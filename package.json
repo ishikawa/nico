@@ -16,6 +16,7 @@
   "homepage": "https://github.com/ishikawa/nico#readme",
   "dependencies": {},
   "scripts": {
+    "pretest": "cargo build",
     "test": "jest"
   },
   "devDependencies": {

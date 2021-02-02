@@ -2,14 +2,16 @@ use std::env;
 use std::fs;
 use std::io;
 
+use io::Read;
+
 fn read_from_stdin() -> String {
-    let mut integer = String::new();
+    let mut content = String::new();
 
     io::stdin()
-        .read_line(&mut integer)
+        .read_to_string(&mut content)
         .expect("Failed to read line.");
 
-    integer
+    content
 }
 
 fn read_from_file(filename: &String) -> String {
