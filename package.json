@@ -29,6 +29,14 @@
     "testMatch": [
       "**/test/**/*.test.[jt]s"
     ],
+    "transform": {
+      "^.+\\.ts$": "ts-jest"
+    },
+    "globals": {
+      "ts-jest": {
+        "tsconfig": "tsconfig.json"
+      }
+    },
     "testPathIgnorePatterns": [
       "node_modules",
       ".work"
