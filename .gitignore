@@ -14,3 +14,4 @@ Cargo.lock
 
 /.work
 .DS_Store
+node_modules
