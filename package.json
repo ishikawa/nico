@@ -27,9 +27,6 @@
     "wabt": "^1.0.20"
   },
   "jest": {
-    "testRegex": [
-      "test/.+\\.test\\.ts$"
-    ],
     "transform": {
       "^.+\\.ts$": "ts-jest"
     },
@@ -39,12 +36,8 @@
       }
     },
     "testPathIgnorePatterns": [
-      "node_modules",
-      ".work"
-    ],
-    "moduleFileExtensions": [
-      "ts",
-      "js"
+      "/node_modules/",
+      "/.work/"
     ]
   }
 }
