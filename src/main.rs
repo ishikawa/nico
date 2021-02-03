@@ -1,5 +1,6 @@
 mod parser;
 
+use parser::Node;
 use std::env;
 use std::fs;
 use std::io;
@@ -22,20 +23,27 @@ fn read_from_file(filename: &String) -> String {
         .expect(format!("Something went wrong reading the file at {}", filename).as_str())
 }
 
+fn generate(node: &Node) {
+    match node {
+        Node::Integer(n) => {
+            println!("    (i32.const {})", n);
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let integer = if args.len() > 1 {
+    let src = if args.len() > 1 {
         read_from_file(&args[1])
     } else {
         read_from_stdin()
     };
 
-    let integer: u32 = integer.trim().parse().unwrap();
+    let node = parser::parse(&src);
 
     println!("(module");
-    println!("  (func (result i32)");
-    println!("    (i32.const {})", integer);
+    println!("  (func (export \"main\") (result i32)");
+    generate(&node);
     println!("  )");
-    println!("  (export \"main\" (func 0))");
     println!(")");
 }

@@ -3,7 +3,6 @@ use std::{iter::Peekable, panic, str::Chars};
 #[derive(Debug, PartialEq)]
 pub enum Node {
     Integer(u32),
-    Add(u32),
 }
 
 pub fn parse(src: &String) -> Node {
