@@ -1,9 +1,12 @@
+mod parser;
+
 use std::env;
 use std::fs;
 use std::io;
 
 use io::Read;
 
+// Compiler
 fn read_from_stdin() -> String {
     let mut content = String::new();
 
