@@ -27,8 +27,7 @@ fn parse_integer(src: &mut Peekable<Chars>) -> Option<Node> {
                 value *= 10;
                 value += (x as u32) - ('0' as u32);
             }
-            Some(x) => panic!("Unexpected char {}", x),
-            None => break,
+            _ => break,
         };
     }
 
@@ -42,5 +41,10 @@ mod tests {
     fn number_integer() {
         let node = parse("42");
         assert_eq!(node, Node::Integer(42));
+    }
+    #[test]
+    fn number_integer_followed_by_letter() {
+        let node = parse("123a");
+        assert_eq!(node, Node::Integer(123));
     }
 }
