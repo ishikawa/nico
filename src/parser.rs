@@ -5,8 +5,8 @@ pub enum Node {
     Integer(u32),
 }
 
-pub fn parse(src: &String) -> Node {
-    let mut it = src.chars().peekable();
+pub fn parse<S: AsRef<str>>(src: S) -> Node {
+    let mut it = src.as_ref().chars().peekable();
     parse_expr(&mut it).unwrap()
 }
 
@@ -39,8 +39,8 @@ fn parse_integer(src: &mut Peekable<Chars>) -> Option<Node> {
 mod tests {
     use super::*;
     #[test]
-    fn it_works() {
-        let node = parse(&"42".to_string());
+    fn number_integer() {
+        let node = parse("42");
         assert_eq!(node, Node::Integer(42));
     }
 }
