@@ -90,7 +90,7 @@ fn next_operator(src: &mut Peekable<Chars>) -> Option<char> {
     };
 
     src.next();
-    return operator;
+    operator
 }
 
 #[cfg(test)]
