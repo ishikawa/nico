@@ -11,10 +11,25 @@ import { compileFile } from "./util/compiler";
     input: "102030",
     expected: 102030
   },
-  // addi
+  // add
   {
     input: "1 + 2",
     expected: 3
+  },
+  // sub
+  {
+    input: "103 - 5",
+    expected: 98
+  },
+  // mul
+  {
+    input: "3 * 11",
+    expected: 33
+  },
+  // div
+  {
+    input: "50 / 2",
+    expected: 25
   }
 ].forEach(({ input, expected }) => {
   test(`given '${input}'`, async () => {

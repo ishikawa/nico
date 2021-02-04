@@ -4,6 +4,9 @@ use std::{iter::Peekable, panic, str::Chars};
 pub enum Node {
     Integer(u32),
     Add(Box<Node>, Box<Node>),
+    Sub(Box<Node>, Box<Node>),
+    Mul(Box<Node>, Box<Node>),
+    Div(Box<Node>, Box<Node>),
 }
 
 pub fn parse<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
@@ -17,14 +20,25 @@ fn parse_expr(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
         Some(lhs) => lhs,
     };
 
-    match next_operator(src) {
-        Some('+') => match parse_expr(src) {
-            Some(rhs) => Some(Box::new(Node::Add(lhs, rhs))),
-            None => panic!("Expected integer for RHS"),
-        },
-        None => Some(lhs),
-        Some(x) => panic!("Unexpected char {}", x),
-    }
+    let operator = match next_operator(src) {
+        None => return Some(lhs),
+        Some(operator) => operator,
+    };
+
+    let rhs = match parse_expr(src) {
+        None => panic!("Expected integer for RHS"),
+        Some(rhs) => rhs,
+    };
+
+    let node = match operator {
+        '+' => Node::Add(lhs, rhs),
+        '-' => Node::Sub(lhs, rhs),
+        '*' => Node::Mul(lhs, rhs),
+        '/' => Node::Div(lhs, rhs),
+        _ => panic!("Unexpected operator {}", operator),
+    };
+
+    Some(Box::new(node))
 }
 
 fn parse_primary(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
@@ -85,8 +99,11 @@ fn next_operator(src: &mut Peekable<Chars>) -> Option<char> {
     skip_whitespaces(src);
 
     let operator = match src.peek() {
-        Some('+') => Some('+'),
-        _ => return None,
+        Some(c) => match c {
+            '+' | '-' | '*' | '/' => Some(*c),
+            _ => return None,
+        },
+        None => return None,
     };
 
     src.next();
