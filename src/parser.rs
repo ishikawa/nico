@@ -14,30 +14,69 @@ pub fn parse<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
 }
 
 fn parse_expr(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
-    let lhs = match parse_primary(src) {
+    parse_binop1(src)
+}
+
+fn parse_binop1(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
+    let mut lhs = match parse_binop2(src) {
         None => return None,
         Some(lhs) => lhs,
     };
 
-    let operator = match next_operator(src) {
-        None => return Some(lhs),
-        Some(operator) => operator,
+    loop {
+        skip_whitespaces(src);
+
+        let operator = match src.peek() {
+            None => return Some(lhs),
+            Some(operator) => *operator,
+        };
+        let builder = match operator {
+            '+' => Node::Add,
+            '-' => Node::Sub,
+            _ => break,
+        };
+        src.next();
+
+        let rhs = match parse_binop2(src) {
+            None => panic!("Expected RHS"),
+            Some(rhs) => rhs,
+        };
+
+        lhs = Box::new(builder(lhs, rhs));
+    }
+
+    Some(lhs)
+}
+
+fn parse_binop2(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
+    let mut lhs = match parse_primary(src) {
+        None => return None,
+        Some(lhs) => lhs,
     };
 
-    let rhs = match parse_expr(src) {
-        None => panic!("Expected integer for RHS"),
-        Some(rhs) => rhs,
-    };
+    loop {
+        skip_whitespaces(src);
 
-    let node = match operator {
-        '+' => Node::Add(lhs, rhs),
-        '-' => Node::Sub(lhs, rhs),
-        '*' => Node::Mul(lhs, rhs),
-        '/' => Node::Div(lhs, rhs),
-        _ => panic!("Unexpected operator {}", operator),
-    };
+        let operator = match src.peek() {
+            None => return Some(lhs),
+            Some(operator) => *operator,
+        };
+        let builder = match operator {
+            '*' => Node::Mul,
+            '/' => Node::Div,
+            _ => break,
+        };
+        src.next();
 
-    Some(Box::new(node))
+        let rhs = match parse_primary(src) {
+            None => panic!("Expected RHS"),
+            Some(rhs) => rhs,
+        };
+
+        lhs = Box::new(builder(lhs, rhs));
+    }
+
+    Some(lhs)
 }
 
 fn parse_primary(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
@@ -111,21 +150,6 @@ fn skip_whitespaces(src: &mut Peekable<Chars>) {
         }
         src.next();
     }
-}
-
-fn next_operator(src: &mut Peekable<Chars>) -> Option<char> {
-    skip_whitespaces(src);
-
-    let operator = match src.peek() {
-        Some(c) => match c {
-            '+' | '-' | '*' | '/' => Some(*c),
-            _ => return None,
-        },
-        None => return None,
-    };
-
-    src.next();
-    operator
 }
 
 #[cfg(test)]

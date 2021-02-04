@@ -37,6 +37,10 @@ import { compileFile } from "./util/compiler";
     expected: 7
   },
   {
+    input: "1 + 2 * 3 + 4",
+    expected: 11
+  },
+  {
     input: "100 + 8 / 4",
     expected: 102
   },
