@@ -43,6 +43,10 @@ import { compileFile } from "./util/compiler";
   {
     input: "(1 + 2) * 3",
     expected: 9
+  },
+  {
+    input: "(((1) + (20 -(1 *3))) * 3)",
+    expected: 54
   }
 ].forEach(({ input, expected }) => {
   test(`given '${input}'`, async () => {
