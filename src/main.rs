@@ -23,10 +23,15 @@ fn read_from_file(filename: &String) -> String {
         .expect(format!("Something went wrong reading the file at {}", filename).as_str())
 }
 
-fn generate(node: &Node) {
-    match node {
+fn generate(node: Box<Node>) {
+    match *node {
         Node::Integer(n) => {
             println!("    (i32.const {})", n);
+        }
+        Node::Add(lhs, rhs) => {
+            generate(lhs);
+            generate(rhs);
+            println!("    (i32.add)");
         }
     }
 }
@@ -39,11 +44,11 @@ fn main() {
         read_from_stdin()
     };
 
-    let node = parser::parse(&src);
+    let node = parser::parse(&src).unwrap();
 
     println!("(module");
     println!("  (func (export \"main\") (result i32)");
-    generate(&node);
+    generate(node);
     println!("  )");
     println!(")");
 }

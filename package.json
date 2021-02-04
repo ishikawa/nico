@@ -37,7 +37,8 @@
     },
     "testPathIgnorePatterns": [
       "/node_modules/",
-      "/.work/"
+      "/.work/",
+      "/__tests__/util/"
     ]
   }
 }
