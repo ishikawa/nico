@@ -16,6 +16,8 @@
   "homepage": "https://github.com/ishikawa/nico#readme",
   "dependencies": {},
   "scripts": {
+    "build": "cargo check && cargo clean && cargo clippy -- -D warnings && cargo build",
+    "pretest": "npm run build",
     "test": "jest"
   },
   "devDependencies": {
@@ -26,9 +28,6 @@
     "wabt": "^1.0.20"
   },
   "jest": {
-    "testMatch": [
-      "**/test/**/*.test.[jt]s"
-    ],
     "transform": {
       "^.+\\.ts$": "ts-jest"
     },
@@ -38,12 +37,9 @@
       }
     },
     "testPathIgnorePatterns": [
-      "node_modules",
-      ".work"
-    ],
-    "moduleFileExtensions": [
-      "ts",
-      "js"
+      "/node_modules/",
+      "/.work/",
+      "/__tests__/util/"
     ]
   }
 }
