@@ -30,6 +30,23 @@ import { compileFile } from "./util/compiler";
   {
     input: "50 / 2",
     expected: 25
+  },
+  // grouping and priority
+  {
+    input: "1 + 2 * 3",
+    expected: 7
+  },
+  {
+    input: "100 + 8 / 4",
+    expected: 102
+  },
+  {
+    input: "(1 + 2) * 3",
+    expected: 9
+  },
+  {
+    input: "(((1) + (20 -(1 *3))) * 3)",
+    expected: 54
   }
 ].forEach(({ input, expected }) => {
   test(`given '${input}'`, async () => {

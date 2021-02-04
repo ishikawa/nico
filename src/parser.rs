@@ -44,16 +44,24 @@ fn parse_expr(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
 fn parse_primary(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
     skip_whitespaces(src);
 
-    match src.peek() {
-        None => None,
-        Some(c) => match c {
-            ' ' | '\t' | '\n' | '\r' => {
-                skip_whitespaces(src);
-                parse_primary(src)
-            }
-            '0'..='9' => parse_integer(src),
-            x => panic!("Unexpected char {}", x),
-        },
+    let nextc = match src.peek() {
+        None => return None,
+        Some(c) => *c,
+    };
+
+    match nextc {
+        '(' => {
+            consume_char(src, '(');
+            let node = parse_expr(src);
+            consume_char(src, ')');
+            node
+        }
+        ' ' | '\t' | '\n' | '\r' => {
+            skip_whitespaces(src);
+            parse_primary(src)
+        }
+        '0'..='9' => parse_integer(src),
+        x => panic!("Unexpected char {}", x),
     }
 }
 
@@ -79,6 +87,17 @@ fn parse_integer(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
             }
         };
         src.next();
+    }
+}
+
+fn consume_char(src: &mut Peekable<Chars>, expected: char) {
+    skip_whitespaces(src);
+    match src.next() {
+        None => panic!("Premature EOF"),
+        Some(c) => match c {
+            c if c == expected => {}
+            c => panic!("Unexpected char {}", c),
+        },
     }
 }
 
