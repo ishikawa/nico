@@ -35,6 +35,21 @@ fn generate(node: &Node) {
             generate(&*rhs);
             println!("    (i32.add)");
         }
+        Node::Sub(lhs, rhs) => {
+            generate(&*lhs);
+            generate(&*rhs);
+            println!("    (i32.add)");
+        }
+        Node::Mul(lhs, rhs) => {
+            generate(&*lhs);
+            generate(&*rhs);
+            println!("    (i32.add)");
+        }
+        Node::Div(lhs, rhs) => {
+            generate(&*lhs);
+            generate(&*rhs);
+            println!("    (i32.add)");
+        }
     }
 }
 
