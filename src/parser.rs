@@ -1,6 +1,5 @@
 use std::{iter::Peekable, panic, str::Chars};
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum Node {
     Integer(u32),
     Add(Box<Node>, Box<Node>),
@@ -15,30 +14,69 @@ pub fn parse<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
 }
 
 fn parse_expr(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
-    let lhs = match parse_primary(src) {
+    parse_binop1(src)
+}
+
+fn parse_binop1(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
+    let mut lhs = match parse_binop2(src) {
         None => return None,
         Some(lhs) => lhs,
     };
 
-    let operator = match next_operator(src) {
-        None => return Some(lhs),
-        Some(operator) => operator,
+    loop {
+        skip_whitespaces(src);
+
+        let operator = match src.peek() {
+            None => return Some(lhs),
+            Some(operator) => *operator,
+        };
+        let builder = match operator {
+            '+' => Node::Add,
+            '-' => Node::Sub,
+            _ => break,
+        };
+        src.next();
+
+        let rhs = match parse_binop2(src) {
+            None => panic!("Expected RHS"),
+            Some(rhs) => rhs,
+        };
+
+        lhs = Box::new(builder(lhs, rhs));
+    }
+
+    Some(lhs)
+}
+
+fn parse_binop2(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
+    let mut lhs = match parse_primary(src) {
+        None => return None,
+        Some(lhs) => lhs,
     };
 
-    let rhs = match parse_expr(src) {
-        None => panic!("Expected integer for RHS"),
-        Some(rhs) => rhs,
-    };
+    loop {
+        skip_whitespaces(src);
 
-    let node = match operator {
-        '+' => Node::Add(lhs, rhs),
-        '-' => Node::Sub(lhs, rhs),
-        '*' => Node::Mul(lhs, rhs),
-        '/' => Node::Div(lhs, rhs),
-        _ => panic!("Unexpected operator {}", operator),
-    };
+        let operator = match src.peek() {
+            None => return Some(lhs),
+            Some(operator) => *operator,
+        };
+        let builder = match operator {
+            '*' => Node::Mul,
+            '/' => Node::Div,
+            _ => break,
+        };
+        src.next();
 
-    Some(Box::new(node))
+        let rhs = match parse_primary(src) {
+            None => panic!("Expected RHS"),
+            Some(rhs) => rhs,
+        };
+
+        lhs = Box::new(builder(lhs, rhs));
+    }
+
+    Some(lhs)
 }
 
 fn parse_primary(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
@@ -114,44 +152,41 @@ fn skip_whitespaces(src: &mut Peekable<Chars>) {
     }
 }
 
-fn next_operator(src: &mut Peekable<Chars>) -> Option<char> {
-    skip_whitespaces(src);
-
-    let operator = match src.peek() {
-        Some(c) => match c {
-            '+' | '-' | '*' | '/' => Some(*c),
-            _ => return None,
-        },
-        None => return None,
-    };
-
-    src.next();
-    operator
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_matches::assert_matches;
+
     #[test]
     fn number_integer() {
         let node = parse("42").unwrap();
-        assert_eq!(*node, Node::Integer(42));
+        assert_matches!(*node, Node::Integer(42));
     }
     #[test]
     fn number_integer_followed_by_letter() {
         let node = parse("123a").unwrap();
-        assert_eq!(*node, Node::Integer(123));
+        assert_matches!(*node, Node::Integer(123));
     }
 
     #[test]
     fn add_integer() {
         let node = parse("1 + 2").unwrap();
-        match *node {
-            Node::Add(lhs, rhs) => {
-                assert_eq!(*lhs, Node::Integer(1));
-                assert_eq!(*rhs, Node::Integer(2));
-            }
-            _ => panic!(),
-        }
+        assert_matches!(*node, Node::Add(lhs, rhs) => {
+            assert_matches!(*lhs, Node::Integer(1));
+            assert_matches!(*rhs, Node::Integer(2));
+        });
+    }
+
+    #[test]
+    fn operator_associative() {
+        let node = parse("1 + 2 + 3").unwrap();
+
+        assert_matches!(*node, Node::Add(lhs, rhs) => {
+            assert_matches!(*lhs, Node::Add(x, y) => {
+                assert_matches!(*x, Node::Integer(1));
+                assert_matches!(*y, Node::Integer(2));
+            });
+            assert_matches!(*rhs, Node::Integer(3));
+        });
     }
 }
