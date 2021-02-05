@@ -7,11 +7,13 @@ pub enum Node {
     Sub(Box<Node>, Box<Node>),
     Mul(Box<Node>, Box<Node>),
     Div(Box<Node>, Box<Node>),
-    // relation
+    // Relational operator
     LT(Box<Node>, Box<Node>), // Less Than
     GT(Box<Node>, Box<Node>), // Greater Than
     LE(Box<Node>, Box<Node>), // Less than Equal
     GE(Box<Node>, Box<Node>), // Greater than Equal
+    EQ(Box<Node>, Box<Node>), // Equal
+    NE(Box<Node>, Box<Node>), // Not Equal
 }
 
 pub fn parse<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
@@ -23,7 +25,47 @@ fn parse_expr(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
     parse_relop1(src)
 }
 
+// "==", "!="
 fn parse_relop1(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
+    let lhs = match parse_relop2(src) {
+        Some(lhs) => lhs,
+        None => return None,
+    };
+
+    skip_whitespaces(src);
+
+    let c1 = match src.peek() {
+        Some(c) => *c,
+        None => return Some(lhs),
+    };
+
+    match c1 {
+        '=' | '!' => src.next(),
+        _ => return Some(lhs),
+    };
+
+    let c2 = match src.peek() {
+        Some(c) => *c,
+        None => panic!("Premature EOF, expected RHS after \"{}\"", c1),
+    };
+
+    let builder = match c1 {
+        '=' if c2 == '=' => Node::EQ,
+        '!' if c2 == '=' => Node::NE,
+        _ => panic!("Unexpected character sequence '{}' and '{}'", c1, c2),
+    };
+    src.next();
+
+    let rhs = match parse_relop2(src) {
+        None => panic!("Expected RHS"),
+        Some(rhs) => rhs,
+    };
+
+    Some(Box::new(builder(lhs, rhs)))
+}
+
+// ">", "<", ">=", "<="
+fn parse_relop2(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
     let lhs = match parse_binop1(src) {
         Some(lhs) => lhs,
         None => return None,
@@ -31,7 +73,6 @@ fn parse_relop1(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
 
     skip_whitespaces(src);
 
-    // ">", "<", ">=", "<="
     let c1 = match src.peek() {
         Some(c) => *c,
         None => return Some(lhs),

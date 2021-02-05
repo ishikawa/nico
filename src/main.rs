@@ -72,6 +72,16 @@ fn generate(node: &Node) {
             generate(&*rhs);
             println!("    (i32.ge_u)");
         }
+        Node::EQ(lhs, rhs) => {
+            generate(&*lhs);
+            generate(&*rhs);
+            println!("    (i32.eq)");
+        }
+        Node::NE(lhs, rhs) => {
+            generate(&*lhs);
+            generate(&*rhs);
+            println!("    (i32.ne)");
+        }
     }
 }
 
