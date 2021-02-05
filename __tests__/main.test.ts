@@ -51,6 +51,23 @@ import { compileFile } from "./util/compiler";
   {
     input: "(((1) + (20 -(1 *3))) * 3)",
     expected: 54
+  },
+  // comparisons
+  {
+    input: "3 < 5",
+    expected: 1
+  },
+  {
+    input: "3 > 5",
+    expected: 0
+  },
+  {
+    input: "30 >= 5",
+    expected: 1
+  },
+  {
+    input: "30 <= 5",
+    expected: 0
   }
 ].forEach(({ input, expected }) => {
   test(`given '${input}'`, async () => {
