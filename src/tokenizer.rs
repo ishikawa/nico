@@ -19,6 +19,14 @@ pub struct Tokenizer<'a> {
     iter: Peekable<Chars<'a>>,
 }
 
+impl<'a> Iterator for Tokenizer<'a> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_token()
+    }
+}
+
 impl<'a> Tokenizer<'a> {
     pub fn from_string<S: AsRef<str> + ?Sized>(src: &'a S) -> Tokenizer<'a> {
         let it = src.as_ref().chars().peekable();
@@ -26,11 +34,7 @@ impl<'a> Tokenizer<'a> {
         Tokenizer { iter: it }
     }
 
-    pub fn at_end(&mut self) -> bool {
-        self.iter.peek().is_none()
-    }
-
-    pub fn next(&mut self) -> Option<Token> {
+    fn next_token(&mut self) -> Option<Token> {
         self.skip_whitespaces();
 
         let nextc = match self.iter.peek() {
@@ -130,7 +134,6 @@ mod tests {
     #[test]
     fn tokenize() {
         let mut tokenizer = Tokenizer::from_string("42() ab_01");
-        assert!(!tokenizer.at_end());
 
         assert_matches!(tokenizer.next().unwrap(), Token::Integer(42));
         assert_matches!(tokenizer.next().unwrap(), Token::Char('('));
