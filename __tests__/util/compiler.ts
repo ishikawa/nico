@@ -13,7 +13,7 @@ export async function compileFile(filepath: string): Promise<Uint8Array> {
         return;
       }
 
-      console.log(stdout);
+      //console.log(stdout);
 
       fs.writeFileSync(inputWat, stdout);
 
