@@ -1,4 +1,7 @@
-use std::{iter::Peekable, str::Chars};
+use std::{
+    iter::{FromIterator, Peekable},
+    str::Chars,
+};
 
 #[derive(Debug)]
 pub enum Token {
@@ -42,8 +45,9 @@ impl<'a> Tokenizer<'a> {
         };
 
         let token = match nextc {
-            '0'..='9' => self.read_integer(),
-            'a'..='z' | '_' => self.read_identifier(),
+            '0'..='9' => self.read_integer(nextc),
+            'a'..='z' | '_' => self.read_identifier(nextc),
+            '!' | '=' | '<' | '>' => self.read_operator(nextc),
             x => {
                 self.iter.next();
                 Token::Char(x)
@@ -53,8 +57,30 @@ impl<'a> Tokenizer<'a> {
         Some(token)
     }
 
-    fn read_identifier(&mut self) -> Token {
-        let mut value = String::new();
+    fn read_operator(&mut self, nextc: char) -> Token {
+        let c = nextc;
+        self.iter.next();
+
+        let nextc = match self.iter.peek() {
+            None => return Token::Char(nextc),
+            Some(c) => *c,
+        };
+
+        let token = match (c, nextc) {
+            ('=', '=') => Token::EQ,
+            ('!', '=') => Token::NE,
+            ('<', '=') => Token::LE,
+            ('>', '=') => Token::GE,
+            _ => return Token::Char(c),
+        };
+
+        self.iter.next();
+        token
+    }
+
+    fn read_identifier(&mut self, nextc: char) -> Token {
+        let mut value = nextc.to_string();
+        self.iter.next();
 
         loop {
             match self.iter.peek() {
@@ -62,10 +88,6 @@ impl<'a> Tokenizer<'a> {
                     value.push(*x);
                 }
                 _ => {
-                    if value.is_empty() {
-                        panic!("No chars met.")
-                    }
-
                     return Token::Identifier(value);
                 }
             };
@@ -73,25 +95,19 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn read_integer(&mut self) -> Token {
-        let mut value: Option<u32> = None;
+    fn read_integer(&mut self, nextc: char) -> Token {
+        let mut value: u32 = (nextc as u32) - ('0' as u32);
+        self.iter.next();
 
         loop {
             match self.iter.peek() {
                 Some(x @ '0'..='9') => {
                     let n = (*x as u32) - ('0' as u32);
 
-                    value = if let Some(v) = value {
-                        Some(v * 10 + n)
-                    } else {
-                        Some(n)
-                    }
+                    value = value * 10 + n;
                 }
                 _ => {
-                    return match value {
-                        Some(value) => Token::Integer(value),
-                        None => panic!("No digits met."),
-                    }
+                    return Token::Integer(value);
                 }
             };
             self.iter.next();
@@ -129,5 +145,17 @@ mod tests {
         assert_matches!(tokenizer.next().unwrap(), Token::Identifier(name) => {
             assert_eq!(name, "ab_01");
         });
+    }
+
+    #[test]
+    fn operators() {
+        let mut tokenizer = Tokenizer::from_string("!===<><=>=");
+
+        assert_matches!(tokenizer.next().unwrap(), Token::NE);
+        assert_matches!(tokenizer.next().unwrap(), Token::EQ);
+        assert_matches!(tokenizer.next().unwrap(), Token::Char('<'));
+        assert_matches!(tokenizer.next().unwrap(), Token::Char('>'));
+        assert_matches!(tokenizer.next().unwrap(), Token::LE);
+        assert_matches!(tokenizer.next().unwrap(), Token::GE);
     }
 }
