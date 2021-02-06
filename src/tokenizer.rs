@@ -7,6 +7,7 @@ pub enum Token {
 
     // Keywords
     If,
+    End,
 
     // Operators
     EQ, // "=="
@@ -91,6 +92,7 @@ impl<'a> Tokenizer<'a> {
                 _ => {
                     return match value.as_str() {
                         "if" => Token::If,
+                        "end" => Token::End,
                         _ => Token::Identifier(value),
                     }
                 }

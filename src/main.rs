@@ -83,6 +83,24 @@ fn generate(node: &Node) {
             generate(&*rhs);
             println!("    (i32.ne)");
         }
+        Node::If {
+            condition,
+            then_body,
+            else_body,
+        } => {
+            generate(condition);
+            println!("    (if (result i32)");
+            println!("      (then");
+            generate(then_body);
+            println!("      )");
+            println!("      (else");
+            match else_body {
+                Some(node) => generate(node),
+                None => generate(&Node::Integer(0)),
+            }
+            println!("      )");
+            println!("    )");
+        }
     }
 }
 
