@@ -30,6 +30,7 @@ fn generate(node: &Node) {
         Node::Integer(n) => {
             println!("    (i32.const {})", n);
         }
+        // binop
         Node::Add(lhs, rhs) => {
             generate(&*lhs);
             generate(&*rhs);
@@ -49,6 +50,37 @@ fn generate(node: &Node) {
             generate(&*lhs);
             generate(&*rhs);
             println!("    (i32.div_u)");
+        }
+        // relation
+        Node::LT(lhs, rhs) => {
+            generate(&*lhs);
+            generate(&*rhs);
+            println!("    (i32.lt_u)");
+        }
+        Node::GT(lhs, rhs) => {
+            generate(&*lhs);
+            generate(&*rhs);
+            println!("    (i32.gt_u)");
+        }
+        Node::LE(lhs, rhs) => {
+            generate(&*lhs);
+            generate(&*rhs);
+            println!("    (i32.le_u)");
+        }
+        Node::GE(lhs, rhs) => {
+            generate(&*lhs);
+            generate(&*rhs);
+            println!("    (i32.ge_u)");
+        }
+        Node::EQ(lhs, rhs) => {
+            generate(&*lhs);
+            generate(&*rhs);
+            println!("    (i32.eq)");
+        }
+        Node::NE(lhs, rhs) => {
+            generate(&*lhs);
+            generate(&*rhs);
+            println!("    (i32.ne)");
         }
     }
 }
