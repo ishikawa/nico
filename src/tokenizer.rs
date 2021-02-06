@@ -5,6 +5,11 @@ pub enum Token {
     Identifier(String),
     Integer(u32),
 
+    // Keywords
+    If,
+    Else,
+    End,
+
     // Operators
     EQ, // "=="
     NE, // "!="
@@ -44,7 +49,7 @@ impl<'a> Tokenizer<'a> {
 
         let token = match nextc {
             '0'..='9' => self.read_integer(nextc),
-            'a'..='z' | '_' => self.read_identifier(nextc),
+            'a'..='z' | '_' => self.read_name(nextc),
             '!' | '=' | '<' | '>' => self.read_operator(nextc),
             x => {
                 self.iter.next();
@@ -76,7 +81,7 @@ impl<'a> Tokenizer<'a> {
         token
     }
 
-    fn read_identifier(&mut self, nextc: char) -> Token {
+    fn read_name(&mut self, nextc: char) -> Token {
         let mut value = nextc.to_string();
         self.iter.next();
 
@@ -86,7 +91,12 @@ impl<'a> Tokenizer<'a> {
                     value.push(*x);
                 }
                 _ => {
-                    return Token::Identifier(value);
+                    return match value.as_str() {
+                        "if" => Token::If,
+                        "else" => Token::Else,
+                        "end" => Token::End,
+                        _ => Token::Identifier(value),
+                    }
                 }
             };
             self.iter.next();
@@ -154,5 +164,13 @@ mod tests {
         assert_matches!(tokenizer.next().unwrap(), Token::Char('>'));
         assert_matches!(tokenizer.next().unwrap(), Token::LE);
         assert_matches!(tokenizer.next().unwrap(), Token::GE);
+    }
+
+    #[test]
+    fn keywords() {
+        let mut tokenizer = Tokenizer::from_string("if");
+
+        assert_matches!(tokenizer.next().unwrap(), Token::If);
+        assert!(tokenizer.next().is_none());
     }
 }

@@ -14,6 +14,7 @@ export async function compileFile(filepath: string): Promise<Uint8Array> {
       }
 
       //console.log(stdout);
+
       fs.writeFileSync(inputWat, stdout);
 
       const wasmModule = wabt.parseWat(inputWat, fs.readFileSync(inputWat, "utf8"));

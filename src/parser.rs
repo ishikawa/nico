@@ -15,6 +15,12 @@ pub enum Node {
     GE(Box<Node>, Box<Node>), // Greater than Equal
     EQ(Box<Node>, Box<Node>), // Equal
     NE(Box<Node>, Box<Node>), // Not Equal
+    // Control flow
+    If {
+        condition: Box<Node>,
+        then_body: Box<Node>,
+        else_body: Option<Box<Node>>,
+    },
 }
 
 pub fn parse<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
@@ -141,6 +147,35 @@ fn parse_primary(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
             let node = Some(Box::new(Node::Integer(*i)));
             tokenizer.next();
             node
+        }
+        Token::If => {
+            tokenizer.next();
+
+            let condition = parse_expr(tokenizer).expect("missing condition");
+
+            // TODO: check line separator
+            let then_body = parse_expr(tokenizer).expect("missing if body");
+
+            let else_body = match tokenizer.peek() {
+                Some(Token::Else) => {
+                    tokenizer.next();
+                    Some(parse_expr(tokenizer).expect("missing else body"))
+                }
+                _ => None,
+            };
+
+            match tokenizer.peek() {
+                Some(Token::End) => tokenizer.next(),
+                Some(token) => panic!("Expected \"end\", but was {:?}", token),
+                None => panic!("Premature EOF"),
+            };
+
+            let node = Node::If {
+                condition,
+                then_body,
+                else_body,
+            };
+            Some(Box::new(node))
         }
         token => panic!("Unexpected token {:?}", token),
     }
