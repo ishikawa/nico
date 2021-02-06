@@ -154,7 +154,15 @@ fn parse_primary(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
             let condition = parse_expr(tokenizer).expect("missing condition");
 
             // TODO: check line separator
-            let body = parse_expr(tokenizer).expect("missing if body");
+            let then_body = parse_expr(tokenizer).expect("missing if body");
+
+            let else_body = match tokenizer.peek() {
+                Some(Token::Else) => {
+                    tokenizer.next();
+                    Some(parse_expr(tokenizer).expect("missing else body"))
+                }
+                _ => None,
+            };
 
             match tokenizer.peek() {
                 Some(Token::End) => tokenizer.next(),
@@ -164,8 +172,8 @@ fn parse_primary(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
 
             let node = Node::If {
                 condition,
-                then_body: body,
-                else_body: None,
+                then_body,
+                else_body,
             };
             Some(Box::new(node))
         }

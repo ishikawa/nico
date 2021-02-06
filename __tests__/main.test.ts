@@ -85,6 +85,10 @@ import { compileFile } from "./util/compiler";
   {
     input: "if 10 < 5\n3 end",
     expected: 0
+  },
+  {
+    input: "if 10 <= 5\n3\nelse\n40\nend",
+    expected: 40
   }
 ].forEach(({ input, expected }) => {
   test(`given '${input}'`, async () => {
