@@ -1,4 +1,5 @@
-use std::{iter::Peekable, panic, str::Chars};
+use super::tokenizer::{Token, Tokenizer};
+use std::iter::Peekable;
 #[derive(Debug)]
 pub enum Node {
     Integer(u32),
@@ -17,46 +18,29 @@ pub enum Node {
 }
 
 pub fn parse<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
-    let mut it = src.as_ref().chars().peekable();
-    parse_expr(&mut it)
+    let mut tokenizer = Tokenizer::from_string(&src).peekable();
+    parse_expr(&mut tokenizer)
 }
 
-fn parse_expr(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
-    parse_relop1(src)
+fn parse_expr(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+    parse_relop1(tokenizer)
 }
 
 // "==", "!="
-fn parse_relop1(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
-    let lhs = match parse_relop2(src) {
+fn parse_relop1(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+    let lhs = match parse_relop2(tokenizer) {
         Some(lhs) => lhs,
         None => return None,
     };
 
-    skip_whitespaces(src);
-
-    let c1 = match src.peek() {
-        Some(c) => *c,
-        None => return Some(lhs),
-    };
-
-    match c1 {
-        '=' | '!' => src.next(),
+    let builder = match tokenizer.peek() {
+        Some(Token::EQ) => Node::EQ,
+        Some(Token::NE) => Node::NE,
         _ => return Some(lhs),
     };
+    tokenizer.next();
 
-    let c2 = match src.peek() {
-        Some(c) => *c,
-        None => panic!("Premature EOF, expected RHS after \"{}\"", c1),
-    };
-
-    let builder = match c1 {
-        '=' if c2 == '=' => Node::EQ,
-        '!' if c2 == '=' => Node::NE,
-        _ => panic!("Unexpected character sequence '{}' and '{}'", c1, c2),
-    };
-    src.next();
-
-    let rhs = match parse_relop2(src) {
+    let rhs = match parse_relop2(tokenizer) {
         None => panic!("Expected RHS"),
         Some(rhs) => rhs,
     };
@@ -65,44 +49,22 @@ fn parse_relop1(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
 }
 
 // ">", "<", ">=", "<="
-fn parse_relop2(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
-    let lhs = match parse_binop1(src) {
+fn parse_relop2(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+    let lhs = match parse_binop1(tokenizer) {
         Some(lhs) => lhs,
         None => return None,
     };
 
-    skip_whitespaces(src);
-
-    let c1 = match src.peek() {
-        Some(c) => *c,
-        None => return Some(lhs),
-    };
-
-    match c1 {
-        '<' | '>' => src.next(),
+    let builder = match tokenizer.peek() {
+        Some(Token::LE) => Node::LE,
+        Some(Token::GE) => Node::GE,
+        Some(Token::Char('<')) => Node::LT,
+        Some(Token::Char('>')) => Node::GT,
         _ => return Some(lhs),
     };
+    tokenizer.next();
 
-    let c2 = match src.peek() {
-        Some(c) => *c,
-        None => panic!("Premature EOF, expected RHS after \"{}\"", c1),
-    };
-
-    let builder = match c1 {
-        '<' if c2 == '=' => {
-            src.next();
-            Node::LE
-        }
-        '<' => Node::LT,
-        '>' if c2 == '=' => {
-            src.next();
-            Node::GE
-        }
-        '>' => Node::GT,
-        _ => panic!("Unexpected character sequence '{}' and '{}'", c1, c2),
-    };
-
-    let rhs = match parse_binop1(src) {
+    let rhs = match parse_binop1(tokenizer) {
         None => panic!("Expected RHS"),
         Some(rhs) => rhs,
     };
@@ -110,27 +72,22 @@ fn parse_relop2(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
     Some(Box::new(builder(lhs, rhs)))
 }
 
-fn parse_binop1(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
-    let mut lhs = match parse_binop2(src) {
+fn parse_binop1(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+    let mut lhs = match parse_binop2(tokenizer) {
         None => return None,
         Some(lhs) => lhs,
     };
 
     loop {
-        skip_whitespaces(src);
-
-        let operator = match src.peek() {
+        let builder = match tokenizer.peek() {
+            Some(Token::Char('+')) => Node::Add,
+            Some(Token::Char('-')) => Node::Sub,
+            Some(_) => break,
             None => return Some(lhs),
-            Some(operator) => *operator,
         };
-        let builder = match operator {
-            '+' => Node::Add,
-            '-' => Node::Sub,
-            _ => break,
-        };
-        src.next();
+        tokenizer.next();
 
-        let rhs = match parse_binop2(src) {
+        let rhs = match parse_binop2(tokenizer) {
             None => panic!("Expected RHS"),
             Some(rhs) => rhs,
         };
@@ -141,27 +98,22 @@ fn parse_binop1(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
     Some(lhs)
 }
 
-fn parse_binop2(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
-    let mut lhs = match parse_primary(src) {
+fn parse_binop2(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+    let mut lhs = match parse_primary(tokenizer) {
         None => return None,
         Some(lhs) => lhs,
     };
 
     loop {
-        skip_whitespaces(src);
-
-        let operator = match src.peek() {
+        let builder = match tokenizer.peek() {
+            Some(Token::Char('*')) => Node::Mul,
+            Some(Token::Char('/')) => Node::Div,
+            Some(_) => break,
             None => return Some(lhs),
-            Some(operator) => *operator,
         };
-        let builder = match operator {
-            '*' => Node::Mul,
-            '/' => Node::Div,
-            _ => break,
-        };
-        src.next();
+        tokenizer.next();
 
-        let rhs = match parse_primary(src) {
+        let rhs = match parse_primary(tokenizer) {
             None => panic!("Expected RHS"),
             Some(rhs) => rhs,
         };
@@ -172,76 +124,36 @@ fn parse_binop2(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
     Some(lhs)
 }
 
-fn parse_primary(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
-    skip_whitespaces(src);
-
-    let nextc = match src.peek() {
+fn parse_primary(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+    let token = match tokenizer.peek() {
         None => return None,
-        Some(c) => *c,
+        Some(token) => token,
     };
 
-    match nextc {
-        '(' => {
-            consume_char(src, '(');
-            let node = parse_expr(src);
-            consume_char(src, ')');
+    match token {
+        Token::Char('(') => {
+            consume_char(tokenizer, '(');
+            let node = parse_expr(tokenizer);
+            consume_char(tokenizer, ')');
             node
         }
-        ' ' | '\t' | '\n' | '\r' => {
-            skip_whitespaces(src);
-            parse_primary(src)
+        Token::Integer(i) => {
+            let node = Some(Box::new(Node::Integer(*i)));
+            tokenizer.next();
+            node
         }
-        '0'..='9' => parse_integer(src),
-        x => panic!("Unexpected char {}", x),
+        token => panic!("Unexpected token {:?}", token),
     }
 }
 
-fn parse_integer(src: &mut Peekable<Chars>) -> Option<Box<Node>> {
-    let mut value: Option<u32> = None;
-
-    loop {
-        match src.peek() {
-            Some(x @ '0'..='9') => {
-                let n = (*x as u32) - ('0' as u32);
-
-                value = if let Some(v) = value {
-                    Some(v * 10 + n)
-                } else {
-                    Some(n)
-                }
-            }
-            _ => {
-                return match value {
-                    Some(value) => Some(Box::new(Node::Integer(value))),
-                    None => None,
-                }
-            }
-        };
-        src.next();
-    }
-}
-
-fn consume_char(src: &mut Peekable<Chars>, expected: char) {
-    skip_whitespaces(src);
-    match src.next() {
+fn consume_char(tokenizer: &mut Peekable<Tokenizer>, expected: char) {
+    match tokenizer.next() {
         None => panic!("Premature EOF"),
-        Some(c) => match c {
+        Some(Token::Char(c)) => match c {
             c if c == expected => {}
-            c => panic!("Unexpected char {}", c),
+            c => panic!("Expected char \"{}\", but was \"{}\"", expected, c),
         },
-    }
-}
-
-fn skip_whitespaces(src: &mut Peekable<Chars>) {
-    loop {
-        match src.peek() {
-            None => return,
-            Some(c) => match c {
-                ' ' | '\t' | '\n' | '\r' => {}
-                _ => return,
-            },
-        }
-        src.next();
+        Some(token) => panic!("Unexpected token {:?}", token),
     }
 }
 
