@@ -5,6 +5,7 @@ use parser::Node;
 use std::env;
 use std::fs;
 use std::io;
+use tokenizer::Tokenizer;
 
 use io::Read;
 
@@ -153,7 +154,10 @@ fn main() {
         read_from_stdin()
     };
 
-    let node = parser::parse(&src).unwrap();
+    let mut tokenizer = Tokenizer::from_string(&src);
+    let node = parser::parse_expression(&mut tokenizer).expect("no expression");
+
+    //let node = parser::parse(&src).unwrap();
     let mut emitter = AsmEmitter::new();
 
     emitter.emit("(module");

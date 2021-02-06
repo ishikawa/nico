@@ -24,16 +24,23 @@ pub enum Node {
 }
 
 pub fn parse<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
-    let mut tokenizer = Tokenizer::from_string(&src).peekable();
+    let mut tokenizer = Tokenizer::from_string(&src);
+    let mut tokenizer = (&mut tokenizer).peekable();
+
     parse_expr(&mut tokenizer)
 }
 
-fn parse_expr(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+pub fn parse_expression(tokenizer: &mut Tokenizer) -> Option<Box<Node>> {
+    let mut tokenizer = tokenizer.peekable();
+    parse_expr(&mut tokenizer)
+}
+
+fn parse_expr(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     parse_relop1(tokenizer)
 }
 
 // "==", "!="
-fn parse_relop1(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+fn parse_relop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     let lhs = match parse_relop2(tokenizer) {
         Some(lhs) => lhs,
         None => return None,
@@ -55,7 +62,7 @@ fn parse_relop1(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
 }
 
 // ">", "<", ">=", "<="
-fn parse_relop2(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+fn parse_relop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     let lhs = match parse_binop1(tokenizer) {
         Some(lhs) => lhs,
         None => return None,
@@ -78,7 +85,7 @@ fn parse_relop2(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
     Some(Box::new(builder(lhs, rhs)))
 }
 
-fn parse_binop1(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+fn parse_binop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     let mut lhs = match parse_binop2(tokenizer) {
         None => return None,
         Some(lhs) => lhs,
@@ -104,7 +111,7 @@ fn parse_binop1(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
     Some(lhs)
 }
 
-fn parse_binop2(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+fn parse_binop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     let mut lhs = match parse_primary(tokenizer) {
         None => return None,
         Some(lhs) => lhs,
@@ -130,7 +137,7 @@ fn parse_binop2(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
     Some(lhs)
 }
 
-fn parse_primary(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
+fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     let token = match tokenizer.peek() {
         None => return None,
         Some(token) => token,
@@ -181,7 +188,7 @@ fn parse_primary(tokenizer: &mut Peekable<Tokenizer>) -> Option<Box<Node>> {
     }
 }
 
-fn consume_char(tokenizer: &mut Peekable<Tokenizer>, expected: char) {
+fn consume_char(tokenizer: &mut Peekable<&mut Tokenizer>, expected: char) {
     match tokenizer.next() {
         None => panic!("Premature EOF"),
         Some(Token::Char(c)) => match c {
