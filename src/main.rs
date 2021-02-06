@@ -1,5 +1,5 @@
-mod parser;
-mod tokenizer;
+pub mod parser;
+pub mod tokenizer;
 
 use parser::Node;
 use std::env;

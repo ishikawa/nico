@@ -9,6 +9,7 @@ pub enum Token {
     If,
     Else,
     End,
+    Fun,
 
     // Operators
     EQ, // "=="
@@ -22,6 +23,7 @@ pub enum Token {
 
 pub struct Tokenizer<'a> {
     iter: Peekable<Chars<'a>>,
+    at_end: bool,
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
@@ -36,13 +38,30 @@ impl<'a> Tokenizer<'a> {
     pub fn from_string<S: AsRef<str> + ?Sized>(src: &'a S) -> Tokenizer<'a> {
         let it = src.as_ref().chars().peekable();
 
-        Tokenizer { iter: it }
+        Tokenizer {
+            iter: it,
+            at_end: false,
+        }
+    }
+
+    pub fn is_at_end(&self) -> bool {
+        self.at_end
+    }
+
+    fn peek_char(&mut self) -> Option<&char> {
+        match self.iter.peek() {
+            None => {
+                self.at_end = true;
+                None
+            }
+            c @ Some(_) => c,
+        }
     }
 
     fn next_token(&mut self) -> Option<Token> {
         self.skip_whitespaces();
 
-        let nextc = match self.iter.peek() {
+        let nextc = match self.peek_char() {
             None => return None,
             Some(c) => *c,
         };
@@ -64,7 +83,7 @@ impl<'a> Tokenizer<'a> {
         let c = nextc;
         self.iter.next();
 
-        let nextc = match self.iter.peek() {
+        let nextc = match self.peek_char() {
             None => return Token::Char(nextc),
             Some(c) => *c,
         };
@@ -86,7 +105,7 @@ impl<'a> Tokenizer<'a> {
         self.iter.next();
 
         loop {
-            match self.iter.peek() {
+            match self.peek_char() {
                 Some(x @ 'a'..='z') | Some(x @ '0'..='9') | Some(x @ '_') => {
                     value.push(*x);
                 }
@@ -95,6 +114,7 @@ impl<'a> Tokenizer<'a> {
                         "if" => Token::If,
                         "else" => Token::Else,
                         "end" => Token::End,
+                        "fun" => Token::Fun,
                         _ => Token::Identifier(value),
                     }
                 }
@@ -108,7 +128,7 @@ impl<'a> Tokenizer<'a> {
         self.iter.next();
 
         loop {
-            match self.iter.peek() {
+            match self.peek_char() {
                 Some(x @ '0'..='9') => {
                     let n = (*x as u32) - ('0' as u32);
 
@@ -124,7 +144,7 @@ impl<'a> Tokenizer<'a> {
 
     fn skip_whitespaces(&mut self) {
         loop {
-            match self.iter.peek() {
+            match self.peek_char() {
                 None => return,
                 Some(c) => match c {
                     ' ' | '\t' | '\n' | '\r' => {}
@@ -145,13 +165,18 @@ mod tests {
     fn tokenize() {
         let mut tokenizer = Tokenizer::from_string("42() ab_01");
 
+        assert!(!tokenizer.is_at_end());
         assert_matches!(tokenizer.next().unwrap(), Token::Integer(42));
         assert_matches!(tokenizer.next().unwrap(), Token::Char('('));
         assert_matches!(tokenizer.next().unwrap(), Token::Char(')'));
+        assert!(!tokenizer.is_at_end());
 
         assert_matches!(tokenizer.next().unwrap(), Token::Identifier(name) => {
             assert_eq!(name, "ab_01");
         });
+
+        assert!(tokenizer.is_at_end());
+        assert!(tokenizer.next().is_none());
     }
 
     #[test]
@@ -168,9 +193,10 @@ mod tests {
 
     #[test]
     fn keywords() {
-        let mut tokenizer = Tokenizer::from_string("if");
+        let mut tokenizer = Tokenizer::from_string("if end fun");
 
         assert_matches!(tokenizer.next().unwrap(), Token::If);
-        assert!(tokenizer.next().is_none());
+        assert_matches!(tokenizer.next().unwrap(), Token::End);
+        assert_matches!(tokenizer.next().unwrap(), Token::Fun);
     }
 }
