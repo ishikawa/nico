@@ -26,81 +26,104 @@ fn read_from_file(filename: &str) -> String {
     }
 }
 
-fn generate(node: &Node) {
+fn generate(node: &Node, level: i32) {
     match node {
         Node::Integer(n) => {
-            println!("    (i32.const {})", n);
+            indent(level);
+            println!("(i32.const {})", n);
         }
         // binop
         Node::Add(lhs, rhs) => {
-            generate(&*lhs);
-            generate(&*rhs);
-            println!("    (i32.add)");
+            generate(&*lhs, level);
+            generate(&*rhs, level);
+            indent(level);
+            println!("(i32.add)");
         }
         Node::Sub(lhs, rhs) => {
-            generate(&*lhs);
-            generate(&*rhs);
-            println!("    (i32.sub)");
+            generate(&*lhs, level);
+            generate(&*rhs, level);
+            indent(level);
+            println!("(i32.sub)");
         }
         Node::Mul(lhs, rhs) => {
-            generate(&*lhs);
-            generate(&*rhs);
-            println!("    (i32.mul)");
+            generate(&*lhs, level);
+            generate(&*rhs, level);
+            indent(level);
+            println!("(i32.mul)");
         }
         Node::Div(lhs, rhs) => {
-            generate(&*lhs);
-            generate(&*rhs);
-            println!("    (i32.div_u)");
+            generate(&*lhs, level);
+            generate(&*rhs, level);
+            indent(level);
+            println!("(i32.div_u)");
         }
         // relation
         Node::LT(lhs, rhs) => {
-            generate(&*lhs);
-            generate(&*rhs);
-            println!("    (i32.lt_u)");
+            generate(&*lhs, level);
+            generate(&*rhs, level);
+            indent(level);
+            println!("(i32.lt_u)");
         }
         Node::GT(lhs, rhs) => {
-            generate(&*lhs);
-            generate(&*rhs);
-            println!("    (i32.gt_u)");
+            generate(&*lhs, level);
+            generate(&*rhs, level);
+            indent(level);
+            println!("(i32.gt_u)");
         }
         Node::LE(lhs, rhs) => {
-            generate(&*lhs);
-            generate(&*rhs);
-            println!("    (i32.le_u)");
+            generate(&*lhs, level);
+            generate(&*rhs, level);
+            indent(level);
+            println!("(i32.le_u)");
         }
         Node::GE(lhs, rhs) => {
-            generate(&*lhs);
-            generate(&*rhs);
-            println!("    (i32.ge_u)");
+            generate(&*lhs, level);
+            generate(&*rhs, level);
+            indent(level);
+            println!("(i32.ge_u)");
         }
         Node::EQ(lhs, rhs) => {
-            generate(&*lhs);
-            generate(&*rhs);
-            println!("    (i32.eq)");
+            generate(&*lhs, level);
+            generate(&*rhs, level);
+            indent(level);
+            println!("(i32.eq)");
         }
         Node::NE(lhs, rhs) => {
-            generate(&*lhs);
-            generate(&*rhs);
-            println!("    (i32.ne)");
+            generate(&*lhs, level);
+            generate(&*rhs, level);
+            indent(level);
+            println!("(i32.ne)");
         }
         Node::If {
             condition,
             then_body,
             else_body,
         } => {
-            generate(condition);
-            println!("    (if (result i32)");
-            println!("      (then");
-            generate(then_body);
-            println!("      )");
-            println!("      (else");
+            generate(condition, level);
+            indent(level);
+            println!("(if (result i32)");
+            indent(level + 1);
+            println!("(then");
+            generate(then_body, level + 2);
+            indent(level + 1);
+            println!(")");
+            indent(level + 1);
+            println!("(else");
             match else_body {
-                Some(node) => generate(node),
-                None => generate(&Node::Integer(0)),
+                Some(node) => generate(node, level + 2),
+                None => generate(&Node::Integer(0), level + 2),
             }
-            println!("      )");
-            println!("    )");
+            indent(level + 1);
+            println!(")");
+            indent(level);
+            println!(")");
         }
+    }
+}
+
+fn indent(level: i32) {
+    for _ in 0..level {
+        print!("  ");
     }
 }
 
@@ -115,8 +138,10 @@ fn main() {
     let node = parser::parse(&src).unwrap();
 
     println!("(module");
-    println!("  (func (export \"main\") (result i32)");
-    generate(&*node);
-    println!("  )");
+    indent(1);
+    println!("(func (export \"main\") (result i32)");
+    generate(&*node, 2);
+    indent(1);
+    println!(")");
     println!(")");
 }
