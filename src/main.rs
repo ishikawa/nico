@@ -1,4 +1,5 @@
 mod parser;
+mod tokenizer;
 
 use parser::Node;
 use std::env;
