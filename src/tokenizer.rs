@@ -1,7 +1,4 @@
-use std::{
-    iter::{FromIterator, Peekable},
-    str::Chars,
-};
+use std::{iter::Peekable, str::Chars};
 
 #[derive(Debug)]
 pub enum Token {
@@ -30,10 +27,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     pub fn at_end(&mut self) -> bool {
-        match self.iter.peek() {
-            Some(_) => false,
-            None => true,
-        }
+        self.iter.peek().is_none()
     }
 
     pub fn next(&mut self) -> Option<Token> {
