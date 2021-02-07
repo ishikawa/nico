@@ -115,6 +115,16 @@ const cases: TestCase[] = [
     ].join("\n"),
     exec: exports => exports.foo(),
     expected: 55
+  },
+  {
+    // prettier-ignore
+    input: [
+      "fun square(x)",
+      "    x * x",
+      "end"
+    ].join("\n"),
+    exec: exports => exports.square(3),
+    expected: 9
   }
 ];
 

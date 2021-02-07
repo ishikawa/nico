@@ -55,12 +55,12 @@ fn main() {
         emitter.emit("(func (export \"main\") (result i32)");
         emitter.push_scope();
         emitter.emit_expr(&*expr);
-        emitter.emit(")");
         emitter.pop_scope();
+        emitter.emit(")");
     }
 
-    emitter.emit(")");
     emitter.pop_scope();
+    emitter.emit(")");
 
     print!("{}", emitter.code());
 }

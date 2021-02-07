@@ -2,6 +2,7 @@ use super::parser::{Definition, Expr};
 pub struct AsmEmitter {
     level: i32,
     buffer: String,
+    locals: Vec<String>,
 }
 
 impl Default for AsmEmitter {
@@ -15,6 +16,7 @@ impl AsmEmitter {
         AsmEmitter {
             level: 0,
             buffer: "".to_string(),
+            locals: vec![],
         }
     }
 
@@ -28,22 +30,42 @@ impl AsmEmitter {
 
     pub fn emit_definition(&mut self, definition: &Definition) {
         match definition {
-            Definition::Function {
-                name,
-                params: _,
-                body,
-            } => {
-                self.emit(format!("(func (export \"{}\") (result i32)", name));
+            Definition::Function { name, params, body } => {
+                // function signature
+                {
+                    let mut signature = String::new();
+
+                    signature.push_str(format!("(func (export \"{}\")", name).as_str());
+                    for param in params {
+                        signature.push_str(format!(" (param ${} i32)", param).as_str());
+                    }
+                    signature.push_str(" (result i32)");
+
+                    self.emit(signature);
+                }
+
+                // Initialize local variables with parameters.
+                self.locals.extend_from_slice(params);
+
                 self.push_scope();
                 self.emit_expr(&*body);
                 self.pop_scope();
                 self.emit(")");
+
+                self.locals.clear();
             }
         }
     }
 
     pub fn emit_expr(&mut self, node: &Expr) {
         match node {
+            Expr::Identifier(name) => {
+                if !self.locals.iter().any(|local| local == name) {
+                    panic!("Undefined local variable `{}`", name);
+                }
+
+                self.emit(format!("(get_local ${})", name));
+            }
             Expr::Integer(n) => {
                 self.emit(format!("(i32.const {})", n));
             }
@@ -66,28 +88,28 @@ impl AsmEmitter {
             Expr::Div(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
-                self.emit("(i32.div_u)");
+                self.emit("(i32.div_s)");
             }
             // relation
             Expr::LT(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
-                self.emit("(i32.lt_u)");
+                self.emit("(i32.lt_s)");
             }
             Expr::GT(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
-                self.emit("(i32.gt_u)");
+                self.emit("(i32.gt_s)");
             }
             Expr::LE(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
-                self.emit("(i32.le_u)");
+                self.emit("(i32.le_s)");
             }
             Expr::GE(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
-                self.emit("(i32.ge_u)");
+                self.emit("(i32.ge_s)");
             }
             Expr::EQ(lhs, rhs) => {
                 self.emit_expr(&*lhs);
