@@ -125,6 +125,20 @@ const cases: TestCase[] = [
     ].join("\n"),
     exec: exports => exports.square(3),
     expected: 9
+  },
+  {
+    // prettier-ignore
+    input: [
+      "fun fib(n)",
+      "    if n <= 1",
+      "        n",
+      "    else",
+      "        fib(n - 1) + fib(n - 2)",
+      "    end",
+      "end"
+    ].join("\n"),
+    exec: exports => exports.fib(9),
+    expected: 34
   }
 ];
 
