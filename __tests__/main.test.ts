@@ -1,7 +1,15 @@
 import fs from "fs";
 import { compileFile } from "./util/compiler";
 
-[
+type Exports = Record<string, any>;
+
+interface TestCase {
+  input: string;
+  expected: any;
+  exec?: (exports: Exports) => any;
+}
+
+const cases: TestCase[] = [
   // an integer
   {
     input: "42",
@@ -87,10 +95,30 @@ import { compileFile } from "./util/compiler";
     expected: 0
   },
   {
-    input: "if 10 <= 5\n3\nelse\n40\nend",
+    // prettier-ignore
+    input: [
+      "if 10 <= 5",
+      "    3",
+      "else",
+      "    40",
+      "end"
+    ].join("\n"),
     expected: 40
+  },
+  // Function
+  {
+    // prettier-ignore
+    input: [
+      "fun foo()",
+      "    55",
+      "end"
+    ].join("\n"),
+    exec: exports => exports.foo(),
+    expected: 55
   }
-].forEach(({ input, expected }) => {
+];
+
+cases.forEach(({ input, expected, exec }) => {
   test(`given '${input}'`, async () => {
     const src = "/tmp/nico_test.nico";
     fs.writeFileSync(src, input);
@@ -100,7 +128,7 @@ import { compileFile } from "./util/compiler";
     const instance = await WebAssembly.instantiate(module);
 
     // @ts-ignore
-    const value = instance.exports.main();
+    const value = exec ? exec(instance.exports) : instance.exports.main();
 
     expect(value).toEqual(expected);
   });
