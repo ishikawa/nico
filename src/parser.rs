@@ -19,12 +19,15 @@ pub enum Definition {
 #[derive(Debug)]
 pub enum Expr {
     // Primitive
+    Identifier(String),
     Integer(u32),
+
     // binop
     Add(Box<Expr>, Box<Expr>),
     Sub(Box<Expr>, Box<Expr>),
     Mul(Box<Expr>, Box<Expr>),
     Div(Box<Expr>, Box<Expr>),
+
     // Relational operator
     LT(Box<Expr>, Box<Expr>), // Less Than
     GT(Box<Expr>, Box<Expr>), // Greater Than
@@ -32,6 +35,7 @@ pub enum Expr {
     GE(Box<Expr>, Box<Expr>), // Greater than Equal
     EQ(Box<Expr>, Box<Expr>), // Equal
     NE(Box<Expr>, Box<Expr>), // Not Equal
+
     // Control flow
     If {
         condition: Box<Expr>,
@@ -208,6 +212,11 @@ fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> 
             consume_char(tokenizer, '(');
             let node = parse_expr(tokenizer);
             consume_char(tokenizer, ')');
+            node
+        }
+        Token::Identifier(name) => {
+            let node = Some(Box::new(Expr::Identifier(name.clone())));
+            tokenizer.next();
             node
         }
         Token::Integer(i) => {
