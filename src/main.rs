@@ -137,7 +137,7 @@ fn generate(node: &Node, emitter: &mut AsmEmitter) {
             emitter.push_scope();
             match else_body {
                 Some(node) => generate(node, emitter),
-                None => generate(&Node::Integer(0), emitter),
+                None => generate_zero(emitter),
             }
             emitter.pop_scope();
             emitter.emit("))");
@@ -151,6 +151,10 @@ fn generate(node: &Node, emitter: &mut AsmEmitter) {
     }
 }
 
+fn generate_zero(emitter: &mut AsmEmitter) {
+    emitter.emit("(i32.const 0)");
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let src = if args.len() > 1 {
@@ -160,7 +164,7 @@ fn main() {
     };
 
     let mut tokenizer = Tokenizer::from_string(&src);
-    let node = parser::parse(&mut tokenizer).expect("no expression");
+    let program = parser::parse(&mut tokenizer);
 
     //let node = parser::parse(&src).unwrap();
     let mut emitter = AsmEmitter::new();
@@ -168,9 +172,18 @@ fn main() {
     emitter.emit("(module");
     emitter.push_scope();
 
+    // main function
     emitter.emit("(func (export \"main\") (result i32)");
     emitter.push_scope();
-    generate(&*node, &mut emitter);
+    match program.expr {
+        Some(node) => {
+            generate(&*node, &mut emitter);
+        }
+        None => {
+            generate_zero(&mut emitter);
+        }
+    }
+
     emitter.pop_scope();
     emitter.emit("))");
     emitter.pop_scope();

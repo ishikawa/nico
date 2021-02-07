@@ -2,6 +2,7 @@ use std::{iter::Peekable, str::Chars};
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
+    // Primitive
     Identifier(String),
     Integer(u32),
 

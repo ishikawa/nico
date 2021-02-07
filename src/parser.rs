@@ -1,7 +1,15 @@
 use super::tokenizer::{Token, Tokenizer};
 use std::iter::Peekable;
+
+// Program
+pub struct Program {
+    pub function: Option<Box<Node>>,
+    pub expr: Option<Box<Node>>,
+}
+
 #[derive(Debug)]
 pub enum Node {
+    // Primitive
     Integer(u32),
     // binop
     Add(Box<Node>, Box<Node>),
@@ -29,16 +37,18 @@ pub enum Node {
     },
 }
 
-pub fn parse_string<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
+pub fn parse_string<S: AsRef<str>>(src: S) -> Box<Program> {
     let mut tokenizer = Tokenizer::from_string(&src);
-    let mut tokenizer = (&mut tokenizer).peekable();
-
-    parse_expr(&mut tokenizer)
+    parse(&mut tokenizer)
 }
 
-pub fn parse(tokenizer: &mut Tokenizer) -> Option<Box<Node>> {
+pub fn parse(tokenizer: &mut Tokenizer) -> Box<Program> {
     let mut tokenizer = tokenizer.peekable();
-    parse_expr(&mut tokenizer)
+
+    let function = parse_function(&mut tokenizer);
+    let expr = parse_expr(&mut tokenizer);
+
+    Box::new(Program { function, expr })
 }
 
 fn parse_function(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
@@ -247,18 +257,27 @@ mod tests {
 
     #[test]
     fn number_integer() {
-        let node = parse_string("42").unwrap();
+        let program = parse_string("42");
+        assert!(program.function.is_none());
+
+        let node = program.expr.unwrap();
         assert_matches!(*node, Node::Integer(42));
     }
     #[test]
     fn number_integer_followed_by_letter() {
-        let node = parse_string("123a").unwrap();
+        let program = parse_string("123a");
+        assert!(program.function.is_none());
+
+        let node = program.expr.unwrap();
         assert_matches!(*node, Node::Integer(123));
     }
 
     #[test]
     fn add_integer() {
-        let node = parse_string("1 + 2").unwrap();
+        let program = parse_string("1 + 2");
+        assert!(program.function.is_none());
+
+        let node = program.expr.unwrap();
         assert_matches!(*node, Node::Add(lhs, rhs) => {
             assert_matches!(*lhs, Node::Integer(1));
             assert_matches!(*rhs, Node::Integer(2));
@@ -267,8 +286,10 @@ mod tests {
 
     #[test]
     fn operator_associative() {
-        let node = parse_string("1 + 2 + 3").unwrap();
+        let program = parse_string("1 + 2 + 3");
+        assert!(program.function.is_none());
 
+        let node = program.expr.unwrap();
         assert_matches!(*node, Node::Add(lhs, rhs) => {
             assert_matches!(*lhs, Node::Add(x, y) => {
                 assert_matches!(*x, Node::Integer(1));
@@ -279,8 +300,10 @@ mod tests {
     }
     #[test]
     fn paren_grouping() {
-        let node = parse_string("(1 + 2) * 3").unwrap();
+        let program = parse_string("(1 + 2) * 3");
+        assert!(program.function.is_none());
 
+        let node = program.expr.unwrap();
         assert_matches!(*node, Node::Mul(lhs, rhs) => {
             assert_matches!(*lhs, Node::Add(x, y) => {
                 assert_matches!(*x, Node::Integer(1));
