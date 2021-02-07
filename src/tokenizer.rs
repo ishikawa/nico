@@ -5,6 +5,7 @@ pub enum Token {
     // Primitive
     Identifier(String),
     Integer(u32),
+    String(String),
 
     // Keywords
     If,
@@ -71,6 +72,7 @@ impl<'a> Tokenizer<'a> {
             '0'..='9' => self.read_integer(nextc),
             'a'..='z' | '_' => self.read_name(nextc),
             '!' | '=' | '<' | '>' => self.read_operator(nextc),
+            '"' => self.read_string(),
             x => {
                 self.iter.next();
                 Token::Char(x)
@@ -78,6 +80,24 @@ impl<'a> Tokenizer<'a> {
         };
 
         Some(token)
+    }
+
+    fn read_string(&mut self) -> Token {
+        let mut string = String::new();
+        self.iter.next();
+
+        loop {
+            match self.iter.peek() {
+                Some('"') => break,
+                Some(c) => {
+                    string.push(*c);
+                    self.iter.next();
+                }
+                None => panic!("Premature EOF while reading string"),
+            };
+        }
+
+        Token::String(string)
     }
 
     fn read_operator(&mut self, nextc: char) -> Token {
@@ -199,5 +219,14 @@ mod tests {
         assert_matches!(tokenizer.next().unwrap(), Token::If);
         assert_matches!(tokenizer.next().unwrap(), Token::End);
         assert_matches!(tokenizer.next().unwrap(), Token::Fun);
+    }
+
+    #[test]
+    fn strings() {
+        let mut tokenizer = Tokenizer::from_string("\"\"");
+
+        assert_matches!(tokenizer.next().unwrap(), Token::String(str) => {
+            assert_eq!(str, "");
+        });
     }
 }
