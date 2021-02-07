@@ -40,6 +40,100 @@ impl AsmEmitter {
         }
     }
 
+    pub fn emit_zero(&mut self) {
+        self.emit("(i32.const 0)");
+    }
+
+    pub fn emit_expr(&mut self, node: &Node) {
+        match node {
+            Node::Integer(n) => {
+                self.emit(format!("(i32.const {})", n));
+            }
+            // binop
+            Node::Add(lhs, rhs) => {
+                self.emit_expr(&*lhs);
+                self.emit_expr(&*rhs);
+                self.emit("(i32.add)");
+            }
+            Node::Sub(lhs, rhs) => {
+                self.emit_expr(&*lhs);
+                self.emit_expr(&*rhs);
+                self.emit("(i32.sub)");
+            }
+            Node::Mul(lhs, rhs) => {
+                self.emit_expr(&*lhs);
+                self.emit_expr(&*rhs);
+                self.emit("(i32.mul)");
+            }
+            Node::Div(lhs, rhs) => {
+                self.emit_expr(&*lhs);
+                self.emit_expr(&*rhs);
+                self.emit("(i32.div_u)");
+            }
+            // relation
+            Node::LT(lhs, rhs) => {
+                self.emit_expr(&*lhs);
+                self.emit_expr(&*rhs);
+                self.emit("(i32.lt_u)");
+            }
+            Node::GT(lhs, rhs) => {
+                self.emit_expr(&*lhs);
+                self.emit_expr(&*rhs);
+                self.emit("(i32.gt_u)");
+            }
+            Node::LE(lhs, rhs) => {
+                self.emit_expr(&*lhs);
+                self.emit_expr(&*rhs);
+                self.emit("(i32.le_u)");
+            }
+            Node::GE(lhs, rhs) => {
+                self.emit_expr(&*lhs);
+                self.emit_expr(&*rhs);
+                self.emit("(i32.ge_u)");
+            }
+            Node::EQ(lhs, rhs) => {
+                self.emit_expr(&*lhs);
+                self.emit_expr(&*rhs);
+                self.emit("(i32.eq)");
+            }
+            Node::NE(lhs, rhs) => {
+                self.emit_expr(&*lhs);
+                self.emit_expr(&*rhs);
+                self.emit("(i32.ne)");
+            }
+            Node::If {
+                condition,
+                then_body,
+                else_body,
+            } => {
+                self.emit_expr(condition);
+                self.emit("(if (result i32)");
+                self.push_scope();
+
+                self.emit("(then");
+                self.push_scope();
+                self.emit_expr(then_body);
+                self.pop_scope();
+                self.emit(")");
+
+                self.emit("(else");
+                self.push_scope();
+                match else_body {
+                    Some(node) => self.emit_expr(node),
+                    None => self.emit_zero(),
+                }
+                self.pop_scope();
+                self.emit("))");
+                self.pop_scope();
+            }
+            Node::Function {
+                name: _,
+                params: _,
+                body: _,
+            } => {}
+        }
+    }
+
     pub fn emit<S: AsRef<str>>(&mut self, asm: S) {
         self.indent();
         self.code.push_str(asm.as_ref());
@@ -59,100 +153,6 @@ impl AsmEmitter {
             self.code.push_str("  ");
         }
     }
-}
-
-fn generate(node: &Node, emitter: &mut AsmEmitter) {
-    match node {
-        Node::Integer(n) => {
-            emitter.emit(format!("(i32.const {})", n));
-        }
-        // binop
-        Node::Add(lhs, rhs) => {
-            generate(&*lhs, emitter);
-            generate(&*rhs, emitter);
-            emitter.emit("(i32.add)");
-        }
-        Node::Sub(lhs, rhs) => {
-            generate(&*lhs, emitter);
-            generate(&*rhs, emitter);
-            emitter.emit("(i32.sub)");
-        }
-        Node::Mul(lhs, rhs) => {
-            generate(&*lhs, emitter);
-            generate(&*rhs, emitter);
-            emitter.emit("(i32.mul)");
-        }
-        Node::Div(lhs, rhs) => {
-            generate(&*lhs, emitter);
-            generate(&*rhs, emitter);
-            emitter.emit("(i32.div_u)");
-        }
-        // relation
-        Node::LT(lhs, rhs) => {
-            generate(&*lhs, emitter);
-            generate(&*rhs, emitter);
-            emitter.emit("(i32.lt_u)");
-        }
-        Node::GT(lhs, rhs) => {
-            generate(&*lhs, emitter);
-            generate(&*rhs, emitter);
-            emitter.emit("(i32.gt_u)");
-        }
-        Node::LE(lhs, rhs) => {
-            generate(&*lhs, emitter);
-            generate(&*rhs, emitter);
-            emitter.emit("(i32.le_u)");
-        }
-        Node::GE(lhs, rhs) => {
-            generate(&*lhs, emitter);
-            generate(&*rhs, emitter);
-            emitter.emit("(i32.ge_u)");
-        }
-        Node::EQ(lhs, rhs) => {
-            generate(&*lhs, emitter);
-            generate(&*rhs, emitter);
-            emitter.emit("(i32.eq)");
-        }
-        Node::NE(lhs, rhs) => {
-            generate(&*lhs, emitter);
-            generate(&*rhs, emitter);
-            emitter.emit("(i32.ne)");
-        }
-        Node::If {
-            condition,
-            then_body,
-            else_body,
-        } => {
-            generate(condition, emitter);
-            emitter.emit("(if (result i32)");
-            emitter.push_scope();
-
-            emitter.emit("(then");
-            emitter.push_scope();
-            generate(then_body, emitter);
-            emitter.pop_scope();
-            emitter.emit(")");
-
-            emitter.emit("(else");
-            emitter.push_scope();
-            match else_body {
-                Some(node) => generate(node, emitter),
-                None => generate_zero(emitter),
-            }
-            emitter.pop_scope();
-            emitter.emit("))");
-            emitter.pop_scope();
-        }
-        Node::Function {
-            name: _,
-            params: _,
-            body: _,
-        } => {}
-    }
-}
-
-fn generate_zero(emitter: &mut AsmEmitter) {
-    emitter.emit("(i32.const 0)");
 }
 
 fn main() {
@@ -177,10 +177,10 @@ fn main() {
     emitter.push_scope();
     match program.expr {
         Some(node) => {
-            generate(&*node, &mut emitter);
+            emitter.emit_expr(&*node);
         }
         None => {
-            generate_zero(&mut emitter);
+            emitter.emit_zero();
         }
     }
 
