@@ -3,37 +3,40 @@ use std::iter::Peekable;
 
 // Program
 pub struct Program {
-    pub function: Option<Box<Node>>,
-    pub expr: Option<Box<Node>>,
+    pub definition: Option<Box<Definition>>,
+    pub expr: Option<Box<Expr>>,
 }
 
 #[derive(Debug)]
-pub enum Node {
-    // Primitive
-    Integer(u32),
-    // binop
-    Add(Box<Node>, Box<Node>),
-    Sub(Box<Node>, Box<Node>),
-    Mul(Box<Node>, Box<Node>),
-    Div(Box<Node>, Box<Node>),
-    // Relational operator
-    LT(Box<Node>, Box<Node>), // Less Than
-    GT(Box<Node>, Box<Node>), // Greater Than
-    LE(Box<Node>, Box<Node>), // Less than Equal
-    GE(Box<Node>, Box<Node>), // Greater than Equal
-    EQ(Box<Node>, Box<Node>), // Equal
-    NE(Box<Node>, Box<Node>), // Not Equal
-    // Control flow
-    If {
-        condition: Box<Node>,
-        then_body: Box<Node>,
-        else_body: Option<Box<Node>>,
-    },
-    // Definition
+pub enum Definition {
     Function {
         name: String,
         params: Vec<String>,
-        body: Box<Node>,
+        body: Box<Expr>,
+    },
+}
+
+#[derive(Debug)]
+pub enum Expr {
+    // Primitive
+    Integer(u32),
+    // binop
+    Add(Box<Expr>, Box<Expr>),
+    Sub(Box<Expr>, Box<Expr>),
+    Mul(Box<Expr>, Box<Expr>),
+    Div(Box<Expr>, Box<Expr>),
+    // Relational operator
+    LT(Box<Expr>, Box<Expr>), // Less Than
+    GT(Box<Expr>, Box<Expr>), // Greater Than
+    LE(Box<Expr>, Box<Expr>), // Less than Equal
+    GE(Box<Expr>, Box<Expr>), // Greater than Equal
+    EQ(Box<Expr>, Box<Expr>), // Equal
+    NE(Box<Expr>, Box<Expr>), // Not Equal
+    // Control flow
+    If {
+        condition: Box<Expr>,
+        then_body: Box<Expr>,
+        else_body: Option<Box<Expr>>,
     },
 }
 
@@ -48,10 +51,13 @@ pub fn parse(tokenizer: &mut Tokenizer) -> Box<Program> {
     let function = parse_function(&mut tokenizer);
     let expr = parse_expr(&mut tokenizer);
 
-    Box::new(Program { function, expr })
+    Box::new(Program {
+        definition: function,
+        expr,
+    })
 }
 
-fn parse_function(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+fn parse_function(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Definition>> {
     match tokenizer.peek() {
         Some(Token::Fun) => {
             tokenizer.next();
@@ -85,24 +91,24 @@ fn parse_function(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>>
     let body = parse_expr(tokenizer).expect("no function body");
     consume_token(tokenizer, Token::End);
 
-    let node = Node::Function { name, params, body };
-    Some(Box::new(node))
+    let definition = Definition::Function { name, params, body };
+    Some(Box::new(definition))
 }
 
-fn parse_expr(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+fn parse_expr(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
     parse_relop1(tokenizer)
 }
 
 // "==", "!="
-fn parse_relop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+fn parse_relop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
     let lhs = match parse_relop2(tokenizer) {
         Some(lhs) => lhs,
         None => return None,
     };
 
     let builder = match tokenizer.peek() {
-        Some(Token::EQ) => Node::EQ,
-        Some(Token::NE) => Node::NE,
+        Some(Token::EQ) => Expr::EQ,
+        Some(Token::NE) => Expr::NE,
         _ => return Some(lhs),
     };
     tokenizer.next();
@@ -116,17 +122,17 @@ fn parse_relop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
 }
 
 // ">", "<", ">=", "<="
-fn parse_relop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+fn parse_relop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
     let lhs = match parse_binop1(tokenizer) {
         Some(lhs) => lhs,
         None => return None,
     };
 
     let builder = match tokenizer.peek() {
-        Some(Token::LE) => Node::LE,
-        Some(Token::GE) => Node::GE,
-        Some(Token::Char('<')) => Node::LT,
-        Some(Token::Char('>')) => Node::GT,
+        Some(Token::LE) => Expr::LE,
+        Some(Token::GE) => Expr::GE,
+        Some(Token::Char('<')) => Expr::LT,
+        Some(Token::Char('>')) => Expr::GT,
         _ => return Some(lhs),
     };
     tokenizer.next();
@@ -139,7 +145,7 @@ fn parse_relop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     Some(Box::new(builder(lhs, rhs)))
 }
 
-fn parse_binop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+fn parse_binop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
     let mut lhs = match parse_binop2(tokenizer) {
         None => return None,
         Some(lhs) => lhs,
@@ -147,8 +153,8 @@ fn parse_binop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
 
     loop {
         let builder = match tokenizer.peek() {
-            Some(Token::Char('+')) => Node::Add,
-            Some(Token::Char('-')) => Node::Sub,
+            Some(Token::Char('+')) => Expr::Add,
+            Some(Token::Char('-')) => Expr::Sub,
             Some(_) => break,
             None => return Some(lhs),
         };
@@ -165,7 +171,7 @@ fn parse_binop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     Some(lhs)
 }
 
-fn parse_binop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+fn parse_binop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
     let mut lhs = match parse_primary(tokenizer) {
         None => return None,
         Some(lhs) => lhs,
@@ -173,8 +179,8 @@ fn parse_binop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
 
     loop {
         let builder = match tokenizer.peek() {
-            Some(Token::Char('*')) => Node::Mul,
-            Some(Token::Char('/')) => Node::Div,
+            Some(Token::Char('*')) => Expr::Mul,
+            Some(Token::Char('/')) => Expr::Div,
             Some(_) => break,
             None => return Some(lhs),
         };
@@ -191,7 +197,7 @@ fn parse_binop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     Some(lhs)
 }
 
-fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
     let token = match tokenizer.peek() {
         None => return None,
         Some(token) => token,
@@ -205,7 +211,7 @@ fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> 
             node
         }
         Token::Integer(i) => {
-            let node = Some(Box::new(Node::Integer(*i)));
+            let node = Some(Box::new(Expr::Integer(*i)));
             tokenizer.next();
             node
         }
@@ -227,7 +233,7 @@ fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> 
 
             consume_token(tokenizer, Token::End);
 
-            let node = Node::If {
+            let node = Expr::If {
                 condition,
                 then_body,
                 else_body,
@@ -258,58 +264,58 @@ mod tests {
     #[test]
     fn number_integer() {
         let program = parse_string("42");
-        assert!(program.function.is_none());
+        assert!(program.definition.is_none());
 
         let node = program.expr.unwrap();
-        assert_matches!(*node, Node::Integer(42));
+        assert_matches!(*node, Expr::Integer(42));
     }
     #[test]
     fn number_integer_followed_by_letter() {
         let program = parse_string("123a");
-        assert!(program.function.is_none());
+        assert!(program.definition.is_none());
 
         let node = program.expr.unwrap();
-        assert_matches!(*node, Node::Integer(123));
+        assert_matches!(*node, Expr::Integer(123));
     }
 
     #[test]
     fn add_integer() {
         let program = parse_string("1 + 2");
-        assert!(program.function.is_none());
+        assert!(program.definition.is_none());
 
         let node = program.expr.unwrap();
-        assert_matches!(*node, Node::Add(lhs, rhs) => {
-            assert_matches!(*lhs, Node::Integer(1));
-            assert_matches!(*rhs, Node::Integer(2));
+        assert_matches!(*node, Expr::Add(lhs, rhs) => {
+            assert_matches!(*lhs, Expr::Integer(1));
+            assert_matches!(*rhs, Expr::Integer(2));
         });
     }
 
     #[test]
     fn operator_associative() {
         let program = parse_string("1 + 2 + 3");
-        assert!(program.function.is_none());
+        assert!(program.definition.is_none());
 
         let node = program.expr.unwrap();
-        assert_matches!(*node, Node::Add(lhs, rhs) => {
-            assert_matches!(*lhs, Node::Add(x, y) => {
-                assert_matches!(*x, Node::Integer(1));
-                assert_matches!(*y, Node::Integer(2));
+        assert_matches!(*node, Expr::Add(lhs, rhs) => {
+            assert_matches!(*lhs, Expr::Add(x, y) => {
+                assert_matches!(*x, Expr::Integer(1));
+                assert_matches!(*y, Expr::Integer(2));
             });
-            assert_matches!(*rhs, Node::Integer(3));
+            assert_matches!(*rhs, Expr::Integer(3));
         });
     }
     #[test]
     fn paren_grouping() {
         let program = parse_string("(1 + 2) * 3");
-        assert!(program.function.is_none());
+        assert!(program.definition.is_none());
 
         let node = program.expr.unwrap();
-        assert_matches!(*node, Node::Mul(lhs, rhs) => {
-            assert_matches!(*lhs, Node::Add(x, y) => {
-                assert_matches!(*x, Node::Integer(1));
-                assert_matches!(*y, Node::Integer(2));
+        assert_matches!(*node, Expr::Mul(lhs, rhs) => {
+            assert_matches!(*lhs, Expr::Add(x, y) => {
+                assert_matches!(*x, Expr::Integer(1));
+                assert_matches!(*y, Expr::Integer(2));
             });
-            assert_matches!(*rhs, Node::Integer(3));
+            assert_matches!(*rhs, Expr::Integer(3));
         });
     }
 }

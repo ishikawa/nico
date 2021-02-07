@@ -1,4 +1,4 @@
-use super::parser::Node;
+use super::parser::{Definition, Expr};
 pub struct AsmEmitter {
     level: i32,
     buffer: String,
@@ -26,64 +26,80 @@ impl AsmEmitter {
         self.emit("(i32.const 0)");
     }
 
-    pub fn emit_expr(&mut self, node: &Node) {
+    pub fn emit_definition(&mut self, definition: &Definition) {
+        match definition {
+            Definition::Function {
+                name,
+                params: _,
+                body,
+            } => {
+                self.emit(format!("(func (export \"{}\") (result i32)", name));
+                self.push_scope();
+                self.emit_expr(&*body);
+                self.pop_scope();
+                self.emit(")");
+            }
+        }
+    }
+
+    pub fn emit_expr(&mut self, node: &Expr) {
         match node {
-            Node::Integer(n) => {
+            Expr::Integer(n) => {
                 self.emit(format!("(i32.const {})", n));
             }
             // binop
-            Node::Add(lhs, rhs) => {
+            Expr::Add(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
                 self.emit("(i32.add)");
             }
-            Node::Sub(lhs, rhs) => {
+            Expr::Sub(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
                 self.emit("(i32.sub)");
             }
-            Node::Mul(lhs, rhs) => {
+            Expr::Mul(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
                 self.emit("(i32.mul)");
             }
-            Node::Div(lhs, rhs) => {
+            Expr::Div(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
                 self.emit("(i32.div_u)");
             }
             // relation
-            Node::LT(lhs, rhs) => {
+            Expr::LT(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
                 self.emit("(i32.lt_u)");
             }
-            Node::GT(lhs, rhs) => {
+            Expr::GT(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
                 self.emit("(i32.gt_u)");
             }
-            Node::LE(lhs, rhs) => {
+            Expr::LE(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
                 self.emit("(i32.le_u)");
             }
-            Node::GE(lhs, rhs) => {
+            Expr::GE(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
                 self.emit("(i32.ge_u)");
             }
-            Node::EQ(lhs, rhs) => {
+            Expr::EQ(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
                 self.emit("(i32.eq)");
             }
-            Node::NE(lhs, rhs) => {
+            Expr::NE(lhs, rhs) => {
                 self.emit_expr(&*lhs);
                 self.emit_expr(&*rhs);
                 self.emit("(i32.ne)");
             }
-            Node::If {
+            Expr::If {
                 condition,
                 then_body,
                 else_body,
@@ -108,11 +124,6 @@ impl AsmEmitter {
                 self.emit("))");
                 self.pop_scope();
             }
-            Node::Function {
-                name: _,
-                params: _,
-                body: _,
-            } => {}
         }
     }
 

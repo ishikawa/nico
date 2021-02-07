@@ -45,20 +45,21 @@ fn main() {
     emitter.emit("(module");
     emitter.push_scope();
 
-    // main function
-    emitter.emit("(func (export \"main\") (result i32)");
-    emitter.push_scope();
-    match program.expr {
-        Some(node) => {
-            emitter.emit_expr(&*node);
-        }
-        None => {
-            emitter.emit_zero();
-        }
+    // export function
+    if let Some(definition) = program.definition {
+        emitter.emit_definition(&*definition);
     }
 
-    emitter.pop_scope();
-    emitter.emit("))");
+    // main function
+    if let Some(expr) = program.expr {
+        emitter.emit("(func (export \"main\") (result i32)");
+        emitter.push_scope();
+        emitter.emit_expr(&*expr);
+        emitter.emit(")");
+        emitter.pop_scope();
+    }
+
+    emitter.emit(")");
     emitter.pop_scope();
 
     print!("{}", emitter.code());
