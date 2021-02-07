@@ -23,14 +23,14 @@ pub enum Node {
     },
 }
 
-pub fn parse<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
+pub fn parse_string<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
     let mut tokenizer = Tokenizer::from_string(&src);
     let mut tokenizer = (&mut tokenizer).peekable();
 
     parse_expr(&mut tokenizer)
 }
 
-pub fn parse_expression(tokenizer: &mut Tokenizer) -> Option<Box<Node>> {
+pub fn parse(tokenizer: &mut Tokenizer) -> Option<Box<Node>> {
     let mut tokenizer = tokenizer.peekable();
     parse_expr(&mut tokenizer)
 }
@@ -206,18 +206,18 @@ mod tests {
 
     #[test]
     fn number_integer() {
-        let node = parse("42").unwrap();
+        let node = parse_string("42").unwrap();
         assert_matches!(*node, Node::Integer(42));
     }
     #[test]
     fn number_integer_followed_by_letter() {
-        let node = parse("123a").unwrap();
+        let node = parse_string("123a").unwrap();
         assert_matches!(*node, Node::Integer(123));
     }
 
     #[test]
     fn add_integer() {
-        let node = parse("1 + 2").unwrap();
+        let node = parse_string("1 + 2").unwrap();
         assert_matches!(*node, Node::Add(lhs, rhs) => {
             assert_matches!(*lhs, Node::Integer(1));
             assert_matches!(*rhs, Node::Integer(2));
@@ -226,7 +226,7 @@ mod tests {
 
     #[test]
     fn operator_associative() {
-        let node = parse("1 + 2 + 3").unwrap();
+        let node = parse_string("1 + 2 + 3").unwrap();
 
         assert_matches!(*node, Node::Add(lhs, rhs) => {
             assert_matches!(*lhs, Node::Add(x, y) => {
@@ -238,7 +238,7 @@ mod tests {
     }
     #[test]
     fn paren_grouping() {
-        let node = parse("(1 + 2) * 3").unwrap();
+        let node = parse_string("(1 + 2) * 3").unwrap();
 
         assert_matches!(*node, Node::Mul(lhs, rhs) => {
             assert_matches!(*lhs, Node::Add(x, y) => {

@@ -155,7 +155,7 @@ fn main() {
     };
 
     let mut tokenizer = Tokenizer::from_string(&src);
-    let node = parser::parse_expression(&mut tokenizer).expect("no expression");
+    let node = parser::parse(&mut tokenizer).expect("no expression");
 
     //let node = parser::parse(&src).unwrap();
     let mut emitter = AsmEmitter::new();
