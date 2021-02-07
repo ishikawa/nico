@@ -95,7 +95,14 @@ const cases: TestCase[] = [
     expected: 0
   },
   {
-    input: "if 10 <= 5\n3\nelse\n40\nend",
+    // prettier-ignore
+    input: [
+      "if 10 <= 5",
+      "    3",
+      "else",
+      "    40",
+      "end"
+    ].join("\n"),
     expected: 40
   },
   // Function
