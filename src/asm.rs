@@ -3,6 +3,12 @@ pub struct AsmEmitter {
     level: i32,
     buffer: String,
     locals: Vec<String>,
+    functions: Vec<Function>,
+}
+
+struct Function {
+    name: String,
+    params: Vec<String>,
 }
 
 impl Default for AsmEmitter {
@@ -17,6 +23,7 @@ impl AsmEmitter {
             level: 0,
             buffer: "".to_string(),
             locals: vec![],
+            functions: vec![],
         }
     }
 
@@ -35,7 +42,7 @@ impl AsmEmitter {
                 {
                     let mut signature = String::new();
 
-                    signature.push_str(format!("(func (export \"{}\")", name).as_str());
+                    signature.push_str(format!("(func ${} (export \"{}\")", name, name).as_str());
                     for param in params {
                         signature.push_str(format!(" (param ${} i32)", param).as_str());
                     }
@@ -44,14 +51,20 @@ impl AsmEmitter {
                     self.emit(signature);
                 }
 
+                // Register function definition
+                self.functions.push(Function {
+                    name: name.clone(),
+                    params: params.clone(),
+                });
+
                 // Initialize local variables with parameters.
                 self.locals.extend_from_slice(params);
-
-                self.push_scope();
-                self.emit_expr(&*body);
-                self.pop_scope();
-                self.emit(")");
-
+                {
+                    self.push_scope();
+                    self.emit_expr(&*body);
+                    self.pop_scope();
+                    self.emit(")");
+                }
                 self.locals.clear();
             }
         }
@@ -68,6 +81,30 @@ impl AsmEmitter {
             }
             Expr::Integer(n) => {
                 self.emit(format!("(i32.const {})", n));
+            }
+            Expr::Invocation { name, arguments } => {
+                let function = self.functions.iter().find(|f| f.name == *name);
+
+                match function {
+                    None => panic!("Undefined function `{}`", name),
+                    Some(function) if function.params.len() != arguments.len() => {
+                        panic!(
+                            "The function `{}` takes {} arguments, but {} given.",
+                            name,
+                            function.params.len(),
+                            arguments.len()
+                        );
+                    }
+                    _ => {}
+                };
+
+                self.emit(format!("(call ${}", name));
+                self.push_scope();
+                for arg in arguments {
+                    self.emit_expr(arg);
+                }
+                self.pop_scope();
+                self.emit(")")
             }
             // binop
             Expr::Add(lhs, rhs) => {

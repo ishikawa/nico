@@ -21,6 +21,10 @@ pub enum Expr {
     // Primitive
     Identifier(String),
     Integer(u32),
+    Invocation {
+        name: String,
+        arguments: Vec<Expr>,
+    },
 
     // binop
     Add(Box<Expr>, Box<Expr>),
@@ -215,9 +219,33 @@ fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> 
             node
         }
         Token::Identifier(name) => {
-            let node = Some(Box::new(Expr::Identifier(name.clone())));
+            let name = name.clone();
             tokenizer.next();
-            node
+
+            // function invocation?
+            if let Some(Token::Char('(')) = tokenizer.peek() {
+                let mut arguments = vec![];
+
+                consume_char(tokenizer, '(');
+                loop {
+                    if let Some(Token::Char(')')) = tokenizer.peek() {
+                        break;
+                    }
+
+                    let expr = parse_expr(tokenizer).expect("Expected param");
+                    arguments.push(*expr);
+
+                    if let Some(Token::Char(',')) = tokenizer.peek() {
+                        tokenizer.next();
+                    } else {
+                        break;
+                    }
+                }
+                consume_char(tokenizer, ')');
+                Some(Box::new(Expr::Invocation { name, arguments }))
+            } else {
+                Some(Box::new(Expr::Identifier(name)))
+            }
         }
         Token::Integer(i) => {
             let node = Some(Box::new(Expr::Integer(*i)));
