@@ -143,6 +143,11 @@ fn generate(node: &Node, emitter: &mut AsmEmitter) {
             emitter.emit("))");
             emitter.pop_scope();
         }
+        Node::Function {
+            name: _,
+            params: _,
+            body: _,
+        } => {}
     }
 }
 

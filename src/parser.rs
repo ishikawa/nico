@@ -21,6 +21,12 @@ pub enum Node {
         then_body: Box<Node>,
         else_body: Option<Box<Node>>,
     },
+    // Definition
+    Function {
+        name: String,
+        params: Vec<String>,
+        body: Box<Node>,
+    },
 }
 
 pub fn parse_string<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
@@ -33,6 +39,44 @@ pub fn parse_string<S: AsRef<str>>(src: S) -> Option<Box<Node>> {
 pub fn parse(tokenizer: &mut Tokenizer) -> Option<Box<Node>> {
     let mut tokenizer = tokenizer.peekable();
     parse_expr(&mut tokenizer)
+}
+
+fn parse_function(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+    match tokenizer.peek() {
+        Some(Token::Fun) => {
+            tokenizer.next();
+        }
+        _ => return None,
+    };
+
+    let name = match tokenizer.next() {
+        Some(Token::Identifier(name)) => name,
+        Some(token) => panic!("Expected function name, but was {:?}", token),
+        None => panic!("Premature EOF, no function name"),
+    };
+
+    let mut params = vec![];
+
+    consume_char(tokenizer, '(');
+    while let Some(Token::Identifier(name)) = tokenizer.peek() {
+        params.push(name.clone());
+        tokenizer.next();
+
+        match tokenizer.peek() {
+            Some(Token::Char(',')) => {
+                tokenizer.next();
+            }
+            _ => break,
+        };
+    }
+    consume_char(tokenizer, ')');
+
+    // TODO: check line separator
+    let body = parse_expr(tokenizer).expect("no function body");
+    consume_token(tokenizer, Token::End);
+
+    let node = Node::Function { name, params, body };
+    Some(Box::new(node))
 }
 
 fn parse_expr(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
@@ -171,11 +215,7 @@ fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> 
                 _ => None,
             };
 
-            match tokenizer.peek() {
-                Some(Token::End) => tokenizer.next(),
-                Some(token) => panic!("Expected \"end\", but was {:?}", token),
-                None => panic!("Premature EOF"),
-            };
+            consume_token(tokenizer, Token::End);
 
             let node = Node::If {
                 condition,
@@ -188,15 +228,16 @@ fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> 
     }
 }
 
-fn consume_char(tokenizer: &mut Peekable<&mut Tokenizer>, expected: char) {
+fn consume_token(tokenizer: &mut Peekable<&mut Tokenizer>, expected: Token) {
     match tokenizer.next() {
         None => panic!("Premature EOF"),
-        Some(Token::Char(c)) => match c {
-            c if c == expected => {}
-            c => panic!("Expected char \"{}\", but was \"{}\"", expected, c),
-        },
-        Some(token) => panic!("Unexpected token {:?}", token),
+        Some(token) if token == expected => {}
+        Some(token) => panic!("Expected token \"{:?}\", but was {:?}", expected, token),
     }
+}
+
+fn consume_char(tokenizer: &mut Peekable<&mut Tokenizer>, expected: char) {
+    consume_token(tokenizer, Token::Char(expected));
 }
 
 #[cfg(test)]
