@@ -88,7 +88,27 @@ impl<'a> Tokenizer<'a> {
 
         loop {
             match self.iter.peek() {
-                Some('"') => break,
+                Some('"') => {
+                    self.iter.next();
+                    break;
+                }
+                Some('\\') => {
+                    self.iter.next();
+                    let c = match self.iter.peek() {
+                        Some(c) => *c,
+                        None => panic!("Premature EOF while reading escape sequence"),
+                    };
+
+                    match c {
+                        'n' => string.push('\n'),
+                        'r' => string.push('\r'),
+                        't' => string.push('\t'),
+                        '"' => string.push('\"'),
+                        '\\' => string.push('\\'),
+                        c => panic!("Unrecognized escape sequence: \"\\{}\"", c),
+                    };
+                    self.iter.next();
+                }
                 Some(c) => {
                     string.push(*c);
                     self.iter.next();
@@ -223,10 +243,13 @@ mod tests {
 
     #[test]
     fn strings() {
-        let mut tokenizer = Tokenizer::from_string("\"\"");
+        let mut tokenizer = Tokenizer::from_string("\"\" \"\\n\"");
 
         assert_matches!(tokenizer.next().unwrap(), Token::String(str) => {
             assert_eq!(str, "");
+        });
+        assert_matches!(tokenizer.next().unwrap(), Token::String(str) => {
+            assert_eq!(str, "\n");
         });
     }
 }
