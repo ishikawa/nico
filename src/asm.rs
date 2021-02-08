@@ -40,30 +40,30 @@ impl WasmWriter {
         self.write(format!("(i32.const {})", n));
     }
 
-    fn write_bytes(&mut self, bytes: &[u8]) -> usize {
+    fn write_bytes(&mut self, bytes: &[u8]) -> i32 {
         self.indent();
         self.buffer.push('"');
         WasmWriter::bytes_sequence(&mut self.buffer, bytes);
         self.buffer.push('"');
         self.buffer.push('\n');
 
-        bytes.len()
+        bytes.len() as i32
     }
 
-    fn write_string(&mut self, offset: i32, string: &str) -> usize {
+    fn write_string(&mut self, offset: i32, string: &str) -> i32 {
         let bytes = string.as_bytes();
 
         // Write length at head
-        if bytes.len() > u32::MAX as usize {
-            panic!("string literal is too long. max = {}", u32::MAX);
+        if bytes.len() > i32::MAX as usize {
+            panic!("string literal is too long. max = {}", i32::MAX);
         }
 
-        let mut n: usize = 0;
+        let mut n: i32 = 0;
 
         self.write("(data");
         self.push_scope();
         self.write_i32(offset);
-        n += self.write_bytes(&(bytes.len() as u32).to_le_bytes());
+        n += self.write_bytes(&(bytes.len() as i32).to_le_bytes());
         n += self.write_bytes(bytes);
         self.pop_scope();
         self.write(")");
@@ -176,7 +176,8 @@ impl AsmEmitter {
     fn emit_string(&mut self, s: &str) -> i32 {
         let offset = self.memory_offset;
 
-        self.memory.write_string(offset, s);
+        let length = self.memory.write_string(offset, s);
+        self.memory_offset += length;
         offset
     }
 

@@ -143,9 +143,29 @@ const cases: TestCase[] = [
   },
   // string literal
   {
-    // prettier-ignore
-    input: "\"Hello, World!\\n\"",
+    input: '"Hello, World!\\n"',
     expected: "Hello, World!\n"
+  },
+  {
+    // prettier-ignore
+    input: [
+      "fun foo()",
+      "    \"foo\"",
+      "end",
+      "\"main\"",
+    ].join("\n"),
+    expected: "main"
+  },
+  {
+    // prettier-ignore
+    input: [
+      "fun foo()",
+      "    \"foo\"",
+      "end",
+      "\"main\"",
+    ].join("\n"),
+    exec: exports => exports.foo(),
+    expected: "foo"
   }
 ];
 
