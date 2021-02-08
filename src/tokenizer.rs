@@ -103,7 +103,7 @@ impl<'a> Tokenizer<'a> {
                         'n' => string.push('\n'),
                         'r' => string.push('\r'),
                         't' => string.push('\t'),
-                        '"' => string.push('\"'),
+                        '"' => string.push('"'),
                         '\\' => string.push('\\'),
                         c => panic!("Unrecognized escape sequence: \"\\{}\"", c),
                     };
@@ -243,13 +243,16 @@ mod tests {
 
     #[test]
     fn strings() {
-        let mut tokenizer = Tokenizer::from_string("\"\" \"\\n\"");
+        let mut tokenizer = Tokenizer::from_string("\"\" \"\\n\" \"\\\"\"");
 
         assert_matches!(tokenizer.next().unwrap(), Token::String(str) => {
             assert_eq!(str, "");
         });
         assert_matches!(tokenizer.next().unwrap(), Token::String(str) => {
             assert_eq!(str, "\n");
+        });
+        assert_matches!(tokenizer.next().unwrap(), Token::String(str) => {
+            assert_eq!(str, "\"");
         });
     }
 }
