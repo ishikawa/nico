@@ -4,7 +4,8 @@ use std::{iter::Peekable, str::Chars};
 pub enum Token {
     // Primitive
     Identifier(String),
-    Integer(u32),
+    Integer(i32),
+    String(String),
 
     // Keywords
     If,
@@ -71,6 +72,7 @@ impl<'a> Tokenizer<'a> {
             '0'..='9' => self.read_integer(nextc),
             'a'..='z' | '_' => self.read_name(nextc),
             '!' | '=' | '<' | '>' => self.read_operator(nextc),
+            '"' => self.read_string(),
             x => {
                 self.iter.next();
                 Token::Char(x)
@@ -78,6 +80,44 @@ impl<'a> Tokenizer<'a> {
         };
 
         Some(token)
+    }
+
+    fn read_string(&mut self) -> Token {
+        let mut string = String::new();
+        self.iter.next();
+
+        loop {
+            match self.iter.peek() {
+                Some('"') => {
+                    self.iter.next();
+                    break;
+                }
+                Some('\\') => {
+                    self.iter.next();
+                    let c = match self.iter.peek() {
+                        Some(c) => *c,
+                        None => panic!("Premature EOF while reading escape sequence"),
+                    };
+
+                    match c {
+                        'n' => string.push('\n'),
+                        'r' => string.push('\r'),
+                        't' => string.push('\t'),
+                        '"' => string.push('"'),
+                        '\\' => string.push('\\'),
+                        c => panic!("Unrecognized escape sequence: \"\\{}\"", c),
+                    };
+                    self.iter.next();
+                }
+                Some(c) => {
+                    string.push(*c);
+                    self.iter.next();
+                }
+                None => panic!("Premature EOF while reading string"),
+            };
+        }
+
+        Token::String(string)
     }
 
     fn read_operator(&mut self, nextc: char) -> Token {
@@ -125,13 +165,13 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn read_integer(&mut self, nextc: char) -> Token {
-        let mut value: u32 = (nextc as u32) - ('0' as u32);
+        let mut value: i32 = (nextc as i32) - ('0' as i32);
         self.iter.next();
 
         loop {
             match self.peek_char() {
                 Some(x @ '0'..='9') => {
-                    let n = (*x as u32) - ('0' as u32);
+                    let n = (*x as i32) - ('0' as i32);
 
                     value = value * 10 + n;
                 }
@@ -199,5 +239,20 @@ mod tests {
         assert_matches!(tokenizer.next().unwrap(), Token::If);
         assert_matches!(tokenizer.next().unwrap(), Token::End);
         assert_matches!(tokenizer.next().unwrap(), Token::Fun);
+    }
+
+    #[test]
+    fn strings() {
+        let mut tokenizer = Tokenizer::from_string("\"\" \"\\n\" \"\\\"\"");
+
+        assert_matches!(tokenizer.next().unwrap(), Token::String(str) => {
+            assert_eq!(str, "");
+        });
+        assert_matches!(tokenizer.next().unwrap(), Token::String(str) => {
+            assert_eq!(str, "\n");
+        });
+        assert_matches!(tokenizer.next().unwrap(), Token::String(str) => {
+            assert_eq!(str, "\"");
+        });
     }
 }

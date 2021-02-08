@@ -20,7 +20,8 @@ pub enum Definition {
 pub enum Expr {
     // Primitive
     Identifier(String),
-    Integer(u32),
+    Integer(i32),
+    String(String),
     Invocation {
         name: String,
         arguments: Vec<Expr>,
@@ -249,6 +250,11 @@ fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> 
         }
         Token::Integer(i) => {
             let node = Some(Box::new(Expr::Integer(*i)));
+            tokenizer.next();
+            node
+        }
+        Token::String(s) => {
+            let node = Some(Box::new(Expr::String(s.clone())));
             tokenizer.next();
             node
         }

@@ -42,7 +42,6 @@ fn main() {
     //let node = parser::parse(&src).unwrap();
     let mut emitter = AsmEmitter::new();
 
-    emitter.emit("(module");
     emitter.push_scope();
 
     // export function
@@ -60,7 +59,6 @@ fn main() {
     }
 
     emitter.pop_scope();
-    emitter.emit(")");
 
-    print!("{}", emitter.code());
+    print!("{}", emitter.generate_module());
 }
