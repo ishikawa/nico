@@ -31,10 +31,6 @@ impl AsmEmitter {
         &self.buffer
     }
 
-    pub fn emit_zero(&mut self) {
-        self.emit("(i32.const 0)");
-    }
-
     pub fn emit_definition(&mut self, definition: &Definition) {
         match definition {
             Definition::Function { name, params, body } => {
@@ -70,6 +66,14 @@ impl AsmEmitter {
         }
     }
 
+    fn emit_i32(&mut self, n: i32) {
+        self.emit(format!("(i32.const {})", n));
+    }
+
+    fn emit_string(&mut self, _: &str) -> i32 {
+        0
+    }
+
     pub fn emit_expr(&mut self, node: &Expr) {
         match node {
             Expr::Identifier(name) => {
@@ -80,7 +84,11 @@ impl AsmEmitter {
                 self.emit(format!("(get_local ${})", name));
             }
             Expr::Integer(n) => {
-                self.emit(format!("(i32.const {})", n));
+                self.emit_i32(*n);
+            }
+            Expr::String(s) => {
+                let index = self.emit_string(s);
+                self.emit_i32(index);
             }
             Expr::Invocation { name, arguments } => {
                 let function = self.functions.iter().find(|f| f.name == *name);
@@ -177,7 +185,7 @@ impl AsmEmitter {
                 self.push_scope();
                 match else_body {
                     Some(node) => self.emit_expr(node),
-                    None => self.emit_zero(),
+                    None => self.emit_i32(0),
                 }
                 self.pop_scope();
                 self.emit("))");
