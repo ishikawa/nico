@@ -126,8 +126,16 @@ impl AsmEmitter {
         }
     }
 
-    pub fn code(&self) -> &str {
-        &self.writer.code()
+    pub fn generate_module(&self) -> String {
+        let mut module = String::new();
+
+        module.push_str("(module\n");
+        module.push_str("  (memory $mem (export \"memory\") 1)\n");
+        module.push_str(self.memory.code());
+        module.push_str(self.writer.code());
+        module.push(')');
+
+        module
     }
 
     pub fn emit_definition(&mut self, definition: &Definition) {

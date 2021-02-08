@@ -1,5 +1,6 @@
 import fs from "fs";
 import { compileFile } from "./util/compiler";
+import { StringDecoder } from "string_decoder";
 
 type Exports = Record<string, any>;
 
@@ -139,6 +140,12 @@ const cases: TestCase[] = [
     ].join("\n"),
     exec: exports => exports.fib(9),
     expected: 34
+  },
+  // string literal
+  {
+    // prettier-ignore
+    input: "\"Hello, World!\\n\"",
+    expected: "Hello, World!\n"
   }
 ];
 
@@ -154,6 +161,23 @@ cases.forEach(({ input, expected, exec }) => {
     // @ts-ignore
     const value = exec ? exec(instance.exports) : instance.exports.main();
 
-    expect(value).toEqual(expected);
+    if (Number.isInteger(expected)) {
+      expect(value).toEqual(expected);
+    } else if (typeof expected === "string") {
+      const offset = value;
+      expect(Number.isInteger(offset)).toBeTruthy();
+
+      const memory = instance.exports.memory as WebAssembly.Memory;
+      const viewer = new DataView(memory.buffer, 0);
+      const length = viewer.getInt32(offset, true);
+
+      const bytes = new Uint8Array(memory.buffer, offset + 4, length);
+      const decoder = new StringDecoder("utf-8");
+      const string = decoder.end(Buffer.from(bytes));
+
+      expect(string).toEqual(expected);
+    } else {
+      fail(`This expectation value is not implemented yet! ${expected}`);
+    }
   });
 });

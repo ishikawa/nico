@@ -42,9 +42,7 @@ fn main() {
     //let node = parser::parse(&src).unwrap();
     let mut emitter = AsmEmitter::new();
 
-    emitter.emit("(module");
     emitter.push_scope();
-    emitter.emit("(memory $mem (export \"memory\") 1)");
 
     // export function
     if let Some(definition) = program.definition {
@@ -61,7 +59,6 @@ fn main() {
     }
 
     emitter.pop_scope();
-    emitter.emit(")");
 
-    print!("{}", emitter.code());
+    print!("{}", emitter.generate_module());
 }
