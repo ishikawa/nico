@@ -6,6 +6,19 @@ pub struct WasmWriter {
 }
 
 impl WasmWriter {
+    fn bytes_sequence(buffer: &mut String, bytes: &[u8]) {
+        for &b in bytes {
+            if (0x20..0x7f).contains(&b) {
+                // printable
+                buffer.push(b as char);
+            } else {
+                buffer.push_str(format!("\\{:02x}", b).as_ref())
+            }
+        }
+    }
+}
+
+impl WasmWriter {
     pub fn new() -> WasmWriter {
         WasmWriter {
             level: 0,
@@ -27,24 +40,17 @@ impl WasmWriter {
         self.write(format!("(i32.const {})", n));
     }
 
-    fn write_bytes(&mut self, bytes: &[u8]) {
-        let mut buffer = String::new();
+    fn write_bytes(&mut self, bytes: &[u8]) -> usize {
+        self.indent();
+        self.buffer.push('"');
+        WasmWriter::bytes_sequence(&mut self.buffer, bytes);
+        self.buffer.push('"');
+        self.buffer.push('\n');
 
-        buffer.push('"');
-        for &b in bytes {
-            if (0x20..0x7f).contains(&b) {
-                // printable
-                buffer.push(b as char);
-            } else {
-                buffer.push_str(format!("\\{:02x}", b).as_ref())
-            }
-        }
-        buffer.push('"');
-
-        self.write(buffer);
+        bytes.len()
     }
 
-    fn write_string(&mut self, offset: i32, string: &str) {
+    fn write_string(&mut self, offset: i32, string: &str) -> usize {
         let bytes = string.as_bytes();
 
         // Write length at head
@@ -52,13 +58,17 @@ impl WasmWriter {
             panic!("string literal is too long. max = {}", u32::MAX);
         }
 
+        let mut n: usize = 0;
+
         self.write("(data");
         self.push_scope();
         self.write_i32(offset);
-        self.write_bytes(&(bytes.len() as u32).to_le_bytes());
-        self.write_bytes(bytes);
+        n += self.write_bytes(&(bytes.len() as u32).to_le_bytes());
+        n += self.write_bytes(bytes);
         self.pop_scope();
         self.write(")");
+
+        n
     }
 
     pub fn push_scope(&mut self) {
@@ -88,6 +98,8 @@ impl Default for WasmWriter {
 
 pub struct AsmEmitter {
     writer: WasmWriter,
+    memory: WasmWriter,
+    memory_offset: i32,
     locals: Vec<String>,
     functions: Vec<Function>,
 }
@@ -107,6 +119,8 @@ impl AsmEmitter {
     pub fn new() -> AsmEmitter {
         AsmEmitter {
             writer: WasmWriter::new(),
+            memory: WasmWriter::new(),
+            memory_offset: 0,
             locals: vec![],
             functions: vec![],
         }
@@ -152,8 +166,10 @@ impl AsmEmitter {
     }
 
     fn emit_string(&mut self, s: &str) -> i32 {
-        self.writer.write_string(0, s);
-        0
+        let offset = self.memory_offset;
+
+        self.memory.write_string(offset, s);
+        offset
     }
 
     pub fn emit_expr(&mut self, node: &Expr) {

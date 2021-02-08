@@ -44,6 +44,7 @@ fn main() {
 
     emitter.emit("(module");
     emitter.push_scope();
+    emitter.emit("(memory $mem (export \"memory\") 1)");
 
     // export function
     if let Some(definition) = program.definition {
