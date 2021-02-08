@@ -1,7 +1,93 @@
 use super::parser::{Definition, Expr};
-pub struct AsmEmitter {
+
+pub struct WasmWriter {
     level: i32,
     buffer: String,
+}
+
+impl WasmWriter {
+    pub fn new() -> WasmWriter {
+        WasmWriter {
+            level: 0,
+            buffer: String::new(),
+        }
+    }
+
+    pub fn code(&self) -> &str {
+        &self.buffer
+    }
+
+    pub fn write<S: AsRef<str>>(&mut self, asm: S) {
+        self.indent();
+        self.buffer.push_str(asm.as_ref());
+        self.buffer.push('\n');
+    }
+
+    fn write_i32(&mut self, n: i32) {
+        self.write(format!("(i32.const {})", n));
+    }
+
+    fn write_bytes(&mut self, bytes: &[u8]) {
+        let mut buffer = String::new();
+
+        buffer.push('"');
+        for &b in bytes {
+            if (0x20..0x7f).contains(&b) {
+                // printable
+                buffer.push(b as char);
+            } else {
+                buffer.push_str(format!("\\{:02x}", b).as_ref())
+            }
+        }
+        buffer.push('"');
+
+        self.write(buffer);
+    }
+
+    fn write_string(&mut self, offset: i32, string: &str) {
+        let bytes = string.as_bytes();
+
+        // Write length at head
+        if bytes.len() > u32::MAX as usize {
+            panic!("string literal is too long. max = {}", u32::MAX);
+        }
+
+        self.write("(data");
+        self.push_scope();
+        self.write_i32(offset);
+        self.write_bytes(&(bytes.len() as u32).to_le_bytes());
+        self.write_bytes(bytes);
+        self.pop_scope();
+        self.write(")");
+    }
+
+    pub fn push_scope(&mut self) {
+        self.level += 1;
+    }
+
+    pub fn pop_scope(&mut self) {
+        self.level -= 1;
+    }
+
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+    }
+
+    fn indent(&mut self) {
+        for _ in 0..self.level {
+            self.buffer.push_str("  ");
+        }
+    }
+}
+
+impl Default for WasmWriter {
+    fn default() -> Self {
+        WasmWriter::new()
+    }
+}
+
+pub struct AsmEmitter {
+    writer: WasmWriter,
     locals: Vec<String>,
     functions: Vec<Function>,
 }
@@ -20,15 +106,14 @@ impl Default for AsmEmitter {
 impl AsmEmitter {
     pub fn new() -> AsmEmitter {
         AsmEmitter {
-            level: 0,
-            buffer: "".to_string(),
+            writer: WasmWriter::new(),
             locals: vec![],
             functions: vec![],
         }
     }
 
-    pub fn code(&self) -> &String {
-        &self.buffer
+    pub fn code(&self) -> &str {
+        &self.writer.code()
     }
 
     pub fn emit_definition(&mut self, definition: &Definition) {
@@ -66,11 +151,8 @@ impl AsmEmitter {
         }
     }
 
-    fn emit_i32(&mut self, n: i32) {
-        self.emit(format!("(i32.const {})", n));
-    }
-
-    fn emit_string(&mut self, _: &str) -> i32 {
+    fn emit_string(&mut self, s: &str) -> i32 {
+        self.writer.write_string(0, s);
         0
     }
 
@@ -84,11 +166,11 @@ impl AsmEmitter {
                 self.emit(format!("(get_local ${})", name));
             }
             Expr::Integer(n) => {
-                self.emit_i32(*n);
+                self.writer.write_i32(*n);
             }
             Expr::String(s) => {
                 let index = self.emit_string(s);
-                self.emit_i32(index);
+                self.writer.write_i32(index);
             }
             Expr::Invocation { name, arguments } => {
                 let function = self.functions.iter().find(|f| f.name == *name);
@@ -185,7 +267,7 @@ impl AsmEmitter {
                 self.push_scope();
                 match else_body {
                     Some(node) => self.emit_expr(node),
-                    None => self.emit_i32(0),
+                    None => self.writer.write_i32(0),
                 }
                 self.pop_scope();
                 self.emit("))");
@@ -195,22 +277,44 @@ impl AsmEmitter {
     }
 
     pub fn emit<S: AsRef<str>>(&mut self, asm: S) {
-        self.indent();
-        self.buffer.push_str(asm.as_ref());
-        self.buffer.push('\n');
+        self.writer.write(asm);
     }
 
     pub fn push_scope(&mut self) {
-        self.level += 1;
+        self.writer.push_scope()
     }
 
     pub fn pop_scope(&mut self) {
-        self.level -= 1;
+        self.writer.pop_scope()
     }
+}
 
-    fn indent(&mut self) {
-        for _ in 0..self.level {
-            self.buffer.push_str("  ");
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn string_literal() {
+        let mut writer = WasmWriter::new();
+
+        writer.write_string(0, "");
+        assert_eq!(
+            writer.code(),
+            "(data\n  (i32.const 0)\n  \"\\00\\00\\00\\00\"\n  \"\"\n)\n"
+        );
+
+        writer.clear();
+        writer.write_string(0, "a");
+        assert_eq!(
+            writer.code(),
+            "(data\n  (i32.const 0)\n  \"\\01\\00\\00\\00\"\n  \"a\"\n)\n"
+        );
+
+        writer.clear();
+        writer.write_string(0, "あ");
+        assert_eq!(
+            writer.code(),
+            "(data\n  (i32.const 0)\n  \"\\03\\00\\00\\00\"\n  \"\\e3\\81\\82\"\n)\n"
+        );
     }
 }
