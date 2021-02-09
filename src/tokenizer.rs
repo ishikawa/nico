@@ -178,13 +178,9 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn peek_char(&mut self) -> Option<&char> {
-        match self.iter.peek() {
-            None => {
-                self.at_end = true;
-                None
-            }
-            c @ Some(_) => c,
-        }
+        let c = self.iter.peek();
+        self.at_end = c.is_none();
+        c
     }
 
     fn skip_whitespaces(&mut self) {
