@@ -50,16 +50,6 @@ impl<'a> Tokenizer<'a> {
         self.at_end
     }
 
-    fn peek_char(&mut self) -> Option<&char> {
-        match self.iter.peek() {
-            None => {
-                self.at_end = true;
-                None
-            }
-            c @ Some(_) => c,
-        }
-    }
-
     fn next_token(&mut self) -> Option<Token> {
         self.skip_whitespaces();
 
@@ -145,22 +135,28 @@ impl<'a> Tokenizer<'a> {
         let mut value = nextc.to_string();
         self.iter.next();
 
-        loop {
-            match self.peek_char() {
-                Some(x @ 'a'..='z') | Some(x @ '0'..='9') | Some(x @ '_') | Some(x @ '!') => {
-                    value.push(*x);
+        while let Some(nextc) = self.peek_char() {
+            match nextc {
+                'a'..='z' | '0'..='9' | '_' => {
+                    value.push(*nextc);
                 }
-                _ => {
-                    return match value.as_str() {
-                        "if" => Token::If,
-                        "else" => Token::Else,
-                        "end" => Token::End,
-                        "fun" => Token::Fun,
-                        _ => Token::Identifier(value),
-                    }
-                }
+                _ => break,
             };
             self.iter.next();
+        }
+
+        // trailing "!"
+        if let Some(nextc @ '!') = self.peek_char() {
+            value.push(*nextc);
+            self.iter.next();
+        }
+
+        match value.as_str() {
+            "if" => Token::If,
+            "else" => Token::Else,
+            "end" => Token::End,
+            "fun" => Token::Fun,
+            _ => Token::Identifier(value),
         }
     }
 
@@ -180,6 +176,16 @@ impl<'a> Tokenizer<'a> {
                 }
             };
             self.iter.next();
+        }
+    }
+
+    fn peek_char(&mut self) -> Option<&char> {
+        match self.iter.peek() {
+            None => {
+                self.at_end = true;
+                None
+            }
+            c @ Some(_) => c,
         }
     }
 
@@ -253,6 +259,24 @@ mod tests {
         });
         assert_matches!(tokenizer.next().unwrap(), Token::String(str) => {
             assert_eq!(str, "\"");
+        });
+    }
+
+    #[test]
+    fn identifiers() {
+        let mut tokenizer = Tokenizer::from_string("abc abc! ab!c");
+
+        assert_matches!(tokenizer.next().unwrap(), Token::Identifier(str) => {
+            assert_eq!(str, "abc");
+        });
+        assert_matches!(tokenizer.next().unwrap(), Token::Identifier(str) => {
+            assert_eq!(str, "abc!");
+        });
+        assert_matches!(tokenizer.next().unwrap(), Token::Identifier(str) => {
+            assert_eq!(str, "ab!");
+        });
+        assert_matches!(tokenizer.next().unwrap(), Token::Identifier(str) => {
+            assert_eq!(str, "c");
         });
     }
 }
