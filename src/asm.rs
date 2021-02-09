@@ -1,4 +1,5 @@
-use super::parser::{Definition, Expr};
+use super::parser;
+use parser::Expr;
 
 pub struct WasmWriter {
     level: i32,
@@ -167,48 +168,44 @@ impl AsmEmitter {
         module
     }
 
-    pub fn emit_definition(&mut self, definition: &Definition) {
-        match definition {
-            Definition::Function { name, params, body } => {
-                // function signature
-                {
-                    let mut signature = String::new();
+    pub fn emit_definition(&mut self, parser::Function { name, params, body }: &parser::Function) {
+        // function signature
+        {
+            let mut signature = String::new();
 
-                    signature.push_str(format!("(func ${} (export \"{}\")", name, name).as_str());
-                    for param in params {
-                        signature.push_str(format!(" (param ${} i32)", param).as_str());
-                    }
-                    signature.push_str(" (result i32)");
-
-                    self.emit(signature);
-                }
-
-                // Register function definition
-                let typed_params = params
-                    .iter()
-                    .map(|_x| Param {
-                        //name: x.clone(),
-                        is_string: false,
-                    })
-                    .collect();
-
-                self.functions.push(Function {
-                    name: name.clone(),
-                    reference_name: format!("${}", name),
-                    params: typed_params,
-                });
-
-                // Initialize local variables with parameters.
-                self.locals.extend_from_slice(params);
-                {
-                    self.push_scope();
-                    self.emit_expr(&*body);
-                    self.pop_scope();
-                    self.emit(")");
-                }
-                self.locals.clear();
+            signature.push_str(format!("(func ${} (export \"{}\")", name, name).as_str());
+            for param in params {
+                signature.push_str(format!(" (param ${} i32)", param).as_str());
             }
+            signature.push_str(" (result i32)");
+
+            self.emit(signature);
         }
+
+        // Register function definition
+        let typed_params = params
+            .iter()
+            .map(|_x| Param {
+                //name: x.clone(),
+                is_string: false,
+            })
+            .collect();
+
+        self.functions.push(Function {
+            name: name.clone(),
+            reference_name: format!("${}", name),
+            params: typed_params,
+        });
+
+        // Initialize local variables with parameters.
+        self.locals.extend_from_slice(params);
+        {
+            self.push_scope();
+            self.emit_expr(&*body);
+            self.pop_scope();
+            self.emit(")");
+        }
+        self.locals.clear();
     }
 
     fn emit_string(&mut self, s: &str) -> i32 {

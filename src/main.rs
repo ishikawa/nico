@@ -50,8 +50,8 @@ fn main() {
     emitter.push_scope();
 
     // export function
-    if let Some(definition) = module.definition {
-        emitter.emit_definition(&*definition);
+    if let Some(function) = module.function {
+        emitter.emit_definition(&*function);
     }
 
     // main function
