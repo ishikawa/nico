@@ -5,6 +5,7 @@ use std::iter::Peekable;
 pub struct Module {
     pub definition: Option<Box<Definition>>,
     pub expr: Option<Box<Expr>>,
+    pub name: Option<String>,
 }
 
 #[derive(Debug)]
@@ -63,6 +64,7 @@ pub fn parse(tokenizer: &mut Tokenizer) -> Box<Module> {
     Box::new(Module {
         definition: function,
         expr,
+        name: None,
     })
 }
 
