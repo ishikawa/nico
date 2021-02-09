@@ -2,7 +2,7 @@ use super::tokenizer::{Token, Tokenizer};
 use std::iter::Peekable;
 
 // Program
-pub struct Program {
+pub struct Module {
     pub definition: Option<Box<Definition>>,
     pub expr: Option<Box<Expr>>,
 }
@@ -49,18 +49,18 @@ pub enum Expr {
     },
 }
 
-pub fn parse_string<S: AsRef<str>>(src: S) -> Box<Program> {
+pub fn parse_string<S: AsRef<str>>(src: S) -> Box<Module> {
     let mut tokenizer = Tokenizer::from_string(&src);
     parse(&mut tokenizer)
 }
 
-pub fn parse(tokenizer: &mut Tokenizer) -> Box<Program> {
+pub fn parse(tokenizer: &mut Tokenizer) -> Box<Module> {
     let mut tokenizer = tokenizer.peekable();
 
     let function = parse_function(&mut tokenizer);
     let expr = parse_expr(&mut tokenizer);
 
-    Box::new(Program {
+    Box::new(Module {
         definition: function,
         expr,
     })
