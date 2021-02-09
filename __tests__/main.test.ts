@@ -1,6 +1,7 @@
 import fs from "fs";
-import { compileFile } from "./util/compiler";
 import { StringDecoder } from "string_decoder";
+import { compileFile } from "./util/compiler";
+import { BufferedPrinter } from "./util/runtime";
 
 type Exports = Record<string, any>;
 
@@ -8,6 +9,7 @@ interface TestCase {
   input: string;
   expected: any;
   exec?: (exports: Exports) => any;
+  captureOutput?: boolean;
 }
 
 const cases: TestCase[] = [
@@ -166,28 +168,55 @@ const cases: TestCase[] = [
     ].join("\n"),
     exec: exports => exports.foo(),
     expected: "foo"
+  },
+  {
+    // prettier-ignore
+    input: [
+      "println!(1)",
+    ].join("\n"),
+    captureOutput: true,
+    expected: "1\n"
+  },
+  {
+    // prettier-ignore
+    input: [
+      "println!(\"hello\")",
+    ].join("\n"),
+    captureOutput: true,
+    expected: "hello\n"
   }
 ];
 
-cases.forEach(({ input, expected, exec }) => {
+cases.forEach(({ input, expected, exec, captureOutput }) => {
   test(`given '${input}'`, async () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const printer = new BufferedPrinter(memory);
+
     const src = "/tmp/nico_test.nico";
     fs.writeFileSync(src, input);
 
     const buffer = await compileFile(src);
     const module = await WebAssembly.compile(buffer);
-    const instance = await WebAssembly.instantiate(module);
+
+    const instance = await WebAssembly.instantiate(module, {
+      js: { mem: memory },
+      printer: {
+        println_i32: printer.printlnNumber.bind(printer),
+        println_str: printer.printlnString.bind(printer)
+      }
+    });
 
     // @ts-ignore
     const value = exec ? exec(instance.exports) : instance.exports.main();
 
     if (Number.isInteger(expected)) {
       expect(value).toEqual(expected);
+    } else if (captureOutput && typeof expected === "string") {
+      expect(printer.buffer).toEqual(expected);
     } else if (typeof expected === "string") {
       const offset = value;
       expect(Number.isInteger(offset)).toBeTruthy();
 
-      const memory = instance.exports.memory as WebAssembly.Memory;
       const viewer = new DataView(memory.buffer, 0);
       const length = viewer.getInt32(offset, true);
 

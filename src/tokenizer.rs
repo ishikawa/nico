@@ -147,7 +147,7 @@ impl<'a> Tokenizer<'a> {
 
         loop {
             match self.peek_char() {
-                Some(x @ 'a'..='z') | Some(x @ '0'..='9') | Some(x @ '_') => {
+                Some(x @ 'a'..='z') | Some(x @ '0'..='9') | Some(x @ '_') | Some(x @ '!') => {
                     value.push(*x);
                 }
                 _ => {
