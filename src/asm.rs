@@ -104,9 +104,14 @@ pub struct AsmEmitter {
     functions: Vec<Function>,
 }
 
+struct Param {
+    //name: String,
+    is_string: bool,
+}
 struct Function {
-    name: String,
-    params: Vec<String>,
+    name: String,           // The name of a function in .nico file
+    reference_name: String, // The name of a function in .wat file
+    params: Vec<Param>,
 }
 
 impl Default for AsmEmitter {
@@ -117,20 +122,44 @@ impl Default for AsmEmitter {
 
 impl AsmEmitter {
     pub fn new() -> AsmEmitter {
+        // imported functions
+        let mut functions = vec![];
+
+        functions.push(Function {
+            name: "println!".to_string(),
+            reference_name: "$println_i32".to_string(),
+            params: vec![Param { is_string: false }],
+        });
+        functions.push(Function {
+            name: "println!".to_string(),
+            reference_name: "$println_str".to_string(),
+            params: vec![Param { is_string: true }],
+        });
+
         AsmEmitter {
             writer: WasmWriter::new(),
             memory: WasmWriter::new(),
             memory_offset: 0,
             locals: vec![],
-            functions: vec![],
+            functions,
         }
     }
 
-    pub fn generate_module(&self) -> String {
+    pub fn generate_module(&mut self) -> String {
         let mut module = String::new();
 
-        module.push_str("(module\n");
-        module.push_str("  (memory $mem (export \"memory\") 1)\n");
+        module.push_str(r#"(module"#);
+        module.push('\n');
+        module.push_str(r#"  (import "js" "mem" (memory 1))"#);
+        module.push('\n');
+        module.push_str(
+            r#"  (import "printer" "println_i32" (func $println_i32 (param i32) (result i32)))"#,
+        );
+        module.push('\n');
+        module.push_str(
+            r#"  (import "printer" "println_str" (func $println_str (param i32) (result i32)))"#,
+        );
+        module.push('\n');
         module.push_str(self.memory.code());
         module.push_str(self.writer.code());
         module.push(')');
@@ -155,9 +184,18 @@ impl AsmEmitter {
                 }
 
                 // Register function definition
+                let typed_params = params
+                    .iter()
+                    .map(|_x| Param {
+                        //name: x.clone(),
+                        is_string: false,
+                    })
+                    .collect();
+
                 self.functions.push(Function {
                     name: name.clone(),
-                    params: params.clone(),
+                    reference_name: format!("${}", name),
+                    params: typed_params,
                 });
 
                 // Initialize local variables with parameters.
@@ -198,22 +236,36 @@ impl AsmEmitter {
                 self.writer.write_i32(index);
             }
             Expr::Invocation { name, arguments } => {
-                let function = self.functions.iter().find(|f| f.name == *name);
+                // name and the number of arguments
+                let candidates: Vec<&Function> = self
+                    .functions
+                    .iter()
+                    .filter(|f| f.name == *name)
+                    .filter(|f| f.params.len() == arguments.len())
+                    .filter(|f| {
+                        f.params.iter().zip(arguments.iter()).all(|(p, a)| match a {
+                            Expr::String(_) => p.is_string,
+                            _ => !p.is_string,
+                        })
+                    })
+                    .collect();
 
-                match function {
-                    None => panic!("Undefined function `{}`", name),
-                    Some(function) if function.params.len() != arguments.len() => {
-                        panic!(
-                            "The function `{}` takes {} arguments, but {} given.",
-                            name,
-                            function.params.len(),
-                            arguments.len()
-                        );
-                    }
-                    _ => {}
+                //let function = self.functions.iter().find(|f| f.name == *name);
+                if candidates.is_empty() {
+                    panic!("Undefined function `{}`", name);
+                } else if candidates.len() > 1 {
+                    panic!("Duplicate function `{}`", name);
+                }
+
+                let function = match candidates.len() {
+                    0 => panic!("Undefined function `{}`", name),
+                    1 => candidates[0],
+                    _ => panic!("Duplicate function `{}`", name),
                 };
 
-                self.emit(format!("(call ${}", name));
+                let name = function.reference_name.clone();
+
+                self.emit(format!("(call {}", name));
                 self.push_scope();
                 for arg in arguments {
                     self.emit_expr(arg);
