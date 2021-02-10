@@ -1,3 +1,4 @@
+use super::sem;
 use super::tokenizer::{Token, Tokenizer};
 use std::iter::Peekable;
 
@@ -18,11 +19,12 @@ pub struct Function {
 #[derive(Debug)]
 pub struct Node {
     pub expr: Expr,
+    pub r#type: Option<sem::Type>,
 }
 
 impl Node {
     pub fn expr(expr: Expr) -> Node {
-        Node { expr }
+        Node { expr, r#type: None }
     }
 }
 

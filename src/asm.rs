@@ -217,9 +217,7 @@ impl AsmEmitter {
     }
 
     pub fn emit_expr(&mut self, node: &Node) {
-        let expr = &node.expr;
-
-        match expr {
+        match &node.expr {
             Expr::Identifier(name) => {
                 if !self.locals.iter().any(|local| local == name) {
                     panic!("Undefined local variable `{}`", name);
