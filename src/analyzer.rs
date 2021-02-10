@@ -12,9 +12,17 @@ impl Semantic {
     pub fn analyze(&mut self, module: &mut parser::Module) {
         module.name = Some("main".to_string());
 
+        if let Some(ref mut function) = module.function {
+            self.analyze_function(function);
+        }
         if let Some(ref mut expr) = module.expr {
             self.analyze_expr(expr);
         }
+    }
+
+    fn analyze_function(&mut self, function: &mut parser::Function) {
+        self.analyze_expr(&mut function.body);
+        function.return_type = function.body.r#type
     }
 
     fn analyze_expr(&mut self, node: &mut parser::Node) {

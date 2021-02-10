@@ -14,6 +14,7 @@ pub struct Function {
     pub name: String,
     pub params: Vec<String>,
     pub body: Box<Node>,
+    pub return_type: Option<sem::Type>,
 }
 
 #[derive(Debug)]
@@ -113,7 +114,12 @@ fn parse_function(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Functi
     let body = parse_expr(tokenizer).expect("no function body");
     consume_token(tokenizer, Token::End);
 
-    let function = Function { name, params, body };
+    let function = Function {
+        name,
+        params,
+        body,
+        return_type: None,
+    };
     Some(Box::new(function))
 }
 

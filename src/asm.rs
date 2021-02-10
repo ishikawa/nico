@@ -168,7 +168,15 @@ impl AsmEmitter {
         module
     }
 
-    pub fn emit_definition(&mut self, parser::Function { name, params, body }: &parser::Function) {
+    pub fn emit_definition(
+        &mut self,
+        parser::Function {
+            name,
+            params,
+            body,
+            return_type: _,
+        }: &parser::Function,
+    ) {
         // function signature
         {
             let mut signature = String::new();
