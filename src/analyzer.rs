@@ -18,7 +18,7 @@ impl Semantic {
     }
 
     fn analyze_expr(&mut self, node: &mut parser::Node) {
-        match &node.expr {
+        match node.expr {
             Expr::Integer(_) => {
                 node.r#type = Some(sem::Type::Int32);
             }
@@ -31,65 +31,100 @@ impl Semantic {
                 arguments: _,
             } => panic!("not implemented yet."),
             // binop
-            Expr::Add(lhs, rhs) => {
+            Expr::Add(ref mut lhs, ref mut rhs) => {
+                self.analyze_expr(lhs);
+                self.analyze_expr(rhs);
+
                 expect_type(lhs, sem::Type::Int32);
                 expect_type(rhs, sem::Type::Int32);
-                node.r#type = Some(sem::Type::String);
+                node.r#type = Some(sem::Type::Int32);
             }
-            Expr::Sub(lhs, rhs) => {
+            Expr::Sub(ref mut lhs, ref mut rhs) => {
+                self.analyze_expr(lhs);
+                self.analyze_expr(rhs);
+
                 expect_type(lhs, sem::Type::Int32);
                 expect_type(rhs, sem::Type::Int32);
-                node.r#type = Some(sem::Type::String);
+                node.r#type = Some(sem::Type::Int32);
             }
-            Expr::Mul(lhs, rhs) => {
+            Expr::Mul(ref mut lhs, ref mut rhs) => {
+                self.analyze_expr(lhs);
+                self.analyze_expr(rhs);
+
                 expect_type(lhs, sem::Type::Int32);
                 expect_type(rhs, sem::Type::Int32);
-                node.r#type = Some(sem::Type::String);
+                node.r#type = Some(sem::Type::Int32);
             }
-            Expr::Div(lhs, rhs) => {
+            Expr::Div(ref mut lhs, ref mut rhs) => {
+                self.analyze_expr(lhs);
+                self.analyze_expr(rhs);
+
                 expect_type(lhs, sem::Type::Int32);
                 expect_type(rhs, sem::Type::Int32);
-                node.r#type = Some(sem::Type::String);
+                node.r#type = Some(sem::Type::Int32);
             }
             // relation
-            Expr::LT(lhs, rhs) => {
+            Expr::LT(ref mut lhs, ref mut rhs) => {
+                self.analyze_expr(lhs);
+                self.analyze_expr(rhs);
+
                 expect_type(lhs, sem::Type::Int32);
                 expect_type(rhs, sem::Type::Int32);
                 node.r#type = Some(sem::Type::Boolean);
             }
-            Expr::GT(lhs, rhs) => {
+            Expr::GT(ref mut lhs, ref mut rhs) => {
+                self.analyze_expr(lhs);
+                self.analyze_expr(rhs);
+
                 expect_type(lhs, sem::Type::Int32);
                 expect_type(rhs, sem::Type::Int32);
                 node.r#type = Some(sem::Type::Boolean);
             }
-            Expr::LE(lhs, rhs) => {
+            Expr::LE(ref mut lhs, ref mut rhs) => {
+                self.analyze_expr(lhs);
+                self.analyze_expr(rhs);
+
                 expect_type(lhs, sem::Type::Int32);
                 expect_type(rhs, sem::Type::Int32);
                 node.r#type = Some(sem::Type::Boolean);
             }
-            Expr::GE(lhs, rhs) => {
+            Expr::GE(ref mut lhs, ref mut rhs) => {
+                self.analyze_expr(lhs);
+                self.analyze_expr(rhs);
+
                 expect_type(lhs, sem::Type::Int32);
                 expect_type(rhs, sem::Type::Int32);
                 node.r#type = Some(sem::Type::Boolean);
             }
-            Expr::EQ(lhs, rhs) => {
+            Expr::EQ(ref mut lhs, ref mut rhs) => {
+                self.analyze_expr(lhs);
+                self.analyze_expr(rhs);
+
                 expect_type(lhs, sem::Type::Int32);
                 expect_type(rhs, sem::Type::Int32);
                 node.r#type = Some(sem::Type::Boolean);
             }
-            Expr::NE(lhs, rhs) => {
+            Expr::NE(ref mut lhs, ref mut rhs) => {
+                self.analyze_expr(lhs);
+                self.analyze_expr(rhs);
+
                 expect_type(lhs, sem::Type::Int32);
                 expect_type(rhs, sem::Type::Int32);
                 node.r#type = Some(sem::Type::Boolean);
             }
             Expr::If {
-                condition,
-                then_body,
-                else_body,
+                ref mut condition,
+                ref mut then_body,
+                ref mut else_body,
             } => {
+                self.analyze_expr(condition);
+                self.analyze_expr(then_body);
+
                 expect_type(condition, sem::Type::Boolean);
+
                 match else_body {
                     Some(else_body) => {
+                        self.analyze_expr(else_body);
                         if then_body.r#type != else_body.r#type {
                             panic!("Type mismatch between `then` and `else`")
                         }
@@ -117,53 +152,35 @@ fn expect_type(node: &parser::Node, expected_type: sem::Type) {
     };
 }
 
-/*
-impl Semantic {
-    pub fn new() -> Semantic {
-        Semantic {
-            functions: vec![],
-            locals: vec![],
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_matches::assert_matches;
+    use parser;
+
+    #[test]
+    fn number_integer() {
+        let mut module = parser::parse_string("42");
+        let mut semantic = Semantic::new();
+
+        semantic.analyze(&mut module);
+
+        let node = module.expr.unwrap();
+        assert_matches!(node.r#type, Some(sem::Type::Int32));
     }
 
-    pub fn analyze(module: parser::Module) -> Semantic {
-        let mut sem = Semantic::new();
+    #[test]
+    fn add_operation() {
+        let mut module = parser::parse_string("1 + 2");
+        let mut semantic = Semantic::new();
 
-        sem.analyze_module(&module);
-        sem
-    }
+        semantic.analyze(&mut module);
 
-    fn analyze_module(&mut self, module: &parser::Module) {
-        if let Some(definition) = module.definition {
-            self.analyze_definition(definition);
-        }
-    }
-
-    fn analyze_definition(&mut self, definition: &Definition) {
-        match definition {
-            Definition::Function { name, params, body } => {
-                // Register function definition
-                let typed_params = params
-                    .iter()
-                    .map(|x| sem::Binding {
-                        name: x.clone(),
-                        r#type: sem::Type::Int32,
-                    })
-                    .collect();
-
-                self.functions.push(sem::Function {
-                    name: name.clone(),
-                    reference_name: format!("${}", name),
-                    params: typed_params,
-                });
-
-                // Initialize local variables with parameters.
-                //self.locals.extend(typed_params);
-
-                //self.locals.clear();
-            }
-        }
+        let node = module.expr.unwrap();
+        assert_matches!(node.r#type, Some(sem::Type::Int32));
+        assert_matches!(node.expr, Expr::Add(lhs, rhs) => {
+            assert_matches!(lhs.r#type, Some(sem::Type::Int32));
+            assert_matches!(rhs.r#type, Some(sem::Type::Int32));
+        });
     }
 }
-
- */

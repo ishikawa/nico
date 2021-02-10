@@ -41,7 +41,6 @@ fn main() {
 
     let mut tokenizer = Tokenizer::from_string(&src);
     let mut module = parser::parse(&mut tokenizer);
-
     let mut semantic = Semantic::new();
 
     semantic.analyze(&mut module);
