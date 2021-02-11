@@ -25,22 +25,63 @@ fn prune(ty: Rc<RefCell<sem::Type>>) -> Rc<RefCell<sem::Type>> {
     }
 }
 
-/*
-// Check if the type given by the 2nd argument appears in the type given by the 1st argument.
-fn occurs_in(ty1: Rc<RefCell<sem::Type>>, ty2: Rc<RefCell<sem::Type>>) -> bool {
+fn unify(ty1: Rc<RefCell<sem::Type>>, ty2: Rc<RefCell<sem::Type>>) {
     let ty1 = prune(ty1);
+    let ty2 = prune(ty2);
 
-    let x = match *ty1.borrow() {
-        sem::Type::TypeVariable { .. } => *ty1 == *ty2,
+    match *ty1.borrow_mut() {
+        sem::Type::TypeVariable {
+            ref mut instance, ..
+        } => {
+            if *ty1 == *ty2 {
+                if (*ty1).borrow().contains(&*ty2.borrow()) {
+                    panic!("recursive unification");
+                }
+                instance.replace(Rc::clone(&ty2));
+            }
+        }
+        sem::Type::Int32 => {
+            match *ty2.borrow() {
+                sem::Type::Int32 => {}
+                sem::Type::TypeVariable { .. } => unify(Rc::clone(&ty2), Rc::clone(&ty1)),
+                _ => panic!("type error: {:?}", *ty1),
+            };
+        }
+        sem::Type::Boolean => {
+            match *ty2.borrow() {
+                sem::Type::Boolean => {}
+                sem::Type::TypeVariable { .. } => unify(Rc::clone(&ty2), Rc::clone(&ty1)),
+                _ => panic!("type error: {:?}", *ty1),
+            };
+        }
+        sem::Type::String => {
+            match *ty2.borrow() {
+                sem::Type::String => {}
+                sem::Type::TypeVariable { .. } => unify(Rc::clone(&ty2), Rc::clone(&ty1)),
+                _ => panic!("type error: {:?}", *ty1),
+            };
+        }
         sem::Type::Function {
-            params,
-            return_type,
-        } => params.contains(*ty2),
-        _ => false,
+            params: ref params1,
+            return_type: ref return_type1,
+        } => {
+            match *ty2.borrow() {
+                sem::Type::Function {
+                    params: ref params2,
+                    return_type: ref return_type2,
+                } => {
+                    if params1.len() != params2.len() {
+                        panic!("The number of params differs: {:?}", *ty1);
+                    }
+
+                    unify(Rc::clone(return_type1), Rc::clone(return_type2));
+                }
+                sem::Type::TypeVariable { .. } => unify(Rc::clone(&ty2), Rc::clone(&ty1)),
+                _ => panic!("type error: {:?}", *ty1),
+            };
+        }
     };
-    x
 }
-*/
 
 #[allow(unused_variables)]
 impl Semantic {

@@ -1,5 +1,5 @@
+use std::cell::RefCell;
 use std::rc::Rc;
-use std::{borrow::Borrow, cell::RefCell};
 
 #[derive(Debug)]
 pub enum Type {
@@ -7,8 +7,8 @@ pub enum Type {
     Boolean,
     String,
     Function {
-        params: Vec<Rc<Type>>,
-        return_type: Rc<Type>,
+        params: Vec<Rc<RefCell<Type>>>,
+        return_type: Rc<RefCell<Type>>,
     },
     TypeVariable {
         name: String,
@@ -26,7 +26,10 @@ impl Type {
             Type::Function {
                 params,
                 return_type,
-            } => params.iter().any(|x| x.contains(other)) || return_type.contains(other),
+            } => {
+                params.iter().any(|x| x.borrow().contains(other))
+                    || return_type.borrow().contains(other)
+            }
             Type::TypeVariable { instance: None, .. } => self == other,
             Type::TypeVariable {
                 instance: Some(instance),
@@ -104,11 +107,11 @@ mod tests {
     #[test]
     fn contains_polytype() {
         let ty1 = Type::Function {
-            params: vec![Rc::new(Type::Int32)],
-            return_type: Rc::new(Type::TypeVariable {
+            params: vec![Rc::new(RefCell::new(Type::Int32))],
+            return_type: Rc::new(RefCell::new(Type::TypeVariable {
                 name: "a".to_string(),
                 instance: None,
-            }),
+            })),
         };
 
         assert!(ty1.contains(&Type::Int32));
@@ -122,11 +125,11 @@ mod tests {
     #[test]
     fn contains_type_variable() {
         let ty1 = Type::Function {
-            params: vec![Rc::new(Type::Int32)],
-            return_type: Rc::new(Type::TypeVariable {
+            params: vec![Rc::new(RefCell::new(Type::Int32))],
+            return_type: Rc::new(RefCell::new(Type::TypeVariable {
                 name: "a".to_string(),
                 instance: Some(Rc::new(RefCell::new(Type::Boolean))),
-            }),
+            })),
         };
 
         assert!(!ty1.contains(&Type::String));
