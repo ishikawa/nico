@@ -3,21 +3,20 @@ use super::sem;
 use parser::Expr;
 
 pub struct Semantic {
-    functions: Vec<sem::Binding>,
+    locals: Vec<sem::Binding>,
     type_variable_index: i32,
 }
 
 impl Semantic {
     pub fn new() -> Semantic {
         Semantic {
-            functions: vec![],
+            locals: vec![],
             type_variable_index: 0,
         }
     }
 
     pub fn analyze(&mut self, module: &mut parser::Module) {
         module.name = Some("main".to_string());
-        self.functions = vec![];
 
         if let Some(ref mut function) = module.function {
             self.analyze_function(function);
@@ -35,26 +34,17 @@ impl Semantic {
         }
     }
 
-    fn function_signature(&mut self, function: &parser::Function) -> sem::Binding {
-        let params = function
+    fn analyze_function(&mut self, function: &mut parser::Function) {
+        let bindings: Vec<sem::Binding> = function
             .params
             .iter()
-            .map(|_p| self.new_type_variable())
+            .map(|p| sem::Binding {
+                name: p.clone(),
+                r#type: self.new_type_variable(),
+            })
             .collect();
 
-        sem::Binding {
-            name: function.name.clone(),
-            r#type: sem::Type::Function {
-                params,
-                return_type: Box::new(self.new_type_variable()),
-            },
-        }
-    }
-
-    fn analyze_function(&mut self, function: &mut parser::Function) {
-        let f = self.function_signature(function);
-        self.functions.push(f);
-
+        self.locals.extend(bindings);
         self.analyze_expr(&mut function.body);
     }
 
@@ -66,7 +56,13 @@ impl Semantic {
             Expr::String(_) => {
                 node.r#type = Some(sem::Type::String);
             }
-            Expr::Identifier(_) => panic!("not implemented yet."),
+            Expr::Identifier(ref name) => {
+                if let Some(binding) = self.locals.iter().find(|binding| binding.name == *name) {
+                    node.r#type = Some(binding.r#type.clone());
+                } else {
+                    panic!("Undefined variable: {}", name);
+                }
+            }
             Expr::Invocation {
                 name: _,
                 arguments: _,
@@ -75,6 +71,11 @@ impl Semantic {
             Expr::Add(ref mut lhs, ref mut rhs) => {
                 self.analyze_expr(lhs);
                 self.analyze_expr(rhs);
+
+                sem::Type::Function {
+                    params: vec![lhs.r#type.unwrap(), rhs.r#type.unwrap()],
+                    return_type: Box::new(self.new_type_variable()),
+                };
 
                 expect_type(lhs, sem::Type::Int32);
                 expect_type(rhs, sem::Type::Int32);
@@ -217,6 +218,28 @@ mod tests {
         assert_matches!(node.expr, Expr::Add(lhs, rhs) => {
             assert_matches!(lhs.r#type, Some(sem::Type::Int32));
             assert_matches!(rhs.r#type, Some(sem::Type::Int32));
+        });
+    }
+    #[test]
+    fn fun1() {
+        let mut module = parser::parse_string(
+            "
+            fun twice(n)
+                n + n
+            end
+            ",
+        );
+        let mut semantic = Semantic::new();
+
+        semantic.analyze(&mut module);
+
+        let function = module.function.unwrap();
+
+        assert_eq!(function.name, "twice");
+
+        assert_matches!(function.r#type, Some(sem::Type::Function{ params, return_type }) => {
+            assert_eq!(params[0], sem::Type::Int32);
+            assert_eq!(*return_type, sem::Type::Int32);
         });
     }
 }
