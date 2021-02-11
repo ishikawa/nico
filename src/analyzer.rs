@@ -29,15 +29,21 @@ fn unify(ty1: &Rc<RefCell<sem::Type>>, ty2: &Rc<RefCell<sem::Type>>) {
     let ty1 = prune(ty1);
     let ty2 = prune(ty2);
 
-    match *ty1.borrow_mut() {
-        sem::Type::TypeVariable {
-            ref mut instance, ..
-        } => {
-            if *ty1 == *ty2 {
+    match *ty1.borrow() {
+        sem::Type::TypeVariable { .. } => {
+            if *ty1 != *ty2 {
                 if (*ty1).borrow().contains(&*ty2.borrow()) {
                     panic!("recursive unification");
                 }
-                instance.replace(Rc::clone(&ty2));
+
+                match *ty1.borrow_mut() {
+                    sem::Type::TypeVariable {
+                        ref mut instance, ..
+                    } => {
+                        instance.replace(Rc::clone(&ty2));
+                    }
+                    _ => {}
+                };
             }
         }
         sem::Type::Int32 => {
@@ -283,6 +289,35 @@ mod tests {
 
         assert_matches!(*pty0.borrow(), sem::Type::String);
         assert_matches!(*pty1.borrow(), sem::Type::String);
+    }
+
+    #[test]
+    fn unify_type_variable_same() {
+        let pty0 = Rc::new(RefCell::new(sem::Type::TypeVariable {
+            name: "a".to_string(),
+            instance: None,
+        }));
+        let pty1 = Rc::new(RefCell::new(sem::Type::TypeVariable {
+            name: "a".to_string(),
+            instance: None,
+        }));
+
+        unify(&pty0, &pty1);
+
+        assert_matches!(*pty0.borrow(), sem::Type::TypeVariable {
+            ref name,
+            ref instance,
+        } => {
+            assert_eq!(name, "a");
+            assert!(instance.is_none());
+        });
+        assert_matches!(*pty1.borrow(), sem::Type::TypeVariable {
+            ref name,
+            ref instance,
+        } => {
+            assert_eq!(name, "a");
+            assert!(instance.is_none());
+        });
     }
     /*
         #[test]
