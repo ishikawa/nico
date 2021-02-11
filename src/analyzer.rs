@@ -25,9 +25,9 @@ fn prune(ty: &Rc<RefCell<sem::Type>>) -> Rc<RefCell<sem::Type>> {
     }
 }
 
-fn unify(ty1: Rc<RefCell<sem::Type>>, ty2: Rc<RefCell<sem::Type>>) {
-    let ty1 = prune(&ty1);
-    let ty2 = prune(&ty2);
+fn unify(ty1: &Rc<RefCell<sem::Type>>, ty2: &Rc<RefCell<sem::Type>>) {
+    let ty1 = prune(ty1);
+    let ty2 = prune(ty2);
 
     match *ty1.borrow_mut() {
         sem::Type::TypeVariable {
@@ -43,21 +43,21 @@ fn unify(ty1: Rc<RefCell<sem::Type>>, ty2: Rc<RefCell<sem::Type>>) {
         sem::Type::Int32 => {
             match *ty2.borrow() {
                 sem::Type::Int32 => {}
-                sem::Type::TypeVariable { .. } => unify(Rc::clone(&ty2), Rc::clone(&ty1)),
+                sem::Type::TypeVariable { .. } => unify(&ty2, &ty1),
                 _ => panic!("type error: {:?}", *ty1),
             };
         }
         sem::Type::Boolean => {
             match *ty2.borrow() {
                 sem::Type::Boolean => {}
-                sem::Type::TypeVariable { .. } => unify(Rc::clone(&ty2), Rc::clone(&ty1)),
+                sem::Type::TypeVariable { .. } => unify(&ty2, &ty1),
                 _ => panic!("type error: {:?}", *ty1),
             };
         }
         sem::Type::String => {
             match *ty2.borrow() {
                 sem::Type::String => {}
-                sem::Type::TypeVariable { .. } => unify(Rc::clone(&ty2), Rc::clone(&ty1)),
+                sem::Type::TypeVariable { .. } => unify(&ty2, &ty1),
                 _ => panic!("type error: {:?}", *ty1),
             };
         }
@@ -74,9 +74,13 @@ fn unify(ty1: Rc<RefCell<sem::Type>>, ty2: Rc<RefCell<sem::Type>>) {
                         panic!("The number of params differs: {:?}", *ty1);
                     }
 
-                    unify(Rc::clone(return_type1), Rc::clone(return_type2));
+                    for (x, y) in params1.iter().zip(params2.iter()) {
+                        unify(x, y);
+                    }
+
+                    unify(return_type1, return_type2);
                 }
-                sem::Type::TypeVariable { .. } => unify(Rc::clone(&ty2), Rc::clone(&ty1)),
+                sem::Type::TypeVariable { .. } => unify(&ty2, &ty1),
                 _ => panic!("type error: {:?}", *ty1),
             };
         }
@@ -250,6 +254,36 @@ mod tests {
         assert_matches!(*pty1.borrow(), sem::Type::Int32);
     }
 
+    #[test]
+    fn unify_int32() {
+        let pty0 = Rc::new(RefCell::new(sem::Type::Int32));
+        let pty1 = Rc::new(RefCell::new(sem::Type::Int32));
+
+        unify(&pty0, &pty1);
+
+        assert_matches!(*pty0.borrow(), sem::Type::Int32);
+        assert_matches!(*pty1.borrow(), sem::Type::Int32);
+    }
+    #[test]
+    fn unify_boolean() {
+        let pty0 = Rc::new(RefCell::new(sem::Type::Boolean));
+        let pty1 = Rc::new(RefCell::new(sem::Type::Boolean));
+
+        unify(&pty0, &pty1);
+
+        assert_matches!(*pty0.borrow(), sem::Type::Boolean);
+        assert_matches!(*pty1.borrow(), sem::Type::Boolean);
+    }
+    #[test]
+    fn unify_string() {
+        let pty0 = Rc::new(RefCell::new(sem::Type::String));
+        let pty1 = Rc::new(RefCell::new(sem::Type::String));
+
+        unify(&pty0, &pty1);
+
+        assert_matches!(*pty0.borrow(), sem::Type::String);
+        assert_matches!(*pty1.borrow(), sem::Type::String);
+    }
     /*
         #[test]
         fn number_integer() {
