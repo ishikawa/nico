@@ -25,6 +25,23 @@ fn prune(ty: Rc<RefCell<sem::Type>>) -> Rc<RefCell<sem::Type>> {
     }
 }
 
+/*
+// Check if the type given by the 2nd argument appears in the type given by the 1st argument.
+fn occurs_in(ty1: Rc<RefCell<sem::Type>>, ty2: Rc<RefCell<sem::Type>>) -> bool {
+    let ty1 = prune(ty1);
+
+    let x = match *ty1.borrow() {
+        sem::Type::TypeVariable { .. } => *ty1 == *ty2,
+        sem::Type::Function {
+            params,
+            return_type,
+        } => false,
+        _ => false,
+    };
+    x
+}
+*/
+
 #[allow(unused_variables)]
 impl Semantic {
     pub fn new() -> Semantic {
@@ -154,9 +171,16 @@ mod tests {
         };
 
         let pty0 = Rc::new(RefCell::new(ty0));
-        prune(Rc::clone(&pty0));
+        let pty1 = prune(Rc::clone(&pty0));
 
         assert_matches!(*pty0.borrow(), sem::Type::TypeVariable {
+            ref name,
+            ref instance,
+        } => {
+            assert_eq!(name, "$1");
+            assert!(instance.is_none());
+        });
+        assert_matches!(*pty1.borrow(), sem::Type::TypeVariable {
             ref name,
             ref instance,
         } => {
@@ -173,7 +197,7 @@ mod tests {
         };
 
         let pty0 = Rc::new(RefCell::new(ty0));
-        prune(Rc::clone(&pty0));
+        let pty1 = prune(Rc::clone(&pty0));
 
         assert_matches!(*pty0.borrow(), sem::Type::TypeVariable {
             ref name,
@@ -182,6 +206,7 @@ mod tests {
             assert_eq!(name, "$1");
             assert_eq!(*instance.borrow(), sem::Type::Int32);
         });
+        assert_matches!(*pty1.borrow(), sem::Type::Int32);
     }
 
     /*
