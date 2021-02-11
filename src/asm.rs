@@ -174,7 +174,7 @@ impl AsmEmitter {
             name,
             params,
             body,
-            return_type: _,
+            r#type: _,
         }: &parser::Function,
     ) {
         // function signature
