@@ -12,22 +12,22 @@ pub struct Semantic {
     type_variable_index: i32,
 }
 
-fn prune(ty: Rc<RefCell<sem::Type>>) -> Rc<RefCell<sem::Type>> {
+fn prune(ty: &Rc<RefCell<sem::Type>>) -> Rc<RefCell<sem::Type>> {
     match *ty.borrow_mut() {
         sem::Type::TypeVariable {
             instance: Some(ref mut instance),
             ..
         } => {
-            *instance = prune(Rc::clone(instance));
+            *instance = prune(instance);
             Rc::clone(&instance)
         }
-        _ => Rc::clone(&ty),
+        _ => Rc::clone(ty),
     }
 }
 
 fn unify(ty1: Rc<RefCell<sem::Type>>, ty2: Rc<RefCell<sem::Type>>) {
-    let ty1 = prune(ty1);
-    let ty2 = prune(ty2);
+    let ty1 = prune(&ty1);
+    let ty2 = prune(&ty2);
 
     match *ty1.borrow_mut() {
         sem::Type::TypeVariable {
@@ -212,7 +212,7 @@ mod tests {
         };
 
         let pty0 = Rc::new(RefCell::new(ty0));
-        let pty1 = prune(Rc::clone(&pty0));
+        let pty1 = prune(&pty0);
 
         assert_matches!(*pty0.borrow(), sem::Type::TypeVariable {
             ref name,
@@ -238,7 +238,7 @@ mod tests {
         };
 
         let pty0 = Rc::new(RefCell::new(ty0));
-        let pty1 = prune(Rc::clone(&pty0));
+        let pty1 = prune(&pty0);
 
         assert_matches!(*pty0.borrow(), sem::Type::TypeVariable {
             ref name,
