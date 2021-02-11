@@ -1,6 +1,7 @@
 use super::sem;
 use super::tokenizer::{Token, Tokenizer};
 use std::iter::Peekable;
+use std::rc::Rc;
 
 // Program
 pub struct Module {
@@ -14,13 +15,13 @@ pub struct Function {
     pub name: String,
     pub params: Vec<String>,
     pub body: Box<Node>,
-    pub r#type: Option<sem::Type>,
+    pub r#type: Option<Rc<sem::Type>>,
 }
 
 #[derive(Debug)]
 pub struct Node {
     pub expr: Expr,
-    pub r#type: Option<sem::Type>,
+    pub r#type: Option<Rc<sem::Type>>,
 }
 
 impl Node {

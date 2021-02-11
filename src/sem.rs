@@ -1,19 +1,22 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Int32,
     Boolean,
     String,
     Function {
-        params: Vec<Type>,
-        return_type: Box<Type>,
+        params: Vec<Rc<Type>>,
+        return_type: Rc<Type>,
     },
     TypeVariable {
         name: String,
-        instance: Option<Box<Type>>,
+        instance: Option<Rc<RefCell<Type>>>,
     },
 }
 
 pub struct Binding {
     pub name: String,
-    pub r#type: Type,
+    pub r#type: Rc<Type>,
 }
