@@ -35,7 +35,7 @@ fn occurs_in(ty1: Rc<RefCell<sem::Type>>, ty2: Rc<RefCell<sem::Type>>) -> bool {
         sem::Type::Function {
             params,
             return_type,
-        } => false,
+        } => params.contains(*ty2),
         _ => false,
     };
     x

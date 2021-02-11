@@ -1,5 +1,5 @@
-use std::cell::RefCell;
 use std::rc::Rc;
+use std::{borrow::Borrow, cell::RefCell};
 
 #[derive(Debug)]
 pub enum Type {
@@ -14,6 +14,26 @@ pub enum Type {
         name: String,
         instance: Option<Rc<RefCell<Type>>>,
     },
+}
+
+impl Type {
+    /// Returns `true` if the type given by the 2nd argument appears in this type.
+    pub fn contains(&self, other: &Self) -> bool {
+        match self {
+            Type::Int32 => matches!(other, Type::Int32),
+            Type::Boolean => matches!(other, Type::Boolean),
+            Type::String => matches!(other, Type::String),
+            Type::Function {
+                params,
+                return_type,
+            } => params.iter().any(|x| x.contains(other)) || return_type.contains(other),
+            Type::TypeVariable { instance: None, .. } => self == other,
+            Type::TypeVariable {
+                instance: Some(instance),
+                ..
+            } => (self == other) || (**instance).borrow().contains(other),
+        }
+    }
 }
 
 impl PartialEq for Type {
@@ -72,5 +92,49 @@ mod tests {
         };
 
         assert_eq!(ty1, ty2);
+    }
+
+    #[test]
+    fn contains_monotype() {
+        assert!(Type::Int32.contains(&Type::Int32));
+        assert!(Type::Boolean.contains(&Type::Boolean));
+        assert!(Type::String.contains(&Type::String));
+        assert!(!Type::Int32.contains(&Type::Boolean));
+    }
+    #[test]
+    fn contains_polytype() {
+        let ty1 = Type::Function {
+            params: vec![Rc::new(Type::Int32)],
+            return_type: Rc::new(Type::TypeVariable {
+                name: "a".to_string(),
+                instance: None,
+            }),
+        };
+
+        assert!(ty1.contains(&Type::Int32));
+        assert!(!ty1.contains(&Type::Boolean));
+        assert!(ty1.contains(&Type::TypeVariable {
+            name: "a".to_string(),
+            instance: None,
+        }));
+    }
+
+    #[test]
+    fn contains_type_variable() {
+        let ty1 = Type::Function {
+            params: vec![Rc::new(Type::Int32)],
+            return_type: Rc::new(Type::TypeVariable {
+                name: "a".to_string(),
+                instance: Some(Rc::new(RefCell::new(Type::Boolean))),
+            }),
+        };
+
+        assert!(!ty1.contains(&Type::String));
+        assert!(ty1.contains(&Type::Int32));
+        assert!(ty1.contains(&Type::Boolean));
+        assert!(ty1.contains(&Type::TypeVariable {
+            name: "a".to_string(),
+            instance: None,
+        }));
     }
 }
