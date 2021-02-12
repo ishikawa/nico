@@ -67,8 +67,18 @@ impl Semantic {
         env: &HashMap<String, Rc<RefCell<sem::Type>>>,
     ) -> Option<Rc<RefCell<sem::Type>>> {
         match node.expr {
-            Expr::Integer(_) => Some(wrap(sem::Type::Int32)),
-            Expr::String(_) => Some(wrap(sem::Type::String)),
+            Expr::Integer(_) => {
+                let ty = wrap(sem::Type::Int32);
+
+                node.r#type = Some(Rc::clone(&ty));
+                Some(Rc::clone(&ty))
+            }
+            Expr::String(_) => {
+                let ty = wrap(sem::Type::String);
+
+                node.r#type = Some(Rc::clone(&ty));
+                Some(Rc::clone(&ty))
+            }
             Expr::Identifier(ref name) => match self.lookup(name, non_generic_vars, env) {
                 None => panic!("Undefined variable `{}`", name),
                 ty => ty,
@@ -499,19 +509,33 @@ mod tests {
         assert_eq!(fresh0, cache0);
         assert_eq!(fresh1, cache1);
     }
+
+    #[test]
+    fn infer_i32() {
+        let mut module = parser::parse_string("42");
+        let mut semantic = Semantic::new();
+
+        semantic.analyze(&mut module);
+
+        let node = module.expr.unwrap();
+        assert_matches!(node.r#type, Some(ref ty) => {
+            assert_eq!(*ty.borrow(), sem::Type::Int32)
+        });
+    }
+
+    #[test]
+    fn infer_string() {
+        let mut module = parser::parse_string("\"\"");
+        let mut semantic = Semantic::new();
+
+        semantic.analyze(&mut module);
+
+        let node = module.expr.unwrap();
+        assert_matches!(node.r#type, Some(ref ty) => {
+            assert_eq!(*ty.borrow(), sem::Type::String)
+        });
+    }
     /*
-        #[test]
-        fn number_integer() {
-            let mut module = parser::parse_string("42");
-            let mut semantic = Semantic::new();
-
-            semantic.analyze(&mut module);
-
-            let node = module.expr.unwrap();
-            assert_matches!(node.r#type, Some(ty) => {
-                assert_eq!(*ty, sem::Type::Int32)
-            });
-        }
 
         #[test]
         fn add_operation() {
