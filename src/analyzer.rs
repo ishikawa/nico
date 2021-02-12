@@ -11,11 +11,15 @@ pub fn wrap(ty: sem::Type) -> Rc<RefCell<sem::Type>> {
 
 pub struct Semantic {
     type_var_index: i32,
+    functions: HashMap<String, Rc<RefCell<sem::Type>>>,
 }
 
 impl Semantic {
     pub fn new() -> Semantic {
-        Semantic { type_var_index: 0 }
+        Semantic {
+            type_var_index: 0,
+            functions: HashMap::new(),
+        }
     }
 
     pub fn analyze(&mut self, module: &mut parser::Module) {
@@ -28,7 +32,7 @@ impl Semantic {
             self.analyze_function(function, &mut non_generic_vars, &mut env);
         }
         if let Some(ref mut expr) = module.expr {
-            self.analyze_expr(expr, &mut non_generic_vars, &mut env);
+            self.analyze_expr(expr, &mut non_generic_vars, &env);
         }
     }
 
@@ -36,8 +40,8 @@ impl Semantic {
         &mut self,
         function: &mut parser::Function,
         non_generic_vars: &mut HashSet<String>,
-        env: &HashMap<String, Rc<RefCell<sem::Type>>>,
-    ) -> Option<Rc<RefCell<sem::Type>>> {
+        env: &mut HashMap<String, Rc<RefCell<sem::Type>>>,
+    ) -> Rc<RefCell<sem::Type>> {
         let mut scoped_ng = non_generic_vars.clone();
         let mut scoped_env = env.clone();
         let mut arg_types = vec![];
@@ -52,24 +56,34 @@ impl Semantic {
             arg_types.push(Rc::clone(&var));
         }
 
-        let retty = self.analyze_expr(&mut function.body, &mut scoped_ng, &mut scoped_env);
+        // Before evaluating expr, bind the function itself. It is the same as `letrec` in
+        // other languages, but does not create a new scope.
 
-        // -- function type
-        {
-            let return_type = self.instantiate(&retty.unwrap());
-            let params = arg_types
-                .iter()
-                .map(|a| self.instantiate(a))
-                .collect::<Vec<_>>();
+        let function_type_var_name = self.next_type_var_name();
+        let function_type_var = wrap(sem::Type::new_type_var(&function_type_var_name));
 
-            let function_type = wrap(sem::Type::Function {
-                params,
-                return_type,
-            });
+        scoped_ng.insert(function_type_var_name);
+        self.functions
+            .insert(function.name.clone(), Rc::clone(&function_type_var));
 
-            function.r#type = Some(Rc::clone(&function_type));
-            Some(Rc::clone(&function_type))
-        }
+        let retty = self.analyze_expr(&mut function.body, &mut scoped_ng, &scoped_env);
+
+        // Constructs the type of the function.
+        let return_type = self.instantiate(&retty);
+        let params = arg_types
+            .iter()
+            .map(|a| self.instantiate(a))
+            .collect::<Vec<_>>();
+
+        let function_type = wrap(sem::Type::Function {
+            params,
+            return_type,
+        });
+
+        self.unify(&function_type, &function_type_var);
+
+        function.r#type = Some(Rc::clone(&function_type));
+        Rc::clone(&function_type)
     }
 
     fn analyze_invocation(
@@ -79,12 +93,9 @@ impl Semantic {
         non_generic_vars: &mut HashSet<String>,
         env: &HashMap<String, Rc<RefCell<sem::Type>>>,
     ) -> Rc<RefCell<sem::Type>> {
-        //let mut a = args[0];
-        //self.analyze_expr(&mut a, non_generic_vars, env);
-
         let arg_types = args
             .iter_mut()
-            .map(|nd| self.analyze_expr(nd, non_generic_vars, env).unwrap())
+            .map(|nd| self.analyze_expr(nd, non_generic_vars, env))
             .collect::<Vec<_>>();
         let retty = wrap(sem::Type::new_type_var(&self.next_type_var_name()));
         let callsite = wrap(sem::Type::Function {
@@ -101,26 +112,26 @@ impl Semantic {
         node: &mut parser::Node,
         non_generic_vars: &mut HashSet<String>,
         env: &HashMap<String, Rc<RefCell<sem::Type>>>,
-    ) -> Option<Rc<RefCell<sem::Type>>> {
+    ) -> Rc<RefCell<sem::Type>> {
         match node.expr {
             Expr::Integer(_) => {
                 let ty = wrap(sem::Type::Int32);
 
                 node.r#type = Some(Rc::clone(&ty));
-                Some(Rc::clone(&ty))
+                Rc::clone(&ty)
             }
             Expr::String(_) => {
                 let ty = wrap(sem::Type::String);
 
                 node.r#type = Some(Rc::clone(&ty));
-                Some(Rc::clone(&ty))
+                Rc::clone(&ty)
             }
             Expr::Identifier(ref name) => match self.lookup(name, non_generic_vars, env) {
                 None => panic!("Undefined variable `{}`", name),
                 Some(ty) => {
                     let ty = self.instantiate(&ty);
                     node.r#type = Some(Rc::clone(&ty));
-                    Some(Rc::clone(&ty))
+                    Rc::clone(&ty)
                 }
             },
             Expr::Invocation {
@@ -142,7 +153,7 @@ impl Semantic {
                     env,
                 );
                 node.r#type = Some(Rc::clone(&retty));
-                Some(Rc::clone(&retty))
+                Rc::clone(&retty)
             }
             Expr::Sub(ref mut lhs, ref mut rhs) => {
                 let function_type = wrap(sem::Type::Function {
@@ -157,18 +168,18 @@ impl Semantic {
                     env,
                 );
                 node.r#type = Some(Rc::clone(&retty));
-                Some(Rc::clone(&retty))
+                Rc::clone(&retty)
             }
-            Expr::Mul(..) => None,
-            Expr::Div(..) => None,
+            Expr::Mul(..) => panic!("not implemented"),
+            Expr::Div(..) => panic!("not implemented"),
             // relation
-            Expr::LT(..) => None,
-            Expr::GT(..) => None,
-            Expr::LE(..) => None,
-            Expr::GE(..) => None,
-            Expr::EQ(..) => None,
-            Expr::NE(..) => None,
-            Expr::If { .. } => None,
+            Expr::LT(..) => panic!("not implemented"),
+            Expr::GT(..) => panic!("not implemented"),
+            Expr::LE(..) => panic!("not implemented"),
+            Expr::GE(..) => panic!("not implemented"),
+            Expr::EQ(..) => panic!("not implemented"),
+            Expr::NE(..) => panic!("not implemented"),
+            Expr::If { .. } => panic!("not implemented"),
         }
     }
 }
