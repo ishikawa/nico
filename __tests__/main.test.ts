@@ -42,6 +42,11 @@ const cases: TestCase[] = [
     input: "50 / 2",
     expected: 25
   },
+  // rem
+  {
+    input: "10 % 3",
+    expected: 1
+  },
   // grouping and priority
   {
     input: "1 + 2 * 3",

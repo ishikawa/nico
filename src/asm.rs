@@ -302,6 +302,11 @@ impl AsmEmitter {
                 self.emit_expr(&*rhs);
                 self.emit("(i32.div_s)");
             }
+            Expr::Rem(lhs, rhs) => {
+                self.emit_expr(&*lhs);
+                self.emit_expr(&*rhs);
+                self.emit("(i32.rem_s)");
+            }
             // relation
             Expr::LT(lhs, rhs) => {
                 self.emit_expr(&*lhs);
