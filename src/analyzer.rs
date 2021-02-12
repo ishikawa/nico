@@ -57,8 +57,10 @@ impl Semantic {
         // -- function type
         {
             let return_type = self.instantiate(&retty.unwrap());
-            let params: Vec<Rc<RefCell<sem::Type>>> =
-                arg_types.iter().map(|a| self.instantiate(a)).collect();
+            let params = arg_types
+                .iter()
+                .map(|a| self.instantiate(a))
+                .collect::<Vec<_>>();
 
             let function_type = wrap(sem::Type::Function {
                 params,
@@ -68,6 +70,30 @@ impl Semantic {
             function.r#type = Some(Rc::clone(&function_type));
             Some(Rc::clone(&function_type))
         }
+    }
+
+    fn analyze_invocation(
+        &mut self,
+        function_type: Rc<RefCell<sem::Type>>,
+        args: &mut Vec<&mut Box<parser::Node>>,
+        non_generic_vars: &mut HashSet<String>,
+        env: &HashMap<String, Rc<RefCell<sem::Type>>>,
+    ) -> Rc<RefCell<sem::Type>> {
+        //let mut a = args[0];
+        //self.analyze_expr(&mut a, non_generic_vars, env);
+
+        let arg_types = args
+            .iter_mut()
+            .map(|nd| self.analyze_expr(nd, non_generic_vars, env).unwrap())
+            .collect::<Vec<_>>();
+        let retty = wrap(sem::Type::new_type_var(&self.next_type_var_name()));
+        let callsite = wrap(sem::Type::Function {
+            params: arg_types,
+            return_type: Rc::clone(&retty),
+        });
+
+        self.unify(&function_type, &callsite);
+        self.instantiate(&retty)
     }
 
     fn analyze_expr(
@@ -101,24 +127,20 @@ impl Semantic {
                 name: _,
                 arguments: _,
             } => panic!("not implemented yet."),
+
             // binop
             Expr::Add(ref mut lhs, ref mut rhs) => {
-                let function = wrap(sem::Type::Function {
+                let function_type = wrap(sem::Type::Function {
                     params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
                     return_type: wrap(sem::Type::Int32),
                 });
-
-                let arg1 = self.analyze_expr(lhs, non_generic_vars, env).unwrap();
-                let arg2 = self.analyze_expr(rhs, non_generic_vars, env).unwrap();
-                let retty = wrap(sem::Type::new_type_var(&self.next_type_var_name()));
-                let callsite = wrap(sem::Type::Function {
-                    params: vec![Rc::clone(&arg1), Rc::clone(&arg2)],
-                    return_type: Rc::clone(&retty),
-                });
-
-                self.unify(&function, &callsite);
-
-                let retty = self.instantiate(&retty);
+                let mut args = vec![lhs, rhs];
+                let retty = self.analyze_invocation(
+                    Rc::clone(&function_type),
+                    &mut args,
+                    non_generic_vars,
+                    env,
+                );
 
                 node.r#type = Some(Rc::clone(&retty));
                 Some(Rc::clone(&retty))
@@ -580,7 +602,7 @@ mod tests {
     }
 
     #[test]
-    fn fun1() {
+    fn fun_plus10() {
         let mut module = parser::parse_string(
             "
             fun plus10(n)
@@ -593,8 +615,6 @@ mod tests {
         semantic.analyze(&mut module);
 
         let function = module.function.unwrap();
-        println!("Function({}): {:?}", function.name, function.r#type);
-
         assert_eq!(function.name, "plus10");
 
         assert_matches!(function.r#type, Some(ref ty) => {
