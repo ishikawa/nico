@@ -25,12 +25,6 @@ pub struct Node {
     pub r#type: Option<Rc<RefCell<sem::Type>>>,
 }
 
-impl Node {
-    pub fn expr(expr: Expr) -> Node {
-        Node { expr, r#type: None }
-    }
-}
-
 #[derive(Debug)]
 pub enum Expr {
     // Primitive
@@ -321,7 +315,7 @@ fn consume_char(tokenizer: &mut Peekable<&mut Tokenizer>, expected: char) {
 }
 
 fn boxed_expr(expr: Expr) -> Box<Node> {
-    Box::new(Node::expr(expr))
+    Box::new(Node { expr, r#type: None })
 }
 
 #[cfg(test)]

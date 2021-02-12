@@ -89,7 +89,7 @@ impl Semantic {
     fn analyze_invocation(
         &mut self,
         function_type: Rc<RefCell<sem::Type>>,
-        args: &mut Vec<&mut Box<parser::Node>>,
+        args: &mut [&mut parser::Node],
         non_generic_vars: &mut HashSet<String>,
         env: &HashMap<String, Rc<RefCell<sem::Type>>>,
     ) -> Rc<RefCell<sem::Type>> {
@@ -135,9 +135,23 @@ impl Semantic {
                 }
             },
             Expr::Invocation {
-                name: _,
-                arguments: _,
-            } => panic!("not implemented yet."),
+                ref name,
+                ref mut arguments,
+            } => match self.lookup_function(name, non_generic_vars) {
+                None => panic!("Undefined variable `{}`", name),
+                Some(function_type) => {
+                    let mut m = arguments.iter_mut().collect::<Vec<_>>();
+                    let retty = self.analyze_invocation(
+                        Rc::clone(&function_type),
+                        &mut m,
+                        non_generic_vars,
+                        env,
+                    );
+
+                    node.r#type = Some(Rc::clone(&retty));
+                    Rc::clone(&retty)
+                }
+            },
 
             // binop
             Expr::Add(ref mut lhs, ref mut rhs) => {
@@ -145,7 +159,7 @@ impl Semantic {
                     params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
                     return_type: wrap(sem::Type::Int32),
                 });
-                let mut args = vec![lhs, rhs];
+                let mut args = [lhs.as_mut(), rhs.as_mut()];
                 let retty = self.analyze_invocation(
                     Rc::clone(&function_type),
                     &mut args,
@@ -160,7 +174,7 @@ impl Semantic {
                     params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
                     return_type: wrap(sem::Type::Int32),
                 });
-                let mut args = vec![lhs, rhs];
+                let mut args = [lhs.as_mut(), rhs.as_mut()];
                 let retty = self.analyze_invocation(
                     Rc::clone(&function_type),
                     &mut args,
@@ -209,6 +223,20 @@ impl Semantic {
         } else {
             None
         }
+    }
+
+    fn lookup_function(
+        &mut self,
+        name: &str,
+        non_generic_vars: &mut HashSet<String>,
+    ) -> Option<Rc<RefCell<sem::Type>>> {
+        let ty = if let Some(ty) = self.functions.get(name) {
+            Rc::clone(ty)
+        } else {
+            return None;
+        };
+
+        Some(self.fresh(&ty, non_generic_vars))
     }
 
     /// Type operator and generic variables are duplicated; non-generic variables are shared.
@@ -664,6 +692,30 @@ mod tests {
 
         let function = module.function.unwrap();
         assert_eq!(function.name, "minus10");
+
+        assert_matches!(function.r#type, Some(ref ty) => {
+            assert_matches!(*ty.borrow(), sem::Type::Function{ ref params, ref return_type } => {
+                assert_eq!(*(params[0]).borrow(), sem::Type::Int32);
+                assert_eq!(*return_type.borrow(), sem::Type::Int32);
+            });
+        });
+    }
+
+    #[test]
+    fn fun_invoke() {
+        let mut module = parser::parse_string(
+            "
+            fun plus10(n)
+                n + 10
+            end
+            plus10(5)
+            ",
+        );
+        let mut semantic = Semantic::new();
+
+        semantic.analyze(&mut module);
+
+        let function = module.function.unwrap();
 
         assert_matches!(function.r#type, Some(ref ty) => {
             assert_matches!(*ty.borrow(), sem::Type::Function{ ref params, ref return_type } => {
