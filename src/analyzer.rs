@@ -81,7 +81,11 @@ impl Semantic {
             }
             Expr::Identifier(ref name) => match self.lookup(name, non_generic_vars, env) {
                 None => panic!("Undefined variable `{}`", name),
-                ty => ty,
+                Some(ty) => {
+                    let ty = self.instantiate(&ty);
+                    node.r#type = Some(Rc::clone(&ty));
+                    Some(Rc::clone(&ty))
+                }
             },
             Expr::Invocation {
                 name: _,
@@ -91,7 +95,7 @@ impl Semantic {
             Expr::Add(ref mut lhs, ref mut rhs) => {
                 let function = wrap(sem::Type::Function {
                     params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
-                    return_type: Rc::new(RefCell::new(sem::Type::Int32)),
+                    return_type: wrap(sem::Type::Int32),
                 });
 
                 let arg1 = self.analyze_expr(lhs, non_generic_vars, env).unwrap();
@@ -103,7 +107,11 @@ impl Semantic {
                 });
 
                 self.unify(&function, &callsite);
-                Some(retty)
+
+                let retty = self.instantiate(&retty);
+
+                node.r#type = Some(Rc::clone(&retty));
+                Some(Rc::clone(&retty))
             }
             Expr::Sub(..) => None,
             Expr::Mul(..) => None,
@@ -118,6 +126,12 @@ impl Semantic {
             Expr::If { .. } => None,
         }
     }
+}
+
+enum Unification {
+    Instantiate(Rc<RefCell<sem::Type>>),
+    Unify(Rc<RefCell<sem::Type>>, Rc<RefCell<sem::Type>>),
+    Done,
 }
 
 impl Semantic {
@@ -197,7 +211,7 @@ impl Semantic {
             }
         };
 
-        Rc::new(RefCell::new(freshed))
+        wrap(freshed)
     }
 
     fn prune(&mut self, ty: &Rc<RefCell<sem::Type>>) -> Rc<RefCell<sem::Type>> {
@@ -206,64 +220,71 @@ impl Semantic {
                 instance: Some(ref mut instance),
                 ..
             } => {
-                *instance = self.prune(instance);
+                *instance = self.instantiate(instance);
                 Rc::clone(&instance)
             }
             _ => Rc::clone(ty),
         }
     }
 
-    fn unify(&mut self, ty1: &Rc<RefCell<sem::Type>>, ty2: &Rc<RefCell<sem::Type>>) {
-        let ty1 = self.prune(ty1);
-        let ty2 = self.prune(ty2);
+    fn instantiate(&self, ty: &Rc<RefCell<sem::Type>>) -> Rc<RefCell<sem::Type>> {
+        match *ty.borrow() {
+            sem::Type::TypeVariable {
+                instance: Some(ref instance),
+                ..
+            } => self.instantiate(instance),
+            _ => Rc::clone(ty),
+        }
+    }
 
-        let new_instance = match *ty1.borrow() {
+    fn unify(&mut self, ty1: &Rc<RefCell<sem::Type>>, ty2: &Rc<RefCell<sem::Type>>) {
+        let pty1 = self.prune(ty1);
+        let pty2 = self.prune(ty2);
+
+        let action = match *pty1.borrow() {
             sem::Type::TypeVariable { .. } => {
-                if *ty1 != *ty2 {
-                    if (*ty1).borrow().contains(&*ty2.borrow()) {
+                if *pty1 != *pty2 {
+                    if (*pty1).borrow().contains(&*pty2.borrow()) {
                         panic!("recursive unification");
                     }
-                    Some(&ty2)
+                    Unification::Instantiate(Rc::clone(&pty2))
                 } else {
-                    None
+                    Unification::Done
                 }
             }
-            sem::Type::Int32 => match *ty2.borrow() {
-                sem::Type::Int32 => None,
+            sem::Type::Int32 => match *pty2.borrow() {
+                sem::Type::Int32 => Unification::Done,
                 sem::Type::TypeVariable { .. } => {
-                    self.unify(&ty2, &ty1);
-                    None
+                    Unification::Unify(Rc::clone(&pty2), Rc::clone(&pty1))
                 }
                 _ => {
-                    panic!("type error: {:?}", *ty1);
+                    panic!("type error: {:?}", *pty1);
                 }
             },
-            sem::Type::Boolean => match *ty2.borrow() {
-                sem::Type::Boolean => None,
+            sem::Type::Boolean => match *pty2.borrow() {
+                sem::Type::Boolean => Unification::Done,
                 sem::Type::TypeVariable { .. } => {
-                    self.unify(&ty2, &ty1);
-                    None
+                    Unification::Unify(Rc::clone(&pty2), Rc::clone(&pty1))
                 }
-                _ => panic!("type error: {:?}", *ty1),
+                _ => panic!("type error: {:?}", *pty1),
             },
-            sem::Type::String => match *ty2.borrow() {
-                sem::Type::String => None,
+            sem::Type::String => match *pty2.borrow() {
+                sem::Type::String => Unification::Done,
                 sem::Type::TypeVariable { .. } => {
-                    self.unify(&ty2, &ty1);
-                    None
+                    Unification::Unify(Rc::clone(&pty2), Rc::clone(&pty1))
                 }
-                _ => panic!("type error: {:?}", *ty1),
+                _ => panic!("type error: {:?}", *pty1),
             },
             sem::Type::Function {
                 params: ref params1,
                 return_type: ref return_type1,
-            } => match *ty2.borrow() {
+            } => match *pty2.borrow() {
                 sem::Type::Function {
                     params: ref params2,
                     return_type: ref return_type2,
                 } => {
                     if params1.len() != params2.len() {
-                        panic!("The number of params differs: {:?}", *ty1);
+                        panic!("The number of params differs: {:?}", *pty1);
                     }
 
                     for (x, y) in params1.iter().zip(params2.iter()) {
@@ -271,26 +292,27 @@ impl Semantic {
                     }
 
                     self.unify(return_type1, return_type2);
-                    None
+                    Unification::Done
                 }
                 sem::Type::TypeVariable { .. } => {
-                    self.unify(&ty2, &ty1);
-                    None
+                    Unification::Unify(Rc::clone(&pty2), Rc::clone(&pty1))
                 }
-                _ => panic!("type error: {:?}", *ty1),
+                _ => panic!("type error: {:?}", *pty1),
             },
         };
 
-        if let Some(new_instance) = new_instance {
-            match *ty1.borrow_mut() {
+        match action {
+            Unification::Instantiate(new_instance) => match *pty1.borrow_mut() {
                 sem::Type::TypeVariable {
                     ref mut instance, ..
                 } => {
-                    instance.replace(Rc::clone(new_instance));
+                    instance.replace(Rc::clone(&new_instance));
                 }
                 _ => {}
-            }
-        }
+            },
+            Unification::Unify(ref ty1, ref ty2) => self.unify(&Rc::clone(ty1), &Rc::clone(ty2)),
+            Unification::Done => {}
+        };
     }
 }
 
@@ -533,6 +555,19 @@ mod tests {
         let node = module.expr.unwrap();
         assert_matches!(node.r#type, Some(ref ty) => {
             assert_eq!(*ty.borrow(), sem::Type::String)
+        });
+    }
+
+    #[test]
+    fn infer_add_i32() {
+        let mut module = parser::parse_string("1 + 2");
+        let mut semantic = Semantic::new();
+
+        semantic.analyze(&mut module);
+
+        let node = module.expr.unwrap();
+        assert_matches!(node.r#type, Some(ref ty) => {
+            assert_eq!(*ty.borrow(), sem::Type::Int32)
         });
     }
     /*
