@@ -2,7 +2,7 @@ use super::parser;
 use super::sem;
 use parser::Expr;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 pub struct Semantic {
@@ -10,6 +10,57 @@ pub struct Semantic {
     environment: HashMap<String, Rc<sem::Type>>,
     non_generic: HashMap<String, Rc<sem::Type>>,
     type_variable_index: i32,
+}
+
+/// Type operator and generic variables are duplicated; non-generic variables are shared.
+fn freshrec(
+    ty: &Rc<RefCell<sem::Type>>,
+    non_generic_vars: &mut HashSet<String>,
+    mappings: &mut HashMap<String, Rc<RefCell<sem::Type>>>,
+) -> Rc<RefCell<sem::Type>> {
+    let ty = prune(ty);
+
+    let freshed = match *ty.borrow() {
+        sem::Type::TypeVariable { ref name, .. } => {
+            if non_generic_vars.contains(name) {
+                return Rc::clone(&ty);
+            } else {
+                if let Some(cached) = mappings.get(name) {
+                    return Rc::clone(cached);
+                } else {
+                    let cached = sem::Type::TypeVariable {
+                        name: "a".to_string(),
+                        instance: None,
+                    };
+                    let cached = Rc::new(RefCell::new(cached));
+
+                    mappings.insert(name.clone(), Rc::clone(&cached));
+                    return cached;
+                }
+            }
+        }
+        // Type operators
+        sem::Type::Int32 => sem::Type::Int32,
+        sem::Type::Boolean => sem::Type::Boolean,
+        sem::Type::String => sem::Type::String,
+        sem::Type::Function {
+            ref params,
+            ref return_type,
+        } => {
+            let params = params
+                .iter()
+                .map(|x| freshrec(x, non_generic_vars, mappings))
+                .collect();
+            let return_type = freshrec(&return_type, non_generic_vars, mappings);
+
+            sem::Type::Function {
+                params,
+                return_type,
+            }
+        }
+    };
+
+    Rc::new(RefCell::new(freshed))
 }
 
 fn prune(ty: &Rc<RefCell<sem::Type>>) -> Rc<RefCell<sem::Type>> {
@@ -29,68 +80,80 @@ fn unify(ty1: &Rc<RefCell<sem::Type>>, ty2: &Rc<RefCell<sem::Type>>) {
     let ty1 = prune(ty1);
     let ty2 = prune(ty2);
 
-    match *ty1.borrow() {
+    let new_instance = match *ty1.borrow() {
         sem::Type::TypeVariable { .. } => {
             if *ty1 != *ty2 {
                 if (*ty1).borrow().contains(&*ty2.borrow()) {
                     panic!("recursive unification");
                 }
-
-                match *ty1.borrow_mut() {
-                    sem::Type::TypeVariable {
-                        ref mut instance, ..
-                    } => {
-                        instance.replace(Rc::clone(&ty2));
-                    }
-                    _ => {}
-                };
+                Some(&ty2)
+            } else {
+                None
             }
         }
-        sem::Type::Int32 => {
-            match *ty2.borrow() {
-                sem::Type::Int32 => {}
-                sem::Type::TypeVariable { .. } => unify(&ty2, &ty1),
-                _ => panic!("type error: {:?}", *ty1),
-            };
-        }
-        sem::Type::Boolean => {
-            match *ty2.borrow() {
-                sem::Type::Boolean => {}
-                sem::Type::TypeVariable { .. } => unify(&ty2, &ty1),
-                _ => panic!("type error: {:?}", *ty1),
-            };
-        }
-        sem::Type::String => {
-            match *ty2.borrow() {
-                sem::Type::String => {}
-                sem::Type::TypeVariable { .. } => unify(&ty2, &ty1),
-                _ => panic!("type error: {:?}", *ty1),
-            };
-        }
+        sem::Type::Int32 => match *ty2.borrow() {
+            sem::Type::Int32 => None,
+            sem::Type::TypeVariable { .. } => {
+                unify(&ty2, &ty1);
+                None
+            }
+            _ => {
+                panic!("type error: {:?}", *ty1);
+            }
+        },
+        sem::Type::Boolean => match *ty2.borrow() {
+            sem::Type::Boolean => None,
+            sem::Type::TypeVariable { .. } => {
+                unify(&ty2, &ty1);
+                None
+            }
+            _ => panic!("type error: {:?}", *ty1),
+        },
+        sem::Type::String => match *ty2.borrow() {
+            sem::Type::String => None,
+            sem::Type::TypeVariable { .. } => {
+                unify(&ty2, &ty1);
+                None
+            }
+            _ => panic!("type error: {:?}", *ty1),
+        },
         sem::Type::Function {
             params: ref params1,
             return_type: ref return_type1,
-        } => {
-            match *ty2.borrow() {
-                sem::Type::Function {
-                    params: ref params2,
-                    return_type: ref return_type2,
-                } => {
-                    if params1.len() != params2.len() {
-                        panic!("The number of params differs: {:?}", *ty1);
-                    }
-
-                    for (x, y) in params1.iter().zip(params2.iter()) {
-                        unify(x, y);
-                    }
-
-                    unify(return_type1, return_type2);
+        } => match *ty2.borrow() {
+            sem::Type::Function {
+                params: ref params2,
+                return_type: ref return_type2,
+            } => {
+                if params1.len() != params2.len() {
+                    panic!("The number of params differs: {:?}", *ty1);
                 }
-                sem::Type::TypeVariable { .. } => unify(&ty2, &ty1),
-                _ => panic!("type error: {:?}", *ty1),
-            };
-        }
+
+                for (x, y) in params1.iter().zip(params2.iter()) {
+                    unify(x, y);
+                }
+
+                unify(return_type1, return_type2);
+                None
+            }
+            sem::Type::TypeVariable { .. } => {
+                unify(&ty2, &ty1);
+                None
+            }
+            _ => panic!("type error: {:?}", *ty1),
+        },
     };
+
+    if let Some(new_instance) = new_instance {
+        match *ty1.borrow_mut() {
+            sem::Type::TypeVariable {
+                ref mut instance, ..
+            } => {
+                instance.replace(Rc::clone(new_instance));
+            }
+            _ => {}
+        }
+    }
 }
 
 #[allow(unused_variables)]
@@ -319,6 +382,43 @@ mod tests {
             assert!(instance.is_none());
         });
     }
+    #[test]
+    fn unify_undetermined_type_variables() {
+        let pty0 = Rc::new(RefCell::new(sem::Type::TypeVariable {
+            name: "a".to_string(),
+            instance: None,
+        }));
+        let pty1 = Rc::new(RefCell::new(sem::Type::TypeVariable {
+            name: "b".to_string(),
+            instance: None,
+        }));
+
+        unify(&pty0, &pty1);
+
+        assert_matches!(*pty0.borrow(), sem::Type::TypeVariable {
+            ref name,
+            ref instance,
+        } => {
+            assert_eq!(name, "a");
+            assert_matches!(instance, Some(instance) => {
+                assert_matches!(*instance.borrow(), sem::Type::TypeVariable {
+                    ref name,
+                    ref instance,
+                } => {
+                    assert_eq!(name, "b");
+                    assert!(instance.is_none());
+                });
+            })
+        });
+        assert_matches!(*pty1.borrow(), sem::Type::TypeVariable {
+            ref name,
+            ref instance,
+        } => {
+            assert_eq!(name, "b");
+            assert!(instance.is_none());
+        });
+    }
+
     /*
         #[test]
         fn number_integer() {
