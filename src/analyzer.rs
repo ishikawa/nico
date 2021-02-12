@@ -357,6 +357,22 @@ impl Semantic {
                 }),
             );
         }
+
+        // print
+        self.functions.insert(
+            "println".to_string(),
+            wrap(sem::Type::Function {
+                params: vec![wrap(sem::Type::String)],
+                return_type: wrap(sem::Type::Void),
+            }),
+        );
+        self.functions.insert(
+            "println_int".to_string(),
+            wrap(sem::Type::Function {
+                params: vec![wrap(sem::Type::Int32)],
+                return_type: wrap(sem::Type::Void),
+            }),
+        );
     }
 
     /// Generates a new type variable.
@@ -430,6 +446,7 @@ impl Semantic {
             sem::Type::Int32 => sem::Type::Int32,
             sem::Type::Boolean => sem::Type::Boolean,
             sem::Type::String => sem::Type::String,
+            sem::Type::Void => sem::Type::Void,
             sem::Type::Function {
                 ref params,
                 ref return_type,
@@ -488,29 +505,6 @@ impl Semantic {
                     Unification::Done
                 }
             }
-            sem::Type::Int32 => match *pty2.borrow() {
-                sem::Type::Int32 => Unification::Done,
-                sem::Type::TypeVariable { .. } => {
-                    Unification::Unify(Rc::clone(&pty2), Rc::clone(&pty1))
-                }
-                _ => {
-                    panic!("type error: {:?}", *pty1);
-                }
-            },
-            sem::Type::Boolean => match *pty2.borrow() {
-                sem::Type::Boolean => Unification::Done,
-                sem::Type::TypeVariable { .. } => {
-                    Unification::Unify(Rc::clone(&pty2), Rc::clone(&pty1))
-                }
-                _ => panic!("type error: {:?}", *pty1),
-            },
-            sem::Type::String => match *pty2.borrow() {
-                sem::Type::String => Unification::Done,
-                sem::Type::TypeVariable { .. } => {
-                    Unification::Unify(Rc::clone(&pty2), Rc::clone(&pty1))
-                }
-                _ => panic!("type error: {:?}", *pty1),
-            },
             sem::Type::Function {
                 params: ref params1,
                 return_type: ref return_type1,
@@ -530,6 +524,13 @@ impl Semantic {
                     self.unify(return_type1, return_type2);
                     Unification::Done
                 }
+                sem::Type::TypeVariable { .. } => {
+                    Unification::Unify(Rc::clone(&pty2), Rc::clone(&pty1))
+                }
+                _ => panic!("type error: {:?}", *pty1),
+            },
+            _ => match *pty2.borrow() {
+                ref t2 if t2.eq(&*pty1.borrow()) => Unification::Done,
                 sem::Type::TypeVariable { .. } => {
                     Unification::Unify(Rc::clone(&pty2), Rc::clone(&pty1))
                 }
