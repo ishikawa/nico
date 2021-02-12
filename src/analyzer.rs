@@ -16,10 +16,13 @@ pub struct Semantic {
 
 impl Semantic {
     pub fn new() -> Semantic {
-        Semantic {
+        let mut semantic = Semantic {
             type_var_index: 0,
             functions: HashMap::new(),
-        }
+        };
+
+        semantic.install_prelude();
+        semantic
     }
 
     pub fn analyze(&mut self, module: &mut parser::Module) {
@@ -153,145 +156,155 @@ impl Semantic {
 
             // binop
             Expr::Add(ref mut lhs, ref mut rhs) => {
-                let function_type = wrap(sem::Type::Function {
-                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
-                    return_type: wrap(sem::Type::Int32),
-                });
-                let retty = self.analyze_invocation(
-                    Rc::clone(&function_type),
-                    &mut [lhs.as_mut(), rhs.as_mut()],
-                    non_generic_vars,
-                    env,
-                );
-                node.r#type = Some(Rc::clone(&retty));
-                Rc::clone(&retty)
+                match self.lookup_function("+", non_generic_vars) {
+                    None => panic!("Prelude not installed"),
+                    Some(function_type) => {
+                        let retty = self.analyze_invocation(
+                            Rc::clone(&function_type),
+                            &mut [lhs.as_mut(), rhs.as_mut()],
+                            non_generic_vars,
+                            env,
+                        );
+                        node.r#type = Some(Rc::clone(&retty));
+                        Rc::clone(&retty)
+                    }
+                }
             }
             Expr::Sub(ref mut lhs, ref mut rhs) => {
-                let function_type = wrap(sem::Type::Function {
-                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
-                    return_type: wrap(sem::Type::Int32),
-                });
-                let retty = self.analyze_invocation(
-                    Rc::clone(&function_type),
-                    &mut [lhs.as_mut(), rhs.as_mut()],
-                    non_generic_vars,
-                    env,
-                );
-                node.r#type = Some(Rc::clone(&retty));
-                Rc::clone(&retty)
+                match self.lookup_function("-", non_generic_vars) {
+                    None => panic!("Prelude not installed"),
+                    Some(function_type) => {
+                        let retty = self.analyze_invocation(
+                            Rc::clone(&function_type),
+                            &mut [lhs.as_mut(), rhs.as_mut()],
+                            non_generic_vars,
+                            env,
+                        );
+                        node.r#type = Some(Rc::clone(&retty));
+                        Rc::clone(&retty)
+                    }
+                }
             }
             Expr::Mul(ref mut lhs, ref mut rhs) => {
-                let function_type = wrap(sem::Type::Function {
-                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
-                    return_type: wrap(sem::Type::Int32),
-                });
-                let retty = self.analyze_invocation(
-                    Rc::clone(&function_type),
-                    &mut [lhs.as_mut(), rhs.as_mut()],
-                    non_generic_vars,
-                    env,
-                );
-                node.r#type = Some(Rc::clone(&retty));
-                Rc::clone(&retty)
+                match self.lookup_function("*", non_generic_vars) {
+                    None => panic!("Prelude not installed"),
+                    Some(function_type) => {
+                        let retty = self.analyze_invocation(
+                            Rc::clone(&function_type),
+                            &mut [lhs.as_mut(), rhs.as_mut()],
+                            non_generic_vars,
+                            env,
+                        );
+                        node.r#type = Some(Rc::clone(&retty));
+                        Rc::clone(&retty)
+                    }
+                }
             }
             Expr::Div(ref mut lhs, ref mut rhs) => {
-                let function_type = wrap(sem::Type::Function {
-                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
-                    return_type: wrap(sem::Type::Int32),
-                });
-                let retty = self.analyze_invocation(
-                    Rc::clone(&function_type),
-                    &mut [lhs.as_mut(), rhs.as_mut()],
-                    non_generic_vars,
-                    env,
-                );
-                node.r#type = Some(Rc::clone(&retty));
-                Rc::clone(&retty)
+                match self.lookup_function("/", non_generic_vars) {
+                    None => panic!("Prelude not installed"),
+                    Some(function_type) => {
+                        let retty = self.analyze_invocation(
+                            Rc::clone(&function_type),
+                            &mut [lhs.as_mut(), rhs.as_mut()],
+                            non_generic_vars,
+                            env,
+                        );
+                        node.r#type = Some(Rc::clone(&retty));
+                        Rc::clone(&retty)
+                    }
+                }
             }
             // relation
             Expr::LT(ref mut lhs, ref mut rhs) => {
-                let function_type = wrap(sem::Type::Function {
-                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
-                    return_type: wrap(sem::Type::Boolean),
-                });
-                let retty = self.analyze_invocation(
-                    Rc::clone(&function_type),
-                    &mut [lhs.as_mut(), rhs.as_mut()],
-                    non_generic_vars,
-                    env,
-                );
-                node.r#type = Some(Rc::clone(&retty));
-                Rc::clone(&retty)
+                match self.lookup_function("<", non_generic_vars) {
+                    None => panic!("Prelude not installed"),
+                    Some(function_type) => {
+                        let retty = self.analyze_invocation(
+                            Rc::clone(&function_type),
+                            &mut [lhs.as_mut(), rhs.as_mut()],
+                            non_generic_vars,
+                            env,
+                        );
+                        node.r#type = Some(Rc::clone(&retty));
+                        Rc::clone(&retty)
+                    }
+                }
             }
             Expr::GT(ref mut lhs, ref mut rhs) => {
-                let function_type = wrap(sem::Type::Function {
-                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
-                    return_type: wrap(sem::Type::Boolean),
-                });
-                let retty = self.analyze_invocation(
-                    Rc::clone(&function_type),
-                    &mut [lhs.as_mut(), rhs.as_mut()],
-                    non_generic_vars,
-                    env,
-                );
-                node.r#type = Some(Rc::clone(&retty));
-                Rc::clone(&retty)
+                match self.lookup_function(">", non_generic_vars) {
+                    None => panic!("Prelude not installed"),
+                    Some(function_type) => {
+                        let retty = self.analyze_invocation(
+                            Rc::clone(&function_type),
+                            &mut [lhs.as_mut(), rhs.as_mut()],
+                            non_generic_vars,
+                            env,
+                        );
+                        node.r#type = Some(Rc::clone(&retty));
+                        Rc::clone(&retty)
+                    }
+                }
             }
             Expr::LE(ref mut lhs, ref mut rhs) => {
-                let function_type = wrap(sem::Type::Function {
-                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
-                    return_type: wrap(sem::Type::Boolean),
-                });
-                let retty = self.analyze_invocation(
-                    Rc::clone(&function_type),
-                    &mut [lhs.as_mut(), rhs.as_mut()],
-                    non_generic_vars,
-                    env,
-                );
-                node.r#type = Some(Rc::clone(&retty));
-                Rc::clone(&retty)
+                match self.lookup_function("<=", non_generic_vars) {
+                    None => panic!("Prelude not installed"),
+                    Some(function_type) => {
+                        let retty = self.analyze_invocation(
+                            Rc::clone(&function_type),
+                            &mut [lhs.as_mut(), rhs.as_mut()],
+                            non_generic_vars,
+                            env,
+                        );
+                        node.r#type = Some(Rc::clone(&retty));
+                        Rc::clone(&retty)
+                    }
+                }
             }
             Expr::GE(ref mut lhs, ref mut rhs) => {
-                let function_type = wrap(sem::Type::Function {
-                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
-                    return_type: wrap(sem::Type::Boolean),
-                });
-                let retty = self.analyze_invocation(
-                    Rc::clone(&function_type),
-                    &mut [lhs.as_mut(), rhs.as_mut()],
-                    non_generic_vars,
-                    env,
-                );
-                node.r#type = Some(Rc::clone(&retty));
-                Rc::clone(&retty)
+                match self.lookup_function(">=", non_generic_vars) {
+                    None => panic!("Prelude not installed"),
+                    Some(function_type) => {
+                        let retty = self.analyze_invocation(
+                            Rc::clone(&function_type),
+                            &mut [lhs.as_mut(), rhs.as_mut()],
+                            non_generic_vars,
+                            env,
+                        );
+                        node.r#type = Some(Rc::clone(&retty));
+                        Rc::clone(&retty)
+                    }
+                }
             }
             Expr::EQ(ref mut lhs, ref mut rhs) => {
-                let function_type = wrap(sem::Type::Function {
-                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
-                    return_type: wrap(sem::Type::Boolean),
-                });
-                let retty = self.analyze_invocation(
-                    Rc::clone(&function_type),
-                    &mut [lhs.as_mut(), rhs.as_mut()],
-                    non_generic_vars,
-                    env,
-                );
-                node.r#type = Some(Rc::clone(&retty));
-                Rc::clone(&retty)
+                match self.lookup_function("==", non_generic_vars) {
+                    None => panic!("Prelude not installed"),
+                    Some(function_type) => {
+                        let retty = self.analyze_invocation(
+                            Rc::clone(&function_type),
+                            &mut [lhs.as_mut(), rhs.as_mut()],
+                            non_generic_vars,
+                            env,
+                        );
+                        node.r#type = Some(Rc::clone(&retty));
+                        Rc::clone(&retty)
+                    }
+                }
             }
             Expr::NE(ref mut lhs, ref mut rhs) => {
-                let function_type = wrap(sem::Type::Function {
-                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
-                    return_type: wrap(sem::Type::Boolean),
-                });
-                let retty = self.analyze_invocation(
-                    Rc::clone(&function_type),
-                    &mut [lhs.as_mut(), rhs.as_mut()],
-                    non_generic_vars,
-                    env,
-                );
-                node.r#type = Some(Rc::clone(&retty));
-                Rc::clone(&retty)
+                match self.lookup_function("!=", non_generic_vars) {
+                    None => panic!("Prelude not installed"),
+                    Some(function_type) => {
+                        let retty = self.analyze_invocation(
+                            Rc::clone(&function_type),
+                            &mut [lhs.as_mut(), rhs.as_mut()],
+                            non_generic_vars,
+                            env,
+                        );
+                        node.r#type = Some(Rc::clone(&retty));
+                        Rc::clone(&retty)
+                    }
+                }
             }
             Expr::If {
                 ref mut condition,
@@ -324,6 +337,28 @@ enum Unification {
 }
 
 impl Semantic {
+    fn install_prelude(&mut self) {
+        // Binary operators
+        for op in &["+", "-", "*", "/"] {
+            self.functions.insert(
+                op.to_string(),
+                wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: wrap(sem::Type::Int32),
+                }),
+            );
+        }
+        for op in &["<", ">", "<=", ">", "==", "!="] {
+            self.functions.insert(
+                op.to_string(),
+                wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: wrap(sem::Type::Boolean),
+                }),
+            );
+        }
+    }
+
     /// Generates a new type variable.
     fn next_type_var_name(&mut self) -> String {
         let i = self.type_var_index;
