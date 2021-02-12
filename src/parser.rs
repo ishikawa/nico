@@ -1,19 +1,27 @@
+use super::sem;
 use super::tokenizer::{Token, Tokenizer};
+use std::cell::RefCell;
 use std::iter::Peekable;
+use std::rc::Rc;
 
 // Program
 pub struct Module {
-    pub definition: Option<Box<Definition>>,
-    pub expr: Option<Box<Expr>>,
+    pub function: Option<Box<Function>>,
+    pub expr: Option<Box<Node>>,
 }
 
 #[derive(Debug)]
-pub enum Definition {
-    Function {
-        name: String,
-        params: Vec<String>,
-        body: Box<Expr>,
-    },
+pub struct Function {
+    pub name: String,
+    pub params: Vec<String>,
+    pub body: Box<Node>,
+    pub r#type: Option<Rc<RefCell<sem::Type>>>,
+}
+
+#[derive(Debug)]
+pub struct Node {
+    pub expr: Expr,
+    pub r#type: Option<Rc<RefCell<sem::Type>>>,
 }
 
 #[derive(Debug)]
@@ -24,28 +32,28 @@ pub enum Expr {
     String(String),
     Invocation {
         name: String,
-        arguments: Vec<Expr>,
+        arguments: Vec<Node>,
     },
 
     // binop
-    Add(Box<Expr>, Box<Expr>),
-    Sub(Box<Expr>, Box<Expr>),
-    Mul(Box<Expr>, Box<Expr>),
-    Div(Box<Expr>, Box<Expr>),
+    Add(Box<Node>, Box<Node>),
+    Sub(Box<Node>, Box<Node>),
+    Mul(Box<Node>, Box<Node>),
+    Div(Box<Node>, Box<Node>),
 
     // Relational operator
-    LT(Box<Expr>, Box<Expr>), // Less Than
-    GT(Box<Expr>, Box<Expr>), // Greater Than
-    LE(Box<Expr>, Box<Expr>), // Less than Equal
-    GE(Box<Expr>, Box<Expr>), // Greater than Equal
-    EQ(Box<Expr>, Box<Expr>), // Equal
-    NE(Box<Expr>, Box<Expr>), // Not Equal
+    LT(Box<Node>, Box<Node>), // Less Than
+    GT(Box<Node>, Box<Node>), // Greater Than
+    LE(Box<Node>, Box<Node>), // Less than Equal
+    GE(Box<Node>, Box<Node>), // Greater than Equal
+    EQ(Box<Node>, Box<Node>), // Equal
+    NE(Box<Node>, Box<Node>), // Not Equal
 
     // Control flow
     If {
-        condition: Box<Expr>,
-        then_body: Box<Expr>,
-        else_body: Option<Box<Expr>>,
+        condition: Box<Node>,
+        then_body: Box<Node>,
+        else_body: Option<Box<Node>>,
     },
 }
 
@@ -60,13 +68,10 @@ pub fn parse(tokenizer: &mut Tokenizer) -> Box<Module> {
     let function = parse_function(&mut tokenizer);
     let expr = parse_expr(&mut tokenizer);
 
-    Box::new(Module {
-        definition: function,
-        expr,
-    })
+    Box::new(Module { function, expr })
 }
 
-fn parse_function(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Definition>> {
+fn parse_function(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Function>> {
     match tokenizer.peek() {
         Some(Token::Fun) => {
             tokenizer.next();
@@ -100,16 +105,21 @@ fn parse_function(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Defini
     let body = parse_expr(tokenizer).expect("no function body");
     consume_token(tokenizer, Token::End);
 
-    let definition = Definition::Function { name, params, body };
-    Some(Box::new(definition))
+    let function = Function {
+        name,
+        params,
+        body,
+        r#type: None,
+    };
+    Some(Box::new(function))
 }
 
-fn parse_expr(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
+fn parse_expr(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     parse_relop1(tokenizer)
 }
 
 // "==", "!="
-fn parse_relop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
+fn parse_relop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     let lhs = match parse_relop2(tokenizer) {
         Some(lhs) => lhs,
         None => return None,
@@ -127,11 +137,11 @@ fn parse_relop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
         Some(rhs) => rhs,
     };
 
-    Some(Box::new(builder(lhs, rhs)))
+    Some(boxed_expr(builder(lhs, rhs)))
 }
 
 // ">", "<", ">=", "<="
-fn parse_relop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
+fn parse_relop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     let lhs = match parse_binop1(tokenizer) {
         Some(lhs) => lhs,
         None => return None,
@@ -151,10 +161,10 @@ fn parse_relop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
         Some(rhs) => rhs,
     };
 
-    Some(Box::new(builder(lhs, rhs)))
+    Some(boxed_expr(builder(lhs, rhs)))
 }
 
-fn parse_binop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
+fn parse_binop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     let mut lhs = match parse_binop2(tokenizer) {
         None => return None,
         Some(lhs) => lhs,
@@ -174,13 +184,13 @@ fn parse_binop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
             Some(rhs) => rhs,
         };
 
-        lhs = Box::new(builder(lhs, rhs));
+        lhs = boxed_expr(builder(lhs, rhs));
     }
 
     Some(lhs)
 }
 
-fn parse_binop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
+fn parse_binop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     let mut lhs = match parse_primary(tokenizer) {
         None => return None,
         Some(lhs) => lhs,
@@ -200,13 +210,13 @@ fn parse_binop2(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
             Some(rhs) => rhs,
         };
 
-        lhs = Box::new(builder(lhs, rhs));
+        lhs = boxed_expr(builder(lhs, rhs));
     }
 
     Some(lhs)
 }
 
-fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> {
+fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
     let token = match tokenizer.peek() {
         None => return None,
         Some(token) => token,
@@ -243,20 +253,20 @@ fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> 
                     }
                 }
                 consume_char(tokenizer, ')');
-                Some(Box::new(Expr::Invocation { name, arguments }))
+                Some(boxed_expr(Expr::Invocation { name, arguments }))
             } else {
-                Some(Box::new(Expr::Identifier(name)))
+                Some(boxed_expr(Expr::Identifier(name)))
             }
         }
         Token::Integer(i) => {
-            let node = Some(Box::new(Expr::Integer(*i)));
+            let expr = Expr::Integer(*i);
             tokenizer.next();
-            node
+            Some(boxed_expr(expr))
         }
         Token::String(s) => {
-            let node = Some(Box::new(Expr::String(s.clone())));
+            let expr = Expr::String(s.clone());
             tokenizer.next();
-            node
+            Some(boxed_expr(expr))
         }
         Token::If => {
             tokenizer.next();
@@ -276,12 +286,12 @@ fn parse_primary(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Expr>> 
 
             consume_token(tokenizer, Token::End);
 
-            let node = Expr::If {
+            let expr = Expr::If {
                 condition,
                 then_body,
                 else_body,
             };
-            Some(Box::new(node))
+            Some(boxed_expr(expr))
         }
         token => panic!("Unexpected token {:?}", token),
     }
@@ -299,6 +309,10 @@ fn consume_char(tokenizer: &mut Peekable<&mut Tokenizer>, expected: char) {
     consume_token(tokenizer, Token::Char(expected));
 }
 
+fn boxed_expr(expr: Expr) -> Box<Node> {
+    Box::new(Node { expr, r#type: None })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,58 +321,58 @@ mod tests {
     #[test]
     fn number_integer() {
         let program = parse_string("42");
-        assert!(program.definition.is_none());
+        assert!(program.function.is_none());
 
-        let node = program.expr.unwrap();
-        assert_matches!(*node, Expr::Integer(42));
+        let expr = program.expr.unwrap().expr;
+        assert_matches!(expr, Expr::Integer(42));
     }
     #[test]
     fn number_integer_followed_by_letter() {
         let program = parse_string("123a");
-        assert!(program.definition.is_none());
+        assert!(program.function.is_none());
 
-        let node = program.expr.unwrap();
-        assert_matches!(*node, Expr::Integer(123));
+        let expr = program.expr.unwrap().expr;
+        assert_matches!(expr, Expr::Integer(123));
     }
 
     #[test]
     fn add_integer() {
         let program = parse_string("1 + 2");
-        assert!(program.definition.is_none());
+        assert!(program.function.is_none());
 
         let node = program.expr.unwrap();
-        assert_matches!(*node, Expr::Add(lhs, rhs) => {
-            assert_matches!(*lhs, Expr::Integer(1));
-            assert_matches!(*rhs, Expr::Integer(2));
+        assert_matches!(node.expr, Expr::Add(lhs, rhs) => {
+            assert_matches!(lhs.expr, Expr::Integer(1));
+            assert_matches!(rhs.expr, Expr::Integer(2));
         });
     }
 
     #[test]
     fn operator_associative() {
         let program = parse_string("1 + 2 + 3");
-        assert!(program.definition.is_none());
+        assert!(program.function.is_none());
 
         let node = program.expr.unwrap();
-        assert_matches!(*node, Expr::Add(lhs, rhs) => {
-            assert_matches!(*lhs, Expr::Add(x, y) => {
-                assert_matches!(*x, Expr::Integer(1));
-                assert_matches!(*y, Expr::Integer(2));
+        assert_matches!(node.expr, Expr::Add(lhs, rhs) => {
+            assert_matches!(lhs.expr, Expr::Add(x, y) => {
+                assert_matches!(x.expr, Expr::Integer(1));
+                assert_matches!(y.expr, Expr::Integer(2));
             });
-            assert_matches!(*rhs, Expr::Integer(3));
+            assert_matches!(rhs.expr, Expr::Integer(3));
         });
     }
     #[test]
     fn paren_grouping() {
         let program = parse_string("(1 + 2) * 3");
-        assert!(program.definition.is_none());
+        assert!(program.function.is_none());
 
         let node = program.expr.unwrap();
-        assert_matches!(*node, Expr::Mul(lhs, rhs) => {
-            assert_matches!(*lhs, Expr::Add(x, y) => {
-                assert_matches!(*x, Expr::Integer(1));
-                assert_matches!(*y, Expr::Integer(2));
+        assert_matches!(node.expr, Expr::Mul(lhs, rhs) => {
+            assert_matches!(lhs.expr, Expr::Add(x, y) => {
+                assert_matches!(x.expr, Expr::Integer(1));
+                assert_matches!(y.expr, Expr::Integer(2));
             });
-            assert_matches!(*rhs, Expr::Integer(3));
+            assert_matches!(rhs.expr, Expr::Integer(3));
         });
     }
 }

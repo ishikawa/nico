@@ -16,7 +16,7 @@
   "homepage": "https://github.com/ishikawa/nico#readme",
   "dependencies": {},
   "scripts": {
-    "build": "cargo check && cargo clean && cargo clippy -- -D warnings && cargo build",
+    "build": "cargo check && cargo clean && cargo clippy -- -D warnings && cargo build && cargo test",
     "pretest": "npm run build",
     "test": "jest"
   },

@@ -172,7 +172,7 @@ const cases: TestCase[] = [
   {
     // prettier-ignore
     input: [
-      "println!(1)",
+      "println_int(1)",
     ].join("\n"),
     captureOutput: true,
     expected: "1\n"
@@ -180,7 +180,7 @@ const cases: TestCase[] = [
   {
     // prettier-ignore
     input: [
-      "println!(\"hello\")",
+      "println(\"hello\")",
     ].join("\n"),
     captureOutput: true,
     expected: "hello\n"

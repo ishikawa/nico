@@ -1,4 +1,5 @@
-use super::parser::{Definition, Expr};
+use super::parser;
+use parser::{Expr, Node};
 
 pub struct WasmWriter {
     level: i32,
@@ -126,12 +127,12 @@ impl AsmEmitter {
         let mut functions = vec![];
 
         functions.push(Function {
-            name: "println!".to_string(),
+            name: "println_int".to_string(),
             reference_name: "$println_i32".to_string(),
             params: vec![Param { is_string: false }],
         });
         functions.push(Function {
-            name: "println!".to_string(),
+            name: "println".to_string(),
             reference_name: "$println_str".to_string(),
             params: vec![Param { is_string: true }],
         });
@@ -167,48 +168,52 @@ impl AsmEmitter {
         module
     }
 
-    pub fn emit_definition(&mut self, definition: &Definition) {
-        match definition {
-            Definition::Function { name, params, body } => {
-                // function signature
-                {
-                    let mut signature = String::new();
+    pub fn emit_definition(
+        &mut self,
+        parser::Function {
+            name,
+            params,
+            body,
+            r#type: _,
+        }: &parser::Function,
+    ) {
+        // function signature
+        {
+            let mut signature = String::new();
 
-                    signature.push_str(format!("(func ${} (export \"{}\")", name, name).as_str());
-                    for param in params {
-                        signature.push_str(format!(" (param ${} i32)", param).as_str());
-                    }
-                    signature.push_str(" (result i32)");
-
-                    self.emit(signature);
-                }
-
-                // Register function definition
-                let typed_params = params
-                    .iter()
-                    .map(|_x| Param {
-                        //name: x.clone(),
-                        is_string: false,
-                    })
-                    .collect();
-
-                self.functions.push(Function {
-                    name: name.clone(),
-                    reference_name: format!("${}", name),
-                    params: typed_params,
-                });
-
-                // Initialize local variables with parameters.
-                self.locals.extend_from_slice(params);
-                {
-                    self.push_scope();
-                    self.emit_expr(&*body);
-                    self.pop_scope();
-                    self.emit(")");
-                }
-                self.locals.clear();
+            signature.push_str(format!("(func ${} (export \"{}\")", name, name).as_str());
+            for param in params {
+                signature.push_str(format!(" (param ${} i32)", param).as_str());
             }
+            signature.push_str(" (result i32)");
+
+            self.emit(signature);
         }
+
+        // Register function definition
+        let typed_params = params
+            .iter()
+            .map(|_x| Param {
+                //name: x.clone(),
+                is_string: false,
+            })
+            .collect();
+
+        self.functions.push(Function {
+            name: name.clone(),
+            reference_name: format!("${}", name),
+            params: typed_params,
+        });
+
+        // Initialize local variables with parameters.
+        self.locals.extend_from_slice(params);
+        {
+            self.push_scope();
+            self.emit_expr(&*body);
+            self.pop_scope();
+            self.emit(")");
+        }
+        self.locals.clear();
     }
 
     fn emit_string(&mut self, s: &str) -> i32 {
@@ -219,8 +224,8 @@ impl AsmEmitter {
         offset
     }
 
-    pub fn emit_expr(&mut self, node: &Expr) {
-        match node {
+    pub fn emit_expr(&mut self, node: &Node) {
+        match &node.expr {
             Expr::Identifier(name) => {
                 if !self.locals.iter().any(|local| local == name) {
                     panic!("Undefined local variable `{}`", name);
@@ -232,7 +237,7 @@ impl AsmEmitter {
                 self.writer.write_i32(*n);
             }
             Expr::String(s) => {
-                let index = self.emit_string(s);
+                let index = self.emit_string(&s);
                 self.writer.write_i32(index);
             }
             Expr::Invocation { name, arguments } => {
@@ -243,10 +248,13 @@ impl AsmEmitter {
                     .filter(|f| f.name == *name)
                     .filter(|f| f.params.len() == arguments.len())
                     .filter(|f| {
-                        f.params.iter().zip(arguments.iter()).all(|(p, a)| match a {
-                            Expr::String(_) => p.is_string,
-                            _ => !p.is_string,
-                        })
+                        f.params
+                            .iter()
+                            .zip(arguments.iter())
+                            .all(|(p, a)| match a.expr {
+                                Expr::String(_) => p.is_string,
+                                _ => !p.is_string,
+                            })
                     })
                     .collect();
 
@@ -268,7 +276,7 @@ impl AsmEmitter {
                 self.emit(format!("(call {}", name));
                 self.push_scope();
                 for arg in arguments {
-                    self.emit_expr(arg);
+                    self.emit_expr(&arg);
                 }
                 self.pop_scope();
                 self.emit(")")
@@ -330,20 +338,20 @@ impl AsmEmitter {
                 then_body,
                 else_body,
             } => {
-                self.emit_expr(condition);
+                self.emit_expr(&*condition);
                 self.emit("(if (result i32)");
                 self.push_scope();
 
                 self.emit("(then");
                 self.push_scope();
-                self.emit_expr(then_body);
+                self.emit_expr(&*then_body);
                 self.pop_scope();
                 self.emit(")");
 
                 self.emit("(else");
                 self.push_scope();
                 match else_body {
-                    Some(node) => self.emit_expr(node),
+                    Some(node) => self.emit_expr(&*node),
                     None => self.writer.write_i32(0),
                 }
                 self.pop_scope();

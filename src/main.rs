@@ -1,7 +1,10 @@
+pub mod analyzer;
 pub mod asm;
 pub mod parser;
+pub mod sem;
 pub mod tokenizer;
 
+use analyzer::Semantic;
 use asm::AsmEmitter;
 use std::env;
 use std::fs;
@@ -37,20 +40,22 @@ fn main() {
     };
 
     let mut tokenizer = Tokenizer::from_string(&src);
-    let program = parser::parse(&mut tokenizer);
+    let mut module = parser::parse(&mut tokenizer);
+    let mut semantic = Semantic::new();
 
-    //let node = parser::parse(&src).unwrap();
+    semantic.analyze(&mut module);
+
     let mut emitter = AsmEmitter::new();
 
     emitter.push_scope();
 
     // export function
-    if let Some(definition) = program.definition {
-        emitter.emit_definition(&*definition);
+    if let Some(function) = module.function {
+        emitter.emit_definition(&*function);
     }
 
     // main function
-    if let Some(expr) = program.expr {
+    if let Some(expr) = module.expr {
         emitter.emit("(func (export \"main\") (result i32)");
         emitter.push_scope();
         emitter.emit_expr(&*expr);
