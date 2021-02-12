@@ -8,7 +8,6 @@ use std::rc::Rc;
 pub struct Module {
     pub function: Option<Box<Function>>,
     pub expr: Option<Box<Node>>,
-    pub name: Option<String>,
 }
 
 #[derive(Debug)]
@@ -69,11 +68,7 @@ pub fn parse(tokenizer: &mut Tokenizer) -> Box<Module> {
     let function = parse_function(&mut tokenizer);
     let expr = parse_expr(&mut tokenizer);
 
-    Box::new(Module {
-        function,
-        expr,
-        name: None,
-    })
+    Box::new(Module { function, expr })
 }
 
 fn parse_function(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Function>> {

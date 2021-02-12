@@ -26,8 +26,6 @@ impl Semantic {
         let mut non_generic_vars = HashSet::new();
         let mut env = HashMap::new();
 
-        module.name = Some("main".to_string());
-
         if let Some(ref mut function) = module.function {
             self.analyze_function(function, &mut non_generic_vars, &mut env);
         }
@@ -159,10 +157,9 @@ impl Semantic {
                     params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
                     return_type: wrap(sem::Type::Int32),
                 });
-                let mut args = [lhs.as_mut(), rhs.as_mut()];
                 let retty = self.analyze_invocation(
                     Rc::clone(&function_type),
-                    &mut args,
+                    &mut [lhs.as_mut(), rhs.as_mut()],
                     non_generic_vars,
                     env,
                 );
@@ -174,26 +171,148 @@ impl Semantic {
                     params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
                     return_type: wrap(sem::Type::Int32),
                 });
-                let mut args = [lhs.as_mut(), rhs.as_mut()];
                 let retty = self.analyze_invocation(
                     Rc::clone(&function_type),
-                    &mut args,
+                    &mut [lhs.as_mut(), rhs.as_mut()],
                     non_generic_vars,
                     env,
                 );
                 node.r#type = Some(Rc::clone(&retty));
                 Rc::clone(&retty)
             }
-            Expr::Mul(..) => panic!("not implemented"),
-            Expr::Div(..) => panic!("not implemented"),
+            Expr::Mul(ref mut lhs, ref mut rhs) => {
+                let function_type = wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: wrap(sem::Type::Int32),
+                });
+                let retty = self.analyze_invocation(
+                    Rc::clone(&function_type),
+                    &mut [lhs.as_mut(), rhs.as_mut()],
+                    non_generic_vars,
+                    env,
+                );
+                node.r#type = Some(Rc::clone(&retty));
+                Rc::clone(&retty)
+            }
+            Expr::Div(ref mut lhs, ref mut rhs) => {
+                let function_type = wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: wrap(sem::Type::Int32),
+                });
+                let retty = self.analyze_invocation(
+                    Rc::clone(&function_type),
+                    &mut [lhs.as_mut(), rhs.as_mut()],
+                    non_generic_vars,
+                    env,
+                );
+                node.r#type = Some(Rc::clone(&retty));
+                Rc::clone(&retty)
+            }
             // relation
-            Expr::LT(..) => panic!("not implemented"),
-            Expr::GT(..) => panic!("not implemented"),
-            Expr::LE(..) => panic!("not implemented"),
-            Expr::GE(..) => panic!("not implemented"),
-            Expr::EQ(..) => panic!("not implemented"),
-            Expr::NE(..) => panic!("not implemented"),
-            Expr::If { .. } => panic!("not implemented"),
+            Expr::LT(ref mut lhs, ref mut rhs) => {
+                let function_type = wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: wrap(sem::Type::Boolean),
+                });
+                let retty = self.analyze_invocation(
+                    Rc::clone(&function_type),
+                    &mut [lhs.as_mut(), rhs.as_mut()],
+                    non_generic_vars,
+                    env,
+                );
+                node.r#type = Some(Rc::clone(&retty));
+                Rc::clone(&retty)
+            }
+            Expr::GT(ref mut lhs, ref mut rhs) => {
+                let function_type = wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: wrap(sem::Type::Boolean),
+                });
+                let retty = self.analyze_invocation(
+                    Rc::clone(&function_type),
+                    &mut [lhs.as_mut(), rhs.as_mut()],
+                    non_generic_vars,
+                    env,
+                );
+                node.r#type = Some(Rc::clone(&retty));
+                Rc::clone(&retty)
+            }
+            Expr::LE(ref mut lhs, ref mut rhs) => {
+                let function_type = wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: wrap(sem::Type::Boolean),
+                });
+                let retty = self.analyze_invocation(
+                    Rc::clone(&function_type),
+                    &mut [lhs.as_mut(), rhs.as_mut()],
+                    non_generic_vars,
+                    env,
+                );
+                node.r#type = Some(Rc::clone(&retty));
+                Rc::clone(&retty)
+            }
+            Expr::GE(ref mut lhs, ref mut rhs) => {
+                let function_type = wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: wrap(sem::Type::Boolean),
+                });
+                let retty = self.analyze_invocation(
+                    Rc::clone(&function_type),
+                    &mut [lhs.as_mut(), rhs.as_mut()],
+                    non_generic_vars,
+                    env,
+                );
+                node.r#type = Some(Rc::clone(&retty));
+                Rc::clone(&retty)
+            }
+            Expr::EQ(ref mut lhs, ref mut rhs) => {
+                let function_type = wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: wrap(sem::Type::Boolean),
+                });
+                let retty = self.analyze_invocation(
+                    Rc::clone(&function_type),
+                    &mut [lhs.as_mut(), rhs.as_mut()],
+                    non_generic_vars,
+                    env,
+                );
+                node.r#type = Some(Rc::clone(&retty));
+                Rc::clone(&retty)
+            }
+            Expr::NE(ref mut lhs, ref mut rhs) => {
+                let function_type = wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: wrap(sem::Type::Boolean),
+                });
+                let retty = self.analyze_invocation(
+                    Rc::clone(&function_type),
+                    &mut [lhs.as_mut(), rhs.as_mut()],
+                    non_generic_vars,
+                    env,
+                );
+                node.r#type = Some(Rc::clone(&retty));
+                Rc::clone(&retty)
+            }
+            Expr::If {
+                ref mut condition,
+                ref mut then_body,
+                ref mut else_body,
+            } => {
+                let cond_type = self.analyze_expr(condition, non_generic_vars, env);
+
+                self.unify(&cond_type, &wrap(sem::Type::Boolean));
+
+                let then_type = self.analyze_expr(then_body, non_generic_vars, env);
+
+                if let Some(else_body) = else_body {
+                    let else_type = self.analyze_expr(else_body, non_generic_vars, env);
+
+                    self.unify(&then_type, &else_type);
+                    self.instantiate(&then_type)
+                } else {
+                    self.instantiate(&then_type)
+                }
+            }
         }
     }
 }
@@ -709,6 +828,33 @@ mod tests {
                 n + 10
             end
             plus10(5)
+            ",
+        );
+        let mut semantic = Semantic::new();
+
+        semantic.analyze(&mut module);
+
+        let function = module.function.unwrap();
+
+        assert_matches!(function.r#type, Some(ref ty) => {
+            assert_matches!(*ty.borrow(), sem::Type::Function{ ref params, ref return_type } => {
+                assert_eq!(*(params[0]).borrow(), sem::Type::Int32);
+                assert_eq!(*return_type.borrow(), sem::Type::Int32);
+            });
+        });
+    }
+
+    #[test]
+    fn fun_recursive_fun() {
+        let mut module = parser::parse_string(
+            "
+            fun recr(n)
+                if n < 1
+                    0
+                else
+                    recr(n) - 1
+                end
+            end
             ",
         );
         let mut semantic = Semantic::new();
