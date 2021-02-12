@@ -5,110 +5,129 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+pub fn wrap(ty: sem::Type) -> Rc<RefCell<sem::Type>> {
+    Rc::new(RefCell::new(ty))
+}
+
 pub struct Semantic {
-    // Type environment
-    environment: HashMap<String, Rc<sem::Type>>,
     type_var_index: i32,
 }
 
-#[allow(unused_variables)]
 impl Semantic {
     pub fn new() -> Semantic {
-        Semantic {
-            environment: HashMap::new(),
-            type_var_index: 0,
-        }
+        Semantic { type_var_index: 0 }
     }
 
     pub fn analyze(&mut self, module: &mut parser::Module) {
+        let mut non_generic_vars = HashSet::new();
+        let mut env = HashMap::new();
+
         module.name = Some("main".to_string());
 
         if let Some(ref mut function) = module.function {
-            self.analyze_function(function);
+            self.analyze_function(function, &mut non_generic_vars, &mut env);
         }
         if let Some(ref mut expr) = module.expr {
-            self.analyze_expr(expr);
+            self.analyze_expr(expr, &mut non_generic_vars, &mut env);
         }
     }
 
-    fn new_type_variable(&mut self) -> Rc<sem::Type> {
-        self.type_var_index += 1;
+    fn analyze_function(
+        &mut self,
+        function: &mut parser::Function,
+        non_generic_vars: &mut HashSet<String>,
+        env: &HashMap<String, Rc<RefCell<sem::Type>>>,
+    ) {
+        let mut scoped_ng = non_generic_vars.clone();
+        let mut scoped_env = env.clone();
+        let mut arg_types = vec![];
 
-        let ty = sem::Type::TypeVariable {
-            name: format!("${}", self.type_var_index),
-            instance: None,
-        };
-        Rc::new(ty)
-    }
-
-    fn analyze_function(&mut self, function: &mut parser::Function) {
         for param in function.params.iter() {
-            let var = self.new_type_variable();
+            let name = self.next_type_var_name();
+            let var = wrap(sem::Type::new_type_var(&name));
 
-            //self.prune(var);
-            self.environment.insert(param.clone(), var);
+            scoped_env.insert(param.clone(), Rc::clone(&var));
+            scoped_ng.insert(name);
+
+            arg_types.push(Rc::clone(&var));
         }
 
-        self.analyze_expr(&mut function.body);
-        self.environment.clear();
+        let retty = self.analyze_expr(&mut function.body, &mut scoped_ng, &mut scoped_env);
+
+        println!(
+            "Function({}): {:?} -> {:?}",
+            function.name, arg_types, retty
+        );
     }
 
-    fn analyze_expr(&mut self, node: &mut parser::Node) {
+    fn analyze_expr(
+        &mut self,
+        node: &mut parser::Node,
+        non_generic_vars: &mut HashSet<String>,
+        env: &HashMap<String, Rc<RefCell<sem::Type>>>,
+    ) -> Option<Rc<RefCell<sem::Type>>> {
         match node.expr {
-            Expr::Integer(_) => {
-                node.r#type = Some(Rc::new(sem::Type::Int32));
-            }
-            Expr::String(_) => {
-                node.r#type = Some(Rc::new(sem::Type::String));
-            }
-            Expr::Identifier(ref name) => {
-                if let Some(ty) = self.environment.get(name) {
-                    node.r#type = Some(Rc::clone(ty));
-                } else {
-                    panic!("Undefined variable `{}`", name);
-                }
-            }
+            Expr::Integer(_) => Some(wrap(sem::Type::Int32)),
+            Expr::String(_) => Some(wrap(sem::Type::String)),
+            Expr::Identifier(ref name) => match self.lookup(name, non_generic_vars, env) {
+                None => panic!("Undefined variable `{}`", name),
+                ty => ty,
+            },
             Expr::Invocation {
                 name: _,
                 arguments: _,
             } => panic!("not implemented yet."),
             // binop
             Expr::Add(ref mut lhs, ref mut rhs) => {
-                self.analyze_expr(lhs);
-                self.analyze_expr(rhs);
+                let function = wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: Rc::new(RefCell::new(sem::Type::Int32)),
+                });
 
-                expect_type(lhs, sem::Type::Int32);
-                expect_type(rhs, sem::Type::Int32);
-                node.r#type = Some(Rc::new(sem::Type::Int32));
+                let arg1 = self.analyze_expr(lhs, non_generic_vars, env).unwrap();
+                let arg2 = self.analyze_expr(rhs, non_generic_vars, env).unwrap();
+                let retty = wrap(sem::Type::new_type_var(&self.next_type_var_name()));
+                let callsite = wrap(sem::Type::Function {
+                    params: vec![Rc::clone(&arg1), Rc::clone(&arg2)],
+                    return_type: Rc::clone(&retty),
+                });
+
+                self.unify(&function, &callsite);
+                Some(retty)
             }
-            Expr::Sub(ref mut lhs, ref mut rhs) => {}
-            Expr::Mul(ref mut lhs, ref mut rhs) => {}
-            Expr::Div(ref mut lhs, ref mut rhs) => {}
+            Expr::Sub(..) => None,
+            Expr::Mul(..) => None,
+            Expr::Div(..) => None,
             // relation
-            Expr::LT(ref mut lhs, ref mut rhs) => {}
-            Expr::GT(ref mut lhs, ref mut rhs) => {}
-            Expr::LE(ref mut lhs, ref mut rhs) => {}
-            Expr::GE(ref mut lhs, ref mut rhs) => {}
-            Expr::EQ(ref mut lhs, ref mut rhs) => {}
-            Expr::NE(ref mut lhs, ref mut rhs) => {}
-            Expr::If {
-                ref mut condition,
-                ref mut then_body,
-                ref mut else_body,
-            } => {}
+            Expr::LT(..) => None,
+            Expr::GT(..) => None,
+            Expr::LE(..) => None,
+            Expr::GE(..) => None,
+            Expr::EQ(..) => None,
+            Expr::NE(..) => None,
+            Expr::If { .. } => None,
         }
     }
 }
 
 impl Semantic {
-    fn new_type_var(&mut self) -> sem::Type {
+    /// Generates a new type variable.
+    fn next_type_var_name(&mut self) -> String {
         let i = self.type_var_index;
-
         self.type_var_index += 1;
+        format!("{}", i)
+    }
 
-        sem::Type::TypeVariable {
-            name: format!("{}", i),
-            instance: None,
+    fn lookup(
+        &mut self,
+        name: &String,
+        non_generic_vars: &mut HashSet<String>,
+        env: &HashMap<String, Rc<RefCell<sem::Type>>>,
+    ) -> Option<Rc<RefCell<sem::Type>>> {
+        if let Some(ty) = env.get(name) {
+            Some(self.fresh(ty, non_generic_vars))
+        } else {
+            None
         }
     }
 
@@ -138,8 +157,9 @@ impl Semantic {
                     if let Some(cached) = mappings.get(name) {
                         return Rc::clone(cached);
                     } else {
-                        let cached = self.new_type_var();
-                        let cached = Rc::new(RefCell::new(cached));
+                        let cached = Rc::new(RefCell::new(sem::Type::new_type_var(
+                            &self.next_type_var_name(),
+                        )));
 
                         mappings.insert(name.clone(), Rc::clone(&cached));
                         return cached;
@@ -270,13 +290,6 @@ impl Default for Semantic {
     }
 }
 
-fn expect_type(node: &parser::Node, expected_type: sem::Type) {
-    match &node.r#type {
-        Some(ty) if **ty == expected_type => {}
-        Some(ty) => panic!("Expected {:?}, but was {:?}", expected_type, ty),
-        None => panic!("Type can't be inferred."),
-    };
-}
 #[cfg(test)]
 mod tests {
     use super::*;

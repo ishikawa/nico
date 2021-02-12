@@ -17,6 +17,13 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn new_type_var(name: &str) -> Self {
+        Type::TypeVariable {
+            name: name.to_string(),
+            instance: None,
+        }
+    }
+
     /// Returns `true` if the type given by the 2nd argument appears in this type.
     pub fn contains(&self, other: &Self) -> bool {
         match self {
