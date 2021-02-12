@@ -144,7 +144,7 @@ impl Semantic {
 
     fn lookup(
         &mut self,
-        name: &String,
+        name: &str,
         non_generic_vars: &mut HashSet<String>,
         env: &HashMap<String, Rc<RefCell<sem::Type>>>,
     ) -> Option<Rc<RefCell<sem::Type>>> {
@@ -177,17 +177,15 @@ impl Semantic {
             sem::Type::TypeVariable { ref name, .. } => {
                 if non_generic_vars.contains(name) {
                     return Rc::clone(&ty);
+                } else if let Some(cached) = mappings.get(name) {
+                    return Rc::clone(cached);
                 } else {
-                    if let Some(cached) = mappings.get(name) {
-                        return Rc::clone(cached);
-                    } else {
-                        let cached = Rc::new(RefCell::new(sem::Type::new_type_var(
-                            &self.next_type_var_name(),
-                        )));
+                    let cached = Rc::new(RefCell::new(sem::Type::new_type_var(
+                        &self.next_type_var_name(),
+                    )));
 
-                        mappings.insert(name.clone(), Rc::clone(&cached));
-                        return cached;
-                    }
+                    mappings.insert(name.clone(), Rc::clone(&cached));
+                    return cached;
                 }
             }
             // Type operators
@@ -302,14 +300,14 @@ impl Semantic {
         };
 
         match action {
-            Unification::Instantiate(new_instance) => match *pty1.borrow_mut() {
-                sem::Type::TypeVariable {
+            Unification::Instantiate(new_instance) => {
+                if let sem::Type::TypeVariable {
                     ref mut instance, ..
-                } => {
+                } = *pty1.borrow_mut()
+                {
                     instance.replace(Rc::clone(&new_instance));
                 }
-                _ => {}
-            },
+            }
             Unification::Unify(ref ty1, ref ty2) => self.unify(&Rc::clone(ty1), &Rc::clone(ty2)),
             Unification::Done => {}
         };
