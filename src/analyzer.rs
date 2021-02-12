@@ -348,7 +348,7 @@ impl Semantic {
                 }),
             );
         }
-        for op in &["<", ">", "<=", ">", "==", "!="] {
+        for op in &["<", ">", "<=", ">=", "==", "!="] {
             self.functions.insert(
                 op.to_string(),
                 wrap(sem::Type::Function {

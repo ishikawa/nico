@@ -127,12 +127,12 @@ impl AsmEmitter {
         let mut functions = vec![];
 
         functions.push(Function {
-            name: "println!".to_string(),
+            name: "println_int".to_string(),
             reference_name: "$println_i32".to_string(),
             params: vec![Param { is_string: false }],
         });
         functions.push(Function {
-            name: "println!".to_string(),
+            name: "println".to_string(),
             reference_name: "$println_str".to_string(),
             params: vec![Param { is_string: true }],
         });
