@@ -37,7 +37,7 @@ impl Semantic {
         function: &mut parser::Function,
         non_generic_vars: &mut HashSet<String>,
         env: &HashMap<String, Rc<RefCell<sem::Type>>>,
-    ) {
+    ) -> Option<Rc<RefCell<sem::Type>>> {
         let mut scoped_ng = non_generic_vars.clone();
         let mut scoped_env = env.clone();
         let mut arg_types = vec![];
@@ -54,10 +54,20 @@ impl Semantic {
 
         let retty = self.analyze_expr(&mut function.body, &mut scoped_ng, &mut scoped_env);
 
-        println!(
-            "Function({}): {:?} -> {:?}",
-            function.name, arg_types, retty
-        );
+        // -- function type
+        {
+            let return_type = self.instantiate(&retty.unwrap());
+            let params: Vec<Rc<RefCell<sem::Type>>> =
+                arg_types.iter().map(|a| self.instantiate(a)).collect();
+
+            let function_type = wrap(sem::Type::Function {
+                params,
+                return_type,
+            });
+
+            function.r#type = Some(Rc::clone(&function_type));
+            Some(Rc::clone(&function_type))
+        }
     }
 
     fn analyze_expr(
@@ -568,48 +578,30 @@ mod tests {
             assert_eq!(*ty.borrow(), sem::Type::Int32)
         });
     }
-    /*
 
-        #[test]
-        fn add_operation() {
-            let mut module = parser::parse_string("1 + 2");
-            let mut semantic = Semantic::new();
+    #[test]
+    fn fun1() {
+        let mut module = parser::parse_string(
+            "
+            fun plus10(n)
+                n + 10
+            end
+            ",
+        );
+        let mut semantic = Semantic::new();
 
-            semantic.analyze(&mut module);
+        semantic.analyze(&mut module);
 
-            let node = module.expr.unwrap();
-            assert_matches!(node.expr, Expr::Add(lhs, rhs) => {
-                assert_matches!(lhs.r#type, Some(ty) => {
-                    assert_eq!(*ty, sem::Type::Int32);
-                });
-                assert_matches!(rhs.r#type, Some(ty) => {
-                    assert_eq!(*ty, sem::Type::Int32);
-                });
+        let function = module.function.unwrap();
+        println!("Function({}): {:?}", function.name, function.r#type);
+
+        assert_eq!(function.name, "plus10");
+
+        assert_matches!(function.r#type, Some(ref ty) => {
+            assert_matches!(*ty.borrow(), sem::Type::Function{ ref params, ref return_type } => {
+                assert_eq!(*(params[0]).borrow(), sem::Type::Int32);
+                assert_eq!(*return_type.borrow(), sem::Type::Int32);
             });
-        }
-        #[test]
-        fn fun1() {
-            let mut module = parser::parse_string(
-                "
-                fun plus10(n)
-                    n + 10
-                end
-                ",
-            );
-            let mut semantic = Semantic::new();
-
-            semantic.analyze(&mut module);
-
-            let function = module.function.unwrap();
-
-            assert_eq!(function.name, "plus10");
-
-            assert_matches!(function.r#type, Some(ty) => {
-                assert_matches!(*ty, sem::Type::Function{ params, return_type } => {
-                    assert_eq!(*params[0], sem::Type::Int32);
-                    assert_eq!(*return_type, sem::Type::Int32);
-                });
-            });
-        }
-    */
+        });
+    }
 }
