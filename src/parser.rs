@@ -40,6 +40,7 @@ pub enum Expr {
     Sub(Box<Node>, Box<Node>),
     Mul(Box<Node>, Box<Node>),
     Div(Box<Node>, Box<Node>),
+    Rem(Box<Node>, Box<Node>),
 
     // Relational operator
     LT(Box<Node>, Box<Node>), // Less Than
@@ -174,6 +175,7 @@ fn parse_binop1(tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
         let builder = match tokenizer.peek() {
             Some(Token::Char('+')) => Expr::Add,
             Some(Token::Char('-')) => Expr::Sub,
+            Some(Token::Char('%')) => Expr::Rem,
             Some(_) => break,
             None => return Some(lhs),
         };

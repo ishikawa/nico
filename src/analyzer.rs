@@ -155,37 +155,11 @@ impl Semantic {
             },
 
             // binop
-            Expr::Add(ref mut lhs, ref mut rhs) => {
-                match self.lookup_function("+", non_generic_vars) {
-                    None => panic!("Prelude not installed"),
-                    Some(function_type) => {
-                        let retty = self.analyze_invocation(
-                            Rc::clone(&function_type),
-                            &mut [lhs.as_mut(), rhs.as_mut()],
-                            non_generic_vars,
-                            env,
-                        );
-                        node.r#type = Some(Rc::clone(&retty));
-                        Rc::clone(&retty)
-                    }
-                }
-            }
-            Expr::Sub(ref mut lhs, ref mut rhs) => {
-                match self.lookup_function("-", non_generic_vars) {
-                    None => panic!("Prelude not installed"),
-                    Some(function_type) => {
-                        let retty = self.analyze_invocation(
-                            Rc::clone(&function_type),
-                            &mut [lhs.as_mut(), rhs.as_mut()],
-                            non_generic_vars,
-                            env,
-                        );
-                        node.r#type = Some(Rc::clone(&retty));
-                        Rc::clone(&retty)
-                    }
-                }
-            }
-            Expr::Mul(ref mut lhs, ref mut rhs) => {
+            Expr::Add(ref mut lhs, ref mut rhs)
+            | Expr::Sub(ref mut lhs, ref mut rhs)
+            | Expr::Mul(ref mut lhs, ref mut rhs)
+            | Expr::Div(ref mut lhs, ref mut rhs)
+            | Expr::Rem(ref mut lhs, ref mut rhs) => {
                 match self.lookup_function("*", non_generic_vars) {
                     None => panic!("Prelude not installed"),
                     Some(function_type) => {
@@ -200,99 +174,14 @@ impl Semantic {
                     }
                 }
             }
-            Expr::Div(ref mut lhs, ref mut rhs) => {
-                match self.lookup_function("/", non_generic_vars) {
-                    None => panic!("Prelude not installed"),
-                    Some(function_type) => {
-                        let retty = self.analyze_invocation(
-                            Rc::clone(&function_type),
-                            &mut [lhs.as_mut(), rhs.as_mut()],
-                            non_generic_vars,
-                            env,
-                        );
-                        node.r#type = Some(Rc::clone(&retty));
-                        Rc::clone(&retty)
-                    }
-                }
-            }
             // relation
-            Expr::LT(ref mut lhs, ref mut rhs) => {
+            Expr::LT(ref mut lhs, ref mut rhs)
+            | Expr::GT(ref mut lhs, ref mut rhs)
+            | Expr::LE(ref mut lhs, ref mut rhs)
+            | Expr::GE(ref mut lhs, ref mut rhs)
+            | Expr::EQ(ref mut lhs, ref mut rhs)
+            | Expr::NE(ref mut lhs, ref mut rhs) => {
                 match self.lookup_function("<", non_generic_vars) {
-                    None => panic!("Prelude not installed"),
-                    Some(function_type) => {
-                        let retty = self.analyze_invocation(
-                            Rc::clone(&function_type),
-                            &mut [lhs.as_mut(), rhs.as_mut()],
-                            non_generic_vars,
-                            env,
-                        );
-                        node.r#type = Some(Rc::clone(&retty));
-                        Rc::clone(&retty)
-                    }
-                }
-            }
-            Expr::GT(ref mut lhs, ref mut rhs) => {
-                match self.lookup_function(">", non_generic_vars) {
-                    None => panic!("Prelude not installed"),
-                    Some(function_type) => {
-                        let retty = self.analyze_invocation(
-                            Rc::clone(&function_type),
-                            &mut [lhs.as_mut(), rhs.as_mut()],
-                            non_generic_vars,
-                            env,
-                        );
-                        node.r#type = Some(Rc::clone(&retty));
-                        Rc::clone(&retty)
-                    }
-                }
-            }
-            Expr::LE(ref mut lhs, ref mut rhs) => {
-                match self.lookup_function("<=", non_generic_vars) {
-                    None => panic!("Prelude not installed"),
-                    Some(function_type) => {
-                        let retty = self.analyze_invocation(
-                            Rc::clone(&function_type),
-                            &mut [lhs.as_mut(), rhs.as_mut()],
-                            non_generic_vars,
-                            env,
-                        );
-                        node.r#type = Some(Rc::clone(&retty));
-                        Rc::clone(&retty)
-                    }
-                }
-            }
-            Expr::GE(ref mut lhs, ref mut rhs) => {
-                match self.lookup_function(">=", non_generic_vars) {
-                    None => panic!("Prelude not installed"),
-                    Some(function_type) => {
-                        let retty = self.analyze_invocation(
-                            Rc::clone(&function_type),
-                            &mut [lhs.as_mut(), rhs.as_mut()],
-                            non_generic_vars,
-                            env,
-                        );
-                        node.r#type = Some(Rc::clone(&retty));
-                        Rc::clone(&retty)
-                    }
-                }
-            }
-            Expr::EQ(ref mut lhs, ref mut rhs) => {
-                match self.lookup_function("==", non_generic_vars) {
-                    None => panic!("Prelude not installed"),
-                    Some(function_type) => {
-                        let retty = self.analyze_invocation(
-                            Rc::clone(&function_type),
-                            &mut [lhs.as_mut(), rhs.as_mut()],
-                            non_generic_vars,
-                            env,
-                        );
-                        node.r#type = Some(Rc::clone(&retty));
-                        Rc::clone(&retty)
-                    }
-                }
-            }
-            Expr::NE(ref mut lhs, ref mut rhs) => {
-                match self.lookup_function("!=", non_generic_vars) {
                     None => panic!("Prelude not installed"),
                     Some(function_type) => {
                         let retty = self.analyze_invocation(

@@ -283,54 +283,59 @@ impl AsmEmitter {
             }
             // binop
             Expr::Add(lhs, rhs) => {
-                self.emit_expr(&*lhs);
-                self.emit_expr(&*rhs);
+                self.emit_expr(lhs);
+                self.emit_expr(rhs);
                 self.emit("(i32.add)");
             }
             Expr::Sub(lhs, rhs) => {
-                self.emit_expr(&*lhs);
-                self.emit_expr(&*rhs);
+                self.emit_expr(lhs);
+                self.emit_expr(rhs);
                 self.emit("(i32.sub)");
             }
             Expr::Mul(lhs, rhs) => {
-                self.emit_expr(&*lhs);
-                self.emit_expr(&*rhs);
+                self.emit_expr(lhs);
+                self.emit_expr(rhs);
                 self.emit("(i32.mul)");
             }
             Expr::Div(lhs, rhs) => {
-                self.emit_expr(&*lhs);
-                self.emit_expr(&*rhs);
+                self.emit_expr(lhs);
+                self.emit_expr(rhs);
                 self.emit("(i32.div_s)");
+            }
+            Expr::Rem(lhs, rhs) => {
+                self.emit_expr(lhs);
+                self.emit_expr(rhs);
+                self.emit("(i32.rem_s)");
             }
             // relation
             Expr::LT(lhs, rhs) => {
-                self.emit_expr(&*lhs);
-                self.emit_expr(&*rhs);
+                self.emit_expr(lhs);
+                self.emit_expr(rhs);
                 self.emit("(i32.lt_s)");
             }
             Expr::GT(lhs, rhs) => {
-                self.emit_expr(&*lhs);
-                self.emit_expr(&*rhs);
+                self.emit_expr(lhs);
+                self.emit_expr(rhs);
                 self.emit("(i32.gt_s)");
             }
             Expr::LE(lhs, rhs) => {
-                self.emit_expr(&*lhs);
-                self.emit_expr(&*rhs);
+                self.emit_expr(lhs);
+                self.emit_expr(rhs);
                 self.emit("(i32.le_s)");
             }
             Expr::GE(lhs, rhs) => {
-                self.emit_expr(&*lhs);
-                self.emit_expr(&*rhs);
+                self.emit_expr(lhs);
+                self.emit_expr(rhs);
                 self.emit("(i32.ge_s)");
             }
             Expr::EQ(lhs, rhs) => {
-                self.emit_expr(&*lhs);
-                self.emit_expr(&*rhs);
+                self.emit_expr(lhs);
+                self.emit_expr(rhs);
                 self.emit("(i32.eq)");
             }
             Expr::NE(lhs, rhs) => {
-                self.emit_expr(&*lhs);
-                self.emit_expr(&*rhs);
+                self.emit_expr(lhs);
+                self.emit_expr(rhs);
                 self.emit("(i32.ne)");
             }
             Expr::If {
@@ -338,20 +343,20 @@ impl AsmEmitter {
                 then_body,
                 else_body,
             } => {
-                self.emit_expr(&*condition);
+                self.emit_expr(condition);
                 self.emit("(if (result i32)");
                 self.push_scope();
 
                 self.emit("(then");
                 self.push_scope();
-                self.emit_expr(&*then_body);
+                self.emit_expr(then_body);
                 self.pop_scope();
                 self.emit(")");
 
                 self.emit("(else");
                 self.push_scope();
                 match else_body {
-                    Some(node) => self.emit_expr(&*node),
+                    Some(node) => self.emit_expr(node),
                     None => self.writer.write_i32(0),
                 }
                 self.pop_scope();
