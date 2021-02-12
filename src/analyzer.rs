@@ -141,11 +141,24 @@ impl Semantic {
                     non_generic_vars,
                     env,
                 );
-
                 node.r#type = Some(Rc::clone(&retty));
                 Some(Rc::clone(&retty))
             }
-            Expr::Sub(..) => None,
+            Expr::Sub(ref mut lhs, ref mut rhs) => {
+                let function_type = wrap(sem::Type::Function {
+                    params: vec![wrap(sem::Type::Int32), wrap(sem::Type::Int32)],
+                    return_type: wrap(sem::Type::Int32),
+                });
+                let mut args = vec![lhs, rhs];
+                let retty = self.analyze_invocation(
+                    Rc::clone(&function_type),
+                    &mut args,
+                    non_generic_vars,
+                    env,
+                );
+                node.r#type = Some(Rc::clone(&retty));
+                Some(Rc::clone(&retty))
+            }
             Expr::Mul(..) => None,
             Expr::Div(..) => None,
             // relation
@@ -616,6 +629,30 @@ mod tests {
 
         let function = module.function.unwrap();
         assert_eq!(function.name, "plus10");
+
+        assert_matches!(function.r#type, Some(ref ty) => {
+            assert_matches!(*ty.borrow(), sem::Type::Function{ ref params, ref return_type } => {
+                assert_eq!(*(params[0]).borrow(), sem::Type::Int32);
+                assert_eq!(*return_type.borrow(), sem::Type::Int32);
+            });
+        });
+    }
+
+    #[test]
+    fn fun_minus10() {
+        let mut module = parser::parse_string(
+            "
+            fun minus10(n)
+                n - 10
+            end
+            ",
+        );
+        let mut semantic = Semantic::new();
+
+        semantic.analyze(&mut module);
+
+        let function = module.function.unwrap();
+        assert_eq!(function.name, "minus10");
 
         assert_matches!(function.r#type, Some(ref ty) => {
             assert_matches!(*ty.borrow(), sem::Type::Function{ ref params, ref return_type } => {
