@@ -12,7 +12,24 @@ pub struct Semantic {
     type_variable_index: i32,
 }
 
+fn new_typevar() -> sem::Type {
+    let i = 0;
+
+    sem::Type::TypeVariable {
+        name: format!("{}", i),
+        instance: None,
+    }
+}
+
 /// Type operator and generic variables are duplicated; non-generic variables are shared.
+fn fresh(
+    ty: &Rc<RefCell<sem::Type>>,
+    non_generic_vars: &mut HashSet<String>,
+) -> Rc<RefCell<sem::Type>> {
+    let mut mappings = HashMap::new();
+    freshrec(ty, non_generic_vars, &mut mappings)
+}
+
 fn freshrec(
     ty: &Rc<RefCell<sem::Type>>,
     non_generic_vars: &mut HashSet<String>,
@@ -419,6 +436,56 @@ mod tests {
         });
     }
 
+    #[test]
+    fn fresh_int32() {
+        let mut non_generic_vars = HashSet::new();
+        let pty0 = Rc::new(RefCell::new(sem::Type::Int32));
+        let pty1 = fresh(&pty0, &mut non_generic_vars);
+
+        assert_eq!(pty0, pty1);
+    }
+
+    #[test]
+    fn fresh_function() {
+        let mut non_generic_vars = HashSet::new();
+
+        let pty0 = Rc::new(RefCell::new(sem::Type::Function {
+            params: vec![],
+            return_type: Rc::new(RefCell::new(sem::Type::Boolean)),
+        }));
+        let pty1 = fresh(&pty0, &mut non_generic_vars);
+
+        assert_eq!(pty0, pty1);
+    }
+
+    #[test]
+    fn fresh_typevar() {
+        let mut non_generic_vars = HashSet::new();
+        let mut mappings = HashMap::new();
+
+        // fresh type variable
+        let pty0 = Rc::new(RefCell::new(sem::Type::TypeVariable {
+            name: "$1".to_string(),
+            instance: None,
+        }));
+        let pty1 = Rc::new(RefCell::new(sem::Type::TypeVariable {
+            name: "$2".to_string(),
+            instance: None,
+        }));
+
+        let fresh0 = freshrec(&pty0, &mut non_generic_vars, &mut mappings);
+        let fresh1 = freshrec(&pty1, &mut non_generic_vars, &mut mappings);
+
+        // should be cached
+        let cache0 = freshrec(&pty0, &mut non_generic_vars, &mut mappings);
+        let cache1 = freshrec(&pty1, &mut non_generic_vars, &mut mappings);
+
+        assert_eq!(pty0, fresh0);
+        assert_eq!(pty1, fresh1);
+        assert_ne!(fresh0, fresh1);
+        assert_eq!(fresh0, cache0);
+        assert_eq!(fresh1, cache1);
+    }
     /*
         #[test]
         fn number_integer() {
