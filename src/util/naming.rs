@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 
 /// Generates a unique string while continuously incrementing the index internally.
 /// The user can specify a prefix for the generated string.
@@ -16,9 +15,9 @@ impl SequenceNaming {
     pub fn next<S: AsRef<str>>(&mut self, name: S) -> String {
         let name = name.as_ref();
         let n = self.names.entry(name.to_string()).or_insert(0);
-        let next = format!("{}{}", name, n);
+        let next = format!("{}.{}", name, n);
 
-        *n = *n + 1;
+        *n += 1;
         next
     }
 }
@@ -62,8 +61,8 @@ mod tests {
     fn sequence_naming() {
         let mut naming = SequenceNaming::new();
 
-        assert_eq!(naming.next("x"), "x0".to_string());
-        assert_eq!(naming.next("x"), "x1".to_string());
-        assert_eq!(naming.next("y"), "y0".to_string());
+        assert_eq!(naming.next("x"), "x.0".to_string());
+        assert_eq!(naming.next("x"), "x.1".to_string());
+        assert_eq!(naming.next("y"), "y.0".to_string());
     }
 }
