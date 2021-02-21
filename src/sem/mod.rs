@@ -1,5 +1,18 @@
+pub mod binder;
+pub mod inferencer;
+use crate::asm;
+use crate::parser;
+use crate::util::wrap;
+pub use binder::Binder;
+pub use inferencer::TypeInferencer;
 use std::cell::RefCell;
+use std::collections::hash_map;
+use std::collections::HashMap;
 use std::rc::Rc;
+
+pub trait SemanticAnalyzer {
+    fn analyze(&mut self, module: &mut parser::Module);
+}
 
 #[derive(Debug)]
 pub enum Type {
@@ -17,6 +30,104 @@ pub enum Type {
         name: String,
         instance: Option<Rc<RefCell<Type>>>,
     },
+}
+
+/// The name of the reference in the source code,
+/// the type of the target being referenced, and
+/// the reference to the runtime storage
+#[derive(Debug, PartialEq)]
+pub enum Binding {
+    Variable {
+        name: String,
+        r#type: Rc<RefCell<Type>>,
+        storage: Option<Rc<RefCell<asm::Storage>>>,
+    },
+    Function {
+        name: String,
+        r#type: Rc<RefCell<Type>>,
+    },
+}
+
+#[derive(Debug, Default)]
+pub struct Environment {
+    pub parent: Option<Rc<RefCell<Environment>>>,
+    bindings: HashMap<String, Rc<RefCell<Binding>>>,
+}
+
+impl Environment {
+    pub fn prelude() -> Environment {
+        let mut env = Environment::new();
+
+        // Binary operators
+        for op in &["+", "-", "%", "*", "/"] {
+            env.insert(wrap(Binding::Function {
+                name: op.to_string(),
+                r#type: wrap(Type::Function {
+                    params: vec![wrap(Type::Int32), wrap(Type::Int32)],
+                    return_type: wrap(Type::Int32),
+                }),
+            }));
+        }
+        for op in &["<", ">", "<=", ">=", "==", "!="] {
+            env.insert(wrap(Binding::Function {
+                name: op.to_string(),
+                r#type: wrap(Type::Function {
+                    params: vec![wrap(Type::Int32), wrap(Type::Int32)],
+                    return_type: wrap(Type::Boolean),
+                }),
+            }));
+        }
+        // print
+        env.insert(wrap(Binding::Function {
+            name: "println_str".to_string(),
+            r#type: wrap(Type::Function {
+                params: vec![wrap(Type::String)],
+                return_type: wrap(Type::Int32),
+            }),
+        }));
+        env.insert(wrap(Binding::Function {
+            name: "println_i32".to_string(),
+            r#type: wrap(Type::Function {
+                params: vec![wrap(Type::Int32)],
+                return_type: wrap(Type::Int32),
+            }),
+        }));
+
+        env
+    }
+
+    pub fn new() -> Self {
+        Environment::default()
+    }
+
+    pub fn with_parent(parent: Rc<RefCell<Environment>>) -> Environment {
+        Environment {
+            parent: Some(parent),
+            bindings: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, binding: Rc<RefCell<Binding>>) {
+        let name = match *binding.borrow() {
+            Binding::Variable { ref name, .. } | Binding::Function { ref name, .. } => name.clone(),
+        };
+
+        self.bindings.insert(name, binding);
+    }
+
+    pub fn get(&self, name: &str) -> Option<Rc<RefCell<Binding>>> {
+        match self.bindings.get(name) {
+            None => match self.parent {
+                None => None,
+                Some(ref parent) => parent.borrow().get(name).map(|x| Rc::clone(&x)),
+            },
+            Some(binding) => Some(Rc::clone(binding)),
+        }
+    }
+
+    pub fn bindings(&self) -> hash_map::Values<String, Rc<RefCell<Binding>>> {
+        self.bindings.values()
+    }
 }
 
 impl Type {
@@ -77,7 +188,7 @@ impl PartialEq for Type {
 }
 
 #[cfg(test)]
-mod tests {
+mod type_tests {
     use super::*;
 
     #[test]

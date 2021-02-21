@@ -12,6 +12,8 @@ pub enum Token {
     Else,
     End,
     Fun,
+    Case,
+    When,
 
     // Operators
     EQ, // "=="
@@ -154,6 +156,8 @@ impl<'a> Tokenizer<'a> {
             "else" => Token::Else,
             "end" => Token::End,
             "fun" => Token::Fun,
+            "case" => Token::Case,
+            "when" => Token::When,
             _ => Token::Identifier(value),
         }
     }
