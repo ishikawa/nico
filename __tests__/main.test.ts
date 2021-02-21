@@ -174,6 +174,11 @@ const cases: TestCase[] = [
     file: "input/more_than_one_expr.nico",
     captureOutput: true,
     expected: "Hello\n,\n \nWorld!\n\n"
+  },
+  // Multiple functions
+  {
+    file: "input/more_than_one_fun.nico",
+    expected: 16
   }
 ];
 
