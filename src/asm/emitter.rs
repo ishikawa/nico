@@ -1,5 +1,5 @@
 use super::wasm;
-use crate::asm::Storage;
+use crate::asm::LocalStorage;
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem::{Binding, Type};
@@ -107,13 +107,10 @@ impl AsmBuilder {
                     storage: Some(ref storage),
                     ..
                 } => match *storage.borrow() {
-                    Storage::Parameter {
+                    LocalStorage {
                         ref name,
                         ref r#type,
-                    } => {
-                        builder.named_param(name, wasm_type(r#type));
-                    }
-                    _ => panic!("Invalid allocation"),
+                    } => builder.named_param(name, wasm_type(r#type)),
                 },
                 _ => panic!("Invalid binding or allocation"),
             };
@@ -131,13 +128,10 @@ impl AsmBuilder {
         // locals
         for storage in &fun_node.locals {
             match *storage.borrow() {
-                Storage::LocalVariable {
+                LocalStorage {
                     ref name,
                     ref r#type,
-                } => {
-                    builder.named_local(name, wasm_type(r#type));
-                }
-                _ => panic!("Invalid allocation"),
+                } => builder.named_local(name, wasm_type(r#type)),
             };
         }
 
@@ -162,19 +156,16 @@ impl AsmBuilder {
                     .as_ref()
                     .unwrap_or_else(|| panic!("Undefined local variable `{}`", name));
 
-                let storage = match *binding.borrow() {
+                match *binding.borrow() {
                     Binding::Variable { ref storage, .. } => {
                         let storage = storage
                             .as_ref()
                             .unwrap_or_else(|| panic!("Unbound local variable `{}`", name));
-                        Rc::clone(&storage)
+                        match *storage.borrow() {
+                            LocalStorage { ref name, .. } => builder.local_get(name),
+                        };
                     }
                     _ => panic!("Invalid binding for local variable `{}`", name),
-                };
-
-                match *storage.borrow() {
-                    Storage::Parameter { ref name, .. }
-                    | Storage::LocalVariable { ref name, .. } => builder.local_get(name),
                 };
             }
             Expr::Integer(n) => {
@@ -300,8 +291,7 @@ impl AsmBuilder {
 
                 let head_temp = match head_storage {
                     Some(head_storage) => match *head_storage.borrow() {
-                        Storage::LocalVariable { ref name, .. } => name.clone(),
-                        _ => panic!("Invalid allocated for head expression."),
+                        LocalStorage { ref name, .. } => name.clone(),
                     },
                     None => panic!("No allocation for head expression."),
                 };
@@ -340,12 +330,11 @@ impl AsmBuilder {
                                     });
 
                                     match *storage.borrow() {
-                                        Storage::LocalVariable { ref name, .. } => {
+                                        LocalStorage { ref name, .. } => {
                                             // set the result of head expression to the variable.
                                             arm_builder.local_get(head_temp.clone());
                                             arm_builder.local_set(name);
                                         }
-                                        _ => panic!("Invalid allocated pattern `{}`", name),
                                     };
                                 }
                                 Binding::Function { .. } => panic!("Unexpected binding"),

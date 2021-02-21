@@ -1,5 +1,5 @@
 use super::ConstantString;
-use super::Storage;
+use super::LocalStorage;
 use crate::parser;
 use crate::sem::Binding;
 use crate::util::{wrap, SequenceNaming, UniqueNaming};
@@ -45,7 +45,7 @@ impl Allocator {
                     ref r#type,
                     ..
                 } => {
-                    let v = wrap(Storage::Parameter {
+                    let v = wrap(LocalStorage {
                         name: naming.next(),
                         r#type: Rc::clone(r#type),
                     });
@@ -65,7 +65,7 @@ impl Allocator {
         &self,
         node: &mut Node,
         naming: &mut N,
-        locals: &mut Vec<Rc<RefCell<Storage>>>,
+        locals: &mut Vec<Rc<RefCell<LocalStorage>>>,
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
     ) {
         match node.expr {
@@ -126,7 +126,7 @@ impl Allocator {
                 // head expression.
                 self.analyze_expr(head, naming, locals, strings);
                 {
-                    let temp = wrap(Storage::LocalVariable {
+                    let temp = wrap(LocalStorage {
                         name: naming.next(),
                         r#type: Rc::clone(&node.r#type),
                     });
@@ -160,7 +160,7 @@ impl Allocator {
                                     ref r#type,
                                     ref mut storage,
                                 } => {
-                                    let v = wrap(Storage::LocalVariable {
+                                    let v = wrap(LocalStorage {
                                         name: naming.next(),
                                         r#type: Rc::clone(&r#type),
                                     });

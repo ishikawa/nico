@@ -7,18 +7,12 @@ pub use emitter::AsmBuilder;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// The enum *Storage* represents names in WASM module.
-/// For example, function parameters, local variables and global variables.
+/// The struct *LocalStorage* represents name and type for
+// local variables and function parameters.
 #[derive(Debug, PartialEq)]
-pub enum Storage {
-    Parameter {
-        name: String,
-        r#type: Rc<RefCell<Type>>,
-    },
-    LocalVariable {
-        name: String,
-        r#type: Rc<RefCell<Type>>,
-    },
+pub struct LocalStorage {
+    name: String,
+    r#type: Rc<RefCell<Type>>,
 }
 
 /// String literal's portion of the module's memory that is allocated at compile time.
