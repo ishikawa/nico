@@ -15,7 +15,7 @@ impl SemanticAnalyzer for Binder {
         let mut env = Environment::with_parent(env);
 
         // First, register functions defined in this module (except for `main`).
-        if let Some(ref function) = module.function {
+        for function in &module.functions {
             env.insert(wrap(Binding::Function {
                 name: function.name.clone(),
                 r#type: Rc::clone(&function.r#type),
@@ -24,9 +24,10 @@ impl SemanticAnalyzer for Binder {
 
         let env = wrap(env);
 
-        if let Some(ref mut function) = module.function {
+        for function in &mut module.functions {
             self.analyze_function(function, &env);
         }
+
         if let Some(ref mut main) = module.main {
             self.analyze_function(main, &env);
         }
@@ -250,8 +251,8 @@ mod tests {
 
         analyze(&mut module);
 
-        let function = module.function.unwrap();
-        let body = function.body;
+        let function = &module.functions[0];
+        let body = &function.body;
 
         assert_matches!(body[0].expr, parser::Expr::Identifier { binding: Some(ref binding), .. } => {
             assert_matches!(*binding.borrow(), Binding::Variable { r#type: ref var_type, ..} => {
@@ -280,8 +281,8 @@ mod tests {
 
         analyze(&mut module);
 
-        let function = module.function.unwrap();
-        let body = function.body;
+        let function = &module.functions[0];
+        let body = &function.body;
 
         assert_matches!(body[0].expr, Expr::Case { ref head, ref arms, ..} => {
             assert_matches!(arms[0].pattern.as_ref(), parser::Pattern::Variable(ref _name, ref binding) => {

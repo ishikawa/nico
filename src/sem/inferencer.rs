@@ -14,7 +14,7 @@ pub struct TypeInferencer {
 
 impl SemanticAnalyzer for TypeInferencer {
     fn analyze(&mut self, module: &mut parser::Module) {
-        if let Some(ref mut function) = module.function {
+        for function in &mut module.functions {
             let mut non_generic_vars = HashSet::new();
             self.analyze_function(function, &mut non_generic_vars);
         }
@@ -751,7 +751,7 @@ mod tests {
 
         analyze(&mut module);
 
-        let function = module.function.unwrap();
+        let function = &module.functions[0];
         assert_eq!(function.name, "plus10");
 
         assert_matches!(function.r#type, ref ty => {
@@ -774,7 +774,7 @@ mod tests {
 
         analyze(&mut module);
 
-        let function = module.function.unwrap();
+        let function = &module.functions[0];
         assert_eq!(function.name, "minus10");
 
         assert_matches!(function.r#type, ref ty => {
@@ -798,7 +798,7 @@ mod tests {
 
         analyze(&mut module);
 
-        let function = module.function.unwrap();
+        let function = &module.functions[0];
 
         assert_matches!(function.r#type, ref ty => {
             assert_matches!(*ty.borrow(), Type::Function{ ref params, ref return_type } => {
@@ -824,7 +824,8 @@ mod tests {
 
         analyze(&mut module);
 
-        let function = module.function.unwrap();
+        let function = &module.functions[0];
+        let body = &function.body;
 
         assert_matches!(function.r#type, ref ty => {
             assert_matches!(*ty.borrow(), Type::Function{ ref params, ref return_type } => {
@@ -833,7 +834,6 @@ mod tests {
             });
         });
 
-        let body = function.body;
         assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::Int32);
         });
@@ -856,7 +856,8 @@ mod tests {
 
         analyze(&mut module);
 
-        let function = module.function.unwrap();
+        let function = &module.functions[0];
+        let body = &function.body;
 
         assert_matches!(function.r#type, ref ty => {
             assert_matches!(*ty.borrow(), Type::Function{ ref params, ref return_type } => {
@@ -865,7 +866,6 @@ mod tests {
             });
         });
 
-        let body = function.body;
         assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::Int32);
         });
@@ -888,7 +888,8 @@ mod tests {
 
         analyze(&mut module);
 
-        let function = module.function.unwrap();
+        let function = &module.functions[0];
+        let body = &function.body;
 
         assert_matches!(function.r#type, ref ty => {
             assert_matches!(*ty.borrow(), Type::Function{ ref params, ref return_type } => {
@@ -897,7 +898,6 @@ mod tests {
             });
         });
 
-        let body = function.body;
         assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::Int32);
         });

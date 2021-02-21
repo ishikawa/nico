@@ -20,7 +20,7 @@ impl Allocator {
     pub fn analyze(&mut self, module: &mut parser::Module) {
         let mut strings = vec![];
 
-        if let Some(ref mut function) = module.function {
+        for function in &mut module.functions {
             self.analyze_function(function, &mut strings);
         }
         if let Some(ref mut main) = module.main {
