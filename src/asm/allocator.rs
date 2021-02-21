@@ -2,7 +2,8 @@ use super::ConstantString;
 use super::LocalStorage;
 use crate::parser;
 use crate::sem::Binding;
-use crate::util::{wrap, SequenceNaming, UniqueNaming};
+use crate::util::naming::SequenceNaming;
+use crate::util::wrap;
 use parser::{Expr, Node};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -35,18 +36,19 @@ impl Allocator {
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
     ) {
         let mut locals = vec![];
-        let mut naming = SequenceNaming::new("");
+        let mut naming = SequenceNaming::new();
 
         // Storage for parameters
         for ref mut binding in &function.params {
             match *binding.borrow_mut() {
                 Binding::Variable {
+                    ref name,
                     ref mut storage,
                     ref r#type,
                     ..
                 } => {
                     let v = wrap(LocalStorage {
-                        name: naming.next(),
+                        name: naming.next(name),
                         r#type: Rc::clone(r#type),
                     });
 
@@ -61,10 +63,10 @@ impl Allocator {
         function.locals = locals;
     }
 
-    fn analyze_expr<N: UniqueNaming>(
+    fn analyze_expr(
         &self,
         node: &mut Node,
-        naming: &mut N,
+        naming: &mut SequenceNaming,
         locals: &mut Vec<Rc<RefCell<LocalStorage>>>,
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
     ) {
@@ -127,7 +129,7 @@ impl Allocator {
                 self.analyze_expr(head, naming, locals, strings);
                 {
                     let temp = wrap(LocalStorage {
-                        name: naming.next(),
+                        name: naming.next("_case_head"),
                         r#type: Rc::clone(&node.r#type),
                     });
 
@@ -156,12 +158,12 @@ impl Allocator {
 
                             match *(binding.borrow_mut()) {
                                 Binding::Variable {
-                                    name: _,
+                                    ref name,
                                     ref r#type,
                                     ref mut storage,
                                 } => {
                                     let v = wrap(LocalStorage {
-                                        name: naming.next(),
+                                        name: naming.next(name),
                                         r#type: Rc::clone(&r#type),
                                     });
 

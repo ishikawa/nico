@@ -1,14 +1,15 @@
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem::{Binding, SemanticAnalyzer, Type};
-use crate::util::{wrap, SequenceNaming, UniqueNaming};
+use crate::util::naming::PrefixNaming;
+use crate::util::wrap;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct TypeInferencer {
-    generic_type_var_naming: SequenceNaming,
+    generic_type_var_naming: PrefixNaming,
 }
 
 impl SemanticAnalyzer for TypeInferencer {
@@ -27,7 +28,7 @@ impl SemanticAnalyzer for TypeInferencer {
 impl TypeInferencer {
     pub fn new() -> TypeInferencer {
         TypeInferencer {
-            generic_type_var_naming: SequenceNaming::new("$GENERIC"),
+            generic_type_var_naming: PrefixNaming::new("$GENERIC"),
         }
     }
 

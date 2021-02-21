@@ -1,7 +1,8 @@
 use crate::asm;
 use crate::sem;
 use crate::tokenizer::{Token, Tokenizer};
-use crate::util::{wrap, SequenceNaming, UniqueNaming};
+use crate::util::naming::PrefixNaming;
+use crate::util::wrap;
 use std::cell::RefCell;
 use std::iter::Peekable;
 use std::rc::Rc;
@@ -97,7 +98,7 @@ pub struct CaseArm {
 
 #[derive(Debug)]
 pub struct Parser {
-    naming: SequenceNaming,
+    naming: PrefixNaming,
     // This is the environment that will be used as a placeholder
     // until the correct scope chain is assigned in the semantic analysis.
     empty_env: Rc<RefCell<sem::Environment>>,
@@ -112,7 +113,7 @@ impl Default for Parser {
 impl Parser {
     pub fn new() -> Self {
         Self {
-            naming: SequenceNaming::new("?"),
+            naming: PrefixNaming::new("?"),
             empty_env: Rc::new(RefCell::new(sem::Environment::new())),
         }
     }
