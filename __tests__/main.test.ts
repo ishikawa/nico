@@ -6,7 +6,8 @@ import { BufferedPrinter } from "./util/runtime";
 type Exports = Record<string, any>;
 
 interface TestCase {
-  input: string;
+  input?: string;
+  file?: string;
   expected: any;
   exec?: (exports: Exports) => any[];
   captureOutput?: boolean;
@@ -116,55 +117,24 @@ const cases: TestCase[] = [
 
   // Case
   {
-    // prettier-ignore
-    input: [
-      "fun foo(i)",
-      "    case i",
-      "    when x if x < 5",
-      "        i",
-      "    when x if x == 5",
-      "        10",
-      "    else",
-      "        20",
-      "    end",
-      "end"
-    ].join("\n"),
+    file: "input/case_0.nico",
     exec: exports => [exports.foo(4), exports.foo(5), exports.foo(6)],
     expected: [4, 10, 20]
   },
 
   // Function
   {
-    // prettier-ignore
-    input: [
-      "fun foo()",
-      "    55",
-      "end"
-    ].join("\n"),
+    file: "input/fun_55.nico",
     exec: exports => exports.foo(),
     expected: 55
   },
   {
-    // prettier-ignore
-    input: [
-      "fun square(x)",
-      "    x * x",
-      "end"
-    ].join("\n"),
+    file: "input/fun_square.nico",
     exec: exports => exports.square(3),
     expected: 9
   },
   {
-    // prettier-ignore
-    input: [
-      "fun fib(n)",
-      "    if n <= 1",
-      "        n",
-      "    else",
-      "        fib(n - 1) + fib(n - 2)",
-      "    end",
-      "end"
-    ].join("\n"),
+    file: "input/fib_rec.nico",
     exec: exports => exports.fib(9),
     expected: 34
   },
@@ -175,66 +145,44 @@ const cases: TestCase[] = [
   },
   {
     // prettier-ignore
-    input: [
-      "fun foo()",
-      "    \"foo\"",
-      "end",
-      "\"main\"",
-    ].join("\n"),
+    input: "\"main\"",
     expected: "main"
   },
   {
-    // prettier-ignore
-    input: [
-      "fun foo()",
-      "    \"foo\"",
-      "end",
-      "\"main\"",
-    ].join("\n"),
+    file: "input/fun_string.nico",
     exec: exports => exports.foo(),
     expected: "foo"
   },
   // Passing various parameters
   {
-    // prettier-ignore
-    input: [
-      "fun foo(b)",
-      "    if b",
-      "        10",
-      "    else",
-      "        40",
-      "    end",
-      "end",
-      "foo(5 > 3)"
-    ].join("\n"),
+    file: "input/fun_if.nico",
     expected: 10
   },
   // Println
   {
-    // prettier-ignore
-    input: [
-      "println_i32(1)",
-    ].join("\n"),
+    input: "println_i32(1)",
     captureOutput: true,
     expected: "1\n"
   },
   {
-    // prettier-ignore
-    input: [
-      "println_str(\"hello\")",
-    ].join("\n"),
+    input: 'println_str("hello")',
     captureOutput: true,
     expected: "hello\n"
   }
 ];
 
-cases.forEach(({ input, expected, exec, captureOutput }) => {
-  test(`given '${input}'`, async () => {
+cases.forEach(({ input, file, expected, exec, captureOutput }) => {
+  test(`given '${input || file}'`, async () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     const printer = new BufferedPrinter(memory);
 
-    const src = "/tmp/nico_test.nico";
-    fs.writeFileSync(src, input);
+    let src = "/tmp/nico_test.nico";
+
+    if (input) {
+      fs.writeFileSync(src, input);
+    } else if (file) {
+      src = `${__dirname}/${file}`;
+    }
 
     const buffer = await compileFile(src);
     const module = await WebAssembly.compile(buffer);
