@@ -2,7 +2,8 @@ use super::ConstantString;
 use super::LocalStorage;
 use crate::parser;
 use crate::sem::Binding;
-use crate::util::{wrap, SequenceNaming, UniqueNaming};
+use crate::util::naming::SequenceNaming;
+use crate::util::wrap;
 use parser::{Expr, Node};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -61,10 +62,10 @@ impl Allocator {
         function.locals = locals;
     }
 
-    fn analyze_expr<N: UniqueNaming>(
+    fn analyze_expr(
         &self,
         node: &mut Node,
-        naming: &mut N,
+        naming: &mut SequenceNaming,
         locals: &mut Vec<Rc<RefCell<LocalStorage>>>,
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
     ) {

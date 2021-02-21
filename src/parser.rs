@@ -1,7 +1,8 @@
 use crate::asm;
 use crate::sem;
 use crate::tokenizer::{Token, Tokenizer};
-use crate::util::{wrap, SequenceNaming, UniqueNaming};
+use crate::util::naming::SequenceNaming;
+use crate::util::wrap;
 use std::cell::RefCell;
 use std::iter::Peekable;
 use std::rc::Rc;

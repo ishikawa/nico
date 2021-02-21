@@ -1,7 +1,8 @@
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem::{Binding, SemanticAnalyzer, Type};
-use crate::util::{wrap, SequenceNaming, UniqueNaming};
+use crate::util::naming::SequenceNaming;
+use crate::util::wrap;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;

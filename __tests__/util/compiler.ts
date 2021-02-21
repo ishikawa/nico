@@ -3,7 +3,7 @@ import { execFile } from "child_process";
 import { StringDecoder } from "string_decoder";
 import loadWabt from "wabt";
 
-const DEBUG = false;
+const DEBUG = true;
 
 export async function compileFile(filepath: string): Promise<Uint8Array> {
   const inputWat = "/tmp/nico_test.wat";
