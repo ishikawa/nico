@@ -99,7 +99,11 @@ impl AsmBuilder {
         let mut builder = wasm::Builders::function();
         let name = fun_node.name.as_str();
 
-        let builder = builder.id(name).export(name);
+        builder.id(name);
+
+        if fun_node.export {
+            builder.export(name);
+        }
 
         // typeuse
         for binding in &fun_node.params {

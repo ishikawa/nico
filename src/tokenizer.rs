@@ -14,6 +14,7 @@ pub enum Token {
     Fun,
     Case,
     When,
+    Export,
 
     // Operators
     EQ, // "=="
@@ -158,6 +159,7 @@ impl<'a> Tokenizer<'a> {
             "fun" => Token::Fun,
             "case" => Token::Case,
             "when" => Token::When,
+            "export" => Token::Export,
             _ => Token::Identifier(value),
         }
     }
