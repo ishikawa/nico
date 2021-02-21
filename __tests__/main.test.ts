@@ -8,7 +8,7 @@ type Exports = Record<string, any>;
 interface TestCase {
   input: string;
   expected: any;
-  exec?: (exports: Exports) => any;
+  exec?: (exports: Exports) => any[];
   captureOutput?: boolean;
 }
 
@@ -113,6 +113,26 @@ const cases: TestCase[] = [
     ].join("\n"),
     expected: 40
   },
+
+  // Case
+  {
+    // prettier-ignore
+    input: [
+      "fun foo(i)",
+      "    case i",
+      "    when x if x < 5",
+      "        i",
+      "    when x if x == 5",
+      "        10",
+      "    else",
+      "        20",
+      "    end",
+      "end"
+    ].join("\n"),
+    exec: exports => [exports.foo(4), exports.foo(5), exports.foo(6)],
+    expected: [4, 10, 20]
+  },
+
   // Function
   {
     // prettier-ignore
@@ -174,10 +194,26 @@ const cases: TestCase[] = [
     exec: exports => exports.foo(),
     expected: "foo"
   },
+  // Passing various parameters
   {
     // prettier-ignore
     input: [
-      "println_int(1)",
+      "fun foo(b)",
+      "    if b",
+      "        10",
+      "    else",
+      "        40",
+      "    end",
+      "end",
+      "foo(5 > 3)"
+    ].join("\n"),
+    expected: 10
+  },
+  // Println
+  {
+    // prettier-ignore
+    input: [
+      "println_i32(1)",
     ].join("\n"),
     captureOutput: true,
     expected: "1\n"
@@ -185,7 +221,7 @@ const cases: TestCase[] = [
   {
     // prettier-ignore
     input: [
-      "println(\"hello\")",
+      "println_str(\"hello\")",
     ].join("\n"),
     captureOutput: true,
     expected: "hello\n"
@@ -212,26 +248,39 @@ cases.forEach(({ input, expected, exec, captureOutput }) => {
     });
 
     // @ts-ignore
-    const value = exec ? exec(instance.exports) : instance.exports.main();
+    let values = exec ? exec(instance.exports) : instance.exports.main();
+    let expected_values = expected;
 
-    if (Number.isInteger(expected)) {
-      expect(value).toEqual(expected);
-    } else if (captureOutput && typeof expected === "string") {
-      expect(printer.buffer).toEqual(expected);
-    } else if (typeof expected === "string") {
-      const offset = value;
-      expect(Number.isInteger(offset)).toBeTruthy();
-
-      const viewer = new DataView(memory.buffer, 0);
-      const length = viewer.getInt32(offset, true);
-
-      const bytes = new Uint8Array(memory.buffer, offset + 4, length);
-      const decoder = new StringDecoder("utf-8");
-      const string = decoder.end(Buffer.from(bytes));
-
-      expect(string).toEqual(expected);
+    if (Array.isArray(values)) {
+      expect(Array.isArray(expected_values)).toBeTruthy();
     } else {
-      fail(`This expectation value is not implemented yet! ${expected}`);
+      values = [values];
+      expected_values = [expected];
+    }
+
+    for (let i = 0; i < values.length; i++) {
+      let value = values[i];
+      let expected = expected_values[i];
+
+      if (Number.isInteger(expected)) {
+        expect(value).toEqual(expected);
+      } else if (captureOutput && typeof expected === "string") {
+        expect(printer.buffer).toEqual(expected);
+      } else if (typeof expected === "string") {
+        const offset = value;
+        expect(Number.isInteger(offset)).toBeTruthy();
+
+        const viewer = new DataView(memory.buffer, 0);
+        const length = viewer.getInt32(offset, true);
+
+        const bytes = new Uint8Array(memory.buffer, offset + 4, length);
+        const decoder = new StringDecoder("utf-8");
+        const string = decoder.end(Buffer.from(bytes));
+
+        expect(string).toEqual(expected);
+      } else {
+        fail(`This expectation value is not implemented yet! ${expected}`);
+      }
     }
   });
 });

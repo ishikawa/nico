@@ -1,17 +1,12 @@
-pub mod analyzer;
-pub mod asm;
-pub mod parser;
-pub mod sem;
-pub mod tokenizer;
-
-use analyzer::Semantic;
-use asm::AsmEmitter;
+use io::Read;
+use nico::asm::wasm::Printer as WasmPrinter;
+use nico::asm::AsmBuilder;
+use nico::parser::Parser;
+use nico::tokenizer::Tokenizer;
+use nico::CompilerPasses;
 use std::env;
 use std::fs;
 use std::io;
-use tokenizer::Tokenizer;
-
-use io::Read;
 
 // Compiler
 fn read_from_stdin() -> String {
@@ -40,30 +35,18 @@ fn main() {
     };
 
     let mut tokenizer = Tokenizer::from_string(&src);
-    let mut module = parser::parse(&mut tokenizer);
-    let mut semantic = Semantic::new();
+    let mut parser = Parser::new();
+    let mut module = parser.parse(&mut tokenizer);
 
-    semantic.analyze(&mut module);
+    let mut passes = CompilerPasses::new();
+    passes.apply(&mut module);
 
-    let mut emitter = AsmEmitter::new();
+    let builder = AsmBuilder::new();
+    let mut printer = WasmPrinter::new();
 
-    emitter.push_scope();
+    let wasm_module = builder.build_module(&module);
 
-    // export function
-    if let Some(function) = module.function {
-        emitter.emit_definition(&*function);
-    }
-
-    // main function
-    if let Some(expr) = module.expr {
-        emitter.emit("(func (export \"main\") (result i32)");
-        emitter.push_scope();
-        emitter.emit_expr(&*expr);
-        emitter.pop_scope();
-        emitter.emit(")");
-    }
-
-    emitter.pop_scope();
-
-    print!("{}", emitter.generate_module());
+    printer.pretty = true;
+    printer.write_module(&wasm_module);
+    print!("{}", printer.to_string());
 }
