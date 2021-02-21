@@ -86,9 +86,10 @@ impl AsmBuilder {
     }
 
     fn build_module_functions(&self, module: &mut wasm::Module, module_node: &parser::Module) {
-        if let Some(ref function) = module_node.function {
+        for function in &module_node.functions {
             module.functions.push(self.build_function(function));
         }
+
         if let Some(ref function) = module_node.main {
             module.functions.push(self.build_function(function));
         }

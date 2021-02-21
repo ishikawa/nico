@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 // Program
 pub struct Module {
-    pub function: Option<Box<Function>>,
+    pub functions: Vec<Function>,
     pub main: Option<Box<Function>>,
     // metadata
     pub env: Rc<RefCell<sem::Environment>>,
@@ -141,7 +141,11 @@ impl Parser {
     pub fn parse(&mut self, tokenizer: &mut Tokenizer) -> Box<Module> {
         let mut tokenizer = tokenizer.peekable();
 
-        let function = self.parse_function(&mut tokenizer);
+        let mut functions = vec![];
+
+        while let Some(function) = self.parse_function(&mut tokenizer) {
+            functions.push(*function);
+        }
 
         // Parser collects top expressions and automatically build
         // `main` function which is the entry point of a program.
@@ -170,7 +174,7 @@ impl Parser {
         };
 
         Box::new(Module {
-            function,
+            functions,
             main,
             env: Rc::clone(&self.empty_env),
             strings: None,
@@ -552,7 +556,7 @@ mod tests {
     #[test]
     fn number_integer() {
         let program = parse_string("42");
-        assert!(program.function.is_none());
+        assert!(program.functions.is_empty());
 
         let expr = &program.main.unwrap().body[0].expr;
         assert_matches!(expr, Expr::Integer(42));
@@ -560,7 +564,7 @@ mod tests {
     #[test]
     fn number_integer_followed_by_letter() {
         let program = parse_string("123a");
-        assert!(program.function.is_none());
+        assert!(program.functions.is_empty());
 
         let node = &program.main.unwrap().body[0];
         assert_matches!(node.expr, Expr::Integer(123));
@@ -569,7 +573,7 @@ mod tests {
     #[test]
     fn add_integer() {
         let program = parse_string("1 + 2");
-        assert!(program.function.is_none());
+        assert!(program.functions.is_empty());
 
         let body = program.main.unwrap().body;
         assert_matches!(&body[0].expr, Expr::Add(lhs, rhs, None) => {
@@ -581,7 +585,7 @@ mod tests {
     #[test]
     fn operator_associative() {
         let program = parse_string("1 + 2 + 3");
-        assert!(program.function.is_none());
+        assert!(program.functions.is_empty());
 
         let body = program.main.unwrap().body;
         assert_matches!(&body[0].expr, Expr::Add(lhs, rhs, None) => {
@@ -595,7 +599,7 @@ mod tests {
     #[test]
     fn paren_grouping() {
         let program = parse_string("(1 + 2) * 3");
-        assert!(program.function.is_none());
+        assert!(program.functions.is_empty());
 
         let body = program.main.unwrap().body;
         assert_matches!(&body[0].expr, Expr::Mul(lhs, rhs, None) => {
