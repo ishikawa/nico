@@ -51,7 +51,13 @@ impl TypeInferencer {
             }
         }
 
-        let retty = self.analyze_expr(&mut function.body, &mut scoped_ng);
+        // Iterates expressions. Type::Void for empty expression.
+        let retty = function
+            .body
+            .iter_mut()
+            .fold(wrap(Type::Void), |_retty, node| {
+                self.analyze_expr(node, &mut scoped_ng)
+            });
 
         // Unify return type from body.
         match *function.r#type.borrow() {
@@ -705,8 +711,8 @@ mod tests {
         let mut module = parser::parse_string("42");
         analyze(&mut module);
 
-        let node = module.main.unwrap().body;
-        assert_matches!(node.r#type, ref ty => {
+        let body = module.main.unwrap().body;
+        assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::Int32)
         });
     }
@@ -716,8 +722,8 @@ mod tests {
         let mut module = parser::parse_string("\"\"");
         analyze(&mut module);
 
-        let node = module.main.unwrap().body;
-        assert_matches!(node.r#type, ref ty => {
+        let body = module.main.unwrap().body;
+        assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::String)
         });
     }
@@ -727,8 +733,8 @@ mod tests {
         let mut module = parser::parse_string("1 + 2");
         analyze(&mut module);
 
-        let node = module.main.unwrap().body;
-        assert_matches!(node.r#type, ref ty => {
+        let body = module.main.unwrap().body;
+        assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::Int32)
         });
     }
@@ -827,8 +833,8 @@ mod tests {
             });
         });
 
-        let expr = function.body;
-        assert_matches!(expr.r#type, ref ty => {
+        let body = function.body;
+        assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::Int32);
         });
     }
@@ -859,8 +865,8 @@ mod tests {
             });
         });
 
-        let expr = function.body;
-        assert_matches!(expr.r#type, ref ty => {
+        let body = function.body;
+        assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::Int32);
         });
     }
@@ -891,8 +897,8 @@ mod tests {
             });
         });
 
-        let expr = function.body;
-        assert_matches!(expr.r#type, ref ty => {
+        let body = function.body;
+        assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::Int32);
         });
     }

@@ -52,7 +52,9 @@ impl Binder {
 
         let env = wrap(env);
 
-        self.analyze_expr(&mut function.body, &env);
+        for node in &mut function.body {
+            self.analyze_expr(node, &env);
+        }
 
         function.env = env;
     }
@@ -249,11 +251,11 @@ mod tests {
         analyze(&mut module);
 
         let function = module.function.unwrap();
-        let node = function.body;
+        let body = function.body;
 
-        assert_matches!(node.expr, parser::Expr::Identifier { binding: Some(ref binding), .. } => {
+        assert_matches!(body[0].expr, parser::Expr::Identifier { binding: Some(ref binding), .. } => {
             assert_matches!(*binding.borrow(), Binding::Variable { r#type: ref var_type, ..} => {
-                assert_eq!(*var_type.borrow(), *node.r#type.borrow(), "variable and node has the same type");
+                assert_eq!(*var_type.borrow(), *body[0].r#type.borrow(), "variable and node has the same type");
                 assert_matches!(*function.params[0].borrow(), Binding::Variable { r#type: ref param_type, ..} => {
                     assert_eq!(*var_type.borrow(), *param_type.borrow(), "variable and params[0] has the same type");
                 });
@@ -279,9 +281,9 @@ mod tests {
         analyze(&mut module);
 
         let function = module.function.unwrap();
-        let expr = function.body;
+        let body = function.body;
 
-        assert_matches!(expr.expr, Expr::Case { ref head, ref arms, ..} => {
+        assert_matches!(body[0].expr, Expr::Case { ref head, ref arms, ..} => {
             assert_matches!(arms[0].pattern.as_ref(), parser::Pattern::Variable(ref _name, ref binding) => {
                 assert!(!binding.is_none());
 

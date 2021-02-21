@@ -168,6 +168,12 @@ const cases: TestCase[] = [
     input: 'println_str("hello")',
     captureOutput: true,
     expected: "hello\n"
+  },
+  // Multiple expressions
+  {
+    file: "input/more_than_one_expr.nico",
+    captureOutput: true,
+    expected: "Hello\n,\n \nWorld!\n\n"
   }
 ];
 

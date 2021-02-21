@@ -139,10 +139,25 @@ impl AsmBuilder {
         builder.build()
     }
 
-    fn build_body(&self, node: &parser::Node) -> Vec<wasm::Instruction> {
+    fn build_body(&self, body: &[parser::Node]) -> Vec<wasm::Instruction> {
         let mut builder = wasm::Builders::instructions();
 
-        self.build_expr(&mut builder, &node);
+        let mut body = body.iter().peekable();
+        while let Some(node) = body.next() {
+            self.build_expr(&mut builder, node);
+
+            // Drop the top value(s) of stack if an expression left a value or
+            // the node is not the last one.
+            match *node.r#type.borrow() {
+                Type::Void => {}
+                _ => {
+                    // not the last one.
+                    if body.peek().is_some() {
+                        builder.drop();
+                    }
+                }
+            }
+        }
 
         builder.build()
     }
