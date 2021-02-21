@@ -20,6 +20,7 @@ pub struct Module {
 pub struct Function {
     pub name: String,
     pub body: Vec<Node>,
+    pub export: bool,
     // metadata
     pub params: Vec<Rc<RefCell<sem::Binding>>>,
     pub locals: Vec<Rc<RefCell<asm::LocalStorage>>>,
@@ -159,6 +160,7 @@ impl Parser {
             let fun = Function {
                 name: "main".to_string(),
                 body,
+                export: true,
                 params: vec![],
                 locals: vec![],
                 env: Rc::clone(&self.empty_env),
@@ -185,6 +187,16 @@ impl Parser {
         &mut self,
         tokenizer: &mut Peekable<&mut Tokenizer>,
     ) -> Option<Box<Function>> {
+        // modifiers
+        let export = match tokenizer.peek() {
+            Some(Token::Export) => {
+                tokenizer.next();
+                true
+            }
+            _ => false,
+        };
+
+        // fun
         match tokenizer.peek() {
             Some(Token::Fun) => {
                 tokenizer.next();
@@ -257,6 +269,7 @@ impl Parser {
             let function = Function {
                 name,
                 params,
+                export,
                 locals: vec![],
                 body,
                 env: Rc::clone(&self.empty_env),
