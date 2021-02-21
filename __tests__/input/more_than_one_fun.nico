@@ -2,7 +2,7 @@ fun square(n)
     n * n
 end
 
-fun foo(n)
+export fun foo(n)
     square(n + 1)
 end
 

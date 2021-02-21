@@ -1,4 +1,4 @@
-fun foo(i)
+export fun foo(i)
     case i
     when x if x < 5
         i

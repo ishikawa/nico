@@ -1,4 +1,4 @@
-fun fib(n)
+export fun fib(n)
     if n <= 1
         n
     else
