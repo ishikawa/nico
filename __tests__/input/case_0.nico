@@ -1,0 +1,10 @@
+fun foo(i)
+    case i
+    when x if x < 5
+        i
+    when x if x == 5
+        10
+    else
+        20
+    end
+end
