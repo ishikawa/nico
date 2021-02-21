@@ -2,7 +2,7 @@ use super::ConstantString;
 use super::LocalStorage;
 use crate::parser;
 use crate::sem::Binding;
-use crate::util::naming::SequenceNaming;
+use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use parser::{Expr, Node};
 use std::cell::RefCell;
@@ -36,7 +36,7 @@ impl Allocator {
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
     ) {
         let mut locals = vec![];
-        let mut naming = SequenceNaming::new("");
+        let mut naming = PrefixNaming::new("");
 
         // Storage for parameters
         for ref mut binding in &function.params {
@@ -65,7 +65,7 @@ impl Allocator {
     fn analyze_expr(
         &self,
         node: &mut Node,
-        naming: &mut SequenceNaming,
+        naming: &mut PrefixNaming,
         locals: &mut Vec<Rc<RefCell<LocalStorage>>>,
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
     ) {
