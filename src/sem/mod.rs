@@ -40,7 +40,7 @@ pub enum Binding {
     Variable {
         name: String,
         r#type: Rc<RefCell<Type>>,
-        storage: Option<Rc<RefCell<asm::Storage>>>,
+        storage: Option<Rc<RefCell<asm::LocalStorage>>>,
     },
     Function {
         name: String,

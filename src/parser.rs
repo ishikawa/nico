@@ -21,7 +21,7 @@ pub struct Function {
     pub body: Box<Node>,
     // metadata
     pub params: Vec<Rc<RefCell<sem::Binding>>>,
-    pub locals: Vec<Rc<RefCell<asm::Storage>>>,
+    pub locals: Vec<Rc<RefCell<asm::LocalStorage>>>,
     pub env: Rc<RefCell<sem::Environment>>,
     pub r#type: Rc<RefCell<sem::Type>>,
 }
@@ -77,7 +77,7 @@ pub enum Expr {
     },
     Case {
         head: Box<Node>, // head expression
-        head_storage: Option<Rc<RefCell<asm::Storage>>>,
+        head_storage: Option<Rc<RefCell<asm::LocalStorage>>>,
         arms: Vec<CaseArm>,
         else_body: Option<Box<Node>>,
     },
