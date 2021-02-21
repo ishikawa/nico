@@ -58,7 +58,9 @@ impl Allocator {
             }
         }
 
-        self.analyze_expr(&mut function.body, &mut naming, &mut locals, strings);
+        for node in &mut function.body {
+            self.analyze_expr(node, &mut naming, &mut locals, strings);
+        }
 
         function.locals = locals;
     }

@@ -19,7 +19,7 @@ pub struct Module {
 #[derive(Debug)]
 pub struct Function {
     pub name: String,
-    pub body: Box<Node>,
+    pub body: Vec<Node>,
     // metadata
     pub params: Vec<Rc<RefCell<sem::Binding>>>,
     pub locals: Vec<Rc<RefCell<asm::LocalStorage>>>,
@@ -145,7 +145,13 @@ impl Parser {
 
         // Parser collects top expressions and automatically build
         // `main` function which is the entry point of a program.
-        let main = if let Some(body) = self.parse_expr(&mut tokenizer) {
+        let mut body = vec![];
+
+        while let Some(expr) = self.parse_expr(&mut tokenizer) {
+            body.push(*expr);
+        }
+
+        let main = if !body.is_empty() {
             let fun = Function {
                 name: "main".to_string(),
                 body,
@@ -203,9 +209,22 @@ impl Parser {
             };
         }
         consume_char(tokenizer, ')');
+        // TODO: check line separator before reading body
 
-        // TODO: check line separator
-        let body = self.parse_expr(tokenizer).expect("no function body");
+        let mut body = vec![];
+
+        loop {
+            match tokenizer.peek() {
+                None => panic!("Premature EOF"),
+                Some(Token::End) => break,
+                _ => {}
+            };
+
+            match self.parse_expr(tokenizer) {
+                None => break,
+                Some(node) => body.push(*node),
+            };
+        }
         consume_token(tokenizer, Token::End);
 
         {
@@ -535,7 +554,7 @@ mod tests {
         let program = parse_string("42");
         assert!(program.function.is_none());
 
-        let expr = program.main.unwrap().body.expr;
+        let expr = &program.main.unwrap().body[0].expr;
         assert_matches!(expr, Expr::Integer(42));
     }
     #[test]
@@ -543,8 +562,8 @@ mod tests {
         let program = parse_string("123a");
         assert!(program.function.is_none());
 
-        let expr = program.main.unwrap().body.expr;
-        assert_matches!(expr, Expr::Integer(123));
+        let node = &program.main.unwrap().body[0];
+        assert_matches!(node.expr, Expr::Integer(123));
     }
 
     #[test]
@@ -552,10 +571,10 @@ mod tests {
         let program = parse_string("1 + 2");
         assert!(program.function.is_none());
 
-        let node = program.main.unwrap().body;
-        assert_matches!(node.expr, Expr::Add(lhs, rhs, None) => {
-            assert_matches!(lhs.expr, Expr::Integer(1));
-            assert_matches!(rhs.expr, Expr::Integer(2));
+        let body = program.main.unwrap().body;
+        assert_matches!(&body[0].expr, Expr::Add(lhs, rhs, None) => {
+            assert_matches!(&lhs.expr, Expr::Integer(1));
+            assert_matches!(&rhs.expr, Expr::Integer(2));
         });
     }
 
@@ -564,13 +583,13 @@ mod tests {
         let program = parse_string("1 + 2 + 3");
         assert!(program.function.is_none());
 
-        let node = program.main.unwrap().body;
-        assert_matches!(node.expr, Expr::Add(lhs, rhs, None) => {
-            assert_matches!(lhs.expr, Expr::Add(x, y, None) => {
+        let body = program.main.unwrap().body;
+        assert_matches!(&body[0].expr, Expr::Add(lhs, rhs, None) => {
+            assert_matches!(&lhs.expr, Expr::Add(x, y, None) => {
                 assert_matches!(x.expr, Expr::Integer(1));
                 assert_matches!(y.expr, Expr::Integer(2));
             });
-            assert_matches!(rhs.expr, Expr::Integer(3));
+            assert_matches!(&rhs.expr, Expr::Integer(3));
         });
     }
     #[test]
@@ -578,13 +597,13 @@ mod tests {
         let program = parse_string("(1 + 2) * 3");
         assert!(program.function.is_none());
 
-        let node = program.main.unwrap().body;
-        assert_matches!(node.expr, Expr::Mul(lhs, rhs, None) => {
-            assert_matches!(lhs.expr, Expr::Add(x, y, _) => {
+        let body = program.main.unwrap().body;
+        assert_matches!(&body[0].expr, Expr::Mul(lhs, rhs, None) => {
+            assert_matches!(&lhs.expr, Expr::Add(x, y, _) => {
                 assert_matches!(x.expr, Expr::Integer(1));
                 assert_matches!(y.expr, Expr::Integer(2));
             });
-            assert_matches!(rhs.expr, Expr::Integer(3));
+            assert_matches!(&rhs.expr, Expr::Integer(3));
         });
     }
 }
