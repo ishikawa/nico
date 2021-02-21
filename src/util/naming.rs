@@ -1,3 +1,28 @@
+use std::collections::HashMap;
+use std::rc::Rc;
+
+/// Generates a unique string while continuously incrementing the index internally.
+/// The user can specify a prefix for the generated string.
+#[derive(Debug, Default)]
+pub struct SequenceNaming {
+    names: HashMap<String, i32>,
+}
+
+impl SequenceNaming {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn next<S: AsRef<str>>(&mut self, name: S) -> String {
+        let name = name.as_ref();
+        let n = self.names.entry(name.to_string()).or_insert(0);
+        let next = format!("{}{}", name, n);
+
+        *n = *n + 1;
+        next
+    }
+}
+
 /// This struct produces a unique name while giving a sequential
 /// number to the name passed to the next() method.
 #[derive(Debug)]
@@ -31,5 +56,14 @@ mod tests {
 
         assert_eq!(naming.next(), "my_0".to_string());
         assert_eq!(naming.next(), "my_1".to_string());
+    }
+
+    #[test]
+    fn sequence_naming() {
+        let mut naming = SequenceNaming::new();
+
+        assert_eq!(naming.next("x"), "x0".to_string());
+        assert_eq!(naming.next("x"), "x1".to_string());
+        assert_eq!(naming.next("y"), "y0".to_string());
     }
 }
