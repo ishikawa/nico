@@ -190,12 +190,26 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn skip_whitespaces(&mut self) {
+        let mut line_comment = false;
+
         loop {
             match self.peek_char() {
                 None => return,
                 Some(c) => match c {
-                    ' ' | '\t' | '\n' | '\r' => {}
-                    _ => return,
+                    '#' => {
+                        line_comment = true;
+                    }
+                    // whitespace
+                    ' ' | '\t' => {}
+                    // newline
+                    '\n' | '\r' => {
+                        line_comment = false;
+                    }
+                    _ => {
+                        if !line_comment {
+                            return;
+                        }
+                    }
                 },
             }
             self.iter.next();
