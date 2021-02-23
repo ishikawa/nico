@@ -74,14 +74,14 @@ pub enum Expr {
     // Control flow
     If {
         condition: Box<Node>,
-        then_body: Box<Node>,
-        else_body: Option<Box<Node>>,
+        then_body: Vec<Node>,
+        else_body: Vec<Node>,
     },
     Case {
         head: Box<Node>, // head expression
         head_storage: Option<Rc<RefCell<asm::LocalStorage>>>,
         arms: Vec<CaseArm>,
-        else_body: Option<Box<Node>>,
+        else_body: Vec<Node>,
     },
 }
 
@@ -94,7 +94,7 @@ pub enum Pattern {
 pub struct CaseArm {
     pub pattern: Box<Pattern>,
     pub condition: Option<Box<Node>>, // guard
-    pub then_body: Box<Node>,
+    pub then_body: Vec<Node>,
 }
 
 #[derive(Debug)]
@@ -449,17 +449,46 @@ impl Parser {
                 tokenizer.next();
 
                 let condition = self.parse_expr(tokenizer).expect("missing condition");
+                // TODO: check line separator before reading body
 
-                // TODO: check line separator
-                let then_body = self.parse_expr(tokenizer).expect("missing if body");
+                let mut then_body = vec![];
+                let mut else_body = vec![];
+                let mut has_else = false;
 
-                let else_body = match tokenizer.peek() {
-                    Some(Token::Else) => {
-                        tokenizer.next();
-                        Some(self.parse_expr(tokenizer).expect("missing else body"))
+                loop {
+                    match tokenizer.peek() {
+                        None => panic!("Premature EOF"),
+                        Some(Token::Else) => {
+                            // TODO: check line separator before reading body
+                            has_else = true;
+                            break;
+                        }
+                        Some(Token::End) => break,
+                        _ => {}
+                    };
+
+                    match self.parse_expr(tokenizer) {
+                        None => break,
+                        Some(node) => then_body.push(*node),
+                    };
+                }
+
+                if has_else {
+                    consume_token(tokenizer, Token::Else);
+
+                    loop {
+                        match tokenizer.peek() {
+                            None => panic!("Premature EOF"),
+                            Some(Token::End) => break,
+                            _ => {}
+                        };
+
+                        match self.parse_expr(tokenizer) {
+                            None => break,
+                            Some(node) => else_body.push(*node),
+                        };
                     }
-                    _ => None,
-                };
+                }
 
                 consume_token(tokenizer, Token::End);
 
@@ -504,11 +533,23 @@ impl Parser {
                         }
                         _ => None,
                     };
+                    // TODO: check line separator before reading body
+                    let mut then_body = vec![];
 
-                    // TODO: check line separator
-                    let then_body = self
-                        .parse_expr(tokenizer)
-                        .expect("Missing body after `when if ...`");
+                    loop {
+                        match tokenizer.peek() {
+                            None => panic!("Premature EOF"),
+                            Some(Token::When) => break,
+                            Some(Token::Else) => break,
+                            Some(Token::End) => break,
+                            _ => {}
+                        };
+
+                        match self.parse_expr(tokenizer) {
+                            None => break,
+                            Some(node) => then_body.push(*node),
+                        };
+                    }
 
                     arms.push(CaseArm {
                         pattern: Box::new(pattern),
@@ -518,16 +559,24 @@ impl Parser {
                 }
 
                 // else
-                let else_body = match tokenizer.peek() {
-                    Some(Token::Else) => {
-                        tokenizer.next();
-                        Some(
-                            self.parse_expr(tokenizer)
-                                .expect("Missing else body for `case when ...`"),
-                        )
+                let mut else_body = vec![];
+
+                if let Some(Token::Else) = tokenizer.peek() {
+                    tokenizer.next();
+
+                    loop {
+                        match tokenizer.peek() {
+                            None => panic!("Premature EOF"),
+                            Some(Token::End) => break,
+                            _ => {}
+                        };
+
+                        match self.parse_expr(tokenizer) {
+                            None => break,
+                            Some(node) => else_body.push(*node),
+                        };
                     }
-                    _ => None,
-                };
+                }
 
                 consume_token(tokenizer, Token::End);
                 let expr = Expr::Case {

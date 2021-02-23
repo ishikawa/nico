@@ -39,7 +39,7 @@ pub enum Instruction {
     // Control Instructions
     Call(Index),
     If {
-        result_type: Type,
+        result_type: Option<Type>,
         then: Vec<Instruction>,
         r#else: Option<Vec<Instruction>>,
     },
@@ -97,7 +97,7 @@ pub struct Function {
     export: Option<String>,
     id: Option<Identifier>,
     params: Vec<Param>,
-    result_type: Type,
+    result_type: Option<Type>,
     locals: Vec<Local>,
     body: Vec<Instruction>,
 }
@@ -338,7 +338,7 @@ impl FunctionBuilder {
         Function {
             export: self.export.take(),
             id: self.id.take(),
-            result_type: self.result_type.unwrap(),
+            result_type: self.result_type,
             params: mem::take(&mut self.params),
             locals: mem::take(&mut self.locals),
             body: mem::take(&mut self.body),
@@ -732,7 +732,9 @@ impl Printer {
         }
 
         self.buffer.push(' ');
-        self.write_return_type(&function.result_type);
+        if let Some(result_type) = function.result_type {
+            self.write_return_type(&result_type);
+        }
 
         // locals
         for local in &function.locals {
@@ -941,7 +943,9 @@ impl Printer {
             } => {
                 self.indent();
                 self.buffer.push_str("(if ");
-                self.write_return_type(result_type);
+                if let Some(result_type) = result_type {
+                    self.write_return_type(result_type);
+                }
 
                 self.push_indent();
                 self.indent();

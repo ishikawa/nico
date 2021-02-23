@@ -179,6 +179,13 @@ const cases: TestCase[] = [
   {
     file: "input/more_than_one_fun.nico",
     expected: 16
+  },
+  // FizzBuzz
+  {
+    file: "input/fizzbuzz.nico",
+    exec: exports => exports.fizzbuzz(15),
+    captureOutput: true,
+    expected: ["1", "2", "Fizz"].join("\n")
   }
 ];
 

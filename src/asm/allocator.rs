@@ -115,9 +115,12 @@ impl Allocator {
                 ref mut else_body,
             } => {
                 self.analyze_expr(condition, naming, locals, strings);
-                self.analyze_expr(then_body, naming, locals, strings);
-                if let Some(ref mut else_body) = else_body {
-                    self.analyze_expr(else_body, naming, locals, strings);
+
+                for node in then_body {
+                    self.analyze_expr(node, naming, locals, strings);
+                }
+                for node in else_body {
+                    self.analyze_expr(node, naming, locals, strings);
                 }
             }
             Expr::Case {
@@ -139,16 +142,16 @@ impl Allocator {
                     head_storage.replace(Rc::clone(&temp));
                 }
 
+                for node in else_body {
+                    self.analyze_expr(node, naming, locals, strings);
+                }
+
                 for parser::CaseArm {
                     ref mut pattern,
                     ref mut condition,
                     ref mut then_body,
                 } in arms
                 {
-                    if let Some(ref mut else_body) = else_body {
-                        self.analyze_expr(else_body, naming, locals, strings);
-                    }
-
                     // Currntly, only "Variable pattern" is supported.
                     // - A variable pattern introduces a new environment into arm body.
                     // - The type of a this kind of pattern is always equal to the type of head.
@@ -182,7 +185,9 @@ impl Allocator {
                         self.analyze_expr(condition, naming, locals, strings);
                     }
 
-                    self.analyze_expr(then_body, naming, locals, strings);
+                    for node in then_body {
+                        self.analyze_expr(node, naming, locals, strings);
+                    }
                 }
             }
         };
