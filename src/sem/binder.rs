@@ -62,6 +62,9 @@ impl Binder {
 
     fn analyze_expr(&self, node: &mut Node, env: &Rc<RefCell<Environment>>) {
         match &mut node.expr {
+            Expr::Stmt(node) => {
+                self.analyze_expr(node, env);
+            }
             Expr::Integer(_) => {}
             Expr::String { .. } => {}
             Expr::Identifier {
@@ -155,9 +158,11 @@ impl Binder {
                 ref mut else_body,
             } => {
                 self.analyze_expr(condition, env);
-                self.analyze_expr(then_body, env);
-                if let Some(ref mut else_body) = else_body {
-                    self.analyze_expr(else_body, env);
+                for node in then_body {
+                    self.analyze_expr(node, env);
+                }
+                for node in else_body {
+                    self.analyze_expr(node, env);
                 }
             }
             Expr::Case {
@@ -166,17 +171,19 @@ impl Binder {
                 ref mut else_body,
                 ..
             } => {
+                self.analyze_expr(head, env);
+
+                // else
+                for node in else_body {
+                    self.analyze_expr(node, env);
+                }
+
                 for parser::CaseArm {
                     ref mut pattern,
                     ref mut condition,
                     ref mut then_body,
                 } in arms
                 {
-                    self.analyze_expr(head, env);
-                    if let Some(ref mut else_body) = else_body {
-                        self.analyze_expr(else_body, env);
-                    }
-
                     // Currntly, only "Variable pattern" is supported.
                     // - A variable pattern introduces a new environment into arm body.
                     // - The type of a this kind of pattern is always equal to the type of head.
@@ -202,7 +209,9 @@ impl Binder {
                         self.analyze_expr(condition, &arm_env);
                     }
 
-                    self.analyze_expr(then_body, &arm_env);
+                    for node in then_body {
+                        self.analyze_expr(node, &arm_env);
+                    }
                 }
             }
         };

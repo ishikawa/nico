@@ -97,11 +97,11 @@ const cases: TestCase[] = [
   // If
   {
     input: "if 10 > 5\n3 end",
-    expected: 3
+    expected: undefined
   },
   {
     input: "if 10 < 5\n3 end",
-    expected: 0
+    expected: undefined
   },
   {
     // prettier-ignore
@@ -179,6 +179,30 @@ const cases: TestCase[] = [
   {
     file: "input/more_than_one_fun.nico",
     expected: 16
+  },
+  // FizzBuzz
+  {
+    file: "input/fizzbuzz.nico",
+    exec: exports => exports.fizzbuzz(15),
+    captureOutput: true,
+    expected: [
+      "1",
+      "2",
+      "Fizz",
+      "4",
+      "Buzz",
+      "Fizz",
+      "7",
+      "8",
+      "Fizz",
+      "Buzz",
+      "11",
+      "Fizz",
+      "13",
+      "14",
+      "Fizz Buzz",
+      ""
+    ].join("\n")
   }
 ];
 
@@ -237,6 +261,8 @@ cases.forEach(({ input, file, expected, exec, captureOutput }) => {
         const string = decoder.end(Buffer.from(bytes));
 
         expect(string).toEqual(expected);
+      } else if (typeof expected === "undefined") {
+        expect(value).toBeUndefined();
       } else {
         fail(`This expectation value is not implemented yet! ${expected}`);
       }

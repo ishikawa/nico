@@ -71,17 +71,20 @@ pub enum Expr {
     EQ(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Equal
     NE(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Not Equal
 
+    // Statement
+    Stmt(Box<Node>),
+
     // Control flow
     If {
         condition: Box<Node>,
-        then_body: Box<Node>,
-        else_body: Option<Box<Node>>,
+        then_body: Vec<Node>,
+        else_body: Vec<Node>,
     },
     Case {
         head: Box<Node>, // head expression
         head_storage: Option<Rc<RefCell<asm::LocalStorage>>>,
         arms: Vec<CaseArm>,
-        else_body: Option<Box<Node>>,
+        else_body: Vec<Node>,
     },
 }
 
@@ -94,7 +97,7 @@ pub enum Pattern {
 pub struct CaseArm {
     pub pattern: Box<Pattern>,
     pub condition: Option<Box<Node>>, // guard
-    pub then_body: Box<Node>,
+    pub then_body: Vec<Node>,
 }
 
 #[derive(Debug)]
@@ -119,18 +122,52 @@ impl Parser {
         }
     }
 
-    fn typed_expr(&mut self, expr: Expr) -> Box<Node> {
+    // Wrap an expression with statement if it is not statement.
+    fn wrap_stmt(&mut self, node: Node) -> Node {
+        if let Expr::Stmt(..) = node.expr {
+            // Don't wrap stmt with stmt.
+            return node;
+        }
+
+        self.typed_expr(Expr::Stmt(Box::new(node)))
+    }
+
+    // Wrap an expressions with statements if it is not the last one.
+    fn wrap_stmts(&mut self, nodes: &mut Vec<Option<Node>>) -> Vec<Node> {
+        let mut stmts = vec![];
+        let mut it = nodes.iter_mut().peekable();
+
+        while let Some(node) = it.next() {
+            if it.peek().is_none() {
+                stmts.push(node.take().unwrap());
+            } else {
+                stmts.push(self.wrap_stmt(node.take().unwrap()));
+            }
+        }
+
+        stmts
+    }
+
+    fn replace_last_expr_to_stmt(&mut self, nodes: &mut Vec<Node>) {
+        if !nodes.is_empty() {
+            let node = nodes.remove(nodes.len() - 1);
+            nodes.push(self.wrap_stmt(node));
+        }
+    }
+
+    fn typed_expr(&mut self, expr: Expr) -> Node {
         let ty = match expr {
             Expr::Integer(_) => wrap(sem::Type::Int32),
             Expr::String { .. } => wrap(sem::Type::String),
+            Expr::Stmt(..) => wrap(sem::Type::Void),
             _ => self.type_var(),
         };
 
-        Box::new(Node {
+        Node {
             expr,
             r#type: ty,
             env: Rc::clone(&self.empty_env),
-        })
+        }
     }
 
     /// Returns a new type variable.
@@ -153,8 +190,10 @@ impl Parser {
         let mut body = vec![];
 
         while let Some(expr) = self.parse_expr(&mut tokenizer) {
-            body.push(*expr);
+            body.push(Some(*expr));
         }
+
+        let body = self.wrap_stmts(&mut body);
 
         let main = if !body.is_empty() {
             let fun = Function {
@@ -238,10 +277,12 @@ impl Parser {
 
             match self.parse_expr(tokenizer) {
                 None => break,
-                Some(node) => body.push(*node),
+                Some(node) => body.push(Some(*node)),
             };
         }
         consume_token(tokenizer, Token::End);
+
+        let body = self.wrap_stmts(&mut body);
 
         {
             let param_types = param_names
@@ -303,7 +344,7 @@ impl Parser {
             Some(rhs) => rhs,
         };
 
-        Some(self.typed_expr(builder(lhs, rhs, None)))
+        Some(Box::new(self.typed_expr(builder(lhs, rhs, None))))
     }
 
     // ">", "<", ">=", "<="
@@ -327,7 +368,7 @@ impl Parser {
             Some(rhs) => rhs,
         };
 
-        Some(self.typed_expr(builder(lhs, rhs, None)))
+        Some(Box::new(self.typed_expr(builder(lhs, rhs, None))))
     }
 
     fn parse_binop1(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
@@ -351,7 +392,7 @@ impl Parser {
                 Some(rhs) => rhs,
             };
 
-            lhs = self.typed_expr(builder(lhs, rhs, None));
+            lhs = Box::new(self.typed_expr(builder(lhs, rhs, None)));
         }
 
         Some(lhs)
@@ -377,7 +418,7 @@ impl Parser {
                 Some(rhs) => rhs,
             };
 
-            lhs = self.typed_expr(builder(lhs, rhs, None));
+            lhs = Box::new(self.typed_expr(builder(lhs, rhs, None)));
         }
 
         Some(lhs)
@@ -420,22 +461,22 @@ impl Parser {
                         }
                     }
                     consume_char(tokenizer, ')');
-                    Some(self.typed_expr(Expr::Invocation {
+                    Some(Box::new(self.typed_expr(Expr::Invocation {
                         name,
                         arguments,
                         binding: None,
-                    }))
+                    })))
                 } else {
-                    Some(self.typed_expr(Expr::Identifier {
+                    Some(Box::new(self.typed_expr(Expr::Identifier {
                         name,
                         binding: None,
-                    }))
+                    })))
                 }
             }
             Token::Integer(i) => {
                 let expr = Expr::Integer(*i);
                 tokenizer.next();
-                Some(self.typed_expr(expr))
+                Some(Box::new(self.typed_expr(expr)))
             }
             Token::String(s) => {
                 let expr = Expr::String {
@@ -443,32 +484,70 @@ impl Parser {
                     storage: None,
                 };
                 tokenizer.next();
-                Some(self.typed_expr(expr))
+                Some(Box::new(self.typed_expr(expr)))
             }
             Token::If => {
                 tokenizer.next();
 
                 let condition = self.parse_expr(tokenizer).expect("missing condition");
+                // TODO: check line separator before reading body
 
-                // TODO: check line separator
-                let then_body = self.parse_expr(tokenizer).expect("missing if body");
+                let mut then_body = vec![];
+                let mut else_body = vec![];
+                let mut has_else = false;
 
-                let else_body = match tokenizer.peek() {
-                    Some(Token::Else) => {
-                        tokenizer.next();
-                        Some(self.parse_expr(tokenizer).expect("missing else body"))
+                loop {
+                    match tokenizer.peek() {
+                        None => panic!("Premature EOF"),
+                        Some(Token::Else) => {
+                            // TODO: check line separator before reading body
+                            has_else = true;
+                            break;
+                        }
+                        Some(Token::End) => break,
+                        _ => {}
+                    };
+
+                    match self.parse_expr(tokenizer) {
+                        None => break,
+                        Some(node) => then_body.push(Some(*node)),
+                    };
+                }
+
+                if has_else {
+                    consume_token(tokenizer, Token::Else);
+
+                    loop {
+                        match tokenizer.peek() {
+                            None => panic!("Premature EOF"),
+                            Some(Token::End) => break,
+                            _ => {}
+                        };
+
+                        match self.parse_expr(tokenizer) {
+                            None => break,
+                            Some(node) => else_body.push(Some(*node)),
+                        };
                     }
-                    _ => None,
-                };
+                }
 
                 consume_token(tokenizer, Token::End);
+
+                let mut then_body = self.wrap_stmts(&mut then_body);
+                let else_body = self.wrap_stmts(&mut else_body);
+
+                // If `else` clause is empty or omitted, convert the body of `then` to statements.
+                if !has_else {
+                    self.replace_last_expr_to_stmt(&mut then_body);
+                }
 
                 let expr = Expr::If {
                     condition,
                     then_body,
                     else_body,
                 };
-                Some(self.typed_expr(expr))
+
+                Some(Box::new(self.typed_expr(expr)))
             }
             Token::Case => {
                 tokenizer.next();
@@ -504,11 +583,25 @@ impl Parser {
                         }
                         _ => None,
                     };
+                    // TODO: check line separator before reading body
+                    let mut then_body = vec![];
 
-                    // TODO: check line separator
-                    let then_body = self
-                        .parse_expr(tokenizer)
-                        .expect("Missing body after `when if ...`");
+                    loop {
+                        match tokenizer.peek() {
+                            None => panic!("Premature EOF"),
+                            Some(Token::When) => break,
+                            Some(Token::Else) => break,
+                            Some(Token::End) => break,
+                            _ => {}
+                        };
+
+                        match self.parse_expr(tokenizer) {
+                            None => break,
+                            Some(node) => then_body.push(Some(*node)),
+                        };
+                    }
+
+                    let then_body = self.wrap_stmts(&mut then_body);
 
                     arms.push(CaseArm {
                         pattern: Box::new(pattern),
@@ -518,25 +611,44 @@ impl Parser {
                 }
 
                 // else
-                let else_body = match tokenizer.peek() {
-                    Some(Token::Else) => {
-                        tokenizer.next();
-                        Some(
-                            self.parse_expr(tokenizer)
-                                .expect("Missing else body for `case when ...`"),
-                        )
+                let mut else_body = vec![];
+
+                if let Some(Token::Else) = tokenizer.peek() {
+                    tokenizer.next();
+
+                    loop {
+                        match tokenizer.peek() {
+                            None => panic!("Premature EOF"),
+                            Some(Token::End) => break,
+                            _ => {}
+                        };
+
+                        match self.parse_expr(tokenizer) {
+                            None => break,
+                            Some(node) => else_body.push(Some(*node)),
+                        };
                     }
-                    _ => None,
-                };
+                } else {
+                    // If `else` clause is empty or omitted, convert the body of `then` to statements.
+                    for CaseArm {
+                        ref mut then_body, ..
+                    } in &mut arms
+                    {
+                        self.replace_last_expr_to_stmt(then_body);
+                    }
+                }
 
                 consume_token(tokenizer, Token::End);
+
+                let else_body = self.wrap_stmts(&mut else_body);
+
                 let expr = Expr::Case {
                     head,
                     head_storage: None,
                     arms,
                     else_body,
                 };
-                Some(self.typed_expr(expr))
+                Some(Box::new(self.typed_expr(expr)))
             }
             token => panic!("Unexpected token {:?}", token),
         }
@@ -580,7 +692,9 @@ mod tests {
         assert!(program.functions.is_empty());
 
         let node = &program.main.unwrap().body[0];
-        assert_matches!(node.expr, Expr::Integer(123));
+        assert_matches!(&node.expr, Expr::Stmt(expr) => {
+            assert_matches!(expr.expr, Expr::Integer(123));
+        });
     }
 
     #[test]
