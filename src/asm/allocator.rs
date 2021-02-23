@@ -73,6 +73,7 @@ impl Allocator {
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
     ) {
         match node.expr {
+            Expr::Stmt(ref mut expr) => self.analyze_expr(expr, naming, locals, strings),
             Expr::Integer(_) => {}
             Expr::String {
                 ref content,

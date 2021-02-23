@@ -146,39 +146,15 @@ impl AsmBuilder {
             };
         }
 
-        builder.body(self.build_body(&fun_node.r#type, &fun_node.body));
+        builder.body(self.build_body(&fun_node.body));
         builder.build()
     }
 
-    fn build_body(
-        &self,
-        container_type: &Rc<RefCell<Type>>,
-        body: &[parser::Node],
-    ) -> Vec<wasm::Instruction> {
+    fn build_body(&self, body: &[parser::Node]) -> Vec<wasm::Instruction> {
         let mut builder = wasm::Builders::instructions();
 
-        let mut body = body.iter().peekable();
-        while let Some(node) = body.next() {
+        for node in body {
             self.build_expr(&mut builder, node);
-
-            // Drop the top value(s) of stack if
-            // - An expression left a value and the node is not the last one.
-            // - An expression left a value and the node is the last one, but the cotainer type is Void.
-            match *node.r#type.borrow() {
-                Type::Void => {
-                    eprintln!("node type is void");
-                }
-                _ => {
-                    // Is the last one or not
-                    if body.peek().is_none() {
-                        if let Type::Void = *container_type.borrow() {
-                            builder.drop();
-                        }
-                    } else {
-                        builder.drop();
-                    }
-                }
-            }
         }
 
         builder.build()
@@ -186,6 +162,16 @@ impl AsmBuilder {
 
     fn build_expr(&self, builder: &mut wasm::InstructionsBuilder, node: &parser::Node) {
         match &node.expr {
+            Expr::Stmt(expr) => {
+                // Drop a value if the type of expression is not Void.
+                self.build_expr(builder, expr);
+                match *expr.r#type.borrow() {
+                    Type::Void => {}
+                    _ => {
+                        builder.drop();
+                    }
+                };
+            }
             Expr::Identifier { name, binding } => {
                 let binding = binding
                     .as_ref()
@@ -297,21 +283,17 @@ impl AsmBuilder {
 
                 eprintln!("if type = {:?}", &node.r#type);
 
-                let then_insts = self.build_body(&node.r#type, then_body);
+                let then_insts = self.build_body(then_body);
                 let else_insts = if !else_body.is_empty() {
-                    self.build_body(&node.r#type, else_body)
+                    Some(self.build_body(else_body))
                 } else {
-                    // TODO: Think about what to do when there are no `else` clause.
-                    // We should not emit i32.const and remove return type.
-                    let mut else_builder = wasm::Builders::instructions();
-                    else_builder.i32_const(0);
-                    else_builder.build()
+                    None
                 };
 
                 builder.push(wasm::Instruction::If {
                     result_type: wasm_type(&node.r#type),
                     then: then_insts,
-                    r#else: Some(else_insts),
+                    r#else: else_insts,
                 });
             }
             Expr::Case {
@@ -336,13 +318,9 @@ impl AsmBuilder {
                 // Build all arms, including the `else` clause, in reverse order.
                 let else_insts = {
                     if !else_body.is_empty() {
-                        self.build_body(&node.r#type, else_body)
+                        Some(self.build_body(else_body))
                     } else {
-                        // TODO: Think about what to do when there are no `else` clause.
-                        // We should not emit i32.const and remove return type.
-                        let mut else_builder = wasm::Builders::instructions();
-                        else_builder.i32_const(0);
-                        else_builder.build()
+                        None
                     }
                 };
 
@@ -385,19 +363,21 @@ impl AsmBuilder {
                     }
 
                     // 4. Build an `if` instruction for arm body and `else` to the next arm or `else` clause.
-                    let then_insts = self.build_body(&node.r#type, &arm.then_body);
+                    let then_insts = self.build_body(&arm.then_body);
 
                     arm_builder.push(wasm::Instruction::If {
                         then: then_insts,
-                        r#else: Some(acc),
+                        r#else: acc,
                         result_type: wasm_type(&node.r#type),
                     });
 
-                    arm_builder.build()
+                    Some(arm_builder.build())
                 });
 
-                for inst in arm_insts {
-                    builder.push(inst);
+                if let Some(arm_insts) = arm_insts {
+                    for inst in arm_insts {
+                        builder.push(inst);
+                    }
                 }
             }
         };

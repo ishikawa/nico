@@ -109,6 +109,10 @@ impl TypeInferencer {
         non_generic_vars: &mut HashSet<String>,
     ) -> Rc<RefCell<Type>> {
         match node.expr {
+            Expr::Stmt(ref mut expr) => {
+                self.analyze_expr(expr, non_generic_vars);
+                Rc::clone(&node.r#type)
+            }
             Expr::Integer(_) => Rc::clone(&node.r#type),
             Expr::String { .. } => Rc::clone(&node.r#type),
             Expr::Identifier {
@@ -171,27 +175,8 @@ impl TypeInferencer {
                 let else_type = self.analyze_body(else_body, non_generic_vars);
 
                 if let Some(error) = self.unify(&then_type, &else_type) {
-                    match error {
-                        UnificationError::TypeMismatch(_, ref ty2) => {
-                            // If `else` clause is empty or omitted, it is infered to `Void`.
-                            // Actually it is type mismatch, but it's ok that omitting `else` clause and
-                            // throw away the result of `then` clause.
-                            // So in this case, we simply unify type to `Void`.
-                            match *ty2.borrow() {
-                                Type::Void if else_body.is_empty() => {
-                                    then_type.replace(Type::Void);
-                                }
-                                _ => {
-                                    self.handle_unification_error(&error);
-                                }
-                            };
-                        }
-                        _ => {
-                            self.handle_unification_error(&error);
-                        }
-                    };
+                    self.handle_unification_error(&error);
                 }
-
                 if let Some(error) = self.unify(&then_type, &node.r#type) {
                     self.handle_unification_error(&error);
                 }
@@ -226,32 +211,13 @@ impl TypeInferencer {
                 let else_type = self.analyze_body(else_body, non_generic_vars);
 
                 // Unify body types with else clause's type.
-                // If `else` clause is empty or omitted, it is infered to `Void`.
-                // Actually it is type mismatch, but it's ok that omitting `else` clause and
-                // throw away the result of rest arms.
-                // So in this case, we simply unify type to `Void`.
                 let case_type =
                     body_types
                         .iter()
                         .fold(&else_type, |previous_type, current_type| {
                             if let Some(error) = self.unify(previous_type, current_type) {
-                                match error {
-                                    UnificationError::TypeMismatch(ref ty, _) => match *ty.borrow()
-                                    {
-                                        Type::Void if else_body.is_empty() => {
-                                            current_type.replace(Type::Void);
-                                            current_type
-                                        }
-                                        _ => {
-                                            self.handle_unification_error(&error);
-                                            unreachable!();
-                                        }
-                                    },
-                                    _ => {
-                                        self.handle_unification_error(&error);
-                                        unreachable!();
-                                    }
-                                }
+                                self.handle_unification_error(&error);
+                                unreachable!();
                             } else {
                                 current_type
                             }

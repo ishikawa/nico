@@ -62,6 +62,9 @@ impl Binder {
 
     fn analyze_expr(&self, node: &mut Node, env: &Rc<RefCell<Environment>>) {
         match &mut node.expr {
+            Expr::Stmt(node) => {
+                self.analyze_expr(node, env);
+            }
             Expr::Integer(_) => {}
             Expr::String { .. } => {}
             Expr::Identifier {
