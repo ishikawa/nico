@@ -182,7 +182,7 @@ const cases: TestCase[] = [
   },
   // FizzBuzz
   {
-    file: "input/fizzbuzz.nico",
+    file: "../samples/fizzbuzz.nico",
     exec: exports => exports.fizzbuzz(15),
     captureOutput: true,
     expected: [
