@@ -134,7 +134,7 @@ const cases: TestCase[] = [
     expected: 9
   },
   {
-    file: "input/fib_rec.nico",
+    file: "../samples/fib.nico",
     exec: exports => exports.fib(9),
     expected: 34
   },
