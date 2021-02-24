@@ -1,7 +1,7 @@
 import fs from "fs";
 import { StringDecoder } from "string_decoder";
 import { compileFile } from "./util/compiler";
-import { BufferedPrinter } from "./util/runtime";
+import { BufferedPrinter } from "../runner/runtime";
 
 type Exports = Record<string, any>;
 
@@ -182,7 +182,7 @@ const cases: TestCase[] = [
   },
   // FizzBuzz
   {
-    file: "input/fizzbuzz.nico",
+    file: "../samples/fizzbuzz.nico",
     exec: exports => exports.fizzbuzz(15),
     captureOutput: true,
     expected: [

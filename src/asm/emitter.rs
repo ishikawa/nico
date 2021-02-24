@@ -281,8 +281,6 @@ impl AsmBuilder {
             } => {
                 self.build_expr(builder, condition);
 
-                eprintln!("if type = {:?}", &node.r#type);
-
                 let then_insts = self.build_body(then_body);
                 let else_insts = if !else_body.is_empty() {
                     Some(self.build_body(else_body))

@@ -14,7 +14,9 @@
     "url": "https://github.com/ishikawa/nico/issues"
   },
   "homepage": "https://github.com/ishikawa/nico#readme",
-  "dependencies": {},
+  "dependencies": {
+    "wabt": "^1.0.20"
+  },
   "scripts": {
     "build": "cargo check && cargo clean && cargo clippy -- -D warnings -A dead-code -A clippy::match-single-binding && cargo build && cargo test",
     "pretest": "npm run build",
@@ -24,8 +26,8 @@
     "@types/jest": "^26.0.20",
     "jest": "^26.6.3",
     "ts-jest": "^26.5.0",
-    "typescript": "^4.1.3",
-    "wabt": "^1.0.20"
+    "ts-node": "^9.1.1",
+    "typescript": "^4.1.3"
   },
   "jest": {
     "transform": {

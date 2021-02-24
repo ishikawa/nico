@@ -18,3 +18,5 @@ end
 export fun fizzbuzz(n)
     _fizzbuzz(1, n)
 end
+
+fizzbuzz(15)
