@@ -1,7 +1,7 @@
 import fs from "fs";
 import { StringDecoder } from "string_decoder";
 import { compileFile } from "./util/compiler";
-import { BufferedPrinter } from "./util/runtime";
+import { BufferedPrinter } from "../runner/runtime";
 
 type Exports = Record<string, any>;
 
