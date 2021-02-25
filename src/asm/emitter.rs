@@ -326,7 +326,7 @@ impl AsmBuilder {
                     let mut arm_builder = wasm::Builders::instructions();
 
                     // 2. Bind the head value to local variable.
-                    match arm.pattern.as_ref() {
+                    match arm.pattern {
                         // variable pattern
                         parser::Pattern::Variable(ref name, ref binding) => {
                             let binding = binding

@@ -189,7 +189,7 @@ impl Binder {
                     // - The type of a this kind of pattern is always equal to the type of head.
                     let mut arm_env = Environment::with_parent(Rc::clone(env));
 
-                    match pattern.as_mut() {
+                    match pattern {
                         parser::Pattern::Variable(ref name, ref mut binding) => {
                             let b = wrap(Binding::Variable {
                                 name: name.clone(),
@@ -294,7 +294,7 @@ mod tests {
         let body = &function.body;
 
         assert_matches!(body[0].expr, Expr::Case { ref head, ref arms, ..} => {
-            assert_matches!(arms[0].pattern.as_ref(), parser::Pattern::Variable(ref _name, ref binding) => {
+            assert_matches!(arms[0].pattern, parser::Pattern::Variable(ref _name, ref binding) => {
                 assert!(!binding.is_none());
 
                 let binding = binding.as_ref().unwrap();

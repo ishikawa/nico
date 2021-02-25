@@ -95,7 +95,7 @@ pub enum Pattern {
 
 #[derive(Debug)]
 pub struct CaseArm {
-    pub pattern: Box<Pattern>,
+    pub pattern: Pattern,
     pub condition: Option<Box<Node>>, // guard
     pub then_body: Vec<Node>,
 }
@@ -604,7 +604,7 @@ impl Parser {
                     let then_body = self.wrap_stmts(&mut then_body);
 
                     arms.push(CaseArm {
-                        pattern: Box::new(pattern),
+                        pattern,
                         condition,
                         then_body,
                     });

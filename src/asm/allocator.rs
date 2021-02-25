@@ -156,7 +156,7 @@ impl Allocator {
                     // Currntly, only "Variable pattern" is supported.
                     // - A variable pattern introduces a new environment into arm body.
                     // - The type of a this kind of pattern is always equal to the type of head.
-                    match pattern.as_mut() {
+                    match pattern {
                         parser::Pattern::Variable(ref name, ref mut binding) => {
                             let binding = binding
                                 .as_ref()
