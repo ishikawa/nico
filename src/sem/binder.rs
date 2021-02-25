@@ -214,6 +214,9 @@ impl Binder {
                     }
                 }
             }
+            Expr::Var { .. } => {
+                panic!("not implemented")
+            }
         };
     }
 

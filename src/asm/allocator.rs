@@ -191,6 +191,9 @@ impl Allocator {
                     }
                 }
             }
+            Expr::Var { .. } => {
+                panic!("not implemented")
+            }
         };
     }
 }

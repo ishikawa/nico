@@ -378,6 +378,9 @@ impl AsmBuilder {
                     }
                 }
             }
+            Expr::Var { .. } => {
+                panic!("not implemented")
+            }
         };
     }
 }

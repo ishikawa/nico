@@ -86,6 +86,12 @@ pub enum Expr {
         arms: Vec<CaseArm>,
         else_body: Vec<Node>,
     },
+
+    // Variable binding
+    Var {
+        pattern: Pattern,
+        init: Box<Node>,
+    },
 }
 
 #[derive(Debug)]
@@ -122,60 +128,6 @@ impl Parser {
         }
     }
 
-    // Wrap an expression with statement if it is not statement.
-    fn wrap_stmt(&mut self, node: Node) -> Node {
-        if let Expr::Stmt(..) = node.expr {
-            // Don't wrap stmt with stmt.
-            return node;
-        }
-
-        self.typed_expr(Expr::Stmt(Box::new(node)))
-    }
-
-    // Wrap an expressions with statements if it is not the last one.
-    fn wrap_stmts(&mut self, nodes: &mut Vec<Option<Node>>) -> Vec<Node> {
-        let mut stmts = vec![];
-        let mut it = nodes.iter_mut().peekable();
-
-        while let Some(node) = it.next() {
-            if it.peek().is_none() {
-                stmts.push(node.take().unwrap());
-            } else {
-                stmts.push(self.wrap_stmt(node.take().unwrap()));
-            }
-        }
-
-        stmts
-    }
-
-    fn replace_last_expr_to_stmt(&mut self, nodes: &mut Vec<Node>) {
-        if !nodes.is_empty() {
-            let node = nodes.remove(nodes.len() - 1);
-            nodes.push(self.wrap_stmt(node));
-        }
-    }
-
-    fn typed_expr(&mut self, expr: Expr) -> Node {
-        let ty = match expr {
-            Expr::Integer(_) => wrap(sem::Type::Int32),
-            Expr::String { .. } => wrap(sem::Type::String),
-            Expr::Stmt(..) => wrap(sem::Type::Void),
-            _ => self.type_var(),
-        };
-
-        Node {
-            expr,
-            r#type: ty,
-            env: Rc::clone(&self.empty_env),
-        }
-    }
-
-    /// Returns a new type variable.
-    fn type_var(&mut self) -> Rc<RefCell<sem::Type>> {
-        let name = self.naming.next();
-        wrap(sem::Type::new_type_var(&name))
-    }
-
     pub fn parse(&mut self, tokenizer: &mut Tokenizer) -> Box<Module> {
         let mut tokenizer = tokenizer.peekable();
 
@@ -189,7 +141,7 @@ impl Parser {
         // `main` function which is the entry point of a program.
         let mut body = vec![];
 
-        while let Some(expr) = self.parse_expr(&mut tokenizer) {
+        while let Some(expr) = self.parse_stmt(&mut tokenizer) {
             body.push(Some(*expr));
         }
 
@@ -275,7 +227,7 @@ impl Parser {
                 _ => {}
             };
 
-            match self.parse_expr(tokenizer) {
+            match self.parse_stmt(tokenizer) {
                 None => break,
                 Some(node) => body.push(Some(*node)),
             };
@@ -319,6 +271,43 @@ impl Parser {
 
             Some(Box::new(function))
         }
+    }
+
+    /// Returns `Stmt` if the result of `parse_stmt_expr()` is a variable binding.
+    fn parse_stmt(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+        let node = match self.parse_stmt_expr(tokenizer) {
+            Some(node) => node,
+            None => return None,
+        };
+
+        if let Expr::Var { .. } = node.expr {
+            return Some(Box::new(self.wrap_stmt(*node)));
+        }
+
+        Some(node)
+    }
+
+    /// Variable binding or `Expr`
+    fn parse_stmt_expr(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+        match tokenizer.peek() {
+            Some(Token::Let) => {
+                tokenizer.next();
+            }
+            _ => return self.parse_expr(tokenizer),
+        };
+
+        // Variable binding - Pattern
+        let pattern = self
+            .parse_pattern(tokenizer)
+            .unwrap_or_else(|| panic!("Missing pattern in `when`"));
+
+        consume_char(tokenizer, '=');
+
+        let init = self
+            .parse_expr(tokenizer)
+            .unwrap_or_else(|| panic!("No initializer"));
+
+        Some(Box::new(self.typed_expr(Expr::Var { pattern, init })))
     }
 
     fn parse_expr(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
@@ -508,7 +497,7 @@ impl Parser {
                         _ => {}
                     };
 
-                    match self.parse_expr(tokenizer) {
+                    match self.parse_stmt(tokenizer) {
                         None => break,
                         Some(node) => then_body.push(Some(*node)),
                     };
@@ -524,7 +513,7 @@ impl Parser {
                             _ => {}
                         };
 
-                        match self.parse_expr(tokenizer) {
+                        match self.parse_stmt(tokenizer) {
                             None => break,
                             Some(node) => else_body.push(Some(*node)),
                         };
@@ -563,14 +552,9 @@ impl Parser {
                     tokenizer.next();
 
                     // pattern
-                    let pattern = match tokenizer.peek() {
-                        Some(Token::Identifier(ref name)) => {
-                            let pat = Pattern::Variable(name.clone(), None);
-                            tokenizer.next();
-                            pat
-                        }
-                        _ => panic!("Missing pattern in `when`"),
-                    };
+                    let pattern = self
+                        .parse_pattern(tokenizer)
+                        .unwrap_or_else(|| panic!("Missing pattern in `when`"));
 
                     // guard
                     let condition = match tokenizer.peek() {
@@ -595,7 +579,7 @@ impl Parser {
                             _ => {}
                         };
 
-                        match self.parse_expr(tokenizer) {
+                        match self.parse_stmt(tokenizer) {
                             None => break,
                             Some(node) => then_body.push(Some(*node)),
                         };
@@ -623,7 +607,7 @@ impl Parser {
                             _ => {}
                         };
 
-                        match self.parse_expr(tokenizer) {
+                        match self.parse_stmt(tokenizer) {
                             None => break,
                             Some(node) => else_body.push(Some(*node)),
                         };
@@ -652,6 +636,73 @@ impl Parser {
             }
             token => panic!("Unexpected token {:?}", token),
         }
+    }
+
+    fn parse_pattern(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Pattern> {
+        match tokenizer.peek() {
+            Some(Token::Identifier(ref name)) => {
+                let pat = Pattern::Variable(name.clone(), None);
+                tokenizer.next();
+                Some(pat)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl Parser {
+    // Wrap an expression with statement if it is not statement.
+    fn wrap_stmt(&mut self, node: Node) -> Node {
+        if let Expr::Stmt(..) = node.expr {
+            // Don't wrap stmt with stmt.
+            return node;
+        }
+
+        self.typed_expr(Expr::Stmt(Box::new(node)))
+    }
+
+    // Wrap an expressions with statements if it is not the last one.
+    fn wrap_stmts(&mut self, nodes: &mut Vec<Option<Node>>) -> Vec<Node> {
+        let mut stmts = vec![];
+        let mut it = nodes.iter_mut().peekable();
+
+        while let Some(node) = it.next() {
+            if it.peek().is_none() {
+                stmts.push(node.take().unwrap());
+            } else {
+                stmts.push(self.wrap_stmt(node.take().unwrap()));
+            }
+        }
+
+        stmts
+    }
+
+    fn replace_last_expr_to_stmt(&mut self, nodes: &mut Vec<Node>) {
+        if !nodes.is_empty() {
+            let node = nodes.remove(nodes.len() - 1);
+            nodes.push(self.wrap_stmt(node));
+        }
+    }
+
+    fn typed_expr(&mut self, expr: Expr) -> Node {
+        let ty = match expr {
+            Expr::Integer(_) => wrap(sem::Type::Int32),
+            Expr::String { .. } => wrap(sem::Type::String),
+            Expr::Stmt(..) => wrap(sem::Type::Void),
+            _ => self.type_var(),
+        };
+
+        Node {
+            expr,
+            r#type: ty,
+            env: Rc::clone(&self.empty_env),
+        }
+    }
+
+    /// Returns a new type variable.
+    fn type_var(&mut self) -> Rc<RefCell<sem::Type>> {
+        let name = self.naming.next();
+        wrap(sem::Type::new_type_var(&name))
     }
 }
 

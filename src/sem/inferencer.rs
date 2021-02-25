@@ -226,6 +226,9 @@ impl TypeInferencer {
                 self.unify(case_type, &node.r#type);
                 Rc::clone(case_type)
             }
+            Expr::Var { .. } => {
+                panic!("not implemented")
+            }
         }
     }
 }
