@@ -76,3 +76,9 @@ Fizz
 14
 Fizz Buzz
 ```
+
+## FAQ
+
+### Why the name "nico"?
+
+Japanese people express "nicely smiling" as "NICO-NICO". I think programming should be fun and makes people smile. So I picked the keyword `fun` for *function*s and named my programming language `nico`.
