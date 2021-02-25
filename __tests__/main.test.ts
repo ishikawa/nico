@@ -203,6 +203,12 @@ const cases: TestCase[] = [
       "Fizz Buzz",
       ""
     ].join("\n")
+  },
+  // Variable declaration
+  {
+    // prettier-ignore
+    file: "input/let_0.nico",
+    expected: 6580
   }
 ];
 

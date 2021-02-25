@@ -1,0 +1,12 @@
+fun foo(bar, baz)
+    let x = bar * 2
+    let y = x + baz + 50
+    let z = (x + y) * 2
+
+    z
+end
+
+let a = 365
+let b = 429
+
+foo((a +b), (b -a))
