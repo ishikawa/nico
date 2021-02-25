@@ -18,7 +18,7 @@
     "wabt": "^1.0.20"
   },
   "scripts": {
-    "nico": "ts-node ./runner/cli.ts",
+    "nico": "ts-node ./runner/index.ts",
     "build": "cargo check && cargo clean && cargo clippy -- -D warnings -A dead-code -A clippy::match-single-binding && cargo build && cargo test",
     "pretest": "npm run build",
     "test": "jest"

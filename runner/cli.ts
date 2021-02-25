@@ -19,7 +19,7 @@ async function parseWat(filepath: string): Promise<Uint8Array> {
   });
 }
 
-async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[]): Promise<number> {
   if (argv.length < 3) {
     printUsage();
     return 1;
@@ -48,7 +48,3 @@ async function main(argv: string[]): Promise<number> {
 
   return 0;
 }
-
-main(process.argv).then(exitCode => {
-  process.exitCode = exitCode;
-});

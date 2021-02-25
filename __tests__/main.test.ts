@@ -1,4 +1,6 @@
 import fs from "fs";
+import os from "os";
+import path from "path";
 import { StringDecoder } from "string_decoder";
 import { compileFile } from "./util/compiler";
 import { BufferedPrinter } from "../runner/runtime";
@@ -12,6 +14,8 @@ interface TestCase {
   exec?: (exports: Exports) => any[];
   captureOutput?: boolean;
 }
+
+const temporaryCodePath = path.join(os.tmpdir(), "nico_test_main.nico");
 
 const cases: TestCase[] = [
   // an integer
@@ -211,7 +215,7 @@ cases.forEach(({ input, file, expected, exec, captureOutput }) => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     const printer = new BufferedPrinter(memory);
 
-    let src = "/tmp/nico_test.nico";
+    let src = temporaryCodePath;
 
     if (input) {
       fs.writeFileSync(src, input);
