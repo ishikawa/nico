@@ -1,3 +1,5 @@
+import os from "os";
+import path from "path";
 import fs from "fs";
 import { execFile } from "child_process";
 import { StringDecoder } from "string_decoder";
@@ -34,7 +36,7 @@ export async function compileFileToWATFile(filepath: string, outputFilepath: str
 }
 
 export async function compileFile(filepath: string): Promise<Uint8Array> {
-  const inputWat = "/tmp/nico_test.wat";
+  const inputWat = path.join(os.tmpdir(), "nico_test.wat");
   const wabt = await loadWabt();
 
   await compileFileToWATFile(filepath, inputWat);

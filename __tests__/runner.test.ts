@@ -1,5 +1,4 @@
 import os from "os";
-import fs from "fs";
 import path from "path";
 import { main } from "../runner/cli";
 import { compileFileToWATFile } from "./util/compiler";
