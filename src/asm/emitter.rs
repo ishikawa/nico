@@ -356,7 +356,7 @@ impl AsmBuilder {
                     if let Some(ref condition) = arm.condition {
                         self.build_expr(&mut arm_builder, condition);
                     } else {
-                        // Without guard, push `true` value.
+                        // Pattern without guard always push `true` value.
                         arm_builder.i32_const(1);
                     }
 
@@ -378,8 +378,33 @@ impl AsmBuilder {
                     }
                 }
             }
-            Expr::Var { .. } => {
-                panic!("not implemented")
+            Expr::Var { pattern, init } => {
+                self.build_expr(builder, init);
+                match pattern {
+                    // variable pattern
+                    parser::Pattern::Variable(ref name, ref binding) => {
+                        let binding = binding
+                            .as_ref()
+                            .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
+
+                        match *(binding.borrow_mut()) {
+                            Binding::Variable { ref storage, .. } => {
+                                let storage = storage
+                                    .as_ref()
+                                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name));
+
+                                match *storage.borrow() {
+                                    LocalStorage { ref name, .. } => {
+                                        builder.local_set(name);
+                                    }
+                                };
+                            }
+                            Binding::Function { .. } => panic!("Unexpected binding"),
+                        }
+                    }
+                };
+                // Pattern without guard always push `true` value.
+                builder.i32_const(1);
             }
         };
     }
