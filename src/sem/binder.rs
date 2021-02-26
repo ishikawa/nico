@@ -189,8 +189,21 @@ impl Binder {
                     }
                 }
             }
-            Expr::Var { .. } => {
-                panic!("not implemented")
+            Expr::Var { pattern, init } => {
+                self.analyze_expr(init, env);
+
+                match pattern {
+                    parser::Pattern::Variable(ref name, binding) => {
+                        let b = wrap(Binding::Variable {
+                            name: name.clone(),
+                            r#type: Rc::clone(&init.r#type),
+                            storage: None,
+                        });
+
+                        binding.replace(Rc::clone(&b));
+                        env.borrow_mut().insert(Rc::clone(&b));
+                    }
+                };
             }
         };
     }
