@@ -151,33 +151,7 @@ impl Allocator {
                     then_body,
                 } in arms
                 {
-                    // Currntly, only "Variable pattern" is supported.
-                    // - A variable pattern introduces a new environment into arm body.
-                    // - The type of a this kind of pattern is always equal to the type of head.
-                    match pattern {
-                        parser::Pattern::Variable(ref name, binding) => {
-                            let binding = binding
-                                .as_ref()
-                                .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
-
-                            match *(binding.borrow_mut()) {
-                                Binding::Variable {
-                                    ref name,
-                                    ref r#type,
-                                    ref mut storage,
-                                } => {
-                                    let v = wrap(LocalStorage {
-                                        name: naming.next(name),
-                                        r#type: Rc::clone(&r#type),
-                                    });
-
-                                    locals.push(Rc::clone(&v));
-                                    storage.replace(Rc::clone(&v));
-                                }
-                                Binding::Function { .. } => panic!("Unexpected binding"),
-                            }
-                        }
-                    };
+                    self.analyze_pattern(pattern, naming, locals);
 
                     // guard
                     if let Some(condition) = condition {
@@ -189,8 +163,45 @@ impl Allocator {
                     }
                 }
             }
-            Expr::Var { .. } => {
-                panic!("not implemented")
+            Expr::Var {
+                pattern,
+                ref mut init,
+            } => {
+                self.analyze_expr(init, naming, locals, strings);
+                self.analyze_pattern(pattern, naming, locals);
+            }
+        };
+    }
+
+    fn analyze_pattern(
+        &self,
+        pattern: &mut parser::Pattern,
+        naming: &mut SequenceNaming,
+        locals: &mut Vec<Rc<RefCell<LocalStorage>>>,
+    ) {
+        // Currntly, only "Variable pattern" is supported.
+        match pattern {
+            parser::Pattern::Variable(ref name, ref mut binding) => {
+                let binding = binding
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
+
+                match *(binding.borrow_mut()) {
+                    Binding::Variable {
+                        ref name,
+                        ref r#type,
+                        ref mut storage,
+                    } => {
+                        let v = wrap(LocalStorage {
+                            name: naming.next(name),
+                            r#type: Rc::clone(&r#type),
+                        });
+
+                        locals.push(Rc::clone(&v));
+                        storage.replace(Rc::clone(&v));
+                    }
+                    Binding::Function { .. } => panic!("Unexpected binding"),
+                }
             }
         };
     }
