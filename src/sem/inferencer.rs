@@ -229,8 +229,11 @@ impl TypeInferencer {
                 self.unify(case_type, &node.r#type);
                 Rc::clone(case_type)
             }
-            Expr::Var { .. } => {
-                panic!("not implemented")
+            Expr::Var { pattern: _, init } => {
+                self.analyze_expr(init, non_generic_vars);
+
+                // Variable binding pattern always succeeds and its type is boolean.
+                wrap(Type::Boolean)
             }
         }
     }

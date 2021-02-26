@@ -221,14 +221,13 @@ const cases: TestCase[] = [
       "Fizz Buzz",
       ""
     ].join("\n")
-  }
-  /*
+  },
+
   // Variable declaration
   {
     file: "input/let_0.nico",
     expected: 6580
   }
-  */
 ];
 
 cases.forEach(({ input, file, expected, exec, captureOutput }) => {
