@@ -184,8 +184,13 @@ impl TypeInferencer {
                 then_type
             }
             Expr::Case {
-                arms, else_body, ..
+                arms,
+                else_body,
+                head,
+                head_storage: _,
             } => {
+                self.analyze_expr(head, non_generic_vars);
+
                 // arms
                 let mut body_types = vec![];
 

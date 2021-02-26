@@ -136,7 +136,7 @@ impl Allocator {
                 {
                     let temp = wrap(LocalStorage {
                         name: naming.next("_case_head"),
-                        r#type: Rc::clone(&node.r#type),
+                        r#type: Rc::clone(&head.r#type),
                     });
 
                     locals.push(Rc::clone(&temp));
