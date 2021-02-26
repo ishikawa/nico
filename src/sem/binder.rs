@@ -67,10 +67,7 @@ impl Binder {
             }
             Expr::Integer(_) => {}
             Expr::String { .. } => {}
-            Expr::Identifier {
-                ref name,
-                ref mut binding,
-            } => {
+            Expr::Identifier { ref name, binding } => {
                 match env.borrow().get(&name) {
                     None => panic!("Undefined variable `{}`", name),
                     Some(ref b) => match *b.borrow() {
@@ -83,9 +80,9 @@ impl Binder {
                 };
             }
             Expr::Invocation {
-                name,
-                ref mut arguments,
-                ref mut binding,
+                ref name,
+                arguments,
+                binding,
             } => {
                 match env.borrow().get(&name) {
                     None => panic!("Undefined function `{}`", name),
@@ -119,43 +116,21 @@ impl Binder {
                 }
             }
             // binary op
-            Expr::Add(ref mut lhs, ref mut rhs, ref mut binding) => {
-                self.bind_binary_op("+", lhs, rhs, binding, env)
-            }
-            Expr::Sub(ref mut lhs, ref mut rhs, ref mut binding) => {
-                self.bind_binary_op("-", lhs, rhs, binding, env)
-            }
-            Expr::Rem(ref mut lhs, ref mut rhs, ref mut binding) => {
-                self.bind_binary_op("%", lhs, rhs, binding, env)
-            }
-            Expr::Mul(ref mut lhs, ref mut rhs, ref mut binding) => {
-                self.bind_binary_op("*", lhs, rhs, binding, env)
-            }
-            Expr::Div(ref mut lhs, ref mut rhs, ref mut binding) => {
-                self.bind_binary_op("/", lhs, rhs, binding, env)
-            }
-            Expr::LT(ref mut lhs, ref mut rhs, ref mut binding) => {
-                self.bind_binary_op("<", lhs, rhs, binding, env)
-            }
-            Expr::GT(ref mut lhs, ref mut rhs, ref mut binding) => {
-                self.bind_binary_op(">", lhs, rhs, binding, env)
-            }
-            Expr::LE(ref mut lhs, ref mut rhs, ref mut binding) => {
-                self.bind_binary_op("<=", lhs, rhs, binding, env)
-            }
-            Expr::GE(ref mut lhs, ref mut rhs, ref mut binding) => {
-                self.bind_binary_op(">=", lhs, rhs, binding, env)
-            }
-            Expr::EQ(ref mut lhs, ref mut rhs, ref mut binding) => {
-                self.bind_binary_op("==", lhs, rhs, binding, env)
-            }
-            Expr::NE(ref mut lhs, ref mut rhs, ref mut binding) => {
-                self.bind_binary_op("!=", lhs, rhs, binding, env)
-            }
+            Expr::Add(lhs, rhs, binding) => self.bind_binary_op("+", lhs, rhs, binding, env),
+            Expr::Sub(lhs, rhs, binding) => self.bind_binary_op("-", lhs, rhs, binding, env),
+            Expr::Rem(lhs, rhs, binding) => self.bind_binary_op("%", lhs, rhs, binding, env),
+            Expr::Mul(lhs, rhs, binding) => self.bind_binary_op("*", lhs, rhs, binding, env),
+            Expr::Div(lhs, rhs, binding) => self.bind_binary_op("/", lhs, rhs, binding, env),
+            Expr::LT(lhs, rhs, binding) => self.bind_binary_op("<", lhs, rhs, binding, env),
+            Expr::GT(lhs, rhs, binding) => self.bind_binary_op(">", lhs, rhs, binding, env),
+            Expr::LE(lhs, rhs, binding) => self.bind_binary_op("<=", lhs, rhs, binding, env),
+            Expr::GE(lhs, rhs, binding) => self.bind_binary_op(">=", lhs, rhs, binding, env),
+            Expr::EQ(lhs, rhs, binding) => self.bind_binary_op("==", lhs, rhs, binding, env),
+            Expr::NE(lhs, rhs, binding) => self.bind_binary_op("!=", lhs, rhs, binding, env),
             Expr::If {
-                ref mut condition,
-                ref mut then_body,
-                ref mut else_body,
+                condition,
+                then_body,
+                else_body,
             } => {
                 self.analyze_expr(condition, env);
                 for node in then_body {
@@ -166,9 +141,9 @@ impl Binder {
                 }
             }
             Expr::Case {
-                ref mut head,
-                ref mut arms,
-                ref mut else_body,
+                head,
+                arms,
+                else_body,
                 ..
             } => {
                 self.analyze_expr(head, env);
@@ -179,9 +154,9 @@ impl Binder {
                 }
 
                 for parser::CaseArm {
-                    ref mut pattern,
-                    ref mut condition,
-                    ref mut then_body,
+                    pattern,
+                    condition,
+                    then_body,
                 } in arms
                 {
                     // Currntly, only "Variable pattern" is supported.
@@ -190,7 +165,7 @@ impl Binder {
                     let mut arm_env = Environment::with_parent(Rc::clone(env));
 
                     match pattern {
-                        parser::Pattern::Variable(ref name, ref mut binding) => {
+                        parser::Pattern::Variable(ref name, binding) => {
                             let b = wrap(Binding::Variable {
                                 name: name.clone(),
                                 r#type: Rc::clone(&head.r#type),
@@ -205,7 +180,7 @@ impl Binder {
                     let arm_env = wrap(arm_env);
 
                     // guard
-                    if let Some(ref mut condition) = condition {
+                    if let Some(condition) = condition {
                         self.analyze_expr(condition, &arm_env);
                     }
 

@@ -299,7 +299,7 @@ impl Parser {
         // Variable binding - Pattern
         let pattern = self
             .parse_pattern(tokenizer)
-            .unwrap_or_else(|| panic!("Missing pattern in `when`"));
+            .unwrap_or_else(|| panic!("Missing pattern in `let`"));
 
         consume_char(tokenizer, '=');
 
