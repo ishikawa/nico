@@ -63,6 +63,7 @@ impl Binder {
             }
             Expr::Integer(_) => {}
             Expr::String { .. } => {}
+            Expr::Array { .. } => panic!("not implemented"),
             Expr::Identifier { ref name, binding } => {
                 match env.borrow().get(&name) {
                     None => panic!("Undefined variable `{}`", name),

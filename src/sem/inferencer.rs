@@ -101,6 +101,7 @@ impl TypeInferencer {
             }
             Expr::Integer(_) => Rc::clone(&node.r#type),
             Expr::String { .. } => Rc::clone(&node.r#type),
+            Expr::Array { .. } => panic!("not implemented"),
             Expr::Identifier {
                 ref name,
                 ref binding,

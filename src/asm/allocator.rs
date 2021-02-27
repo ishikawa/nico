@@ -86,6 +86,7 @@ impl Allocator {
                 strings.push(Rc::clone(&constant));
             }
             Expr::Identifier { .. } => {}
+            Expr::Array { .. } => panic!("not implemented"),
             Expr::Invocation {
                 name: _, arguments, ..
             } => {

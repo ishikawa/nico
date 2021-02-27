@@ -44,6 +44,9 @@ pub enum Expr {
         // A local variable / parameter that the identifier refers.
         binding: Option<Rc<RefCell<sem::Binding>>>,
     },
+    Array {
+        elements: Vec<Node>,
+    },
     Invocation {
         name: String,
         arguments: Vec<Node>,
