@@ -299,7 +299,6 @@ impl TypeInferencer {
                 } else {
                     let cached = wrap(Type::new_type_var(&self.generic_type_var_naming.next()));
 
-                    eprintln!("  fresh = {:?}", name);
                     type_var_cache.insert(name.clone(), Rc::clone(&cached));
                     return cached;
                 }
