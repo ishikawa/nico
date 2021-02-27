@@ -132,12 +132,16 @@ impl Binder {
                 then_body,
                 else_body,
             } => {
-                self.analyze_expr(condition, env);
+                let node_env = wrap(Environment::with_parent(Rc::clone(env)));
+                let then_env = wrap(Environment::with_parent(Rc::clone(&node_env)));
+                let else_env = wrap(Environment::with_parent(Rc::clone(&node_env)));
+
+                self.analyze_expr(condition, &node_env);
                 for node in then_body {
-                    self.analyze_expr(node, env);
+                    self.analyze_expr(node, &then_env);
                 }
                 for node in else_body {
-                    self.analyze_expr(node, env);
+                    self.analyze_expr(node, &else_env);
                 }
             }
             Expr::Case {
@@ -146,11 +150,14 @@ impl Binder {
                 else_body,
                 ..
             } => {
-                self.analyze_expr(head, env);
+                let node_env = wrap(Environment::with_parent(Rc::clone(env)));
+
+                self.analyze_expr(head, &node_env);
 
                 // else
                 for node in else_body {
-                    self.analyze_expr(node, env);
+                    let else_env = wrap(Environment::with_parent(Rc::clone(&node_env)));
+                    self.analyze_expr(node, &else_env);
                 }
 
                 for parser::CaseArm {
@@ -162,7 +169,7 @@ impl Binder {
                     // Currntly, only "Variable pattern" is supported.
                     // - A variable pattern introduces a new environment into arm body.
                     // - The type of a this kind of pattern is always equal to the type of head.
-                    let mut arm_env = Environment::with_parent(Rc::clone(env));
+                    let mut arm_env = Environment::with_parent(Rc::clone(&node_env));
 
                     match pattern {
                         parser::Pattern::Variable(ref name, binding) => {
