@@ -132,6 +132,22 @@ impl Environment {
 }
 
 impl Type {
+    /// Unwrap a type variable to its instance. Otherwise returns type itself.
+    /// `panic!` if a type variable is not instantiated.
+    pub fn unwrap(ty: &Rc<RefCell<Self>>) -> Rc<RefCell<Self>> {
+        match *ty.borrow() {
+            Type::TypeVariable {
+                instance: Some(ref instance),
+                ..
+            } => Rc::clone(instance),
+            Type::TypeVariable {
+                ref name,
+                instance: None,
+            } => panic!("Type variable `{}` must be unified", name),
+            _ => Rc::clone(ty),
+        }
+    }
+
     pub fn new_type_var(name: &str) -> Self {
         Type::TypeVariable {
             name: name.to_string(),

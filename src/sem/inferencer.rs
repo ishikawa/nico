@@ -94,14 +94,37 @@ impl TypeInferencer {
         node: &mut parser::Node,
         generic_vars: &mut HashSet<String>,
     ) -> Rc<RefCell<Type>> {
-        match &mut node.expr {
+        let ty = match &mut node.expr {
             Expr::Stmt(expr) => {
                 self.analyze_expr(expr, generic_vars);
                 Rc::clone(&node.r#type)
             }
             Expr::Integer(_) => Rc::clone(&node.r#type),
             Expr::String { .. } => Rc::clone(&node.r#type),
-            Expr::Array { .. } => panic!("not implemented"),
+            Expr::Array { ref mut elements } => {
+                if elements.is_empty() {
+                    return wrap(Type::Array(wrap(self.new_type_var())));
+                }
+
+                let mut element_types = elements
+                    .iter_mut()
+                    .map(|element| self.analyze_expr(element, generic_vars))
+                    .collect::<Vec<_>>();
+
+                let first_type = element_types.remove(0);
+                let element_type =
+                    element_types
+                        .iter_mut()
+                        .fold(&first_type, |previous_type, current_type| {
+                            if let Some(error) = self.unify(&previous_type, &current_type) {
+                                self.handle_unification_error(&error);
+                                unreachable!();
+                            }
+                            current_type
+                        });
+
+                wrap(Type::Array(Rc::clone(element_type)))
+            }
             Expr::Identifier {
                 ref name,
                 ref binding,
@@ -211,7 +234,6 @@ impl TypeInferencer {
                             }
                         });
 
-                self.unify(case_type, &node.r#type);
                 Rc::clone(case_type)
             }
             Expr::Var { pattern: _, init } => {
@@ -220,7 +242,11 @@ impl TypeInferencer {
                 // Variable binding pattern always succeeds and its type is boolean.
                 wrap(Type::Boolean)
             }
-        }
+        };
+
+        // To update node's type
+        self.unify(&ty, &node.r#type);
+        ty
     }
 }
 
@@ -298,7 +324,7 @@ impl TypeInferencer {
                 } else if let Some(cached) = type_var_cache.get(name) {
                     return Rc::clone(cached);
                 } else {
-                    let cached = wrap(Type::new_type_var(&self.generic_type_var_naming.next()));
+                    let cached = wrap(self.new_type_var());
 
                     type_var_cache.insert(name.clone(), Rc::clone(&cached));
                     return cached;
@@ -334,10 +360,12 @@ impl TypeInferencer {
     }
 
     /// Prune the instance chain of type variables as much as possible.
-    /// Note, this function leaves unresolvable variable like T -> U -> None.
+    /// Note, this function leaves unresolvable variable like
+    /// - `T -> U -> (None)`
+    /// - `T -> (Not primitive type)`
     fn prune(&mut self, ty: &Rc<RefCell<Type>>) {
         // 1. Roll up instance chain until meets primitive type.
-        // 2. Replace the content of RefCall with primitive type.
+        // 2. Replace the content of RefCall with an instance if it is primitive type.
         let ty2 = match *ty.borrow_mut() {
             Type::TypeVariable {
                 instance: Some(ref mut instance),
@@ -360,6 +388,10 @@ impl TypeInferencer {
         };
 
         *ty.borrow_mut() = ty2;
+    }
+
+    fn new_type_var(&mut self) -> Type {
+        Type::new_type_var(&self.generic_type_var_naming.next())
     }
 
     fn handle_unification_error(&self, e: &UnificationError) {
@@ -990,21 +1022,29 @@ mod tests {
         let mut module = parser::parse_string("[1, 2]");
 
         analyze(&mut module);
-        /*
+
         let function = &module.main.unwrap();
         let body = &function.body;
 
         assert_matches!(function.r#type, ref ty => {
-            assert_matches!(*ty.borrow(), Type::Function{ ref params, ref return_type } => {
-                assert_eq!(*(params[0]).borrow(), Type::Int32);
-                assert_eq!(*return_type.borrow(), Type::Int32);
+            assert_matches!(*ty.borrow(), Type::Function{ ref return_type, .. } => {
+                let return_type = Type::unwrap(return_type);
+
+                assert_matches!(*return_type.borrow(), Type::Array( ref element_type ) => {
+                    assert_eq!(*element_type.borrow(), Type::Int32);
+                });
             });
         });
 
+        println!("body = {:?}", body);
+
         assert_matches!(body[0].r#type, ref ty => {
-            assert_eq!(*ty.borrow(), Type::Int32);
+            let ty = Type::unwrap(ty);
+
+            assert_matches!(*ty.borrow(), Type::Array( ref element_type ) => {
+                assert_eq!(*element_type.borrow(), Type::Int32);
+            });
         });
-         */
     }
 
     fn analyze(module: &mut parser::Module) -> TypeInferencer {
