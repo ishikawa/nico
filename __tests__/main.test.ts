@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import { StringDecoder } from "string_decoder";
 import { compileFile } from "./util/compiler";
-import { BufferedPrinter } from "../runner/runtime";
+import { BufferedPrinter, buildImportObject } from "../runner/runtime";
 
 type Exports = Record<string, any>;
 
@@ -237,9 +237,6 @@ const cases: TestCase[] = [
 
 cases.forEach(({ input, file, expected, exec, captureOutput }) => {
   test(`given '${input || file}'`, async () => {
-    const memory = new WebAssembly.Memory({ initial: 1 });
-    const printer = new BufferedPrinter(memory);
-
     let src = temporaryCodePath;
 
     if (input) {
@@ -248,16 +245,14 @@ cases.forEach(({ input, file, expected, exec, captureOutput }) => {
       src = `${__dirname}/${file}`;
     }
 
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const printer = new BufferedPrinter(memory);
+    const imports = buildImportObject({ memory, printer });
+
     const buffer = await compileFile(src);
     const module = await WebAssembly.compile(buffer);
 
-    const instance = await WebAssembly.instantiate(module, {
-      js: { mem: memory },
-      printer: {
-        println_i32: printer.printlnNumber.bind(printer),
-        println_str: printer.printlnString.bind(printer)
-      }
-    });
+    const instance = await WebAssembly.instantiate(module, imports);
 
     // @ts-ignore
     let values = exec ? exec(instance.exports) : instance.exports.main();

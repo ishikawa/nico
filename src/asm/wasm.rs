@@ -1,4 +1,13 @@
 use std::mem;
+
+// The length of the vector always is a multiple of the WebAssembly page size,
+// which is defined to be the constant 65536 – abbreviated 64Ki.
+// Like in a memory type, the maximum size in a memory instance is given in units of
+// this page size.
+//
+// https://webassembly.github.io/spec/core/exec/runtime.html#page-size
+pub const PAGE_SIZE: u32 = 65536;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Type {
     I32,

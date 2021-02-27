@@ -35,13 +35,14 @@ impl AsmBuilder {
 
         // import - memory
         let import_memory = wasm::Builders::import()
-            .module("js")
+            .module("nico.runtime")
             .name("mem")
             .desc(wasm::Builders::memory().min(1).build())
             .build();
         module.imports.push(import_memory);
 
-        // import - println_i32
+        // ## import - external libraries
+        // println_i32
         let import_println_i32 = wasm::Builders::import()
             .module("printer")
             .name("println_i32")
@@ -55,7 +56,7 @@ impl AsmBuilder {
             .build();
         module.imports.push(import_println_i32);
 
-        // import - println_str
+        // println_str
         let import_println_str = wasm::Builders::import()
             .module("printer")
             .name("println_str")
