@@ -779,4 +779,26 @@ mod tests {
             assert_matches!(&rhs.expr, Expr::Integer(3));
         });
     }
+
+    #[test]
+    fn paren_array_empty() {
+        let program = parse_string("[]");
+        let body = program.main.unwrap().body;
+
+        assert_matches!(&body[0].expr, Expr::Array { elements } => {
+            assert!(elements.is_empty());
+        });
+    }
+
+    #[test]
+    fn paren_array() {
+        let program = parse_string("[1, 2, 3]");
+        let body = program.main.unwrap().body;
+
+        assert_matches!(&body[0].expr, Expr::Array { elements } => {
+            assert_matches!(elements[0].expr, Expr::Integer(1));
+            assert_matches!(elements[1].expr, Expr::Integer(2));
+            assert_matches!(elements[2].expr, Expr::Integer(3));
+        });
+    }
 }
