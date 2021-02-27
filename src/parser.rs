@@ -31,8 +31,6 @@ pub struct Function {
 #[derive(Debug)]
 pub struct Node {
     pub expr: Expr,
-    // metadata
-    pub env: Rc<RefCell<sem::Environment>>,
     pub r#type: Rc<RefCell<sem::Type>>,
 }
 
@@ -692,11 +690,7 @@ impl Parser {
             _ => self.type_var(),
         };
 
-        Node {
-            expr,
-            r#type: ty,
-            env: Rc::clone(&self.empty_env),
-        }
+        Node { expr, r#type: ty }
     }
 
     /// Returns a new type variable.
