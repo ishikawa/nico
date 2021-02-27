@@ -63,7 +63,11 @@ impl Binder {
             }
             Expr::Integer(_) => {}
             Expr::String { .. } => {}
-            Expr::Array { .. } => panic!("not implemented"),
+            Expr::Array { elements } => {
+                for node in elements {
+                    self.analyze_expr(node, env);
+                }
+            }
             Expr::Identifier { ref name, binding } => {
                 match env.borrow().get(&name) {
                     None => panic!("Undefined variable `{}`", name),

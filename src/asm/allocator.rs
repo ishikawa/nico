@@ -1,7 +1,7 @@
 use super::ConstantString;
 use super::LocalStorage;
 use crate::parser;
-use crate::sem::Binding;
+use crate::sem::{Binding, Type};
 use crate::util::naming::SequenceNaming;
 use crate::util::wrap;
 use parser::{Expr, Node};
@@ -49,7 +49,7 @@ impl Allocator {
                 } => {
                     let v = wrap(LocalStorage {
                         name: naming.next(name),
-                        r#type: Rc::clone(r#type),
+                        r#type: Type::unwrap(r#type),
                     });
 
                     storage.replace(Rc::clone(&v));
@@ -135,7 +135,7 @@ impl Allocator {
                 {
                     let temp = wrap(LocalStorage {
                         name: naming.next("_case_head"),
-                        r#type: Rc::clone(&head.r#type),
+                        r#type: Type::unwrap(&head.r#type),
                     });
 
                     locals.push(Rc::clone(&temp));
@@ -195,7 +195,7 @@ impl Allocator {
                     } => {
                         let v = wrap(LocalStorage {
                             name: naming.next(name),
-                            r#type: Rc::clone(&r#type),
+                            r#type: Type::unwrap(&r#type),
                         });
 
                         locals.push(Rc::clone(&v));
