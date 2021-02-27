@@ -11,8 +11,6 @@ use std::rc::Rc;
 pub struct Module {
     pub functions: Vec<Function>,
     pub main: Option<Box<Function>>,
-    // metadata
-    pub env: Rc<RefCell<sem::Environment>>,
     pub strings: Option<Vec<Rc<RefCell<asm::ConstantString>>>>,
 }
 
@@ -24,15 +22,12 @@ pub struct Function {
     // metadata
     pub params: Vec<Rc<RefCell<sem::Binding>>>,
     pub locals: Vec<Rc<RefCell<asm::LocalStorage>>>,
-    pub env: Rc<RefCell<sem::Environment>>,
     pub r#type: Rc<RefCell<sem::Type>>,
 }
 
 #[derive(Debug)]
 pub struct Node {
     pub expr: Expr,
-    // metadata
-    pub env: Rc<RefCell<sem::Environment>>,
     pub r#type: Rc<RefCell<sem::Type>>,
 }
 
@@ -154,7 +149,6 @@ impl Parser {
                 export: true,
                 params: vec![],
                 locals: vec![],
-                env: Rc::clone(&self.empty_env),
                 r#type: wrap(sem::Type::Function {
                     params: vec![],
                     return_type: self.type_var(),
@@ -169,7 +163,6 @@ impl Parser {
         Box::new(Module {
             functions,
             main,
-            env: Rc::clone(&self.empty_env),
             strings: None,
         })
     }
@@ -265,7 +258,6 @@ impl Parser {
                 export,
                 locals: vec![],
                 body,
-                env: Rc::clone(&self.empty_env),
                 r#type: function_type,
             };
 
@@ -692,11 +684,7 @@ impl Parser {
             _ => self.type_var(),
         };
 
-        Node {
-            expr,
-            r#type: ty,
-            env: Rc::clone(&self.empty_env),
-        }
+        Node { expr, r#type: ty }
     }
 
     /// Returns a new type variable.

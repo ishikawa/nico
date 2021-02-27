@@ -31,8 +31,6 @@ impl SemanticAnalyzer for Binder {
         if let Some(ref mut main) = module.main {
             self.analyze_function(main, &env);
         }
-
-        module.env = env;
     }
 }
 
@@ -56,8 +54,6 @@ impl Binder {
         for node in &mut function.body {
             self.analyze_expr(node, &env);
         }
-
-        function.env = env;
     }
 
     fn analyze_expr(&self, node: &mut Node, env: &Rc<RefCell<Environment>>) {
