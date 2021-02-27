@@ -309,6 +309,10 @@ impl TypeInferencer {
             Type::Boolean => Type::Boolean,
             Type::String => Type::String,
             Type::Void => Type::Void,
+            Type::Array(ref element_type) => {
+                let element_type = self.freshrec(element_type, generic_vars, type_var_cache);
+                Type::Array(element_type)
+            }
             Type::Function {
                 ref params,
                 ref return_type,
@@ -317,7 +321,7 @@ impl TypeInferencer {
                     .iter()
                     .map(|x| self.freshrec(x, generic_vars, type_var_cache))
                     .collect();
-                let return_type = self.freshrec(&return_type, generic_vars, type_var_cache);
+                let return_type = self.freshrec(return_type, generic_vars, type_var_cache);
 
                 Type::Function {
                     params,
@@ -979,6 +983,28 @@ mod tests {
         assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::Int32);
         });
+    }
+
+    #[test]
+    fn array_1() {
+        let mut module = parser::parse_string("[1, 2]");
+
+        analyze(&mut module);
+        /*
+        let function = &module.main.unwrap();
+        let body = &function.body;
+
+        assert_matches!(function.r#type, ref ty => {
+            assert_matches!(*ty.borrow(), Type::Function{ ref params, ref return_type } => {
+                assert_eq!(*(params[0]).borrow(), Type::Int32);
+                assert_eq!(*return_type.borrow(), Type::Int32);
+            });
+        });
+
+        assert_matches!(body[0].r#type, ref ty => {
+            assert_eq!(*ty.borrow(), Type::Int32);
+        });
+         */
     }
 
     fn analyze(module: &mut parser::Module) -> TypeInferencer {

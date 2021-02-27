@@ -19,6 +19,7 @@ pub enum Type {
     Int32,
     Boolean,
     String,
+    Array(Rc<RefCell<Type>>),
     // Unit type. In many functional programming languages, this is
     // written as `()`, but I am more familiar with `Void`.
     Void,
@@ -144,6 +145,7 @@ impl Type {
             Type::Int32 => matches!(other, Type::Int32),
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),
+            Type::Array(element_type) => element_type.borrow().contains(other),
             Type::Void => matches!(other, Type::Void),
             Type::Function {
                 params,
@@ -167,6 +169,10 @@ impl PartialEq for Type {
             Type::Int32 => matches!(other, Type::Int32),
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),
+            Type::Array(element_type1) => match other {
+                Type::Array(element_type2) => element_type1 == element_type2,
+                _ => false,
+            },
             Type::Void => matches!(other, Type::Void),
             Type::Function {
                 params: params1,

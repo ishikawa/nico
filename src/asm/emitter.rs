@@ -12,6 +12,7 @@ fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
         Type::Boolean => Some(wasm::Type::I32),
         Type::String => Some(wasm::Type::I32),
         Type::Void => None,
+        Type::Array(_) => panic!("not implemented"),
         Type::TypeVariable { .. } => {
             panic!("Type variable `{:?}` can't be resolved to WASM type.", ty)
         }
