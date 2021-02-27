@@ -72,12 +72,12 @@ impl Allocator {
         locals: &mut Vec<Rc<RefCell<LocalStorage>>>,
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
     ) {
-        match node.expr {
-            Expr::Stmt(ref mut expr) => self.analyze_expr(expr, naming, locals, strings),
+        match &mut node.expr {
+            Expr::Stmt(expr) => self.analyze_expr(expr, naming, locals, strings),
             Expr::Integer(_) => {}
             Expr::String {
                 ref content,
-                ref mut storage,
+                storage,
             } => {
                 let len = strings.iter().fold(0, |accum, x| accum + x.borrow().len());
                 let constant = wrap(ConstantString::from_str(&content, len));
@@ -87,33 +87,31 @@ impl Allocator {
             }
             Expr::Identifier { .. } => {}
             Expr::Invocation {
-                name: _,
-                ref mut arguments,
-                ..
+                name: _, arguments, ..
             } => {
                 for a in arguments {
                     self.analyze_expr(a, naming, locals, strings);
                 }
             }
             // binary op
-            Expr::Add(ref mut lhs, ref mut rhs, _)
-            | Expr::Sub(ref mut lhs, ref mut rhs, _)
-            | Expr::Rem(ref mut lhs, ref mut rhs, _)
-            | Expr::Mul(ref mut lhs, ref mut rhs, _)
-            | Expr::Div(ref mut lhs, ref mut rhs, _)
-            | Expr::LT(ref mut lhs, ref mut rhs, _)
-            | Expr::GT(ref mut lhs, ref mut rhs, _)
-            | Expr::LE(ref mut lhs, ref mut rhs, _)
-            | Expr::GE(ref mut lhs, ref mut rhs, _)
-            | Expr::EQ(ref mut lhs, ref mut rhs, _)
-            | Expr::NE(ref mut lhs, ref mut rhs, _) => {
+            Expr::Add(lhs, rhs, _)
+            | Expr::Sub(lhs, rhs, _)
+            | Expr::Rem(lhs, rhs, _)
+            | Expr::Mul(lhs, rhs, _)
+            | Expr::Div(lhs, rhs, _)
+            | Expr::LT(lhs, rhs, _)
+            | Expr::GT(lhs, rhs, _)
+            | Expr::LE(lhs, rhs, _)
+            | Expr::GE(lhs, rhs, _)
+            | Expr::EQ(lhs, rhs, _)
+            | Expr::NE(lhs, rhs, _) => {
                 self.analyze_expr(lhs, naming, locals, strings);
                 self.analyze_expr(rhs, naming, locals, strings);
             }
             Expr::If {
-                ref mut condition,
-                ref mut then_body,
-                ref mut else_body,
+                condition,
+                then_body,
+                else_body,
             } => {
                 self.analyze_expr(condition, naming, locals, strings);
 
@@ -125,10 +123,10 @@ impl Allocator {
                 }
             }
             Expr::Case {
-                ref mut head,
-                ref mut head_storage,
-                ref mut arms,
-                ref mut else_body,
+                head,
+                head_storage,
+                arms,
+                else_body,
             } => {
                 // Allocate a temporary variable for storing the result of
                 // head expression.
@@ -136,7 +134,7 @@ impl Allocator {
                 {
                     let temp = wrap(LocalStorage {
                         name: naming.next("_case_head"),
-                        r#type: Rc::clone(&node.r#type),
+                        r#type: Rc::clone(&head.r#type),
                     });
 
                     locals.push(Rc::clone(&temp));
@@ -148,47 +146,61 @@ impl Allocator {
                 }
 
                 for parser::CaseArm {
-                    ref mut pattern,
-                    ref mut condition,
-                    ref mut then_body,
+                    pattern,
+                    condition,
+                    then_body,
                 } in arms
                 {
-                    // Currntly, only "Variable pattern" is supported.
-                    // - A variable pattern introduces a new environment into arm body.
-                    // - The type of a this kind of pattern is always equal to the type of head.
-                    match pattern.as_mut() {
-                        parser::Pattern::Variable(ref name, ref mut binding) => {
-                            let binding = binding
-                                .as_ref()
-                                .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
-
-                            match *(binding.borrow_mut()) {
-                                Binding::Variable {
-                                    ref name,
-                                    ref r#type,
-                                    ref mut storage,
-                                } => {
-                                    let v = wrap(LocalStorage {
-                                        name: naming.next(name),
-                                        r#type: Rc::clone(&r#type),
-                                    });
-
-                                    locals.push(Rc::clone(&v));
-                                    storage.replace(Rc::clone(&v));
-                                }
-                                Binding::Function { .. } => panic!("Unexpected binding"),
-                            }
-                        }
-                    };
+                    self.analyze_pattern(pattern, naming, locals);
 
                     // guard
-                    if let Some(ref mut condition) = condition {
+                    if let Some(condition) = condition {
                         self.analyze_expr(condition, naming, locals, strings);
                     }
 
                     for node in then_body {
                         self.analyze_expr(node, naming, locals, strings);
                     }
+                }
+            }
+            Expr::Var {
+                pattern,
+                ref mut init,
+            } => {
+                self.analyze_expr(init, naming, locals, strings);
+                self.analyze_pattern(pattern, naming, locals);
+            }
+        };
+    }
+
+    fn analyze_pattern(
+        &self,
+        pattern: &mut parser::Pattern,
+        naming: &mut SequenceNaming,
+        locals: &mut Vec<Rc<RefCell<LocalStorage>>>,
+    ) {
+        // Currntly, only "Variable pattern" is supported.
+        match pattern {
+            parser::Pattern::Variable(ref name, ref mut binding) => {
+                let binding = binding
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
+
+                match *(binding.borrow_mut()) {
+                    Binding::Variable {
+                        ref name,
+                        ref r#type,
+                        ref mut storage,
+                    } => {
+                        let v = wrap(LocalStorage {
+                            name: naming.next(name),
+                            r#type: Rc::clone(&r#type),
+                        });
+
+                        locals.push(Rc::clone(&v));
+                        storage.replace(Rc::clone(&v));
+                    }
+                    Binding::Function { .. } => panic!("Unexpected binding"),
                 }
             }
         };

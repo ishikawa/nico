@@ -125,7 +125,21 @@ const cases: TestCase[] = [
     exec: exports => [exports.foo(4), exports.foo(5), exports.foo(6)],
     expected: [4, 10, 20]
   },
-
+  {
+    // prettier-ignore
+    input: [
+      "export fun foo(n)",
+      "    case n + 1",
+      "    when x",
+      "        x",
+      "    else",
+      "        n",
+      "    end",
+      "end"
+    ].join("\n"),
+    exec: exports => exports.foo(100),
+    expected: 101
+  },
   // Function
   {
     file: "input/fun_55.nico",
@@ -207,6 +221,17 @@ const cases: TestCase[] = [
       "Fizz Buzz",
       ""
     ].join("\n")
+  },
+
+  // Variable declaration
+  {
+    file: "input/let_0.nico",
+    expected: 6580
+  },
+  {
+    file: "input/let_scoping.nico",
+    captureOutput: true,
+    expected: ["15", "10", ""].join("\n")
   }
 ];
 

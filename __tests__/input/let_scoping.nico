@@ -1,0 +1,9 @@
+# Variables defined in the scope of "if expression" do not overwrite variables in higher scopes.
+let x = 10
+
+if x > 5
+    let x = x + 5
+    println_i32(x)
+end
+
+println_i32(x)

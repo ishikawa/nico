@@ -108,8 +108,8 @@ impl TypeInferencer {
         node: &mut parser::Node,
         non_generic_vars: &mut HashSet<String>,
     ) -> Rc<RefCell<Type>> {
-        match node.expr {
-            Expr::Stmt(ref mut expr) => {
+        match &mut node.expr {
+            Expr::Stmt(expr) => {
                 self.analyze_expr(expr, non_generic_vars);
                 Rc::clone(&node.r#type)
             }
@@ -124,7 +124,7 @@ impl TypeInferencer {
             Expr::Invocation {
                 ref name,
                 ref binding,
-                ref mut arguments,
+                arguments,
             } => match self.lookup_function(binding, non_generic_vars) {
                 None => panic!("Unbound function `{}`", name),
                 Some(function_type) => {
@@ -138,17 +138,17 @@ impl TypeInferencer {
                 }
             },
             // binop
-            Expr::Add(ref mut lhs, ref mut rhs, ref mut binding)
-            | Expr::Sub(ref mut lhs, ref mut rhs, ref mut binding)
-            | Expr::Rem(ref mut lhs, ref mut rhs, ref mut binding)
-            | Expr::Mul(ref mut lhs, ref mut rhs, ref mut binding)
-            | Expr::Div(ref mut lhs, ref mut rhs, ref mut binding)
-            | Expr::LT(ref mut lhs, ref mut rhs, ref mut binding)
-            | Expr::GT(ref mut lhs, ref mut rhs, ref mut binding)
-            | Expr::LE(ref mut lhs, ref mut rhs, ref mut binding)
-            | Expr::GE(ref mut lhs, ref mut rhs, ref mut binding)
-            | Expr::EQ(ref mut lhs, ref mut rhs, ref mut binding)
-            | Expr::NE(ref mut lhs, ref mut rhs, ref mut binding) => {
+            Expr::Add(lhs, rhs, binding)
+            | Expr::Sub(lhs, rhs, binding)
+            | Expr::Rem(lhs, rhs, binding)
+            | Expr::Mul(lhs, rhs, binding)
+            | Expr::Div(lhs, rhs, binding)
+            | Expr::LT(lhs, rhs, binding)
+            | Expr::GT(lhs, rhs, binding)
+            | Expr::LE(lhs, rhs, binding)
+            | Expr::GE(lhs, rhs, binding)
+            | Expr::EQ(lhs, rhs, binding)
+            | Expr::NE(lhs, rhs, binding) => {
                 match self.lookup_function(binding, non_generic_vars) {
                     None => panic!("Prelude not installed"),
                     Some(function_type) => self.analyze_invocation(
@@ -161,9 +161,9 @@ impl TypeInferencer {
             }
 
             Expr::If {
-                ref mut condition,
-                ref mut then_body,
-                ref mut else_body,
+                condition,
+                then_body,
+                else_body,
             } => {
                 let cond_type = self.analyze_expr(condition, non_generic_vars);
 
@@ -184,21 +184,24 @@ impl TypeInferencer {
                 then_type
             }
             Expr::Case {
-                ref mut arms,
-                ref mut else_body,
-                ..
+                arms,
+                else_body,
+                head,
+                head_storage: _,
             } => {
+                self.analyze_expr(head, non_generic_vars);
+
                 // arms
                 let mut body_types = vec![];
 
                 for parser::CaseArm {
-                    ref mut condition,
-                    ref mut then_body,
+                    condition,
+                    then_body,
                     ..
                 } in arms
                 {
                     // guard
-                    if let Some(ref mut condition) = condition {
+                    if let Some(condition) = condition {
                         let cond_type = self.analyze_expr(condition, non_generic_vars);
                         self.unify(&cond_type, &wrap(Type::Boolean));
                     }
@@ -225,6 +228,12 @@ impl TypeInferencer {
 
                 self.unify(case_type, &node.r#type);
                 Rc::clone(case_type)
+            }
+            Expr::Var { pattern: _, init } => {
+                self.analyze_expr(init, non_generic_vars);
+
+                // Variable binding pattern always succeeds and its type is boolean.
+                wrap(Type::Boolean)
             }
         }
     }
