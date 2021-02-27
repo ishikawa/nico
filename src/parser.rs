@@ -421,30 +421,23 @@ impl Parser {
                 consume_char(tokenizer, ')');
                 node
             }
+            Token::Char('[') => {
+                consume_char(tokenizer, '[');
+                let elements = self.parse_elements(tokenizer, ']');
+                consume_char(tokenizer, ']');
+
+                Some(self.typed_expr(Expr::Array { elements }))
+            }
             Token::Identifier(name) => {
                 let name = name.clone();
                 tokenizer.next();
 
                 // function invocation?
                 if let Some(Token::Char('(')) = tokenizer.peek() {
-                    let mut arguments = vec![];
-
                     consume_char(tokenizer, '(');
-                    loop {
-                        if let Some(Token::Char(')')) = tokenizer.peek() {
-                            break;
-                        }
-
-                        let expr = self.parse_expr(tokenizer).expect("Expected param");
-                        arguments.push(expr);
-
-                        if let Some(Token::Char(',')) = tokenizer.peek() {
-                            tokenizer.next();
-                        } else {
-                            break;
-                        }
-                    }
+                    let arguments = self.parse_elements(tokenizer, ')');
                     consume_char(tokenizer, ')');
+
                     Some(self.typed_expr(Expr::Invocation {
                         name,
                         arguments,
@@ -642,6 +635,37 @@ impl Parser {
             }
             _ => None,
         }
+    }
+
+    fn parse_elements(
+        &mut self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        stop_char: char,
+    ) -> Vec<Node> {
+        let mut elements = vec![];
+
+        loop {
+            match tokenizer.peek() {
+                None => panic!("Premature EOF"),
+                Some(Token::Char(c)) => {
+                    if *c == stop_char {
+                        break;
+                    }
+                }
+                _ => {}
+            };
+
+            let expr = self.parse_expr(tokenizer).expect("Expected element");
+            elements.push(expr);
+
+            if let Some(Token::Char(',')) = tokenizer.peek() {
+                tokenizer.next();
+            } else {
+                break;
+            }
+        }
+
+        elements
     }
 }
 
