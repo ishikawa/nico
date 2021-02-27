@@ -7,7 +7,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
-    match *ty.borrow() {
+    let ty = Type::unwrap(ty);
+    let wty = match *ty.borrow() {
         Type::Int32 => Some(wasm::Type::I32),
         Type::Boolean => Some(wasm::Type::I32),
         Type::String => Some(wasm::Type::I32),
@@ -17,7 +18,8 @@ fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
             panic!("Type variable `{:?}` can't be resolved to WASM type.", ty)
         }
         Type::Function { .. } => panic!("Function type `{:?}` can't be resolved to WASM type.", ty),
-    }
+    };
+    wty
 }
 
 #[derive(Debug, Default)]
@@ -126,7 +128,7 @@ impl AsmBuilder {
             };
         }
 
-        match *fun_node.r#type.borrow() {
+        match *Type::unwrap(&fun_node.r#type).borrow() {
             Type::Function {
                 ref return_type, ..
             } => {
@@ -166,7 +168,7 @@ impl AsmBuilder {
             Expr::Stmt(expr) => {
                 // Drop a value if the type of expression is not Void.
                 self.build_expr(builder, expr);
-                match *expr.r#type.borrow() {
+                match *Type::unwrap(&expr.r#type).borrow() {
                     Type::Void => {}
                     _ => {
                         builder.drop();
