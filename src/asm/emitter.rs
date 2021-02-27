@@ -198,6 +198,7 @@ impl AsmBuilder {
                     .unwrap_or_else(|| panic!("The constant string was not allocated."));
                 builder.u32_const(storage.borrow().offset());
             }
+            Expr::Array { .. } => panic!("not implemented"),
             Expr::Invocation {
                 name,
                 arguments,

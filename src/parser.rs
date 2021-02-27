@@ -44,6 +44,9 @@ pub enum Expr {
         // A local variable / parameter that the identifier refers.
         binding: Option<Rc<RefCell<sem::Binding>>>,
     },
+    Array {
+        elements: Vec<Node>,
+    },
     Invocation {
         name: String,
         arguments: Vec<Node>,
@@ -418,30 +421,23 @@ impl Parser {
                 consume_char(tokenizer, ')');
                 node
             }
+            Token::Char('[') => {
+                consume_char(tokenizer, '[');
+                let elements = self.parse_elements(tokenizer, ']');
+                consume_char(tokenizer, ']');
+
+                Some(self.typed_expr(Expr::Array { elements }))
+            }
             Token::Identifier(name) => {
                 let name = name.clone();
                 tokenizer.next();
 
                 // function invocation?
                 if let Some(Token::Char('(')) = tokenizer.peek() {
-                    let mut arguments = vec![];
-
                     consume_char(tokenizer, '(');
-                    loop {
-                        if let Some(Token::Char(')')) = tokenizer.peek() {
-                            break;
-                        }
-
-                        let expr = self.parse_expr(tokenizer).expect("Expected param");
-                        arguments.push(expr);
-
-                        if let Some(Token::Char(',')) = tokenizer.peek() {
-                            tokenizer.next();
-                        } else {
-                            break;
-                        }
-                    }
+                    let arguments = self.parse_elements(tokenizer, ')');
                     consume_char(tokenizer, ')');
+
                     Some(self.typed_expr(Expr::Invocation {
                         name,
                         arguments,
@@ -640,6 +636,37 @@ impl Parser {
             _ => None,
         }
     }
+
+    fn parse_elements(
+        &mut self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        stop_char: char,
+    ) -> Vec<Node> {
+        let mut elements = vec![];
+
+        loop {
+            match tokenizer.peek() {
+                None => panic!("Premature EOF"),
+                Some(Token::Char(c)) => {
+                    if *c == stop_char {
+                        break;
+                    }
+                }
+                _ => {}
+            };
+
+            let expr = self.parse_expr(tokenizer).expect("Expected element");
+            elements.push(expr);
+
+            if let Some(Token::Char(',')) = tokenizer.peek() {
+                tokenizer.next();
+            } else {
+                break;
+            }
+        }
+
+        elements
+    }
 }
 
 impl Parser {
@@ -774,6 +801,28 @@ mod tests {
                 assert_matches!(y.expr, Expr::Integer(2));
             });
             assert_matches!(&rhs.expr, Expr::Integer(3));
+        });
+    }
+
+    #[test]
+    fn paren_array_empty() {
+        let program = parse_string("[]");
+        let body = program.main.unwrap().body;
+
+        assert_matches!(&body[0].expr, Expr::Array { elements } => {
+            assert!(elements.is_empty());
+        });
+    }
+
+    #[test]
+    fn paren_array() {
+        let program = parse_string("[1, 2, 3]");
+        let body = program.main.unwrap().body;
+
+        assert_matches!(&body[0].expr, Expr::Array { elements } => {
+            assert_matches!(elements[0].expr, Expr::Integer(1));
+            assert_matches!(elements[1].expr, Expr::Integer(2));
+            assert_matches!(elements[2].expr, Expr::Integer(3));
         });
     }
 }
