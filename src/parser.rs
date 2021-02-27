@@ -10,7 +10,7 @@ use std::rc::Rc;
 // Program
 pub struct Module {
     pub functions: Vec<Function>,
-    pub main: Option<Box<Function>>,
+    pub main: Option<Function>,
     pub strings: Option<Vec<Rc<RefCell<asm::ConstantString>>>>,
 }
 
@@ -155,7 +155,7 @@ impl Parser {
                 }),
             };
 
-            Some(Box::new(fun))
+            Some(fun)
         } else {
             None
         };
