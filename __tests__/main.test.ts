@@ -227,6 +227,11 @@ const cases: TestCase[] = [
   {
     file: "input/let_0.nico",
     expected: 6580
+  },
+  {
+    file: "input/let_scoping.nico",
+    captureOutput: true,
+    expected: ["15", "10", ""].join("\n")
   }
 ];
 
