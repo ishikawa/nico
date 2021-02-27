@@ -15,12 +15,10 @@ pub struct TypeInferencer {
 impl SemanticAnalyzer for TypeInferencer {
     fn analyze(&mut self, module: &mut parser::Module) {
         for function in &mut module.functions {
-            let mut non_generic_vars = HashSet::new();
-            self.analyze_function(function, &mut non_generic_vars);
+            self.analyze_function(function);
         }
         if let Some(ref mut function) = module.main {
-            let mut non_generic_vars = HashSet::new();
-            self.analyze_function(function, &mut non_generic_vars);
+            self.analyze_function(function);
         }
     }
 }
@@ -32,27 +30,15 @@ impl TypeInferencer {
         }
     }
 
-    // `non_generic_vars` - Non-generic type var names
+    // `generic_vars` - Non
     // `vars` - Identifier, Type
-    fn analyze_function(
-        &mut self,
-        function: &mut parser::Function,
-        non_generic_vars: &mut HashSet<String>,
-    ) -> Rc<RefCell<Type>> {
-        let mut scoped_ng = non_generic_vars.clone();
-
-        // Register local bindings including parameters into
-        // non generic variables.
-        for binding in function.env.borrow().bindings() {
-            if let Binding::Variable { r#type: ref ty, .. } = *binding.borrow() {
-                if let Type::TypeVariable { ref name, .. } = *ty.borrow() {
-                    scoped_ng.insert(name.clone());
-                }
-            }
-        }
+    fn analyze_function(&mut self, function: &mut parser::Function) -> Rc<RefCell<Type>> {
+        // Generic type var names. Nico doesn't support generic type vars though.
+        // See `freshrec()` funciton.
+        let mut generic_vars = HashSet::new();
 
         // Iterates expressions. Type::Void for empty expression.
-        let retty = self.analyze_body(&mut function.body, &mut scoped_ng);
+        let retty = self.analyze_body(&mut function.body, &mut generic_vars);
 
         // Unify return type from body.
         match *function.r#type.borrow() {
@@ -74,11 +60,11 @@ impl TypeInferencer {
         function_type: Rc<RefCell<Type>>,
         retty: &Rc<RefCell<Type>>,
         args: &mut [&mut parser::Node],
-        non_generic_vars: &mut HashSet<String>,
+        generic_vars: &mut HashSet<String>,
     ) -> Rc<RefCell<Type>> {
         let arg_types = args
             .iter_mut()
-            .map(|nd| self.analyze_expr(nd, non_generic_vars))
+            .map(|nd| self.analyze_expr(nd, generic_vars))
             .collect::<Vec<_>>();
         let callsite = wrap(Type::Function {
             params: arg_types,
@@ -95,22 +81,22 @@ impl TypeInferencer {
     fn analyze_body(
         &mut self,
         body: &mut Vec<parser::Node>,
-        non_generic_vars: &mut HashSet<String>,
+        generic_vars: &mut HashSet<String>,
     ) -> Rc<RefCell<Type>> {
         // Iterates expressions. Type::Void for empty expression.
         body.iter_mut().fold(wrap(Type::Void), |_retty, node| {
-            self.analyze_expr(node, non_generic_vars)
+            self.analyze_expr(node, generic_vars)
         })
     }
 
     fn analyze_expr(
         &mut self,
         node: &mut parser::Node,
-        non_generic_vars: &mut HashSet<String>,
+        generic_vars: &mut HashSet<String>,
     ) -> Rc<RefCell<Type>> {
         match &mut node.expr {
             Expr::Stmt(expr) => {
-                self.analyze_expr(expr, non_generic_vars);
+                self.analyze_expr(expr, generic_vars);
                 Rc::clone(&node.r#type)
             }
             Expr::Integer(_) => Rc::clone(&node.r#type),
@@ -119,13 +105,13 @@ impl TypeInferencer {
                 ref name,
                 ref binding,
             } => self
-                .lookup(binding, non_generic_vars)
+                .lookup(binding, generic_vars)
                 .unwrap_or_else(|| panic!("Unbound variable `{}`", name)),
             Expr::Invocation {
                 ref name,
                 ref binding,
                 arguments,
-            } => match self.lookup_function(binding, non_generic_vars) {
+            } => match self.lookup_function(binding, generic_vars) {
                 None => panic!("Unbound function `{}`", name),
                 Some(function_type) => {
                     let mut m = arguments.iter_mut().collect::<Vec<_>>();
@@ -133,7 +119,7 @@ impl TypeInferencer {
                         Rc::clone(&function_type),
                         &node.r#type,
                         &mut m,
-                        non_generic_vars,
+                        generic_vars,
                     )
                 }
             },
@@ -148,31 +134,29 @@ impl TypeInferencer {
             | Expr::LE(lhs, rhs, binding)
             | Expr::GE(lhs, rhs, binding)
             | Expr::EQ(lhs, rhs, binding)
-            | Expr::NE(lhs, rhs, binding) => {
-                match self.lookup_function(binding, non_generic_vars) {
-                    None => panic!("Prelude not installed"),
-                    Some(function_type) => self.analyze_invocation(
-                        Rc::clone(&function_type),
-                        &node.r#type,
-                        &mut [lhs.as_mut(), rhs.as_mut()],
-                        non_generic_vars,
-                    ),
-                }
-            }
+            | Expr::NE(lhs, rhs, binding) => match self.lookup_function(binding, generic_vars) {
+                None => panic!("Prelude not installed"),
+                Some(function_type) => self.analyze_invocation(
+                    Rc::clone(&function_type),
+                    &node.r#type,
+                    &mut [lhs.as_mut(), rhs.as_mut()],
+                    generic_vars,
+                ),
+            },
 
             Expr::If {
                 condition,
                 then_body,
                 else_body,
             } => {
-                let cond_type = self.analyze_expr(condition, non_generic_vars);
+                let cond_type = self.analyze_expr(condition, generic_vars);
 
                 if let Some(error) = self.unify(&cond_type, &wrap(Type::Boolean)) {
                     self.handle_unification_error(&error);
                 }
 
-                let then_type = self.analyze_body(then_body, non_generic_vars);
-                let else_type = self.analyze_body(else_body, non_generic_vars);
+                let then_type = self.analyze_body(then_body, generic_vars);
+                let else_type = self.analyze_body(else_body, generic_vars);
 
                 if let Some(error) = self.unify(&then_type, &else_type) {
                     self.handle_unification_error(&error);
@@ -189,7 +173,7 @@ impl TypeInferencer {
                 head,
                 head_storage: _,
             } => {
-                self.analyze_expr(head, non_generic_vars);
+                self.analyze_expr(head, generic_vars);
 
                 // arms
                 let mut body_types = vec![];
@@ -202,16 +186,16 @@ impl TypeInferencer {
                 {
                     // guard
                     if let Some(condition) = condition {
-                        let cond_type = self.analyze_expr(condition, non_generic_vars);
+                        let cond_type = self.analyze_expr(condition, generic_vars);
                         self.unify(&cond_type, &wrap(Type::Boolean));
                     }
 
                     // body - unify each arm body with else body
-                    let body_type = self.analyze_body(then_body, non_generic_vars);
+                    let body_type = self.analyze_body(then_body, generic_vars);
                     body_types.push(body_type);
                 }
 
-                let else_type = self.analyze_body(else_body, non_generic_vars);
+                let else_type = self.analyze_body(else_body, generic_vars);
 
                 // Unify body types with else clause's type.
                 let case_type =
@@ -230,7 +214,7 @@ impl TypeInferencer {
                 Rc::clone(case_type)
             }
             Expr::Var { pattern: _, init } => {
-                self.analyze_expr(init, non_generic_vars);
+                self.analyze_expr(init, generic_vars);
 
                 // Variable binding pattern always succeeds and its type is boolean.
                 wrap(Type::Boolean)
@@ -257,12 +241,11 @@ impl TypeInferencer {
     fn lookup(
         &mut self,
         binding: &Option<Rc<RefCell<Binding>>>,
-        non_generic_vars: &mut HashSet<String>,
+        generic_vars: &mut HashSet<String>,
     ) -> Option<Rc<RefCell<Type>>> {
         if let Some(binding) = binding {
             if let Binding::Variable { r#type: ref ty, .. } = *binding.borrow() {
-                return Some(self.fresh(ty, non_generic_vars));
-                //return Some(Rc::clone(&ty));
+                return Some(self.fresh(ty, generic_vars));
             }
         };
 
@@ -272,46 +255,52 @@ impl TypeInferencer {
     fn lookup_function(
         &mut self,
         binding: &Option<Rc<RefCell<Binding>>>,
-        non_generic_vars: &mut HashSet<String>,
+        generic_vars: &mut HashSet<String>,
     ) -> Option<Rc<RefCell<Type>>> {
         if let Some(binding) = binding {
             if let Binding::Function { r#type: ref ty, .. } = *binding.borrow() {
-                return Some(self.fresh(ty, non_generic_vars));
+                return Some(self.fresh(ty, generic_vars));
             }
         };
 
         None
     }
 
+    /// Several operations, for example type scheme instantiation, require
+    /// fresh names for newly introduced type variables.
+    /// This is implemented in both `fresh()` and `freshrec()` function, currently
+    /// Nico doesn't support type scheme (generic type variable) though.
+    ///
     /// Type operator and generic variables are duplicated; non-generic variables are shared.
+    /// If the argument `ty` is a generic type variable, recreate a new type variable.
     fn fresh(
         &mut self,
         ty: &Rc<RefCell<Type>>,
-        non_generic_vars: &mut HashSet<String>,
+        generic_vars: &mut HashSet<String>,
     ) -> Rc<RefCell<Type>> {
         let mut mappings = HashMap::new();
-        self.freshrec(ty, non_generic_vars, &mut mappings)
+        self.freshrec(ty, generic_vars, &mut mappings)
     }
 
-    /// If the argument `ty` is a generic type variable, recreate a new type variable.
     fn freshrec(
         &mut self,
         ty: &Rc<RefCell<Type>>,
-        non_generic_vars: &mut HashSet<String>,
-        mappings: &mut HashMap<String, Rc<RefCell<Type>>>,
+        generic_vars: &mut HashSet<String>,
+        type_var_cache: &mut HashMap<String, Rc<RefCell<Type>>>,
     ) -> Rc<RefCell<Type>> {
         self.prune(ty);
 
         let freshed = match *ty.borrow() {
             Type::TypeVariable { ref name, .. } => {
-                if non_generic_vars.contains(name) {
+                if !generic_vars.contains(name) {
                     return Rc::clone(&ty);
-                } else if let Some(cached) = mappings.get(name) {
+                } else if let Some(cached) = type_var_cache.get(name) {
                     return Rc::clone(cached);
                 } else {
                     let cached = wrap(Type::new_type_var(&self.generic_type_var_naming.next()));
 
-                    mappings.insert(name.clone(), Rc::clone(&cached));
+                    eprintln!("  fresh = {:?}", name);
+                    type_var_cache.insert(name.clone(), Rc::clone(&cached));
                     return cached;
                 }
             }
@@ -326,9 +315,9 @@ impl TypeInferencer {
             } => {
                 let params = params
                     .iter()
-                    .map(|x| self.freshrec(x, non_generic_vars, mappings))
+                    .map(|x| self.freshrec(x, generic_vars, type_var_cache))
                     .collect();
-                let return_type = self.freshrec(&return_type, non_generic_vars, mappings);
+                let return_type = self.freshrec(&return_type, generic_vars, type_var_cache);
 
                 Type::Function {
                     params,
@@ -741,9 +730,9 @@ mod tests {
     #[test]
     fn fresh_int32() {
         let mut inferencer = TypeInferencer::new();
-        let mut non_generic_vars = HashSet::new();
+        let mut generic_vars = HashSet::new();
         let pty0 = wrap(Type::Int32);
-        let pty1 = inferencer.fresh(&pty0, &mut non_generic_vars);
+        let pty1 = inferencer.fresh(&pty0, &mut generic_vars);
 
         assert_eq!(pty0, pty1);
     }
@@ -751,13 +740,13 @@ mod tests {
     #[test]
     fn fresh_function() {
         let mut inferencer = TypeInferencer::new();
-        let mut non_generic_vars = HashSet::new();
+        let mut generic_vars = HashSet::new();
 
         let pty0 = Rc::new(RefCell::new(Type::Function {
             params: vec![],
             return_type: wrap(Type::Boolean),
         }));
-        let pty1 = inferencer.fresh(&pty0, &mut non_generic_vars);
+        let pty1 = inferencer.fresh(&pty0, &mut generic_vars);
 
         assert_eq!(pty0, pty1);
     }
@@ -765,7 +754,7 @@ mod tests {
     #[test]
     fn fresh_typevar() {
         let mut inferencer = TypeInferencer::new();
-        let mut non_generic_vars = HashSet::new();
+        let mut generic_vars = HashSet::new();
         let mut mappings = HashMap::new();
 
         // fresh type variable
@@ -778,12 +767,15 @@ mod tests {
             instance: None,
         }));
 
-        let fresh0 = inferencer.freshrec(&pty0, &mut non_generic_vars, &mut mappings);
-        let fresh1 = inferencer.freshrec(&pty1, &mut non_generic_vars, &mut mappings);
+        generic_vars.insert("$1".to_string());
+        generic_vars.insert("$2".to_string());
+
+        let fresh0 = inferencer.freshrec(&pty0, &mut generic_vars, &mut mappings);
+        let fresh1 = inferencer.freshrec(&pty1, &mut generic_vars, &mut mappings);
 
         // should be cached
-        let cache0 = inferencer.freshrec(&pty0, &mut non_generic_vars, &mut mappings);
-        let cache1 = inferencer.freshrec(&pty1, &mut non_generic_vars, &mut mappings);
+        let cache0 = inferencer.freshrec(&pty0, &mut generic_vars, &mut mappings);
+        let cache1 = inferencer.freshrec(&pty1, &mut generic_vars, &mut mappings);
 
         assert_ne!(pty0, fresh0);
         assert_ne!(pty1, fresh1);
