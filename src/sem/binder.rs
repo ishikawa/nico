@@ -56,8 +56,6 @@ impl Binder {
         for node in &mut function.body {
             self.analyze_expr(node, &env);
         }
-
-        function.env = env;
     }
 
     fn analyze_expr(&self, node: &mut Node, env: &Rc<RefCell<Environment>>) {

@@ -24,7 +24,6 @@ pub struct Function {
     // metadata
     pub params: Vec<Rc<RefCell<sem::Binding>>>,
     pub locals: Vec<Rc<RefCell<asm::LocalStorage>>>,
-    pub env: Rc<RefCell<sem::Environment>>,
     pub r#type: Rc<RefCell<sem::Type>>,
 }
 
@@ -152,7 +151,6 @@ impl Parser {
                 export: true,
                 params: vec![],
                 locals: vec![],
-                env: Rc::clone(&self.empty_env),
                 r#type: wrap(sem::Type::Function {
                     params: vec![],
                     return_type: self.type_var(),
@@ -263,7 +261,6 @@ impl Parser {
                 export,
                 locals: vec![],
                 body,
-                env: Rc::clone(&self.empty_env),
                 r#type: function_type,
             };
 
