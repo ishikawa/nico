@@ -10,7 +10,7 @@ use std::rc::Rc;
 // Program
 pub struct Module {
     pub functions: Vec<Function>,
-    pub main: Option<Box<Function>>,
+    pub main: Option<Function>,
     pub strings: Option<Vec<Rc<RefCell<asm::ConstantString>>>>,
 }
 
@@ -97,7 +97,7 @@ pub enum Pattern {
 #[derive(Debug)]
 pub struct CaseArm {
     pub pattern: Pattern,
-    pub condition: Option<Box<Node>>, // guard
+    pub condition: Option<Node>, // guard
     pub then_body: Vec<Node>,
 }
 
@@ -129,7 +129,7 @@ impl Parser {
         let mut functions = vec![];
 
         while let Some(function) = self.parse_function(&mut tokenizer) {
-            functions.push(*function);
+            functions.push(function);
         }
 
         // Parser collects top expressions and automatically build
@@ -137,7 +137,7 @@ impl Parser {
         let mut body = vec![];
 
         while let Some(expr) = self.parse_stmt(&mut tokenizer) {
-            body.push(Some(*expr));
+            body.push(Some(expr));
         }
 
         let body = self.wrap_stmts(&mut body);
@@ -155,7 +155,7 @@ impl Parser {
                 }),
             };
 
-            Some(Box::new(fun))
+            Some(fun)
         } else {
             None
         };
@@ -167,10 +167,7 @@ impl Parser {
         })
     }
 
-    fn parse_function(
-        &mut self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
-    ) -> Option<Box<Function>> {
+    fn parse_function(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Function> {
         // modifiers
         let export = match tokenizer.peek() {
             Some(Token::Export) => {
@@ -222,7 +219,7 @@ impl Parser {
 
             match self.parse_stmt(tokenizer) {
                 None => break,
-                Some(node) => body.push(Some(*node)),
+                Some(node) => body.push(Some(node)),
             };
         }
         consume_token(tokenizer, Token::End);
@@ -261,26 +258,26 @@ impl Parser {
                 r#type: function_type,
             };
 
-            Some(Box::new(function))
+            Some(function)
         }
     }
 
     /// Returns `Stmt` if the result of `parse_stmt_expr()` is a variable binding.
-    fn parse_stmt(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+    fn parse_stmt(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
         let node = match self.parse_stmt_expr(tokenizer) {
             Some(node) => node,
             None => return None,
         };
 
         if let Expr::Var { .. } = node.expr {
-            return Some(Box::new(self.wrap_stmt(*node)));
+            return Some(self.wrap_stmt(node));
         }
 
         Some(node)
     }
 
     /// Variable binding or `Expr`
-    fn parse_stmt_expr(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+    fn parse_stmt_expr(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
         match tokenizer.peek() {
             Some(Token::Let) => {
                 tokenizer.next();
@@ -299,15 +296,18 @@ impl Parser {
             .parse_expr(tokenizer)
             .unwrap_or_else(|| panic!("No initializer"));
 
-        Some(Box::new(self.typed_expr(Expr::Var { pattern, init })))
+        Some(self.typed_expr(Expr::Var {
+            pattern,
+            init: Box::new(init),
+        }))
     }
 
-    fn parse_expr(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+    fn parse_expr(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
         self.parse_relop1(tokenizer)
     }
 
     // "==", "!="
-    fn parse_relop1(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+    fn parse_relop1(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
         let lhs = match self.parse_relop2(tokenizer) {
             Some(lhs) => lhs,
             None => return None,
@@ -325,11 +325,11 @@ impl Parser {
             Some(rhs) => rhs,
         };
 
-        Some(Box::new(self.typed_expr(builder(lhs, rhs, None))))
+        Some(self.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
 
     // ">", "<", ">=", "<="
-    fn parse_relop2(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+    fn parse_relop2(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
         let lhs = match self.parse_binop1(tokenizer) {
             Some(lhs) => lhs,
             None => return None,
@@ -349,10 +349,10 @@ impl Parser {
             Some(rhs) => rhs,
         };
 
-        Some(Box::new(self.typed_expr(builder(lhs, rhs, None))))
+        Some(self.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
 
-    fn parse_binop1(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+    fn parse_binop1(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
         let mut lhs = match self.parse_binop2(tokenizer) {
             None => return None,
             Some(lhs) => lhs,
@@ -373,13 +373,13 @@ impl Parser {
                 Some(rhs) => rhs,
             };
 
-            lhs = Box::new(self.typed_expr(builder(lhs, rhs, None)));
+            lhs = self.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
         }
 
         Some(lhs)
     }
 
-    fn parse_binop2(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+    fn parse_binop2(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
         let mut lhs = match self.parse_primary(tokenizer) {
             None => return None,
             Some(lhs) => lhs,
@@ -399,13 +399,13 @@ impl Parser {
                 Some(rhs) => rhs,
             };
 
-            lhs = Box::new(self.typed_expr(builder(lhs, rhs, None)));
+            lhs = self.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
         }
 
         Some(lhs)
     }
 
-    fn parse_primary(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Box<Node>> {
+    fn parse_primary(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
         let token = match tokenizer.peek() {
             None => return None,
             Some(token) => token,
@@ -433,7 +433,7 @@ impl Parser {
                         }
 
                         let expr = self.parse_expr(tokenizer).expect("Expected param");
-                        arguments.push(*expr);
+                        arguments.push(expr);
 
                         if let Some(Token::Char(',')) = tokenizer.peek() {
                             tokenizer.next();
@@ -442,22 +442,22 @@ impl Parser {
                         }
                     }
                     consume_char(tokenizer, ')');
-                    Some(Box::new(self.typed_expr(Expr::Invocation {
+                    Some(self.typed_expr(Expr::Invocation {
                         name,
                         arguments,
                         binding: None,
-                    })))
+                    }))
                 } else {
-                    Some(Box::new(self.typed_expr(Expr::Identifier {
+                    Some(self.typed_expr(Expr::Identifier {
                         name,
                         binding: None,
-                    })))
+                    }))
                 }
             }
             Token::Integer(i) => {
                 let expr = Expr::Integer(*i);
                 tokenizer.next();
-                Some(Box::new(self.typed_expr(expr)))
+                Some(self.typed_expr(expr))
             }
             Token::String(s) => {
                 let expr = Expr::String {
@@ -465,7 +465,7 @@ impl Parser {
                     storage: None,
                 };
                 tokenizer.next();
-                Some(Box::new(self.typed_expr(expr)))
+                Some(self.typed_expr(expr))
             }
             Token::If => {
                 tokenizer.next();
@@ -491,7 +491,7 @@ impl Parser {
 
                     match self.parse_stmt(tokenizer) {
                         None => break,
-                        Some(node) => then_body.push(Some(*node)),
+                        Some(node) => then_body.push(Some(node)),
                     };
                 }
 
@@ -507,7 +507,7 @@ impl Parser {
 
                         match self.parse_stmt(tokenizer) {
                             None => break,
-                            Some(node) => else_body.push(Some(*node)),
+                            Some(node) => else_body.push(Some(node)),
                         };
                     }
                 }
@@ -523,12 +523,12 @@ impl Parser {
                 }
 
                 let expr = Expr::If {
-                    condition,
+                    condition: Box::new(condition),
                     then_body,
                     else_body,
                 };
 
-                Some(Box::new(self.typed_expr(expr)))
+                Some(self.typed_expr(expr))
             }
             Token::Case => {
                 tokenizer.next();
@@ -552,10 +552,10 @@ impl Parser {
                     let condition = match tokenizer.peek() {
                         Some(Token::If) => {
                             tokenizer.next();
-                            Some(
-                                self.parse_expr(tokenizer)
-                                    .expect("Missing condition in `when if ...`"),
-                            )
+                            let cond = self
+                                .parse_expr(tokenizer)
+                                .expect("Missing condition in `when if ...`");
+                            Some(cond)
                         }
                         _ => None,
                     };
@@ -573,7 +573,7 @@ impl Parser {
 
                         match self.parse_stmt(tokenizer) {
                             None => break,
-                            Some(node) => then_body.push(Some(*node)),
+                            Some(node) => then_body.push(Some(node)),
                         };
                     }
 
@@ -601,7 +601,7 @@ impl Parser {
 
                         match self.parse_stmt(tokenizer) {
                             None => break,
-                            Some(node) => else_body.push(Some(*node)),
+                            Some(node) => else_body.push(Some(node)),
                         };
                     }
                 } else {
@@ -619,12 +619,12 @@ impl Parser {
                 let else_body = self.wrap_stmts(&mut else_body);
 
                 let expr = Expr::Case {
-                    head,
+                    head: Box::new(head),
                     head_storage: None,
                     arms,
                     else_body,
                 };
-                Some(Box::new(self.typed_expr(expr)))
+                Some(self.typed_expr(expr))
             }
             token => panic!("Unexpected token {:?}", token),
         }
