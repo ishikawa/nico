@@ -31,8 +31,6 @@ impl SemanticAnalyzer for Binder {
         if let Some(ref mut main) = module.main {
             self.analyze_function(main, &env);
         }
-
-        module.env = env;
     }
 }
 

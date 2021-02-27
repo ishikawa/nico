@@ -11,8 +11,6 @@ use std::rc::Rc;
 pub struct Module {
     pub functions: Vec<Function>,
     pub main: Option<Box<Function>>,
-    // metadata
-    pub env: Rc<RefCell<sem::Environment>>,
     pub strings: Option<Vec<Rc<RefCell<asm::ConstantString>>>>,
 }
 
@@ -165,7 +163,6 @@ impl Parser {
         Box::new(Module {
             functions,
             main,
-            env: Rc::clone(&self.empty_env),
             strings: None,
         })
     }
