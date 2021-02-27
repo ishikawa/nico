@@ -97,7 +97,7 @@ pub enum Pattern {
 #[derive(Debug)]
 pub struct CaseArm {
     pub pattern: Pattern,
-    pub condition: Option<Box<Node>>, // guard
+    pub condition: Option<Node>, // guard
     pub then_body: Vec<Node>,
 }
 
@@ -552,10 +552,10 @@ impl Parser {
                     let condition = match tokenizer.peek() {
                         Some(Token::If) => {
                             tokenizer.next();
-                            Some(
-                                self.parse_expr(tokenizer)
-                                    .expect("Missing condition in `when if ...`"),
-                            )
+                            let cond = self
+                                .parse_expr(tokenizer)
+                                .expect("Missing condition in `when if ...`");
+                            Some(*cond)
                         }
                         _ => None,
                     };
