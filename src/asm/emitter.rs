@@ -33,13 +33,25 @@ impl AsmBuilder {
     pub fn build_module(&self, module_node: &parser::Module) -> wasm::Module {
         let mut module = wasm::Module::new();
 
-        // import - memory
+        // ## import - environment
         let import_memory = wasm::Builders::import()
             .module("nico.runtime")
             .name("mem")
-            .desc(wasm::Builders::memory().min(1).build())
+            .desc(wasm::Builders::memory_desc().min(1).build())
             .build();
         module.imports.push(import_memory);
+
+        let import_stack_size = wasm::Builders::import()
+            .module("nico.runtime")
+            .name("stack_size")
+            .desc(
+                wasm::Builders::global_desc()
+                    .id("stack_size")
+                    .r#type(wasm::Type::I32)
+                    .build(),
+            )
+            .build();
+        module.imports.push(import_stack_size);
 
         // ## import - external libraries
         // println_i32

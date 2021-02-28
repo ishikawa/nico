@@ -93,6 +93,11 @@ pub enum ImportDescriptor {
         min: i32,
         max: Option<i32>,
     },
+    Global {
+        id: Option<Identifier>,
+        r#type: Type,
+        mutable: bool,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -136,8 +141,12 @@ impl Builders {
         ImportBuilder::default()
     }
 
-    pub fn memory() -> MemoryBuilder {
-        MemoryBuilder::default()
+    pub fn memory_desc() -> MemoryDescriptorBuilder {
+        MemoryDescriptorBuilder::default()
+    }
+
+    pub fn global_desc() -> GlobalDescriptorBuilder {
+        GlobalDescriptorBuilder::default()
     }
 
     pub fn func_desc() -> FunctionDescriptorBuilder {
@@ -190,13 +199,13 @@ impl ImportBuilder {
 }
 
 #[derive(Debug, Default)]
-pub struct MemoryBuilder {
+pub struct MemoryDescriptorBuilder {
     id: Option<Identifier>,
     min: Option<i32>,
     max: Option<i32>,
 }
 
-impl MemoryBuilder {
+impl MemoryDescriptorBuilder {
     pub fn id<T: Into<String>>(&mut self, id: T) -> &mut Self {
         self.id = Some(Identifier(id.into()));
         self
@@ -217,6 +226,38 @@ impl MemoryBuilder {
             id: self.id.take(),
             min: self.min.unwrap(),
             max: self.max,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct GlobalDescriptorBuilder {
+    id: Option<Identifier>,
+    r#type: Option<Type>,
+    mutable: bool,
+}
+
+impl GlobalDescriptorBuilder {
+    pub fn id<T: Into<String>>(&mut self, id: T) -> &mut Self {
+        self.id = Some(Identifier(id.into()));
+        self
+    }
+
+    pub fn r#type(&mut self, ty: Type) -> &mut Self {
+        self.r#type = Some(ty);
+        self
+    }
+
+    pub fn mutable(&mut self, mutable: bool) -> &mut Self {
+        self.mutable = mutable;
+        self
+    }
+
+    pub fn build(&mut self) -> ImportDescriptor {
+        ImportDescriptor::Global {
+            id: self.id.take(),
+            r#type: self.r#type.unwrap(),
+            mutable: self.mutable,
         }
     }
 }
@@ -627,8 +668,11 @@ impl Printer {
             } => {
                 self.buffer.push('(');
                 self.buffer.push_str("func");
-                self.buffer.push(' ');
-                id.iter().for_each(|id| self.write_identifier(id));
+
+                if let Some(id) = id {
+                    self.buffer.push(' ');
+                    self.write_identifier(id);
+                }
 
                 for param in params {
                     self.buffer.push(' ');
@@ -646,14 +690,43 @@ impl Printer {
             ImportDescriptor::Memory { id, min, max } => {
                 self.buffer.push('(');
                 self.buffer.push_str("memory");
-                self.buffer.push(' ');
-                id.iter().for_each(|id| self.write_identifier(id));
+
+                if let Some(id) = id {
+                    self.buffer.push(' ');
+                    self.write_identifier(id);
+                }
+
                 self.buffer.push(' ');
                 self.buffer.push_str(&format!("{}", min));
                 max.iter().for_each(|max| {
                     self.buffer.push(' ');
                     self.buffer.push_str(&format!("{}", max));
                 });
+                self.buffer.push(')');
+            }
+            ImportDescriptor::Global {
+                id,
+                r#type,
+                mutable,
+            } => {
+                self.buffer.push('(');
+                self.buffer.push_str("global");
+
+                if let Some(id) = id {
+                    self.buffer.push(' ');
+                    self.write_identifier(id);
+                }
+
+                self.buffer.push(' ');
+                if *mutable {
+                    self.buffer.push('(');
+                    self.buffer.push_str("mut");
+                    self.buffer.push(' ');
+                    self.buffer.push_str(numeric_type_str(r#type));
+                    self.buffer.push(')');
+                } else {
+                    self.buffer.push_str(numeric_type_str(r#type));
+                }
                 self.buffer.push(')');
             }
         }
