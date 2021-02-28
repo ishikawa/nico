@@ -86,7 +86,11 @@ impl Allocator {
                 strings.push(Rc::clone(&constant));
             }
             Expr::Identifier { .. } => {}
-            Expr::Array { .. } => panic!("not implemented"),
+            Expr::Array { elements } => {
+                for element in elements {
+                    self.analyze_expr(element, naming, locals, strings);
+                }
+            }
             Expr::Invocation {
                 name: _, arguments, ..
             } => {
