@@ -40,12 +40,16 @@ pub enum Instruction {
     Drop,
     Select,
 
-    // Variable instructions.
+    // Variable instructions
     LocalGet(Index),
     LocalSet(Index),
     LocalTee(Index),
     GlobalGet(Index),
     GlobalSet(Index),
+
+    // Memory instructions
+    I32Load,
+    I32Store,
 
     // Control Instructions
     Call(Index),
@@ -1135,6 +1139,16 @@ impl Printer {
                 self.start_plain();
                 self.buffer.push_str("call ");
                 self.write_index(&idx);
+                self.end_plain();
+            }
+            Instruction::I32Load => {
+                self.start_plain();
+                self.buffer.push_str("i32.load");
+                self.end_plain();
+            }
+            Instruction::I32Store => {
+                self.start_plain();
+                self.buffer.push_str("i32.store");
                 self.end_plain();
             }
             Instruction::If {
