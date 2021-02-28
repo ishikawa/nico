@@ -8,6 +8,15 @@ use std::mem;
 // https://webassembly.github.io/spec/core/exec/runtime.html#page-size
 pub const PAGE_SIZE: u32 = 65536;
 
+/// `usize` for WebAssembly.
+///
+/// the largest amount of memory possible with 32-bit pointers,
+/// which is what WebAssembly currently supports
+pub type Size = u32;
+
+/// The size of `Size` type in bytes.
+pub const SIZE_BYTES: Size = mem::size_of::<Size>() as Size;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Type {
     I32,
@@ -22,7 +31,7 @@ impl Type {
         }
     }
 
-    pub fn num_bytes(&self) -> u32 {
+    pub fn num_bytes(&self) -> Size {
         match self {
             Type::I32 => 4,
             Type::I64 => 8,
@@ -87,7 +96,7 @@ pub struct Identifier(String);
 #[derive(Debug, PartialEq, Clone)]
 pub enum Index {
     Id(Identifier),
-    Index(u32),
+    Index(Size),
 }
 
 #[derive(Debug, Default)]
@@ -134,7 +143,7 @@ pub struct Global {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct DataSegment {
-    offset: u32,
+    offset: Size,
     bytes: Vec<u8>,
 }
 
@@ -332,12 +341,12 @@ impl FunctionDescriptorBuilder {
 
 #[derive(Debug, Default)]
 pub struct DataSegmentBuilder {
-    offset: Option<u32>,
+    offset: Option<Size>,
     bytes: Option<Vec<u8>>,
 }
 
 impl DataSegmentBuilder {
-    pub fn offset(&mut self, offset: u32) -> &mut Self {
+    pub fn offset(&mut self, offset: Size) -> &mut Self {
         self.offset = Some(offset);
         self
     }

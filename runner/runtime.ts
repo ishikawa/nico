@@ -83,11 +83,12 @@ export class StringView {
     this.memory = memory;
   }
 
-  getString(offset: number): string {
+  getString(base: number): string {
     const viewer = new DataView(this.memory.buffer, 0);
-    const length = viewer.getInt32(offset, true);
+    const offset = viewer.getInt32(base, true);
+    const length = viewer.getInt32(base + 4, true);
 
-    const bytes = new Uint8Array(this.memory.buffer, offset + 4, length);
+    const bytes = new Uint8Array(this.memory.buffer, offset, length);
     const decoder = new StringDecoder("utf-8");
     return decoder.end(Buffer.from(bytes));
   }

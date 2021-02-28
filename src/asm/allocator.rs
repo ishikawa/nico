@@ -79,7 +79,9 @@ impl Allocator {
                 ref content,
                 storage,
             } => {
-                let len = strings.iter().fold(0, |accum, x| accum + x.borrow().len());
+                let len = strings
+                    .iter()
+                    .fold(0, |accum, x| accum + x.borrow().memory_size());
                 let constant = wrap(ConstantString::from_str(&content, len));
 
                 storage.replace(Rc::clone(&constant));

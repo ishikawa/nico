@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import { StringDecoder } from "string_decoder";
 import { compileFile } from "./util/compiler";
-import { BufferedPrinter, buildImportObject } from "../runner/runtime";
+import { BufferedPrinter, buildImportObject, StringView } from "../runner/runtime";
 
 type Exports = Record<string, any>;
 
@@ -295,12 +295,8 @@ const focused = cases.filter(x => x.focus);
         const offset = value;
         expect(Number.isInteger(offset)).toBeTruthy();
 
-        const viewer = new DataView(memory.buffer, 0);
-        const length = viewer.getInt32(offset, true);
-
-        const bytes = new Uint8Array(memory.buffer, offset + 4, length);
-        const decoder = new StringDecoder("utf-8");
-        const string = decoder.end(Buffer.from(bytes));
+        const viewer = new StringView(memory);
+        const string = viewer.getString(offset);
 
         expect(string).toEqual(expected);
       } else if (typeof expected === "undefined") {

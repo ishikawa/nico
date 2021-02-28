@@ -8,11 +8,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 // The size of the virtual stack segment (bytes). Default: 32KB (half of page size)
-const STACK_SIZE: u32 = wasm::PAGE_SIZE / 2;
+const STACK_SIZE: wasm::Size = wasm::PAGE_SIZE / 2;
 
-const STACK_OFFSET: u32 = STACK_SIZE;
+const STACK_BASE: wasm::Size = STACK_SIZE;
 
-const CONSTANT_OFFSET: u32 = STACK_SIZE;
+const CONSTANT_POOL_BASE: wasm::Size = STACK_SIZE;
 
 fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
     let ty = Type::unwrap(ty);
@@ -102,11 +102,7 @@ impl AsmBuilder {
             .id("sp")
             .r#type(wasm::Type::I32)
             .mutable(true)
-            .init(
-                wasm::Builders::instructions()
-                    .u32_const(STACK_OFFSET)
-                    .build(),
-            )
+            .init(wasm::Builders::instructions().u32_const(STACK_BASE).build())
             .build();
         module.globals.push(global_stack_pointer);
 
@@ -140,10 +136,9 @@ impl AsmBuilder {
             .unwrap_or_else(|| panic!("string constant pool was not initialized."));
         for s in strings {
             let s = s.borrow();
-            let bytes = s.bytes().copied().collect::<Vec<_>>();
             let segment = wasm::Builders::data_segment()
-                .offset(CONSTANT_OFFSET + s.offset())
-                .bytes(bytes)
+                .offset(CONSTANT_POOL_BASE + s.offset())
+                .bytes(s.bytes(CONSTANT_POOL_BASE))
                 .build();
 
             module.data_segments.push(segment);
@@ -151,9 +146,9 @@ impl AsmBuilder {
 
         if let Some(s) = strings.last() {
             let s = s.borrow();
-            CONSTANT_OFFSET + s.offset() + s.len()
+            CONSTANT_POOL_BASE + s.offset() + s.memory_size()
         } else {
-            CONSTANT_OFFSET
+            CONSTANT_POOL_BASE
         }
     }
 
@@ -273,7 +268,7 @@ impl AsmBuilder {
                 let storage = storage
                     .as_ref()
                     .unwrap_or_else(|| panic!("The constant string was not allocated."));
-                builder.u32_const(CONSTANT_OFFSET + storage.borrow().offset());
+                builder.u32_const(CONSTANT_POOL_BASE + storage.borrow().offset());
             }
             Expr::Array { elements } => {
                 for element in elements {
@@ -513,7 +508,7 @@ impl AsmBuilder {
     }
 
     /// Forward SP by `num_bytes` bytes and push the SP to value stack.
-    fn push_stack(&self, builder: &mut wasm::InstructionsBuilder, num_bytes: u32) {
+    fn push_stack(&self, builder: &mut wasm::InstructionsBuilder, num_bytes: wasm::Size) {
         builder
             .global_get("sp")
             .u32_const(num_bytes)
