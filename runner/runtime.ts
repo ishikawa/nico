@@ -9,25 +9,18 @@ export interface Printer {
  * Required `import` objects to run Nico compilation module.
  */
 export interface WasmImportObject extends Record<string, Record<string, WebAssembly.ImportValue>> {
-  "nico.runtime": { mem: WebAssembly.Memory; stack_size: WebAssembly.Global };
+  "nico.runtime": { mem: WebAssembly.Memory };
   printer: {
     println_i32: Printer["printlnNumber"];
     println_str: Printer["printlnString"];
   };
 }
 
-export function buildImportObject(props: {
-  memory: WebAssembly.Memory;
-  printer: Printer;
-  // The size of stack segment (bytes). Default: 32KB (half of page size)
-  stack_size?: number;
-}): WasmImportObject {
+export function buildImportObject(props: { memory: WebAssembly.Memory; printer: Printer }): WasmImportObject {
   const { memory, printer } = props;
 
-  let stack_size = new WebAssembly.Global({ value: "i32", mutable: false }, props.stack_size ?? 32768);
-
   return {
-    "nico.runtime": { mem: memory, stack_size },
+    "nico.runtime": { mem: memory },
     printer: {
       println_i32: printer.printlnNumber.bind(printer),
       println_str: printer.printlnString.bind(printer)

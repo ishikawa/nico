@@ -109,7 +109,7 @@ impl ConstantString {
     }
 
     pub fn len(&self) -> u32 {
-        self.offset + (self.content.len() + self.header.len()) as u32
+        (self.content.len() + self.header.len()) as u32
     }
 
     pub fn bytes(&self) -> std::iter::Chain<std::slice::Iter<u8>, std::slice::Iter<u8>> {

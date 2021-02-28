@@ -6,6 +6,13 @@ use crate::sem::{Binding, Type};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+// The size of the virtual stack segment (bytes). Default: 32KB (half of page size)
+const STACK_SIZE: u32 = wasm::PAGE_SIZE / 2;
+
+const STACK_OFFSET: u32 = STACK_SIZE;
+
+const CONSTANT_OFFSET: u32 = STACK_SIZE;
+
 fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
     let ty = Type::unwrap(ty);
     let wty = match *ty.borrow() {
@@ -41,18 +48,6 @@ impl AsmBuilder {
             .build();
         module.imports.push(import_memory);
 
-        let import_stack_size = wasm::Builders::import()
-            .module("nico.runtime")
-            .name("stack_size")
-            .desc(
-                wasm::Builders::global_desc()
-                    .id("stack_size")
-                    .r#type(wasm::Type::I32)
-                    .build(),
-            )
-            .build();
-        module.imports.push(import_stack_size);
-
         // -- import: external libraries
         // println_i32
         let import_println_i32 = wasm::Builders::import()
@@ -82,7 +77,9 @@ impl AsmBuilder {
             .build();
         module.imports.push(import_println_str);
 
-        self.build_data_segments(&mut module, module_node);
+        // Writes constants to constant pool and increments hp (heap pointer).
+        let hp = self.build_data_segments(&mut module, module_node);
+
         self.build_module_functions(&mut module, module_node);
 
         // -- globals
@@ -92,7 +89,7 @@ impl AsmBuilder {
             .mutable(true)
             .init(
                 wasm::Builders::instructions()
-                    .global_get("stack_size")
+                    .u32_const(STACK_OFFSET)
                     .build(),
             )
             .build();
@@ -102,7 +99,7 @@ impl AsmBuilder {
             .id("hp")
             .r#type(wasm::Type::I32)
             .mutable(true)
-            .init(wasm::Builders::instructions().global_get("sp").build())
+            .init(wasm::Builders::instructions().u32_const(hp).build())
             .build();
         module.globals.push(global_heap_pointer);
 
@@ -117,7 +114,7 @@ impl AsmBuilder {
         module
     }
 
-    fn build_data_segments(&self, module: &mut wasm::Module, module_node: &parser::Module) {
+    fn build_data_segments(&self, module: &mut wasm::Module, module_node: &parser::Module) -> u32 {
         let strings = module_node
             .strings
             .as_ref()
@@ -126,11 +123,18 @@ impl AsmBuilder {
             let s = s.borrow();
             let bytes = s.bytes().copied().collect::<Vec<_>>();
             let segment = wasm::Builders::data_segment()
-                .offset(s.offset())
+                .offset(CONSTANT_OFFSET + s.offset())
                 .bytes(bytes)
                 .build();
 
             module.data_segments.push(segment);
+        }
+
+        if let Some(s) = strings.last() {
+            let s = s.borrow();
+            CONSTANT_OFFSET + s.offset() + s.len()
+        } else {
+            CONSTANT_OFFSET
         }
     }
 
@@ -241,7 +245,7 @@ impl AsmBuilder {
                 let storage = storage
                     .as_ref()
                     .unwrap_or_else(|| panic!("The constant string was not allocated."));
-                builder.u32_const(storage.borrow().offset());
+                builder.u32_const(CONSTANT_OFFSET + storage.borrow().offset());
             }
             Expr::Array { .. } => panic!("not implemented"),
             Expr::Invocation {
