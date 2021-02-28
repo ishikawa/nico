@@ -33,7 +33,7 @@ impl AsmBuilder {
     pub fn build_module(&self, module_node: &parser::Module) -> wasm::Module {
         let mut module = wasm::Module::new();
 
-        // ## import - environment
+        // -- import: environment
         let import_memory = wasm::Builders::import()
             .module("nico.runtime")
             .name("mem")
@@ -53,7 +53,7 @@ impl AsmBuilder {
             .build();
         module.imports.push(import_stack_size);
 
-        // ## import - external libraries
+        // -- import: external libraries
         // println_i32
         let import_println_i32 = wasm::Builders::import()
             .module("printer")
@@ -84,6 +84,35 @@ impl AsmBuilder {
 
         self.build_data_segments(&mut module, module_node);
         self.build_module_functions(&mut module, module_node);
+
+        // -- globals
+        let global_stack_pointer = wasm::Builders::global()
+            .id("sp")
+            .r#type(wasm::Type::I32)
+            .mutable(true)
+            .init(
+                wasm::Builders::instructions()
+                    .global_get("stack_size")
+                    .build(),
+            )
+            .build();
+        module.globals.push(global_stack_pointer);
+
+        let global_heap_pointer = wasm::Builders::global()
+            .id("hp")
+            .r#type(wasm::Type::I32)
+            .mutable(true)
+            .init(wasm::Builders::instructions().global_get("sp").build())
+            .build();
+        module.globals.push(global_heap_pointer);
+
+        let global_frame_pointer = wasm::Builders::global()
+            .id("fp")
+            .r#type(wasm::Type::I32)
+            .mutable(true)
+            .init(wasm::Builders::instructions().i32_const(-1).build())
+            .build();
+        module.globals.push(global_frame_pointer);
 
         module
     }

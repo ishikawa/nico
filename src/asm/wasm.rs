@@ -44,6 +44,8 @@ pub enum Instruction {
     LocalGet(Index),
     LocalSet(Index),
     LocalTee(Index),
+    GlobalGet(Index),
+    GlobalSet(Index),
 
     // Control Instructions
     Call(Index),
@@ -70,6 +72,7 @@ pub enum Index {
 #[derive(Debug, Default)]
 pub struct Module {
     pub imports: Vec<Import>,
+    pub globals: Vec<Global>,
     pub data_segments: Vec<DataSegment>,
     pub functions: Vec<Function>,
 }
@@ -98,6 +101,14 @@ pub enum ImportDescriptor {
         r#type: Type,
         mutable: bool,
     },
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Global {
+    id: Option<Identifier>,
+    r#type: Type,
+    mutable: bool,
+    init: Vec<Instruction>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -151,6 +162,10 @@ impl Builders {
 
     pub fn func_desc() -> FunctionDescriptorBuilder {
         FunctionDescriptorBuilder::default()
+    }
+
+    pub fn global() -> GlobalBuilder {
+        GlobalBuilder::default()
     }
 
     pub fn data_segment() -> DataSegmentBuilder {
@@ -317,6 +332,45 @@ impl DataSegmentBuilder {
         DataSegment {
             offset: self.offset.unwrap(),
             bytes,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct GlobalBuilder {
+    id: Option<Identifier>,
+    r#type: Option<Type>,
+    mutable: bool,
+    init: Option<Vec<Instruction>>,
+}
+
+impl GlobalBuilder {
+    pub fn id<T: Into<String>>(&mut self, id: T) -> &mut Self {
+        self.id = Some(Identifier(id.into()));
+        self
+    }
+
+    pub fn r#type(&mut self, ty: Type) -> &mut Self {
+        self.r#type = Some(ty);
+        self
+    }
+
+    pub fn mutable(&mut self, mutable: bool) -> &mut Self {
+        self.mutable = mutable;
+        self
+    }
+
+    pub fn init(&mut self, instructions: Vec<Instruction>) -> &mut Self {
+        self.init = Some(instructions);
+        self
+    }
+
+    pub fn build(&mut self) -> Global {
+        Global {
+            id: self.id.take(),
+            r#type: self.r#type.take().unwrap(),
+            mutable: self.mutable,
+            init: mem::take(self.init.take().unwrap().as_mut()),
         }
     }
 }
@@ -530,6 +584,18 @@ impl InstructionsBuilder {
         self
     }
 
+    pub fn global_get<T: Into<String>>(&mut self, name: T) -> &mut Self {
+        self.instructions
+            .push(Instruction::GlobalGet(Index::Id(Identifier(name.into()))));
+        self
+    }
+
+    pub fn global_set<T: Into<String>>(&mut self, name: T) -> &mut Self {
+        self.instructions
+            .push(Instruction::GlobalSet(Index::Id(Identifier(name.into()))));
+        self
+    }
+
     pub fn call<T: Into<String>>(&mut self, name: T) -> &mut Self {
         self.instructions
             .push(Instruction::Call(Index::Id(Identifier(name.into()))));
@@ -636,6 +702,7 @@ impl Printer {
         self.push_indent();
         self.write_imports(&module.imports);
         self.write_data_segments(&module.data_segments);
+        self.write_globals(&module.globals);
         self.write_functions(&module.functions);
         self.close_indent();
     }
@@ -770,6 +837,12 @@ impl Printer {
         }
     }
 
+    fn write_globals(&mut self, globals: &[Global]) {
+        for global in globals {
+            self.write_global(global);
+        }
+    }
+
     fn write_data_segment(&mut self, data_segment: &DataSegment) {
         self.indent();
         self.buffer.push('(');
@@ -780,6 +853,40 @@ impl Printer {
         self.buffer.push(' ');
         self.write_bytes(&data_segment.bytes);
         self.buffer.push(')');
+    }
+
+    fn write_global(&mut self, global: &Global) {
+        self.indent();
+
+        self.buffer.push('(');
+        self.buffer.push_str("global");
+
+        if let Some(id) = &global.id {
+            self.buffer.push(' ');
+            self.write_identifier(id);
+        }
+
+        self.buffer.push(' ');
+        if global.mutable {
+            self.buffer.push('(');
+            self.buffer.push_str("mut");
+            self.buffer.push(' ');
+            self.buffer.push_str(numeric_type_str(&global.r#type));
+            self.buffer.push(')');
+        } else {
+            self.buffer.push_str(numeric_type_str(&global.r#type));
+        }
+
+        // Pretty printing should be temporary disabled.
+        let pretty = self.pretty;
+        self.pretty = false;
+
+        for instruction in &global.init {
+            self.write_instruction(instruction);
+        }
+        self.buffer.push(')');
+
+        self.pretty = pretty;
     }
 
     fn write_functions(&mut self, functions: &[Function]) {
@@ -793,19 +900,19 @@ impl Printer {
         self.buffer.push('(');
         self.buffer.push_str("func");
 
-        function.id.iter().for_each(|id| {
+        if let Some(id) = &function.id {
             self.buffer.push(' ');
             self.write_identifier(id)
-        });
+        }
 
-        function.export.iter().for_each(|export| {
+        if let Some(export) = &function.export {
             self.buffer.push(' ');
             self.buffer.push('(');
             self.buffer.push_str("export");
             self.buffer.push(' ');
             self.write_string(export);
             self.buffer.push(')');
-        });
+        }
 
         // typeuse
         for param in &function.params {
@@ -1009,6 +1116,18 @@ impl Printer {
             Instruction::LocalTee(idx) => {
                 self.start_plain();
                 self.buffer.push_str("local.tee ");
+                self.write_index(&idx);
+                self.end_plain();
+            }
+            Instruction::GlobalGet(idx) => {
+                self.start_plain();
+                self.buffer.push_str("global.get ");
+                self.write_index(&idx);
+                self.end_plain();
+            }
+            Instruction::GlobalSet(idx) => {
+                self.start_plain();
+                self.buffer.push_str("global.set ");
                 self.write_index(&idx);
                 self.end_plain();
             }
