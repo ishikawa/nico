@@ -3,6 +3,7 @@ use crate::asm::LocalStorage;
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem::{Binding, Type};
+use crate::util::naming::PrefixNaming;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -20,7 +21,7 @@ fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
         Type::Boolean => Some(wasm::Type::I32),
         Type::String => Some(wasm::Type::I32),
         Type::Void => None,
-        Type::Array(_) => panic!("not implemented"),
+        Type::Array(_) => Some(wasm::Type::I32),
         Type::TypeVariable { .. } => {
             panic!("Type variable `{:?}` can't be resolved to WASM type.", ty)
         }
@@ -29,15 +30,29 @@ fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
     wty
 }
 
-#[derive(Debug, Default)]
-pub struct AsmBuilder {}
+#[derive(Debug)]
+pub struct AsmBuilder {
+    // For now, asm emitter can use only one scratch pad.
+    i32_tmp_locals: Vec<String>,
+    naming: PrefixNaming,
+}
+
+impl Default for AsmBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl AsmBuilder {
     pub fn new() -> Self {
-        Self::default()
+        AsmBuilder {
+            i32_tmp_locals: vec![],
+            // To avoid colision with user's local variables, use special prefix
+            naming: PrefixNaming::new("%tmp."),
+        }
     }
 
-    pub fn build_module(&self, module_node: &parser::Module) -> wasm::Module {
+    pub fn build_module(&mut self, module_node: &parser::Module) -> wasm::Module {
         let mut module = wasm::Module::new();
 
         // -- import: environment
@@ -114,7 +129,11 @@ impl AsmBuilder {
         module
     }
 
-    fn build_data_segments(&self, module: &mut wasm::Module, module_node: &parser::Module) -> u32 {
+    fn build_data_segments(
+        &mut self,
+        module: &mut wasm::Module,
+        module_node: &parser::Module,
+    ) -> u32 {
         let strings = module_node
             .strings
             .as_ref()
@@ -138,7 +157,7 @@ impl AsmBuilder {
         }
     }
 
-    fn build_module_functions(&self, module: &mut wasm::Module, module_node: &parser::Module) {
+    fn build_module_functions(&mut self, module: &mut wasm::Module, module_node: &parser::Module) {
         for function in &module_node.functions {
             module.functions.push(self.build_function(function));
         }
@@ -148,7 +167,11 @@ impl AsmBuilder {
         }
     }
 
-    fn build_function(&self, fun_node: &parser::Function) -> wasm::Function {
+    fn build_function(&mut self, fun_node: &parser::Function) -> wasm::Function {
+        // Before building function signature, builds the body of function. Because it may
+        // add temporary variables which must be included in locals.
+        let body = self.build_body(&fun_node.body);
+
         let mut builder = wasm::Builders::function();
         let name = fun_node.name.as_str();
 
@@ -174,6 +197,7 @@ impl AsmBuilder {
             };
         }
 
+        // params
         match *Type::unwrap(&fun_node.r#type).borrow() {
             Type::Function {
                 ref return_type, ..
@@ -195,11 +219,15 @@ impl AsmBuilder {
             };
         }
 
-        builder.body(self.build_body(&fun_node.body));
+        for name in &self.i32_tmp_locals {
+            builder.named_local(name, wasm::Type::I32);
+        }
+
+        builder.body(body);
         builder.build()
     }
 
-    fn build_body(&self, body: &[parser::Node]) -> Vec<wasm::Instruction> {
+    fn build_body(&mut self, body: &[parser::Node]) -> Vec<wasm::Instruction> {
         let mut builder = wasm::Builders::instructions();
 
         for node in body {
@@ -209,7 +237,7 @@ impl AsmBuilder {
         builder.build()
     }
 
-    fn build_expr(&self, builder: &mut wasm::InstructionsBuilder, node: &parser::Node) {
+    fn build_expr(&mut self, builder: &mut wasm::InstructionsBuilder, node: &parser::Node) {
         match &node.expr {
             Expr::Stmt(expr) => {
                 // Drop a value if the type of expression is not Void.
@@ -247,7 +275,32 @@ impl AsmBuilder {
                     .unwrap_or_else(|| panic!("The constant string was not allocated."));
                 builder.u32_const(CONSTANT_OFFSET + storage.borrow().offset());
             }
-            Expr::Array { .. } => panic!("not implemented"),
+            Expr::Array { elements } => {
+                for element in elements {
+                    let ty = wasm_type(&element.r#type).unwrap();
+
+                    // Store the value to SP
+                    self.push_stack(builder, ty.num_bytes());
+                    self.build_expr(builder, element);
+                    builder.i32_store();
+                }
+
+                // Create a reference
+
+                // Save SP to temporary variable
+                builder.global_get("sp").local_set(self.tmp_i32_0());
+
+                // Reference - the number of elements
+                self.push_stack(builder, wasm::Type::I32.num_bytes());
+                builder.u32_const(elements.len() as u32).i32_store();
+
+                // Reference - saved SP
+                self.push_stack(builder, wasm::Type::I32.num_bytes());
+                builder.local_get(self.tmp_i32_0()).i32_store();
+
+                // Returns a reference
+                builder.global_get("sp");
+            }
             Expr::Invocation {
                 name,
                 arguments,
@@ -457,5 +510,23 @@ impl AsmBuilder {
                 builder.i32_const(1);
             }
         };
+    }
+
+    /// Forward SP by `num_bytes` bytes and push the SP to value stack.
+    fn push_stack(&self, builder: &mut wasm::InstructionsBuilder, num_bytes: u32) {
+        builder
+            .global_get("sp")
+            .u32_const(num_bytes)
+            .i32_sub()
+            .global_set("sp")
+            .global_get("sp");
+    }
+    // Local variable names for temporary scratch pad
+    fn tmp_i32_0(&mut self) -> &str {
+        if self.i32_tmp_locals.is_empty() {
+            self.i32_tmp_locals.push(self.naming.next());
+        }
+
+        &self.i32_tmp_locals[0]
     }
 }

@@ -11,6 +11,23 @@ pub const PAGE_SIZE: u32 = 65536;
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Type {
     I32,
+    I64,
+}
+
+impl Type {
+    fn numeric_type_str(ty: &Type) -> &'static str {
+        match ty {
+            Type::I32 => "i32",
+            Type::I64 => "i64",
+        }
+    }
+
+    pub fn num_bytes(&self) -> u32 {
+        match self {
+            Type::I32 => 4,
+            Type::I64 => 8,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -600,6 +617,16 @@ impl InstructionsBuilder {
         self
     }
 
+    pub fn i32_load(&mut self) -> &mut Self {
+        self.instructions.push(Instruction::I32Load);
+        self
+    }
+
+    pub fn i32_store(&mut self) -> &mut Self {
+        self.instructions.push(Instruction::I32Store);
+        self
+    }
+
     pub fn call<T: Into<String>>(&mut self, name: T) -> &mut Self {
         self.instructions
             .push(Instruction::Call(Index::Id(Identifier(name.into()))));
@@ -793,10 +820,10 @@ impl Printer {
                     self.buffer.push('(');
                     self.buffer.push_str("mut");
                     self.buffer.push(' ');
-                    self.buffer.push_str(numeric_type_str(r#type));
+                    self.buffer.push_str(Type::numeric_type_str(r#type));
                     self.buffer.push(')');
                 } else {
-                    self.buffer.push_str(numeric_type_str(r#type));
+                    self.buffer.push_str(Type::numeric_type_str(r#type));
                 }
                 self.buffer.push(')');
             }
@@ -811,7 +838,7 @@ impl Printer {
             self.write_identifier(id);
             self.buffer.push(' ');
         });
-        self.buffer.push_str(numeric_type_str(&param.r#type));
+        self.buffer.push_str(Type::numeric_type_str(&param.r#type));
         self.buffer.push(')');
     }
 
@@ -823,7 +850,7 @@ impl Printer {
             self.write_identifier(id);
             self.buffer.push(' ');
         });
-        self.buffer.push_str(numeric_type_str(&local.r#type));
+        self.buffer.push_str(Type::numeric_type_str(&local.r#type));
         self.buffer.push(')');
     }
 
@@ -831,7 +858,7 @@ impl Printer {
         self.buffer.push('(');
         self.buffer.push_str("result");
         self.buffer.push(' ');
-        self.buffer.push_str(numeric_type_str(&ty));
+        self.buffer.push_str(Type::numeric_type_str(&ty));
         self.buffer.push(')');
     }
 
@@ -875,10 +902,10 @@ impl Printer {
             self.buffer.push('(');
             self.buffer.push_str("mut");
             self.buffer.push(' ');
-            self.buffer.push_str(numeric_type_str(&global.r#type));
+            self.buffer.push_str(Type::numeric_type_str(&global.r#type));
             self.buffer.push(')');
         } else {
-            self.buffer.push_str(numeric_type_str(&global.r#type));
+            self.buffer.push_str(Type::numeric_type_str(&global.r#type));
         }
 
         // Pretty printing should be temporary disabled.
@@ -1005,13 +1032,13 @@ impl Printer {
             }
             Instruction::I32Eqz => {
                 self.start_plain();
-                self.buffer.push_str(numeric_type_str(&Type::I32));
+                self.buffer.push_str(Type::numeric_type_str(&Type::I32));
                 self.buffer.push_str(".eqz");
                 self.end_plain();
             }
             Instruction::I32Eq => {
                 self.start_plain();
-                self.buffer.push_str(numeric_type_str(&Type::I32));
+                self.buffer.push_str(Type::numeric_type_str(&Type::I32));
                 self.buffer.push_str(".eq");
                 self.end_plain();
             }
@@ -1180,12 +1207,6 @@ impl Printer {
                 self.close_indent();
             }
         }
-    }
-}
-
-fn numeric_type_str(ty: &Type) -> &'static str {
-    match ty {
-        Type::I32 => "i32",
     }
 }
 

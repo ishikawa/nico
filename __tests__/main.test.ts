@@ -13,6 +13,9 @@ interface TestCase {
   expected: any;
   exec?: (exports: Exports) => any[];
   captureOutput?: boolean;
+
+  // filter
+  focus?: boolean;
 }
 
 const temporaryCodePath = path.join(os.tmpdir(), "nico_test_main.nico");
@@ -232,10 +235,25 @@ const cases: TestCase[] = [
     file: "input/let_scoping.nico",
     captureOutput: true,
     expected: ["15", "10", ""].join("\n")
+  },
+  // Array
+  {
+    focus: false,
+    // prettier-ignore
+    input: [
+      "fun foo(x)",
+      "    x * 5",
+      "end",
+      "let x = [1, 21 + 33, foo(10)]"
+    ].join("\n"),
+    expected: undefined
   }
 ];
 
-cases.forEach(({ input, file, expected, exec, captureOutput }) => {
+// filter
+const focused = cases.filter(x => x.focus);
+
+(focused.length === 0 ? cases : focused).forEach(({ input, file, expected, exec, captureOutput }) => {
   test(`given '${input || file}'`, async () => {
     let src = temporaryCodePath;
 
