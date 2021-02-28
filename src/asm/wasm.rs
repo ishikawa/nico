@@ -74,8 +74,8 @@ pub enum Instruction {
     GlobalSet(Index),
 
     // Memory instructions
-    I32Load,
-    I32Store,
+    I32Load(MemArg),
+    I32Store(MemArg),
 
     // Control Instructions
     Call(Index),
@@ -97,6 +97,12 @@ pub struct Identifier(String);
 pub enum Index {
     Id(Identifier),
     Index(Size),
+}
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct MemArg {
+    offset: Option<Size>,
+    align: Option<u32>,
 }
 
 #[derive(Debug, Default)]
@@ -626,13 +632,15 @@ impl InstructionsBuilder {
         self
     }
 
-    pub fn i32_load(&mut self) -> &mut Self {
-        self.instructions.push(Instruction::I32Load);
+    pub fn i32_load(&mut self, offset: Option<Size>, align: Option<u32>) -> &mut Self {
+        self.instructions
+            .push(Instruction::I32Load(MemArg { offset, align }));
         self
     }
 
-    pub fn i32_store(&mut self) -> &mut Self {
-        self.instructions.push(Instruction::I32Store);
+    pub fn i32_store(&mut self, offset: Option<Size>, align: Option<u32>) -> &mut Self {
+        self.instructions
+            .push(Instruction::I32Store(MemArg { offset, align }));
         self
     }
 
@@ -1177,14 +1185,34 @@ impl Printer {
                 self.write_index(&idx);
                 self.end_plain();
             }
-            Instruction::I32Load => {
+            Instruction::I32Load(memarg) => {
                 self.start_plain();
                 self.buffer.push_str("i32.load");
+
+                if let Some(offset) = memarg.offset {
+                    self.buffer.push(' ');
+                    self.buffer.push_str(&format!("offset={} ", offset));
+                }
+                if let Some(align) = memarg.align {
+                    self.buffer.push(' ');
+                    self.buffer.push_str(&format!("align={} ", align));
+                }
+
                 self.end_plain();
             }
-            Instruction::I32Store => {
+            Instruction::I32Store(memarg) => {
                 self.start_plain();
                 self.buffer.push_str("i32.store");
+
+                if let Some(offset) = memarg.offset {
+                    self.buffer.push(' ');
+                    self.buffer.push_str(&format!("offset={} ", offset));
+                }
+                if let Some(align) = memarg.align {
+                    self.buffer.push(' ');
+                    self.buffer.push_str(&format!("align={} ", align));
+                }
+
                 self.end_plain();
             }
             Instruction::If {

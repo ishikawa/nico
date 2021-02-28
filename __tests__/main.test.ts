@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import { StringDecoder } from "string_decoder";
 import { compileFile } from "./util/compiler";
-import { BufferedPrinter, buildImportObject, StringView } from "../runner/runtime";
+import { BufferedPrinter, buildImportObject, ConsolePrinter, StringView } from "../runner/runtime";
 
 type Exports = Record<string, any>;
 
@@ -264,7 +264,7 @@ const focused = cases.filter(x => x.focus);
     }
 
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const printer = new BufferedPrinter(memory);
+    const printer = captureOutput ? new BufferedPrinter(memory) : new ConsolePrinter(memory);
     const imports = buildImportObject({ memory, printer });
 
     const buffer = await compileFile(src);
@@ -290,7 +290,9 @@ const focused = cases.filter(x => x.focus);
       if (Number.isInteger(expected)) {
         expect(value).toEqual(expected);
       } else if (captureOutput && typeof expected === "string") {
-        expect(printer.buffer).toEqual(expected);
+        if (printer instanceof BufferedPrinter) {
+          expect(printer.buffer).toEqual(expected);
+        }
       } else if (typeof expected === "string") {
         const offset = value;
         expect(Number.isInteger(offset)).toBeTruthy();

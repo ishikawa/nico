@@ -1,21 +1,28 @@
 //! ## Memory Layout
 //!
 //! ```ignore
-//!    +-------+-----+-------------------+---------------+----------+
-//!    |       | ... | Caller's FP (i32) | Constant Pool | Heap ... |
-//!    o-------o-----o-------------------o---------------o----------+
-//!    |       |     |                   |               |          
-//! index 0   SP    FP              Stack Offset     Heap Offset
+//!    +-------+-------------+------------+--------------+---------------+----------+
+//!    |  ...  | Dynamic (1) | Static (2) | FP (3) (i32) | Constant Pool | Heap ... |
+//!    o-------o-------------o------------+--------------o---------------o----------+
+//!    |       |             |                           |               |          
+//! index 0   SP            FP                      Stack Base       Heap Base
 //! ```
+//! Since WebAssemby's Memory Instruction cannot take negative values for offsets, the address
+//! calculation should be designed so that it can be calculated by adding positive values.
+//!
+//! - (1) Dynamically allocated memory on the stack.
+//! - (2) Statically allocated memory on the stack. The size of this area is known at compile time.
+//! - (3) Caller's FP = Load(FP + sizeof(Static))
+//!       Caller's SP = FP + sizeof(Static) + sizeof(FP)
 //!
 //! ### Global Context Registers
 //!
 //! Global variables that are shared by multiple execution contexts.
 //!
 //! - **Stack Pointer (SP)** - Stack pointer. End of stack.
-//! - **Stack Offset** - Start index of the virtual stack segment. The virtual stack extends in
+//! - **Stack Base** - Start index of the virtual stack segment. The virtual stack extends in
 //!   the negative direction. If the access is out of range, it will be trapped in the host environment.
-//! - **Heap Offset** - Start index of the heap segment. The heap extends in the positive direction.
+//! - **Heap Base** - Start index of the heap segment. The heap extends in the positive direction.
 //!   If the access is out of range, it will be trapped in the host environment.
 //!
 //! ### Execution Context Registers
@@ -37,7 +44,7 @@
 //! ### Constant Pool
 //!
 //! This is the area of the object whose size is determined at compile time and survives throughout
-//! the execution of the program, starting at Stack Offset and extending in the positive direction to Heap Offset.
+//! the execution of the program, starting at Stack Base and extending in the positive direction to Heap Base.
 //!
 //! ### Heap
 //!
@@ -56,7 +63,7 @@ use std::rc::Rc;
 const ALIGNMENT: wasm::Size = wasm::SIZE_BYTES;
 
 #[inline]
-pub fn align(n: wasm::Size) -> wasm::Size {
+fn align(n: wasm::Size) -> wasm::Size {
     let m = n / ALIGNMENT;
     let a = ALIGNMENT * m;
 
@@ -64,6 +71,39 @@ pub fn align(n: wasm::Size) -> wasm::Size {
         ALIGNMENT * (m + 1)
     } else {
         a
+    }
+}
+
+fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
+    let ty = Type::unwrap(ty);
+    let wty = match *ty.borrow() {
+        Type::Int32 => Some(wasm::Type::I32),
+        Type::Boolean => Some(wasm::Type::I32),
+        Type::String => Some(wasm::Type::I32),
+        Type::Void => None,
+        Type::Array(_) => Some(wasm::Type::I32),
+        Type::TypeVariable { .. } => {
+            panic!("Type variable `{:?}` can't be resolved to WASM type.", ty)
+        }
+        Type::Function { .. } => panic!("Function type `{:?}` can't be resolved to WASM type.", ty),
+    };
+    wty
+}
+
+#[derive(Debug, Default)]
+pub struct StackFrame {
+    sizes: Vec<wasm::Size>,
+}
+
+impl StackFrame {
+    /// Reserve memory in "Static" on the stack.
+    pub fn reserve(&mut self, size: wasm::Size) {
+        self.sizes.push(size);
+    }
+
+    /// Returns the total size of "Static" on  the stack.
+    pub fn static_size(&self) -> wasm::Size {
+        align(self.sizes.iter().sum())
     }
 }
 
@@ -84,7 +124,7 @@ pub struct LocalStorage {
 ///     |  index (u32 little endian) | length (u32 little endian) | UTF-8 byte sequence |
 ///     +----------------------------+----------------------------+---------------------+
 /// ```
-/// - `index` is absolute index in the memory. It points to the beginning of UTF-8 bytes.
+/// - `index` is **absolute index in the memory**. It points to the beginning of UTF-8 bytes.
 /// - `length` is the number of UTF-8 bytes only.
 ///
 #[derive(Debug, PartialEq)]
@@ -125,7 +165,6 @@ impl ConstantString {
             wasm::SIZE_BYTES +                           // length
             self.content.as_bytes().len() as wasm::Size, // UTF-8 bytes
         )
-        //(self.content.len() + self.header.len()) as u32
     }
 
     pub fn bytes(&self, base: wasm::Size) -> Vec<u8> {

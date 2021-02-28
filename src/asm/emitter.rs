@@ -1,11 +1,8 @@
-use super::wasm;
-use crate::asm::LocalStorage;
+use super::{wasm, wasm_type, LocalStorage};
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem::{Binding, Type};
 use crate::util::naming::PrefixNaming;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 // The size of the virtual stack segment (bytes). Default: 32KB (half of page size)
 const STACK_SIZE: wasm::Size = wasm::PAGE_SIZE / 2;
@@ -13,22 +10,6 @@ const STACK_SIZE: wasm::Size = wasm::PAGE_SIZE / 2;
 const STACK_BASE: wasm::Size = STACK_SIZE;
 
 const CONSTANT_POOL_BASE: wasm::Size = STACK_SIZE;
-
-fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
-    let ty = Type::unwrap(ty);
-    let wty = match *ty.borrow() {
-        Type::Int32 => Some(wasm::Type::I32),
-        Type::Boolean => Some(wasm::Type::I32),
-        Type::String => Some(wasm::Type::I32),
-        Type::Void => None,
-        Type::Array(_) => Some(wasm::Type::I32),
-        Type::TypeVariable { .. } => {
-            panic!("Type variable `{:?}` can't be resolved to WASM type.", ty)
-        }
-        Type::Function { .. } => panic!("Function type `{:?}` can't be resolved to WASM type.", ty),
-    };
-    wty
-}
 
 #[derive(Debug)]
 pub struct AsmBuilder {
@@ -163,10 +144,55 @@ impl AsmBuilder {
     }
 
     fn build_function(&mut self, fun_node: &parser::Function) -> wasm::Function {
+        let mut body = wasm::Builders::instructions();
+
+        // -- function body
         // Before building function signature, builds the body of function. Because it may
         // add temporary variables which must be included in locals.
-        let body = self.build_body(&fun_node.body);
+        {
+            let frame = fun_node.frame.as_ref().unwrap();
+            let static_size = frame.static_size();
 
+            // prologue
+            // --------
+            // 1. Push caller's FP on stack
+            // 3. Set FP to current SP
+            // 4. Forward SP to reserve space for stack frame
+            body.global_get("sp")
+                .u32_const(wasm::SIZE_BYTES)
+                .i32_sub()
+                .global_set("sp")
+                .global_get("sp")
+                .global_get("fp")
+                .i32_store(None, None);
+            body.global_get("sp").global_set("fp");
+
+            if static_size > 0 {
+                body.global_get("sp")
+                    .u32_const(static_size)
+                    .i32_sub()
+                    .global_set("sp");
+            }
+
+            // body
+            for node in &fun_node.body {
+                self.build_expr(&mut body, node);
+            }
+
+            // epilogue
+            // --------
+            // 1. Restore SP to caller's SP = FP + sizeof(Static) + sizeof(FP)
+            // 2. Restore FP to caller's FP = Load(FP + sizeof(Static))
+            body.global_get("fp")
+                .u32_const(static_size + wasm::SIZE_BYTES)
+                .i32_add()
+                .global_set("sp");
+            body.global_get("fp")
+                .i32_load(Some(static_size), None)
+                .global_set("fp");
+        }
+
+        // -- function signature
         let mut builder = wasm::Builders::function();
         let name = fun_node.name.as_str();
 
@@ -218,11 +244,11 @@ impl AsmBuilder {
             builder.named_local(name, wasm::Type::I32);
         }
 
-        builder.body(body);
+        builder.body(body.build());
         builder.build()
     }
 
-    fn build_body(&mut self, body: &[parser::Node]) -> Vec<wasm::Instruction> {
+    fn build_expr_nodes(&mut self, body: &[parser::Node]) -> Vec<wasm::Instruction> {
         let mut builder = wasm::Builders::instructions();
 
         for node in body {
@@ -272,14 +298,15 @@ impl AsmBuilder {
             }
             Expr::Array { elements } => {
                 for element in elements {
-                    let ty = wasm_type(&element.r#type).unwrap();
+                    //let ty = wasm_type(&element.r#type).unwrap();
 
                     // Store the value to SP
-                    self.push_stack(builder, ty.num_bytes());
+                    //self.push_stack(builder, ty.num_bytes());
                     self.build_expr(builder, element);
-                    builder.i32_store();
+                    builder.drop();
+                    //builder.i32_store(None, None);
                 }
-
+                /*
                 // Create a reference
 
                 // Save SP to temporary variable
@@ -287,12 +314,14 @@ impl AsmBuilder {
 
                 // Reference - the number of elements
                 self.push_stack(builder, wasm::Type::I32.num_bytes());
-                builder.u32_const(elements.len() as u32).i32_store();
+                builder
+                    .u32_const(elements.len() as u32)
+                    .i32_store(None, None);
 
                 // Reference - saved SP
                 self.push_stack(builder, wasm::Type::I32.num_bytes());
-                builder.local_get(self.tmp_i32_0()).i32_store();
-
+                builder.local_get(self.tmp_i32_0()).i32_store(None, None);
+                */
                 // Returns a reference
                 builder.global_get("sp");
             }
@@ -379,9 +408,9 @@ impl AsmBuilder {
             } => {
                 self.build_expr(builder, condition);
 
-                let then_insts = self.build_body(then_body);
+                let then_insts = self.build_expr_nodes(then_body);
                 let else_insts = if !else_body.is_empty() {
-                    Some(self.build_body(else_body))
+                    Some(self.build_expr_nodes(else_body))
                 } else {
                     None
                 };
@@ -414,7 +443,7 @@ impl AsmBuilder {
                 // Build all arms, including the `else` clause, in reverse order.
                 let else_insts = {
                     if !else_body.is_empty() {
-                        Some(self.build_body(else_body))
+                        Some(self.build_expr_nodes(else_body))
                     } else {
                         None
                     }
@@ -459,7 +488,7 @@ impl AsmBuilder {
                     }
 
                     // 4. Build an `if` instruction for arm body and `else` to the next arm or `else` clause.
-                    let then_insts = self.build_body(&arm.then_body);
+                    let then_insts = self.build_expr_nodes(&arm.then_body);
 
                     arm_builder.push(wasm::Instruction::If {
                         then: then_insts,
@@ -505,23 +534,5 @@ impl AsmBuilder {
                 builder.i32_const(1);
             }
         };
-    }
-
-    /// Forward SP by `num_bytes` bytes and push the SP to value stack.
-    fn push_stack(&self, builder: &mut wasm::InstructionsBuilder, num_bytes: wasm::Size) {
-        builder
-            .global_get("sp")
-            .u32_const(num_bytes)
-            .i32_sub()
-            .global_set("sp")
-            .global_get("sp");
-    }
-    // Local variable names for temporary scratch pad
-    fn tmp_i32_0(&mut self) -> &str {
-        if self.i32_tmp_locals.is_empty() {
-            self.i32_tmp_locals.push(self.naming.next());
-        }
-
-        &self.i32_tmp_locals[0]
     }
 }

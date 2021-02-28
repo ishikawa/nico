@@ -23,6 +23,9 @@ pub struct Function {
     pub params: Vec<Rc<RefCell<sem::Binding>>>,
     pub locals: Vec<Rc<RefCell<asm::LocalStorage>>>,
     pub r#type: Rc<RefCell<sem::Type>>,
+    // The total size of stack frame required for executing this function.
+    // It will be calculated by allocator.
+    pub frame: Option<asm::StackFrame>,
 }
 
 #[derive(Debug)]
@@ -156,6 +159,7 @@ impl Parser {
                     params: vec![],
                     return_type: self.type_var(),
                 }),
+                frame: None,
             };
 
             Some(fun)
@@ -259,6 +263,7 @@ impl Parser {
                 locals: vec![],
                 body,
                 r#type: function_type,
+                frame: None,
             };
 
             Some(function)
