@@ -1036,8 +1036,6 @@ mod tests {
             });
         });
 
-        println!("body = {:?}", body);
-
         assert_matches!(body[0].r#type, ref ty => {
             let ty = Type::unwrap(ty);
 

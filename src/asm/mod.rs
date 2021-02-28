@@ -125,6 +125,7 @@ mod tests {
     fn empty_string() {
         let s = ConstantString::from_str("", 0);
         assert_eq!(s.offset(), 0);
+        assert_eq!(s.len(), 4);
 
         let bytes = s.bytes().copied().collect::<Vec<_>>();
         assert_eq!(bytes, [0, 0, 0, 0]);
@@ -133,6 +134,7 @@ mod tests {
     fn some_string() {
         let s = ConstantString::from_str("123", 0);
         assert_eq!(s.offset(), 0);
+        assert_eq!(s.len(), 7);
 
         let bytes = s.bytes().copied().collect::<Vec<_>>();
         assert_eq!(bytes, [0x3, 0, 0, 0, '1' as u8, '2' as u8, '3' as u8]);
