@@ -118,7 +118,7 @@ impl AsmBuilder {
             .id("fp")
             .r#type(wasm::Type::I32)
             .mutable(true)
-            .init(wasm::Builders::instructions().i32_const(-1).build())
+            .init(wasm::Builders::instructions().u32_const(STACK_BASE).build())
             .build();
         module.globals.push(global_frame_pointer);
 
