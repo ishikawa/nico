@@ -101,7 +101,9 @@ impl TypeInferencer {
             }
             Expr::Integer(_) => Rc::clone(&node.r#type),
             Expr::String { .. } => Rc::clone(&node.r#type),
-            Expr::Array { ref mut elements } => {
+            Expr::Array {
+                ref mut elements, ..
+            } => {
                 if elements.is_empty() {
                     return wrap(Type::Array(wrap(self.new_type_var())));
                 }

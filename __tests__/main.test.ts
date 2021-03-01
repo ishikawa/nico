@@ -238,7 +238,7 @@ const cases: TestCase[] = [
   },
   // Array
   {
-    focus: false,
+    focus: true,
     // prettier-ignore
     input: [
       "fun foo(x)",

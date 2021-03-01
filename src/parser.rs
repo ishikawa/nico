@@ -1,4 +1,5 @@
 use crate::asm;
+use crate::asm::wasm;
 use crate::sem;
 use crate::tokenizer::{Token, Tokenizer};
 use crate::util::naming::PrefixNaming;
@@ -49,6 +50,13 @@ pub enum Expr {
     },
     Array {
         elements: Vec<Node>,
+        // Stack: the offset from the end of Static in stack frame.
+        //
+        // ----+-----------+-----------+-----+-------------+
+        //     | element 0 | element 1 | ... | Caller's FP |
+        // ----o-----------+-----------+-----o-------------+
+        //     |<----------------------------|
+        object_offset: Option<wasm::Size>,
     },
     Invocation {
         name: String,
@@ -431,7 +439,10 @@ impl Parser {
                 let elements = self.parse_elements(tokenizer, ']');
                 consume_char(tokenizer, ']');
 
-                Some(self.typed_expr(Expr::Array { elements }))
+                Some(self.typed_expr(Expr::Array {
+                    elements,
+                    object_offset: None,
+                }))
             }
             Token::Identifier(name) => {
                 let name = name.clone();
@@ -814,7 +825,7 @@ mod tests {
         let program = parse_string("[]");
         let body = program.main.unwrap().body;
 
-        assert_matches!(&body[0].expr, Expr::Array { elements } => {
+        assert_matches!(&body[0].expr, Expr::Array { elements, .. } => {
             assert!(elements.is_empty());
         });
     }
@@ -824,7 +835,7 @@ mod tests {
         let program = parse_string("[1, 2, 3]");
         let body = program.main.unwrap().body;
 
-        assert_matches!(&body[0].expr, Expr::Array { elements } => {
+        assert_matches!(&body[0].expr, Expr::Array { elements, .. } => {
             assert_matches!(elements[0].expr, Expr::Integer(1));
             assert_matches!(elements[1].expr, Expr::Integer(2));
             assert_matches!(elements[2].expr, Expr::Integer(3));

@@ -63,7 +63,7 @@ impl Binder {
             }
             Expr::Integer(_) => {}
             Expr::String { .. } => {}
-            Expr::Array { elements } => {
+            Expr::Array { elements, .. } => {
                 for node in elements {
                     self.analyze_expr(node, env);
                 }

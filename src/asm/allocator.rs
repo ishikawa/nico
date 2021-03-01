@@ -90,7 +90,10 @@ impl Allocator {
                 strings.push(Rc::clone(&constant));
             }
             Expr::Identifier { .. } => {}
-            Expr::Array { elements } => {
+            Expr::Array {
+                elements,
+                ref mut object_offset,
+            } => {
                 // Reserve stack frame for elements and a reference to array.
                 {
                     let length = elements.len();
@@ -102,12 +105,15 @@ impl Allocator {
 
                     let element_size = wasm_type(&element_type).unwrap().num_bytes();
 
-                    // - index
-                    frame.reserve(wasm::SIZE_BYTES);
+                    // - Reserve elements in "Static" frame area and store it in the node.
+                    frame.reserve(element_size * (length as wasm::Size));
+                    object_offset.replace(frame.static_size());
+
+                    // Reserve a reference in "Static" frame area.
                     // - length
                     frame.reserve(wasm::SIZE_BYTES);
-                    // - elements
-                    frame.reserve(element_size * (length as wasm::Size));
+                    // - index
+                    frame.reserve(wasm::SIZE_BYTES);
                 }
 
                 // Allocate every elements

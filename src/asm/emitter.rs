@@ -1,4 +1,4 @@
-use super::{wasm, wasm_type, LocalStorage};
+use super::{wasm, wasm_type, LocalStorage, StackFrame};
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem::{Binding, Type};
@@ -176,7 +176,7 @@ impl AsmBuilder {
 
             // body
             for node in &fun_node.body {
-                self.build_expr(&mut body, node);
+                self.build_expr(&mut body, node, frame);
             }
 
             // epilogue
@@ -248,21 +248,30 @@ impl AsmBuilder {
         builder.build()
     }
 
-    fn build_expr_nodes(&mut self, body: &[parser::Node]) -> Vec<wasm::Instruction> {
+    fn build_expr_nodes(
+        &mut self,
+        body: &[parser::Node],
+        frame: &StackFrame,
+    ) -> Vec<wasm::Instruction> {
         let mut builder = wasm::Builders::instructions();
 
         for node in body {
-            self.build_expr(&mut builder, node);
+            self.build_expr(&mut builder, node, frame);
         }
 
         builder.build()
     }
 
-    fn build_expr(&mut self, builder: &mut wasm::InstructionsBuilder, node: &parser::Node) {
+    fn build_expr(
+        &mut self,
+        builder: &mut wasm::InstructionsBuilder,
+        node: &parser::Node,
+        frame: &StackFrame,
+    ) {
         match &node.expr {
             Expr::Stmt(expr) => {
                 // Drop a value if the type of expression is not Void.
-                self.build_expr(builder, expr);
+                self.build_expr(builder, expr, frame);
                 match *Type::unwrap(&expr.r#type).borrow() {
                     Type::Void => {}
                     _ => {
@@ -296,34 +305,35 @@ impl AsmBuilder {
                     .unwrap_or_else(|| panic!("The constant string was not allocated."));
                 builder.u32_const(CONSTANT_POOL_BASE + storage.borrow().offset());
             }
-            Expr::Array { elements } => {
-                for element in elements {
-                    //let ty = wasm_type(&element.r#type).unwrap();
+            Expr::Array {
+                elements,
+                object_offset,
+            } => {
+                let object_offset = frame.static_size() - object_offset.unwrap();
 
-                    // Store the value to SP
-                    //self.push_stack(builder, ty.num_bytes());
-                    self.build_expr(builder, element);
-                    builder.drop();
-                    //builder.i32_store(None, None);
+                for (i, element) in elements.iter().enumerate() {
+                    let ty = wasm_type(&element.r#type).unwrap();
+                    let offset = object_offset + ty.num_bytes() * (i as wasm::Size);
+
+                    // Store the result on "Static" frame area.
+                    builder.global_get("fp");
+                    self.build_expr(builder, element, frame);
+                    builder.i32_store(Some(offset), None);
                 }
-                /*
-                // Create a reference
 
-                // Save SP to temporary variable
-                builder.global_get("sp").local_set(self.tmp_i32_0());
+                // Store a reference on "Static" frame area.
+                let reference_offset = object_offset - wasm::SIZE_BYTES * 2;
 
-                // Reference - the number of elements
-                self.push_stack(builder, wasm::Type::I32.num_bytes());
                 builder
-                    .u32_const(elements.len() as u32)
-                    .i32_store(None, None);
+                    .global_get("fp")
+                    .u32_const(object_offset)
+                    .i32_store(Some(reference_offset), None)
+                    .global_get("fp")
+                    .u32_const(elements.len() as wasm::Size)
+                    .i32_store(Some(reference_offset + wasm::SIZE_BYTES), None);
 
-                // Reference - saved SP
-                self.push_stack(builder, wasm::Type::I32.num_bytes());
-                builder.local_get(self.tmp_i32_0()).i32_store(None, None);
-                */
                 // Returns a reference
-                builder.global_get("sp");
+                builder.u32_const(reference_offset);
             }
             Expr::Invocation {
                 name,
@@ -337,7 +347,7 @@ impl AsmBuilder {
                 match *binding.borrow() {
                     Binding::Function { ref name, .. } => {
                         for arg in arguments {
-                            self.build_expr(builder, arg);
+                            self.build_expr(builder, arg, frame);
                         }
                         builder.call(name);
                     }
@@ -346,59 +356,59 @@ impl AsmBuilder {
             }
             // binop
             Expr::Add(lhs, rhs, _) => {
-                self.build_expr(builder, lhs);
-                self.build_expr(builder, rhs);
+                self.build_expr(builder, lhs, frame);
+                self.build_expr(builder, rhs, frame);
                 builder.i32_add();
             }
             Expr::Sub(lhs, rhs, _) => {
-                self.build_expr(builder, lhs);
-                self.build_expr(builder, rhs);
+                self.build_expr(builder, lhs, frame);
+                self.build_expr(builder, rhs, frame);
                 builder.i32_sub();
             }
             Expr::Rem(lhs, rhs, _) => {
-                self.build_expr(builder, lhs);
-                self.build_expr(builder, rhs);
+                self.build_expr(builder, lhs, frame);
+                self.build_expr(builder, rhs, frame);
                 builder.i32_rem_s();
             }
             Expr::Mul(lhs, rhs, _) => {
-                self.build_expr(builder, lhs);
-                self.build_expr(builder, rhs);
+                self.build_expr(builder, lhs, frame);
+                self.build_expr(builder, rhs, frame);
                 builder.i32_mul();
             }
             Expr::Div(lhs, rhs, _) => {
-                self.build_expr(builder, lhs);
-                self.build_expr(builder, rhs);
+                self.build_expr(builder, lhs, frame);
+                self.build_expr(builder, rhs, frame);
                 builder.i32_div_s();
             }
             // relation
             Expr::LT(lhs, rhs, _) => {
-                self.build_expr(builder, lhs);
-                self.build_expr(builder, rhs);
+                self.build_expr(builder, lhs, frame);
+                self.build_expr(builder, rhs, frame);
                 builder.i32_lt_s();
             }
             Expr::GT(lhs, rhs, _) => {
-                self.build_expr(builder, lhs);
-                self.build_expr(builder, rhs);
+                self.build_expr(builder, lhs, frame);
+                self.build_expr(builder, rhs, frame);
                 builder.i32_gt_s();
             }
             Expr::LE(lhs, rhs, _) => {
-                self.build_expr(builder, lhs);
-                self.build_expr(builder, rhs);
+                self.build_expr(builder, lhs, frame);
+                self.build_expr(builder, rhs, frame);
                 builder.i32_le_s();
             }
             Expr::GE(lhs, rhs, _) => {
-                self.build_expr(builder, lhs);
-                self.build_expr(builder, rhs);
+                self.build_expr(builder, lhs, frame);
+                self.build_expr(builder, rhs, frame);
                 builder.i32_ge_s();
             }
             Expr::EQ(lhs, rhs, _) => {
-                self.build_expr(builder, lhs);
-                self.build_expr(builder, rhs);
+                self.build_expr(builder, lhs, frame);
+                self.build_expr(builder, rhs, frame);
                 builder.i32_eq();
             }
             Expr::NE(lhs, rhs, _) => {
-                self.build_expr(builder, lhs);
-                self.build_expr(builder, rhs);
+                self.build_expr(builder, lhs, frame);
+                self.build_expr(builder, rhs, frame);
                 builder.i32_neq();
             }
             Expr::If {
@@ -406,11 +416,11 @@ impl AsmBuilder {
                 then_body,
                 else_body,
             } => {
-                self.build_expr(builder, condition);
+                self.build_expr(builder, condition, frame);
 
-                let then_insts = self.build_expr_nodes(then_body);
+                let then_insts = self.build_expr_nodes(then_body, frame);
                 let else_insts = if !else_body.is_empty() {
-                    Some(self.build_expr_nodes(else_body))
+                    Some(self.build_expr_nodes(else_body, frame))
                 } else {
                     None
                 };
@@ -429,7 +439,7 @@ impl AsmBuilder {
             } => {
                 // 1. head - push the result of head expression and copy it to
                 // the temporary variable.
-                self.build_expr(builder, head);
+                self.build_expr(builder, head, frame);
 
                 let head_temp = match head_storage {
                     Some(head_storage) => match *head_storage.borrow() {
@@ -443,7 +453,7 @@ impl AsmBuilder {
                 // Build all arms, including the `else` clause, in reverse order.
                 let else_insts = {
                     if !else_body.is_empty() {
-                        Some(self.build_expr_nodes(else_body))
+                        Some(self.build_expr_nodes(else_body, frame))
                     } else {
                         None
                     }
@@ -481,14 +491,14 @@ impl AsmBuilder {
 
                     // 3. Build a guard condition.
                     if let Some(ref condition) = arm.condition {
-                        self.build_expr(&mut arm_builder, condition);
+                        self.build_expr(&mut arm_builder, condition, frame);
                     } else {
                         // Pattern without guard always push `true` value.
                         arm_builder.i32_const(1);
                     }
 
                     // 4. Build an `if` instruction for arm body and `else` to the next arm or `else` clause.
-                    let then_insts = self.build_expr_nodes(&arm.then_body);
+                    let then_insts = self.build_expr_nodes(&arm.then_body, frame);
 
                     arm_builder.push(wasm::Instruction::If {
                         then: then_insts,
@@ -506,7 +516,7 @@ impl AsmBuilder {
                 }
             }
             Expr::Var { pattern, init } => {
-                self.build_expr(builder, init);
+                self.build_expr(builder, init, frame);
                 match pattern {
                     // variable pattern
                     parser::Pattern::Variable(ref name, ref binding) => {
