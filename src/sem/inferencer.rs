@@ -115,7 +115,13 @@ impl TypeInferencer {
 
                 wrap(Type::Array(Rc::clone(element_type)))
             }
-            Expr::Subscript { .. } => panic!("not implemented"),
+            Expr::Subscript { index, .. } => {
+                // `index` must be an integer
+                let ty = self.analyze_expr(index, generic_vars);
+                self.unify(&ty, &wrap(Type::Int32));
+
+                ty
+            }
             Expr::Identifier {
                 ref name,
                 ref binding,

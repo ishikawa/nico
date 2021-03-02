@@ -59,6 +59,7 @@ pub enum Expr {
         object_offset: Option<wasm::Size>,
     },
     Subscript {
+        operand: Box<Node>,
         index: Box<Node>,
     },
     Invocation {
@@ -399,7 +400,7 @@ impl Parser {
     }
 
     fn parse_binop2(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
-        let mut lhs = match self.parse_primary(tokenizer) {
+        let mut lhs = match self.parse_access(tokenizer) {
             None => return None,
             Some(lhs) => lhs,
         };
@@ -413,7 +414,7 @@ impl Parser {
             };
             tokenizer.next();
 
-            let rhs = match self.parse_primary(tokenizer) {
+            let rhs = match self.parse_access(tokenizer) {
                 None => panic!("Expected RHS"),
                 Some(rhs) => rhs,
             };
@@ -422,6 +423,37 @@ impl Parser {
         }
 
         Some(lhs)
+    }
+
+    // `... [...]`, `... (...)`
+    fn parse_access(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
+        let node = self.parse_primary(tokenizer)?;
+
+        let token = match tokenizer.peek() {
+            None => return Some(node),
+            Some(token) => token,
+        };
+
+        match token {
+            Token::Char('[') => {
+                consume_char(tokenizer, '[');
+                let mut arguments = self.parse_elements(tokenizer, ']');
+                consume_char(tokenizer, ']');
+
+                if arguments.len() != 1 {
+                    panic!(
+                        "subscript operator `[]` takes 1 argument, but {} arguments given",
+                        arguments.len()
+                    );
+                }
+
+                Some(self.typed_expr(Expr::Subscript {
+                    operand: Box::new(node),
+                    index: Box::new(arguments.remove(0)),
+                }))
+            }
+            _ => Some(node),
+        }
     }
 
     fn parse_primary(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
@@ -452,6 +484,7 @@ impl Parser {
                 tokenizer.next();
 
                 // function invocation?
+                // TODO: Move to parse_access()
                 if let Some(Token::Char('(')) = tokenizer.peek() {
                     consume_char(tokenizer, '(');
                     let arguments = self.parse_elements(tokenizer, ')');
@@ -461,21 +494,6 @@ impl Parser {
                         name,
                         arguments,
                         binding: None,
-                    }))
-                } else if let Some(Token::Char('[')) = tokenizer.peek() {
-                    consume_char(tokenizer, '[');
-                    let mut arguments = self.parse_elements(tokenizer, ']');
-                    consume_char(tokenizer, ']');
-
-                    if arguments.len() != 1 {
-                        panic!(
-                            "subscript operator `[]` takes 1 argument, but {} arguments given",
-                            arguments.len()
-                        );
-                    }
-
-                    Some(self.typed_expr(Expr::Subscript {
-                        index: Box::new(arguments.remove(0)),
                     }))
                 } else {
                     Some(self.typed_expr(Expr::Identifier {
