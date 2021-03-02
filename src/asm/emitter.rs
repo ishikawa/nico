@@ -164,7 +164,7 @@ impl AsmBuilder {
                 .global_set("sp")
                 .global_get("sp")
                 .global_get("fp")
-                .i32_store(None, None);
+                .i32_store(0);
             body.global_get("sp").global_set("fp");
 
             if static_size > 0 {
@@ -187,9 +187,7 @@ impl AsmBuilder {
                 .u32_const(static_size + wasm::SIZE_BYTES)
                 .i32_add()
                 .global_set("sp");
-            body.global_get("fp")
-                .i32_load(Some(static_size), None)
-                .global_set("fp");
+            body.global_get("fp").i32_load(static_size).global_set("fp");
         }
 
         // -- function signature
@@ -318,7 +316,7 @@ impl AsmBuilder {
                     // Store the result on "Static" frame area.
                     builder.global_get("fp");
                     self.build_expr(builder, element, frame);
-                    builder.i32_store(Some(offset), None);
+                    builder.i32_store(offset);
                 }
 
                 // Store a reference on "Static" frame area.
@@ -327,10 +325,10 @@ impl AsmBuilder {
                 builder
                     .global_get("fp")
                     .u32_const(object_offset)
-                    .i32_store(Some(reference_offset), None)
+                    .i32_store(reference_offset)
                     .global_get("fp")
                     .u32_const(elements.len() as wasm::Size)
-                    .i32_store(Some(reference_offset + wasm::SIZE_BYTES), None);
+                    .i32_store(reference_offset + wasm::SIZE_BYTES);
 
                 // Returns a reference
                 builder.u32_const(reference_offset);

@@ -632,15 +632,19 @@ impl InstructionsBuilder {
         self
     }
 
-    pub fn i32_load(&mut self, offset: Option<Size>, align: Option<u32>) -> &mut Self {
-        self.instructions
-            .push(Instruction::I32Load(MemArg { offset, align }));
+    pub fn i32_load(&mut self, offset: Size) -> &mut Self {
+        self.instructions.push(Instruction::I32Load(MemArg {
+            offset: Some(offset),
+            align: None,
+        }));
         self
     }
 
-    pub fn i32_store(&mut self, offset: Option<Size>, align: Option<u32>) -> &mut Self {
-        self.instructions
-            .push(Instruction::I32Store(MemArg { offset, align }));
+    pub fn i32_store(&mut self, offset: Size) -> &mut Self {
+        self.instructions.push(Instruction::I32Store(MemArg {
+            offset: Some(offset),
+            align: None,
+        }));
         self
     }
 
@@ -1189,10 +1193,14 @@ impl Printer {
                 self.start_plain();
                 self.buffer.push_str("i32.load");
 
-                if let Some(offset) = memarg.offset {
-                    self.buffer.push(' ');
-                    self.buffer.push_str(&format!("offset={} ", offset));
+                match memarg.offset {
+                    Some(offset) if offset > 0 => {
+                        self.buffer.push(' ');
+                        self.buffer.push_str(&format!("offset={} ", offset));
+                    }
+                    _ => {}
                 }
+
                 if let Some(align) = memarg.align {
                     self.buffer.push(' ');
                     self.buffer.push_str(&format!("align={} ", align));
@@ -1204,10 +1212,14 @@ impl Printer {
                 self.start_plain();
                 self.buffer.push_str("i32.store");
 
-                if let Some(offset) = memarg.offset {
-                    self.buffer.push(' ');
-                    self.buffer.push_str(&format!("offset={} ", offset));
+                match memarg.offset {
+                    Some(offset) if offset > 0 => {
+                        self.buffer.push(' ');
+                        self.buffer.push_str(&format!("offset={} ", offset));
+                    }
+                    _ => {}
                 }
+
                 if let Some(align) = memarg.align {
                     self.buffer.push(' ');
                     self.buffer.push_str(&format!("align={} ", align));
