@@ -68,7 +68,7 @@ impl Binder {
                     self.analyze_expr(node, env);
                 }
             }
-            Expr::Subscript { .. } => panic!("not implemented"),
+            Expr::Subscript { index } => self.analyze_expr(index, env),
             Expr::Identifier { ref name, binding } => {
                 match env.borrow().get(&name) {
                     None => panic!("Undefined variable `{}`", name),
