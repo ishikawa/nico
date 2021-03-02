@@ -41,15 +41,9 @@ impl TypeInferencer {
         let retty = self.analyze_body(&mut function.body, &mut generic_vars);
 
         // Unify return type from body.
-        match *function.r#type.borrow() {
-            Type::Function {
-                ref return_type, ..
-            } => {
-                if let Some(error) = self.unify(&retty, return_type) {
-                    self.handle_unification_error(&error);
-                }
-            }
-            _ => unreachable!(),
+        match &*function.r#type.borrow() {
+            Type::Function { return_type, .. } => self.unify(&retty, return_type),
+            ty => panic!("Expected function type but was {:?}", ty),
         }
 
         Rc::clone(&function.r#type)
@@ -71,10 +65,7 @@ impl TypeInferencer {
             return_type: Rc::clone(retty),
         });
 
-        if let Some(error) = self.unify(&function_type, &callsite) {
-            self.handle_unification_error(&error);
-        }
-
+        self.unify(&function_type, &callsite);
         Rc::clone(retty)
     }
 
@@ -118,10 +109,7 @@ impl TypeInferencer {
                     element_types
                         .iter_mut()
                         .fold(&first_type, |previous_type, current_type| {
-                            if let Some(error) = self.unify(&previous_type, &current_type) {
-                                self.handle_unification_error(&error);
-                                unreachable!();
-                            }
+                            self.unify(&previous_type, &current_type);
                             current_type
                         });
 
@@ -178,19 +166,13 @@ impl TypeInferencer {
             } => {
                 let cond_type = self.analyze_expr(condition, generic_vars);
 
-                if let Some(error) = self.unify(&cond_type, &wrap(Type::Boolean)) {
-                    self.handle_unification_error(&error);
-                }
+                self.unify(&cond_type, &wrap(Type::Boolean));
 
                 let then_type = self.analyze_body(then_body, generic_vars);
                 let else_type = self.analyze_body(else_body, generic_vars);
 
-                if let Some(error) = self.unify(&then_type, &else_type) {
-                    self.handle_unification_error(&error);
-                }
-                if let Some(error) = self.unify(&then_type, &node.r#type) {
-                    self.handle_unification_error(&error);
-                }
+                self.unify(&then_type, &else_type);
+                self.unify(&then_type, &node.r#type);
 
                 then_type
             }
@@ -229,12 +211,8 @@ impl TypeInferencer {
                     body_types
                         .iter()
                         .fold(&else_type, |previous_type, current_type| {
-                            if let Some(error) = self.unify(previous_type, current_type) {
-                                self.handle_unification_error(&error);
-                                unreachable!();
-                            } else {
-                                current_type
-                            }
+                            self.unify(previous_type, current_type);
+                            current_type
                         });
 
                 Rc::clone(case_type)
@@ -397,24 +375,27 @@ impl TypeInferencer {
         Type::new_type_var(&self.generic_type_var_naming.next())
     }
 
-    fn handle_unification_error(&self, e: &UnificationError) {
-        match e {
-            UnificationError::RecursiveReference(_ty1, _ty2) => {
-                panic!("Recursive type reference detected.");
-            }
-            UnificationError::NumberOfParamsMismatch(ty1, ty2, n1, n2) => {
-                panic!(
-                    "Wrong number of parameters. Expected {} but was {} in `{:?}` and `{:?}`",
-                    n1, n2, ty1, ty2
-                );
-            }
-            UnificationError::TypeMismatch(ty1, ty2) => {
-                panic!("Type mismatch in `{:?}` and `{:?}`", ty1, ty2);
-            }
-        };
+    fn unify(&mut self, ty1: &Rc<RefCell<Type>>, ty2: &Rc<RefCell<Type>>) {
+        match self._unify(ty1, ty2) {
+            None => return,
+            Some(error) => match error {
+                UnificationError::RecursiveReference(_ty1, _ty2) => {
+                    panic!("Recursive type reference detected.");
+                }
+                UnificationError::NumberOfParamsMismatch(ty1, ty2, n1, n2) => {
+                    panic!(
+                        "Wrong number of parameters. Expected {} but was {} in `{:?}` and `{:?}`",
+                        n1, n2, ty1, ty2
+                    );
+                }
+                UnificationError::TypeMismatch(ty1, ty2) => {
+                    panic!("Type mismatch in `{:?}` and `{:?}`", ty1, ty2);
+                }
+            },
+        }
     }
 
-    fn unify(
+    fn _unify(
         &mut self,
         ty1: &Rc<RefCell<Type>>,
         ty2: &Rc<RefCell<Type>>,
@@ -454,12 +435,13 @@ impl TypeInferencer {
                     }
 
                     for (x, y) in params1.iter().zip(params2.iter()) {
-                        if let Some(error) = self.unify(x, y) {
+                        if let Some(error) = self._unify(x, y) {
                             return Some(error);
                         }
                     }
-
-                    self.unify(return_type1, return_type2);
+                    if let Some(error) = self._unify(return_type1, return_type2) {
+                        return Some(error);
+                    }
                     Unification::Done
                 }
                 Type::TypeVariable { .. } => Unification::Unify(Rc::clone(ty2), Rc::clone(ty1)),
@@ -493,7 +475,7 @@ impl TypeInferencer {
                 self.prune(ty1);
                 None
             }
-            Unification::Unify(ref ty1, ref ty2) => self.unify(&Rc::clone(ty1), &Rc::clone(ty2)),
+            Unification::Unify(ref ty1, ref ty2) => self._unify(&Rc::clone(ty1), &Rc::clone(ty2)),
             Unification::Done => None,
         }
     }
@@ -664,7 +646,7 @@ mod tests {
         let pty0 = wrap(Type::Int32);
         let pty1 = wrap(Type::Int32);
 
-        let error = inferencer.unify(&pty0, &pty1);
+        let error = inferencer._unify(&pty0, &pty1);
         assert!(error.is_none());
 
         assert_matches!(*pty0.borrow(), Type::Int32);
@@ -677,7 +659,7 @@ mod tests {
         let pty0 = wrap(Type::Boolean);
         let pty1 = wrap(Type::Boolean);
 
-        let error = inferencer.unify(&pty0, &pty1);
+        let error = inferencer._unify(&pty0, &pty1);
         assert!(error.is_none());
 
         assert_matches!(*pty0.borrow(), Type::Boolean);
@@ -690,7 +672,7 @@ mod tests {
         let pty0 = wrap(Type::String);
         let pty1 = wrap(Type::String);
 
-        let error = inferencer.unify(&pty0, &pty1);
+        let error = inferencer._unify(&pty0, &pty1);
         assert!(error.is_none());
 
         assert_matches!(*pty0.borrow(), Type::String);
@@ -709,7 +691,7 @@ mod tests {
             instance: None,
         }));
 
-        let error = inferencer.unify(&pty0, &pty1);
+        let error = inferencer._unify(&pty0, &pty1);
         assert!(error.is_none());
 
         assert_matches!(*pty0.borrow(), Type::TypeVariable {
@@ -739,7 +721,7 @@ mod tests {
             instance: None,
         }));
 
-        let error = inferencer.unify(&pty0, &pty1);
+        let error = inferencer._unify(&pty0, &pty1);
         assert!(error.is_none());
 
         assert_matches!(*pty0.borrow(), Type::TypeVariable {
