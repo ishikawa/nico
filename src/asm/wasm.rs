@@ -1,7 +1,42 @@
 use std::mem;
+
+// The length of the vector always is a multiple of the WebAssembly page size,
+// which is defined to be the constant 65536 – abbreviated 64Ki.
+// Like in a memory type, the maximum size in a memory instance is given in units of
+// this page size.
+//
+// https://webassembly.github.io/spec/core/exec/runtime.html#page-size
+pub const PAGE_SIZE: u32 = 65536;
+
+/// `usize` for WebAssembly.
+///
+/// the largest amount of memory possible with 32-bit pointers,
+/// which is what WebAssembly currently supports
+pub type Size = u32;
+
+/// The size of `Size` type in bytes.
+pub const SIZE_BYTES: Size = mem::size_of::<Size>() as Size;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Type {
     I32,
+    I64,
+}
+
+impl Type {
+    fn numeric_type_str(ty: &Type) -> &'static str {
+        match ty {
+            Type::I32 => "i32",
+            Type::I64 => "i64",
+        }
+    }
+
+    pub fn num_bytes(&self) -> Size {
+        match self {
+            Type::I32 => 4,
+            Type::I64 => 8,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -31,10 +66,16 @@ pub enum Instruction {
     Drop,
     Select,
 
-    // Variable instructions.
+    // Variable instructions
     LocalGet(Index),
     LocalSet(Index),
     LocalTee(Index),
+    GlobalGet(Index),
+    GlobalSet(Index),
+
+    // Memory instructions
+    I32Load(MemArg),
+    I32Store(MemArg),
 
     // Control Instructions
     Call(Index),
@@ -55,12 +96,19 @@ pub struct Identifier(String);
 #[derive(Debug, PartialEq, Clone)]
 pub enum Index {
     Id(Identifier),
-    Index(u32),
+    Index(Size),
+}
+
+#[derive(Debug, Default, PartialEq, Clone)]
+pub struct MemArg {
+    offset: Option<Size>,
+    align: Option<u32>,
 }
 
 #[derive(Debug, Default)]
 pub struct Module {
     pub imports: Vec<Import>,
+    pub globals: Vec<Global>,
     pub data_segments: Vec<DataSegment>,
     pub functions: Vec<Function>,
 }
@@ -84,11 +132,24 @@ pub enum ImportDescriptor {
         min: i32,
         max: Option<i32>,
     },
+    Global {
+        id: Option<Identifier>,
+        r#type: Type,
+        mutable: bool,
+    },
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Global {
+    id: Option<Identifier>,
+    r#type: Type,
+    mutable: bool,
+    init: Vec<Instruction>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct DataSegment {
-    offset: u32,
+    offset: Size,
     bytes: Vec<u8>,
 }
 
@@ -127,12 +188,20 @@ impl Builders {
         ImportBuilder::default()
     }
 
-    pub fn memory() -> MemoryBuilder {
-        MemoryBuilder::default()
+    pub fn memory_desc() -> MemoryDescriptorBuilder {
+        MemoryDescriptorBuilder::default()
+    }
+
+    pub fn global_desc() -> GlobalDescriptorBuilder {
+        GlobalDescriptorBuilder::default()
     }
 
     pub fn func_desc() -> FunctionDescriptorBuilder {
         FunctionDescriptorBuilder::default()
+    }
+
+    pub fn global() -> GlobalBuilder {
+        GlobalBuilder::default()
     }
 
     pub fn data_segment() -> DataSegmentBuilder {
@@ -181,13 +250,13 @@ impl ImportBuilder {
 }
 
 #[derive(Debug, Default)]
-pub struct MemoryBuilder {
+pub struct MemoryDescriptorBuilder {
     id: Option<Identifier>,
     min: Option<i32>,
     max: Option<i32>,
 }
 
-impl MemoryBuilder {
+impl MemoryDescriptorBuilder {
     pub fn id<T: Into<String>>(&mut self, id: T) -> &mut Self {
         self.id = Some(Identifier(id.into()));
         self
@@ -208,6 +277,38 @@ impl MemoryBuilder {
             id: self.id.take(),
             min: self.min.unwrap(),
             max: self.max,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct GlobalDescriptorBuilder {
+    id: Option<Identifier>,
+    r#type: Option<Type>,
+    mutable: bool,
+}
+
+impl GlobalDescriptorBuilder {
+    pub fn id<T: Into<String>>(&mut self, id: T) -> &mut Self {
+        self.id = Some(Identifier(id.into()));
+        self
+    }
+
+    pub fn r#type(&mut self, ty: Type) -> &mut Self {
+        self.r#type = Some(ty);
+        self
+    }
+
+    pub fn mutable(&mut self, mutable: bool) -> &mut Self {
+        self.mutable = mutable;
+        self
+    }
+
+    pub fn build(&mut self) -> ImportDescriptor {
+        ImportDescriptor::Global {
+            id: self.id.take(),
+            r#type: self.r#type.unwrap(),
+            mutable: self.mutable,
         }
     }
 }
@@ -246,12 +347,12 @@ impl FunctionDescriptorBuilder {
 
 #[derive(Debug, Default)]
 pub struct DataSegmentBuilder {
-    offset: Option<u32>,
+    offset: Option<Size>,
     bytes: Option<Vec<u8>>,
 }
 
 impl DataSegmentBuilder {
-    pub fn offset(&mut self, offset: u32) -> &mut Self {
+    pub fn offset(&mut self, offset: Size) -> &mut Self {
         self.offset = Some(offset);
         self
     }
@@ -267,6 +368,45 @@ impl DataSegmentBuilder {
         DataSegment {
             offset: self.offset.unwrap(),
             bytes,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct GlobalBuilder {
+    id: Option<Identifier>,
+    r#type: Option<Type>,
+    mutable: bool,
+    init: Option<Vec<Instruction>>,
+}
+
+impl GlobalBuilder {
+    pub fn id<T: Into<String>>(&mut self, id: T) -> &mut Self {
+        self.id = Some(Identifier(id.into()));
+        self
+    }
+
+    pub fn r#type(&mut self, ty: Type) -> &mut Self {
+        self.r#type = Some(ty);
+        self
+    }
+
+    pub fn mutable(&mut self, mutable: bool) -> &mut Self {
+        self.mutable = mutable;
+        self
+    }
+
+    pub fn init(&mut self, instructions: Vec<Instruction>) -> &mut Self {
+        self.init = Some(instructions);
+        self
+    }
+
+    pub fn build(&mut self) -> Global {
+        Global {
+            id: self.id.take(),
+            r#type: self.r#type.take().unwrap(),
+            mutable: self.mutable,
+            init: mem::take(self.init.take().unwrap().as_mut()),
         }
     }
 }
@@ -480,6 +620,34 @@ impl InstructionsBuilder {
         self
     }
 
+    pub fn global_get<T: Into<String>>(&mut self, name: T) -> &mut Self {
+        self.instructions
+            .push(Instruction::GlobalGet(Index::Id(Identifier(name.into()))));
+        self
+    }
+
+    pub fn global_set<T: Into<String>>(&mut self, name: T) -> &mut Self {
+        self.instructions
+            .push(Instruction::GlobalSet(Index::Id(Identifier(name.into()))));
+        self
+    }
+
+    pub fn i32_load(&mut self, offset: Size) -> &mut Self {
+        self.instructions.push(Instruction::I32Load(MemArg {
+            offset: Some(offset),
+            align: None,
+        }));
+        self
+    }
+
+    pub fn i32_store(&mut self, offset: Size) -> &mut Self {
+        self.instructions.push(Instruction::I32Store(MemArg {
+            offset: Some(offset),
+            align: None,
+        }));
+        self
+    }
+
     pub fn call<T: Into<String>>(&mut self, name: T) -> &mut Self {
         self.instructions
             .push(Instruction::Call(Index::Id(Identifier(name.into()))));
@@ -586,6 +754,7 @@ impl Printer {
         self.push_indent();
         self.write_imports(&module.imports);
         self.write_data_segments(&module.data_segments);
+        self.write_globals(&module.globals);
         self.write_functions(&module.functions);
         self.close_indent();
     }
@@ -618,8 +787,11 @@ impl Printer {
             } => {
                 self.buffer.push('(');
                 self.buffer.push_str("func");
-                self.buffer.push(' ');
-                id.iter().for_each(|id| self.write_identifier(id));
+
+                if let Some(id) = id {
+                    self.buffer.push(' ');
+                    self.write_identifier(id);
+                }
 
                 for param in params {
                     self.buffer.push(' ');
@@ -637,14 +809,43 @@ impl Printer {
             ImportDescriptor::Memory { id, min, max } => {
                 self.buffer.push('(');
                 self.buffer.push_str("memory");
-                self.buffer.push(' ');
-                id.iter().for_each(|id| self.write_identifier(id));
+
+                if let Some(id) = id {
+                    self.buffer.push(' ');
+                    self.write_identifier(id);
+                }
+
                 self.buffer.push(' ');
                 self.buffer.push_str(&format!("{}", min));
                 max.iter().for_each(|max| {
                     self.buffer.push(' ');
                     self.buffer.push_str(&format!("{}", max));
                 });
+                self.buffer.push(')');
+            }
+            ImportDescriptor::Global {
+                id,
+                r#type,
+                mutable,
+            } => {
+                self.buffer.push('(');
+                self.buffer.push_str("global");
+
+                if let Some(id) = id {
+                    self.buffer.push(' ');
+                    self.write_identifier(id);
+                }
+
+                self.buffer.push(' ');
+                if *mutable {
+                    self.buffer.push('(');
+                    self.buffer.push_str("mut");
+                    self.buffer.push(' ');
+                    self.buffer.push_str(Type::numeric_type_str(r#type));
+                    self.buffer.push(')');
+                } else {
+                    self.buffer.push_str(Type::numeric_type_str(r#type));
+                }
                 self.buffer.push(')');
             }
         }
@@ -658,7 +859,7 @@ impl Printer {
             self.write_identifier(id);
             self.buffer.push(' ');
         });
-        self.buffer.push_str(numeric_type_str(&param.r#type));
+        self.buffer.push_str(Type::numeric_type_str(&param.r#type));
         self.buffer.push(')');
     }
 
@@ -670,7 +871,7 @@ impl Printer {
             self.write_identifier(id);
             self.buffer.push(' ');
         });
-        self.buffer.push_str(numeric_type_str(&local.r#type));
+        self.buffer.push_str(Type::numeric_type_str(&local.r#type));
         self.buffer.push(')');
     }
 
@@ -678,13 +879,19 @@ impl Printer {
         self.buffer.push('(');
         self.buffer.push_str("result");
         self.buffer.push(' ');
-        self.buffer.push_str(numeric_type_str(&ty));
+        self.buffer.push_str(Type::numeric_type_str(&ty));
         self.buffer.push(')');
     }
 
     fn write_data_segments(&mut self, data_segments: &[DataSegment]) {
         for data_segment in data_segments {
             self.write_data_segment(data_segment);
+        }
+    }
+
+    fn write_globals(&mut self, globals: &[Global]) {
+        for global in globals {
+            self.write_global(global);
         }
     }
 
@@ -700,6 +907,40 @@ impl Printer {
         self.buffer.push(')');
     }
 
+    fn write_global(&mut self, global: &Global) {
+        self.indent();
+
+        self.buffer.push('(');
+        self.buffer.push_str("global");
+
+        if let Some(id) = &global.id {
+            self.buffer.push(' ');
+            self.write_identifier(id);
+        }
+
+        self.buffer.push(' ');
+        if global.mutable {
+            self.buffer.push('(');
+            self.buffer.push_str("mut");
+            self.buffer.push(' ');
+            self.buffer.push_str(Type::numeric_type_str(&global.r#type));
+            self.buffer.push(')');
+        } else {
+            self.buffer.push_str(Type::numeric_type_str(&global.r#type));
+        }
+
+        // Pretty printing should be temporary disabled.
+        let pretty = self.pretty;
+        self.pretty = false;
+
+        for instruction in &global.init {
+            self.write_instruction(instruction);
+        }
+        self.buffer.push(')');
+
+        self.pretty = pretty;
+    }
+
     fn write_functions(&mut self, functions: &[Function]) {
         for function in functions {
             self.write_function(function);
@@ -711,19 +952,19 @@ impl Printer {
         self.buffer.push('(');
         self.buffer.push_str("func");
 
-        function.id.iter().for_each(|id| {
+        if let Some(id) = &function.id {
             self.buffer.push(' ');
             self.write_identifier(id)
-        });
+        }
 
-        function.export.iter().for_each(|export| {
+        if let Some(export) = &function.export {
             self.buffer.push(' ');
             self.buffer.push('(');
             self.buffer.push_str("export");
             self.buffer.push(' ');
             self.write_string(export);
             self.buffer.push(')');
-        });
+        }
 
         // typeuse
         for param in &function.params {
@@ -812,13 +1053,13 @@ impl Printer {
             }
             Instruction::I32Eqz => {
                 self.start_plain();
-                self.buffer.push_str(numeric_type_str(&Type::I32));
+                self.buffer.push_str(Type::numeric_type_str(&Type::I32));
                 self.buffer.push_str(".eqz");
                 self.end_plain();
             }
             Instruction::I32Eq => {
                 self.start_plain();
-                self.buffer.push_str(numeric_type_str(&Type::I32));
+                self.buffer.push_str(Type::numeric_type_str(&Type::I32));
                 self.buffer.push_str(".eq");
                 self.end_plain();
             }
@@ -930,10 +1171,60 @@ impl Printer {
                 self.write_index(&idx);
                 self.end_plain();
             }
+            Instruction::GlobalGet(idx) => {
+                self.start_plain();
+                self.buffer.push_str("global.get ");
+                self.write_index(&idx);
+                self.end_plain();
+            }
+            Instruction::GlobalSet(idx) => {
+                self.start_plain();
+                self.buffer.push_str("global.set ");
+                self.write_index(&idx);
+                self.end_plain();
+            }
             Instruction::Call(idx) => {
                 self.start_plain();
                 self.buffer.push_str("call ");
                 self.write_index(&idx);
+                self.end_plain();
+            }
+            Instruction::I32Load(memarg) => {
+                self.start_plain();
+                self.buffer.push_str("i32.load");
+
+                match memarg.offset {
+                    Some(offset) if offset > 0 => {
+                        self.buffer.push(' ');
+                        self.buffer.push_str(&format!("offset={} ", offset));
+                    }
+                    _ => {}
+                }
+
+                if let Some(align) = memarg.align {
+                    self.buffer.push(' ');
+                    self.buffer.push_str(&format!("align={} ", align));
+                }
+
+                self.end_plain();
+            }
+            Instruction::I32Store(memarg) => {
+                self.start_plain();
+                self.buffer.push_str("i32.store");
+
+                match memarg.offset {
+                    Some(offset) if offset > 0 => {
+                        self.buffer.push(' ');
+                        self.buffer.push_str(&format!("offset={} ", offset));
+                    }
+                    _ => {}
+                }
+
+                if let Some(align) = memarg.align {
+                    self.buffer.push(' ');
+                    self.buffer.push_str(&format!("align={} ", align));
+                }
+
                 self.end_plain();
             }
             Instruction::If {
@@ -965,12 +1256,6 @@ impl Printer {
                 self.close_indent();
             }
         }
-    }
-}
-
-fn numeric_type_str(ty: &Type) -> &'static str {
-    match ty {
-        Type::I32 => "i32",
     }
 }
 

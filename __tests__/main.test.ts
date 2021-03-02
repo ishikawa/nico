@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import { StringDecoder } from "string_decoder";
 import { compileFile } from "./util/compiler";
-import { BufferedPrinter } from "../runner/runtime";
+import { BufferedPrinter, buildImportObject, ConsolePrinter, StringView } from "../runner/runtime";
 
 type Exports = Record<string, any>;
 
@@ -13,6 +13,9 @@ interface TestCase {
   expected: any;
   exec?: (exports: Exports) => any[];
   captureOutput?: boolean;
+
+  // filter
+  focus?: boolean;
 }
 
 const temporaryCodePath = path.join(os.tmpdir(), "nico_test_main.nico");
@@ -232,14 +235,26 @@ const cases: TestCase[] = [
     file: "input/let_scoping.nico",
     captureOutput: true,
     expected: ["15", "10", ""].join("\n")
+  },
+  // Array
+  {
+    focus: true,
+    // prettier-ignore
+    input: [
+      "fun foo(x)",
+      "    x * 5",
+      "end",
+      "let x = [1, 21 + 33, foo(10)]"
+    ].join("\n"),
+    expected: undefined
   }
 ];
 
-cases.forEach(({ input, file, expected, exec, captureOutput }) => {
-  test(`given '${input || file}'`, async () => {
-    const memory = new WebAssembly.Memory({ initial: 1 });
-    const printer = new BufferedPrinter(memory);
+// filter
+const focused = cases.filter(x => x.focus);
 
+(focused.length === 0 ? cases : focused).forEach(({ input, file, expected, exec, captureOutput }) => {
+  test(`given '${input || file}'`, async () => {
     let src = temporaryCodePath;
 
     if (input) {
@@ -248,16 +263,14 @@ cases.forEach(({ input, file, expected, exec, captureOutput }) => {
       src = `${__dirname}/${file}`;
     }
 
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const printer = captureOutput ? new BufferedPrinter(memory) : new ConsolePrinter(memory);
+    const imports = buildImportObject({ memory, printer });
+
     const buffer = await compileFile(src);
     const module = await WebAssembly.compile(buffer);
 
-    const instance = await WebAssembly.instantiate(module, {
-      js: { mem: memory },
-      printer: {
-        println_i32: printer.printlnNumber.bind(printer),
-        println_str: printer.printlnString.bind(printer)
-      }
-    });
+    const instance = await WebAssembly.instantiate(module, imports);
 
     // @ts-ignore
     let values = exec ? exec(instance.exports) : instance.exports.main();
@@ -277,17 +290,15 @@ cases.forEach(({ input, file, expected, exec, captureOutput }) => {
       if (Number.isInteger(expected)) {
         expect(value).toEqual(expected);
       } else if (captureOutput && typeof expected === "string") {
-        expect(printer.buffer).toEqual(expected);
+        if (printer instanceof BufferedPrinter) {
+          expect(printer.buffer).toEqual(expected);
+        }
       } else if (typeof expected === "string") {
         const offset = value;
         expect(Number.isInteger(offset)).toBeTruthy();
 
-        const viewer = new DataView(memory.buffer, 0);
-        const length = viewer.getInt32(offset, true);
-
-        const bytes = new Uint8Array(memory.buffer, offset + 4, length);
-        const decoder = new StringDecoder("utf-8");
-        const string = decoder.end(Buffer.from(bytes));
+        const viewer = new StringView(memory);
+        const string = viewer.getString(offset);
 
         expect(string).toEqual(expected);
       } else if (typeof expected === "undefined") {

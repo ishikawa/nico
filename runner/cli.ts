@@ -1,6 +1,6 @@
 import fs from "fs";
 import loadWabt from "wabt";
-import { ConsolePrinter } from "./runtime";
+import { ConsolePrinter, buildImportObject } from "./runtime";
 
 function printUsage() {
   const usage = `
@@ -32,13 +32,8 @@ export async function main(argv: string[]): Promise<number> {
   const memory = new WebAssembly.Memory({ initial: 1 });
   const printer = new ConsolePrinter(memory);
 
-  const instance = await WebAssembly.instantiate(module, {
-    js: { mem: memory },
-    printer: {
-      println_i32: printer.printlnNumber.bind(printer),
-      println_str: printer.printlnString.bind(printer)
-    }
-  });
+  const imports = buildImportObject({ memory, printer });
+  const instance = await WebAssembly.instantiate(module, imports);
 
   const entryPoint = instance.exports.main;
 

@@ -40,8 +40,10 @@ impl PrefixNaming {
 
     pub fn next(&mut self) -> String {
         let i = self.type_var_index;
+        let next = format!("{}{}", self.prefix, i);
+
         self.type_var_index += 1;
-        format!("{}{}", self.prefix, i)
+        next
     }
 }
 

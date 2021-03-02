@@ -1,5 +1,4 @@
-use super::ConstantString;
-use super::LocalStorage;
+use super::{wasm, wasm_type, ConstantString, LocalStorage, StackFrame};
 use crate::parser;
 use crate::sem::{Binding, Type};
 use crate::util::naming::SequenceNaming;
@@ -35,8 +34,9 @@ impl Allocator {
         function: &mut parser::Function,
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
     ) {
-        let mut locals = vec![];
         let mut naming = SequenceNaming::new();
+        let mut locals = vec![];
+        let mut frame = StackFrame::default();
 
         // Storage for parameters
         for ref mut binding in &function.params {
@@ -59,10 +59,11 @@ impl Allocator {
         }
 
         for node in &mut function.body {
-            self.analyze_expr(node, &mut naming, &mut locals, strings);
+            self.analyze_expr(node, &mut naming, &mut locals, strings, &mut frame);
         }
 
         function.locals = locals;
+        function.frame = Some(frame);
     }
 
     fn analyze_expr(
@@ -71,27 +72,60 @@ impl Allocator {
         naming: &mut SequenceNaming,
         locals: &mut Vec<Rc<RefCell<LocalStorage>>>,
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
+        frame: &mut StackFrame,
     ) {
         match &mut node.expr {
-            Expr::Stmt(expr) => self.analyze_expr(expr, naming, locals, strings),
+            Expr::Stmt(expr) => self.analyze_expr(expr, naming, locals, strings, frame),
             Expr::Integer(_) => {}
             Expr::String {
                 ref content,
                 storage,
             } => {
-                let len = strings.iter().fold(0, |accum, x| accum + x.borrow().len());
+                let len = strings
+                    .iter()
+                    .fold(0, |accum, x| accum + x.borrow().memory_size());
                 let constant = wrap(ConstantString::from_str(&content, len));
 
                 storage.replace(Rc::clone(&constant));
                 strings.push(Rc::clone(&constant));
             }
             Expr::Identifier { .. } => {}
-            Expr::Array { .. } => panic!("not implemented"),
+            Expr::Array {
+                elements,
+                ref mut object_offset,
+            } => {
+                // Reserve stack frame for elements and a reference to array.
+                {
+                    let length = elements.len();
+
+                    let element_type = match &*Type::unwrap(&node.r#type).borrow() {
+                        Type::Array(element_type) => Rc::clone(element_type),
+                        ty => panic!("Expected Array<T> but was {:?}", ty),
+                    };
+
+                    let element_size = wasm_type(&element_type).unwrap().num_bytes();
+
+                    // - Reserve elements in "Static" frame area and store it in the node.
+                    frame.reserve(element_size * (length as wasm::Size));
+                    object_offset.replace(frame.static_size());
+
+                    // Reserve a reference in "Static" frame area.
+                    // - length
+                    frame.reserve(wasm::SIZE_BYTES);
+                    // - index
+                    frame.reserve(wasm::SIZE_BYTES);
+                }
+
+                // Allocate every elements
+                for element in elements {
+                    self.analyze_expr(element, naming, locals, strings, frame);
+                }
+            }
             Expr::Invocation {
                 name: _, arguments, ..
             } => {
                 for a in arguments {
-                    self.analyze_expr(a, naming, locals, strings);
+                    self.analyze_expr(a, naming, locals, strings, frame);
                 }
             }
             // binary op
@@ -106,21 +140,21 @@ impl Allocator {
             | Expr::GE(lhs, rhs, _)
             | Expr::EQ(lhs, rhs, _)
             | Expr::NE(lhs, rhs, _) => {
-                self.analyze_expr(lhs, naming, locals, strings);
-                self.analyze_expr(rhs, naming, locals, strings);
+                self.analyze_expr(lhs, naming, locals, strings, frame);
+                self.analyze_expr(rhs, naming, locals, strings, frame);
             }
             Expr::If {
                 condition,
                 then_body,
                 else_body,
             } => {
-                self.analyze_expr(condition, naming, locals, strings);
+                self.analyze_expr(condition, naming, locals, strings, frame);
 
                 for node in then_body {
-                    self.analyze_expr(node, naming, locals, strings);
+                    self.analyze_expr(node, naming, locals, strings, frame);
                 }
                 for node in else_body {
-                    self.analyze_expr(node, naming, locals, strings);
+                    self.analyze_expr(node, naming, locals, strings, frame);
                 }
             }
             Expr::Case {
@@ -131,7 +165,7 @@ impl Allocator {
             } => {
                 // Allocate a temporary variable for storing the result of
                 // head expression.
-                self.analyze_expr(head, naming, locals, strings);
+                self.analyze_expr(head, naming, locals, strings, frame);
                 {
                     let temp = wrap(LocalStorage {
                         name: naming.next("_case_head"),
@@ -143,7 +177,7 @@ impl Allocator {
                 }
 
                 for node in else_body {
-                    self.analyze_expr(node, naming, locals, strings);
+                    self.analyze_expr(node, naming, locals, strings, frame);
                 }
 
                 for parser::CaseArm {
@@ -156,11 +190,11 @@ impl Allocator {
 
                     // guard
                     if let Some(condition) = condition {
-                        self.analyze_expr(condition, naming, locals, strings);
+                        self.analyze_expr(condition, naming, locals, strings, frame);
                     }
 
                     for node in then_body {
-                        self.analyze_expr(node, naming, locals, strings);
+                        self.analyze_expr(node, naming, locals, strings, frame);
                     }
                 }
             }
@@ -168,7 +202,7 @@ impl Allocator {
                 pattern,
                 ref mut init,
             } => {
-                self.analyze_expr(init, naming, locals, strings);
+                self.analyze_expr(init, naming, locals, strings, frame);
                 self.analyze_pattern(pattern, naming, locals);
             }
         };

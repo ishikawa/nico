@@ -41,7 +41,7 @@ fn main() {
     let mut passes = CompilerPasses::new();
     passes.apply(&mut module);
 
-    let builder = AsmBuilder::new();
+    let mut builder = AsmBuilder::new();
     let mut printer = WasmPrinter::new();
 
     let wasm_module = builder.build_module(&module);

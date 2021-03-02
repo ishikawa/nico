@@ -5,6 +5,29 @@ export interface Printer {
   printlnString(offset: number): number;
 }
 
+/**
+ * Required `import` objects to run Nico compilation module.
+ */
+export interface WasmImportObject extends Record<string, Record<string, WebAssembly.ImportValue>> {
+  "nico.runtime": { mem: WebAssembly.Memory };
+  printer: {
+    println_i32: Printer["printlnNumber"];
+    println_str: Printer["printlnString"];
+  };
+}
+
+export function buildImportObject(props: { memory: WebAssembly.Memory; printer: Printer }): WasmImportObject {
+  const { memory, printer } = props;
+
+  return {
+    "nico.runtime": { mem: memory },
+    printer: {
+      println_i32: printer.printlnNumber.bind(printer),
+      println_str: printer.printlnString.bind(printer)
+    }
+  };
+}
+
 export class ConsolePrinter implements Printer {
   stringView: StringView;
 
@@ -60,11 +83,12 @@ export class StringView {
     this.memory = memory;
   }
 
-  getString(offset: number): string {
+  getString(base: number): string {
     const viewer = new DataView(this.memory.buffer, 0);
-    const length = viewer.getInt32(offset, true);
+    const offset = viewer.getInt32(base, true);
+    const length = viewer.getInt32(base + 4, true);
 
-    const bytes = new Uint8Array(this.memory.buffer, offset + 4, length);
+    const bytes = new Uint8Array(this.memory.buffer, offset, length);
     const decoder = new StringDecoder("utf-8");
     return decoder.end(Buffer.from(bytes));
   }
