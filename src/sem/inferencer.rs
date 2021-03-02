@@ -127,6 +127,7 @@ impl TypeInferencer {
 
                 wrap(Type::Array(Rc::clone(element_type)))
             }
+            Expr::Subscript { .. } => panic!("not implemented"),
             Expr::Identifier {
                 ref name,
                 ref binding,

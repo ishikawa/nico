@@ -333,6 +333,7 @@ impl AsmBuilder {
                 // Returns a reference
                 builder.u32_const(reference_offset);
             }
+            Expr::Subscript { .. } => panic!("not implemented"),
             Expr::Invocation {
                 name,
                 arguments,

@@ -244,8 +244,11 @@ const cases: TestCase[] = [
       "fun foo(x)",
       "    x * 5",
       "end",
+      "fun bar()",
+      "    1",
+      "end",
       "let x = [1, 21 + 33, foo(10)]",
-      "x[0] + x[1] + x[2]"
+      "x[(2 - 2)] + x[bar()] + x[2]"
     ].join("\n"),
     expected: 105
   }

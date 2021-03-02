@@ -58,6 +58,9 @@ pub enum Expr {
         //     |<----------------------------|
         object_offset: Option<wasm::Size>,
     },
+    Subscript {
+        index: Box<Node>,
+    },
     Invocation {
         name: String,
         arguments: Vec<Node>,
