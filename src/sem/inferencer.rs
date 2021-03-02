@@ -115,12 +115,35 @@ impl TypeInferencer {
 
                 wrap(Type::Array(Rc::clone(element_type)))
             }
-            Expr::Subscript { index, .. } => {
-                // `index` must be an integer
-                let ty = self.analyze_expr(index, generic_vars);
-                self.unify(&ty, &wrap(Type::Int32));
+            Expr::Subscript { operand, index } => {
+                let operand_type = {
+                    let mut scoped_generic_vars = generic_vars.clone();
+                    let generic_element_typename = self.generic_type_var_naming.next();
 
-                ty
+                    scoped_generic_vars.insert(generic_element_typename.clone());
+
+                    let operand_type = self.analyze_expr(operand, &mut scoped_generic_vars);
+
+                    self.unify(
+                        &operand_type,
+                        &wrap(Type::Array(wrap(Type::new_type_var(
+                            &generic_element_typename,
+                        )))),
+                    );
+
+                    Type::unwrap(&operand_type)
+                };
+
+                let element_type = match &*operand_type.borrow() {
+                    Type::Array(element_type) => Rc::clone(element_type),
+                    ty => panic!("Operand must be an array, but was {:?}", ty),
+                };
+
+                // `index` must be an integer
+                let index_type = self.analyze_expr(index, generic_vars);
+                self.unify(&index_type, &wrap(Type::Int32));
+
+                element_type
             }
             Expr::Identifier {
                 ref name,
@@ -382,9 +405,8 @@ impl TypeInferencer {
     }
 
     fn unify(&mut self, ty1: &Rc<RefCell<Type>>, ty2: &Rc<RefCell<Type>>) {
-        match self._unify(ty1, ty2) {
-            None => return,
-            Some(error) => match error {
+        if let Some(error) = self._unify(ty1, ty2) {
+            match error {
                 UnificationError::RecursiveReference(_ty1, _ty2) => {
                     panic!("Recursive type reference detected.");
                 }
@@ -397,7 +419,7 @@ impl TypeInferencer {
                 UnificationError::TypeMismatch(ty1, ty2) => {
                     panic!("Type mismatch in `{:?}` and `{:?}`", ty1, ty2);
                 }
-            },
+            };
         }
     }
 
