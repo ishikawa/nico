@@ -462,6 +462,21 @@ impl Parser {
                         arguments,
                         binding: None,
                     }))
+                } else if let Some(Token::Char('[')) = tokenizer.peek() {
+                    consume_char(tokenizer, '[');
+                    let mut arguments = self.parse_elements(tokenizer, ']');
+                    consume_char(tokenizer, ']');
+
+                    if arguments.len() != 1 {
+                        panic!(
+                            "subscript operator `[]` takes 1 argument, but {} arguments given",
+                            arguments.len()
+                        );
+                    }
+
+                    Some(self.typed_expr(Expr::Subscript {
+                        index: Box::new(arguments.remove(0)),
+                    }))
                 } else {
                     Some(self.typed_expr(Expr::Identifier {
                         name,
