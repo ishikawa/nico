@@ -240,12 +240,13 @@ const cases: TestCase[] = [
   {
     input: "[1][0]",
     expected: 1
+  },
+  {
+    focus: true,
+    input: ["let x = [5]", "x[0]"].join("\n"),
+    expected: 5
   }
   /*
-  {
-    input: ["let x = [1]", "x"].join("\n"),
-    expected: 1
-  }
   {
     focus: true,
     // prettier-ignore

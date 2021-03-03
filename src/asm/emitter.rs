@@ -190,7 +190,8 @@ impl AsmBuilder {
             // 1. Push caller's FP on stack
             // 3. Set FP to current SP
             // 4. Forward SP to reserve space for stack frame
-            body.global_get("sp")
+            body.comment("-- function prologue")
+                .global_get("sp")
                 .u32_const(wasm::SIZE_BYTES)
                 .i32_sub()
                 .global_set("sp")
@@ -213,7 +214,8 @@ impl AsmBuilder {
             // --------
             // 1. Restore SP to caller's SP = FP + sizeof(Static) + sizeof(FP)
             // 2. Restore FP to caller's FP = Load(FP + sizeof(Static))
-            body.global_get("fp")
+            body.comment("-- function epilogue")
+                .global_get("fp")
                 .u32_const(static_size + wasm::SIZE_BYTES)
                 .i32_add()
                 .global_set("sp");
@@ -305,7 +307,9 @@ impl AsmBuilder {
                 match *expr.r#type.borrow() {
                     Type::Void => {}
                     _ => {
-                        builder.drop();
+                        builder
+                            .comment("Drop unused result of the statement.")
+                            .drop();
                     }
                 };
             }
@@ -339,14 +343,34 @@ impl AsmBuilder {
                 elements,
                 object_offset,
             } => {
+                let element_type = match &*node.r#type.borrow() {
+                    Type::Array(element_type) => Rc::clone(element_type),
+                    ty => panic!("Operand must be an array, but was {:?}", ty),
+                };
+                let element_wasm_type = wasm_type(&element_type).unwrap();
+                let num_elements = elements.len();
                 let object_offset = frame.static_size() - object_offset.unwrap();
 
-                for (i, element) in elements.iter().enumerate() {
-                    let ty = wasm_type(&element.r#type).unwrap();
-                    let offset = object_offset + ty.num_bytes() * (i as wasm::Size);
+                builder.comment(format!(
+                    "-- literal {}[{}]",
+                    element_type.borrow(),
+                    num_elements
+                ));
 
-                    // Store the result on "Static" frame area.
-                    builder.global_get("fp");
+                for (i, element) in elements.iter().enumerate() {
+                    builder
+                        .comment(format!(
+                            "Store the result of {}[{}] at `FP + {} + element size({}) * index({})`",
+                            element_type.borrow(),
+                            i,
+                            object_offset,
+                            element_wasm_type.num_bytes(),
+                            i
+                        ))
+                        .global_get("fp");
+
+                    let offset = object_offset + element_wasm_type.num_bytes() * (i as wasm::Size);
+
                     let t = self.build_expr(builder, element, frame);
                     locals.extend(&t);
                     builder.i32_store(offset);
@@ -356,17 +380,24 @@ impl AsmBuilder {
                 let reference_offset = object_offset - wasm::SIZE_BYTES * 2;
 
                 builder
+                    .comment(format!("Store a reference at `FP + {}`", reference_offset))
+                    .comment(format!(
+                        "  index  = `FP + object offset({})`",
+                        object_offset
+                    ))
+                    .comment(format!("  length = {}", num_elements))
                     .global_get("fp")
                     .global_get("fp")
-                    .i32_add()
                     .u32_const(object_offset)
+                    .i32_add()
                     .i32_store(reference_offset)
                     .global_get("fp")
-                    .u32_const(elements.len() as wasm::Size)
+                    .u32_const(num_elements as wasm::Size)
                     .i32_store(reference_offset + wasm::SIZE_BYTES);
 
                 // Returns a reference
                 builder
+                    .comment(format!("Push a reference `FP + {}`", reference_offset))
                     .global_get("fp")
                     .u32_const(reference_offset)
                     .i32_add();
@@ -666,8 +697,9 @@ impl AsmBuilder {
                         }
                     }
                 };
-                // Pattern without guard always push `true` value.
-                builder.i32_const(1);
+                builder
+                    .comment("Pattern without guard always push `true` value.")
+                    .i32_const(1);
             }
         };
 

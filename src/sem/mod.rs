@@ -8,6 +8,7 @@ pub use inferencer::TypeInferencer;
 use std::cell::RefCell;
 use std::collections::hash_map;
 use std::collections::HashMap;
+use std::fmt;
 use std::rc::Rc;
 
 pub trait SemanticAnalyzer {
@@ -128,6 +129,41 @@ impl Environment {
 
     pub fn bindings(&self) -> hash_map::Values<String, Rc<RefCell<Binding>>> {
         self.bindings.values()
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Int32 => write!(f, "i32"),
+            Type::Boolean => write!(f, "bool"),
+            Type::String => write!(f, "str"),
+            Type::Void => write!(f, "void"),
+            Type::Array(element_type) => write!(f, "{}[]", element_type.borrow()),
+            Type::Function {
+                params,
+                return_type,
+            } => {
+                let mut it = params.iter().peekable();
+
+                write!(f, "(")?;
+                while let Some(param) = it.next() {
+                    write!(f, "{}", param.borrow())?;
+                    if it.peek().is_some() {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, ") -> {}", return_type.borrow())
+            }
+            Type::TypeVariable {
+                name,
+                instance: None,
+            } => write!(f, "?{}", name),
+            Type::TypeVariable {
+                name,
+                instance: Some(instance),
+            } => write!(f, "?{}<{}>", name, instance.borrow()),
+        }
     }
 }
 

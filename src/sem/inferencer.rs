@@ -46,6 +46,24 @@ impl TypeInferencer {
             ty => panic!("Expected function type but was {:?}", ty),
         }
 
+        // Validation
+        match &*retty.borrow() {
+            Type::Array(_) => {
+                panic!(
+                    "Attempt to return array {} from function `{}`",
+                    retty.borrow(),
+                    function.name
+                );
+            }
+            Type::TypeVariable { .. } => {
+                panic!(
+                    "Type of return value of function `{}` is unresolved.",
+                    function.name
+                );
+            }
+            _ => {}
+        }
+
         Rc::clone(&function.r#type)
     }
 
@@ -1032,30 +1050,6 @@ mod tests {
 
         assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::Int32);
-        });
-    }
-
-    #[test]
-    fn array_1() {
-        let mut module = parser::parse_string("[1, 2]");
-
-        analyze(&mut module);
-
-        let function = &module.main.unwrap();
-        let body = &function.body;
-
-        assert_matches!(function.r#type, ref ty => {
-            assert_matches!(*ty.borrow(), Type::Function{ ref return_type, .. } => {
-                assert_matches!(*return_type.borrow(), Type::Array( ref element_type ) => {
-                    assert_eq!(*element_type.borrow(), Type::Int32);
-                });
-            });
-        });
-
-        assert_matches!(body[0].r#type, ref ty => {
-            assert_matches!(*ty.borrow(), Type::Array( ref element_type ) => {
-                assert_eq!(*element_type.borrow(), Type::Int32);
-            });
         });
     }
 
