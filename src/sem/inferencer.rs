@@ -325,7 +325,7 @@ impl TypeInferencer {
         generic_vars: &mut HashSet<String>,
         type_var_cache: &mut HashMap<String, Rc<RefCell<Type>>>,
     ) -> Rc<RefCell<Type>> {
-        self.prune(ty);
+        let ty = self.prune(ty);
 
         let freshed = match *ty.borrow() {
             Type::TypeVariable { ref name, .. } => {
@@ -373,31 +373,57 @@ impl TypeInferencer {
     /// Note, this function leaves unresolvable variable like
     /// - `T -> U -> (None)`
     /// - `T -> (Not primitive type)`
-    fn prune(&mut self, ty: &Rc<RefCell<Type>>) {
-        // 1. Roll up instance chain until meets primitive type.
-        // 2. Replace the content of RefCall with an instance if it is primitive type.
-        let ty2 = match *ty.borrow_mut() {
+    ///
+    /// But the function returns TERMINAL type.
+    fn prune(&mut self, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+        // Prune descendants and retrieve the type at the deepest level.
+        let terminal = match &*ty.borrow_mut() {
             Type::TypeVariable {
-                instance: Some(ref mut instance),
+                instance: Some(instance),
                 ..
             } => {
                 self.prune(instance);
-                *instance = Rc::clone(instance);
 
-                match *instance.borrow() {
-                    Type::Int32 => Type::Int32,
-                    Type::String => Type::String,
-                    Type::Boolean => Type::Boolean,
-                    Type::Void => Type::Void,
-                    _ => return,
+                match &*instance.borrow() {
+                    Type::TypeVariable {
+                        instance: Some(instance2),
+                        ..
+                    } => Rc::clone(instance2),
+                    _ => Rc::clone(instance),
                 }
             }
             _ => {
-                return;
+                // We don't need to prune anymore.
+                return Rc::clone(ty);
             }
         };
 
-        *ty.borrow_mut() = ty2;
+        // Replace instance with terminal type.
+        // If the terminal is one of primitive type, clone and replace type itself with termal.
+        match *terminal.borrow() {
+            Type::Int32 => {
+                ty.replace(Type::Int32);
+            }
+            Type::String => {
+                ty.replace(Type::String);
+            }
+            Type::Boolean => {
+                ty.replace(Type::Boolean);
+            }
+            Type::Void => {
+                ty.replace(Type::Void);
+            }
+            _ => {
+                if let Type::TypeVariable {
+                    ref mut instance, ..
+                } = *ty.borrow_mut()
+                {
+                    instance.replace(Rc::clone(&terminal));
+                }
+            }
+        };
+
+        Rc::clone(&terminal)
     }
 
     fn new_type_var(&mut self) -> Type {
@@ -428,8 +454,8 @@ impl TypeInferencer {
         ty1: &Rc<RefCell<Type>>,
         ty2: &Rc<RefCell<Type>>,
     ) -> Option<UnificationError> {
-        self.prune(ty1);
-        self.prune(ty2);
+        let ty1 = &self.prune(ty1);
+        let ty2 = &self.prune(ty2);
 
         let action = match &*ty1.borrow() {
             Type::TypeVariable { .. } => {
@@ -440,6 +466,7 @@ impl TypeInferencer {
                             Rc::clone(ty2),
                         ));
                     }
+
                     Unification::ReplaceInstance(Rc::clone(ty2))
                 } else {
                     Unification::Done

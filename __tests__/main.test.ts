@@ -243,6 +243,10 @@ const cases: TestCase[] = [
   }
   /* 
   {
+    input: ["let x = [1]", "x"].join("\n"),
+    expected: 1
+  }
+  {
     focus: true,
     // prettier-ignore
     input: [
