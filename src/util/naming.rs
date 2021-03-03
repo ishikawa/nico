@@ -24,26 +24,32 @@ impl SequenceNaming {
 
 /// This struct produces a unique name while giving a sequential
 /// number to the name passed to the next() method.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PrefixNaming {
-    type_var_index: usize,
+    index: usize,
     prefix: String,
 }
 
 impl PrefixNaming {
     pub fn new(prefix: &str) -> Self {
         Self {
-            type_var_index: 0,
+            index: 0,
             prefix: prefix.to_string(),
         }
     }
 
     pub fn next(&mut self) -> String {
-        let i = self.type_var_index;
-        let next = format!("{}{}", self.prefix, i);
-
-        self.type_var_index += 1;
+        let next = self.name(self.index);
+        self.index += 1;
         next
+    }
+
+    pub fn name(&self, i: usize) -> String {
+        format!("{}{}", self.prefix, i)
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
     }
 }
 

@@ -121,7 +121,10 @@ impl Allocator {
                     self.analyze_expr(element, naming, locals, strings, frame);
                 }
             }
-            Expr::Subscript { .. } => panic!("not implemented"),
+            Expr::Subscript { operand, index } => {
+                self.analyze_expr(operand, naming, locals, strings, frame);
+                self.analyze_expr(index, naming, locals, strings, frame);
+            }
             Expr::Invocation {
                 name: _, arguments, ..
             } => {

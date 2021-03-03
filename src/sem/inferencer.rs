@@ -120,7 +120,7 @@ impl TypeInferencer {
                     let mut scoped_generic_vars = generic_vars.clone();
                     let generic_element_typename = self.generic_type_var_naming.next();
 
-                    scoped_generic_vars.insert(generic_element_typename.clone());
+                    //scoped_generic_vars.insert(generic_element_typename.clone());
 
                     let operand_type = self.analyze_expr(operand, &mut scoped_generic_vars);
 
@@ -431,7 +431,7 @@ impl TypeInferencer {
         self.prune(ty1);
         self.prune(ty2);
 
-        let action = match *ty1.borrow() {
+        let action = match &*ty1.borrow() {
             Type::TypeVariable { .. } => {
                 if *ty1 != *ty2 {
                     if (*ty1).borrow().contains(&*ty2.borrow()) {
@@ -445,6 +445,21 @@ impl TypeInferencer {
                     Unification::Done
                 }
             }
+            Type::Array(element_type1) => match &*ty2.borrow() {
+                Type::Array(element_type2) => {
+                    if let Some(error) = self._unify(element_type1, element_type2) {
+                        return Some(error);
+                    }
+                    Unification::Done
+                }
+                Type::TypeVariable { .. } => Unification::Unify(Rc::clone(ty2), Rc::clone(ty1)),
+                _ => {
+                    return Some(UnificationError::TypeMismatch(
+                        Rc::clone(ty1),
+                        Rc::clone(ty2),
+                    ));
+                }
+            },
             Type::Function {
                 params: ref params1,
                 return_type: ref return_type1,

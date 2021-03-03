@@ -78,6 +78,7 @@ pub enum Instruction {
     I32Store(MemArg),
 
     // Control Instructions
+    Unreachable,
     Call(Index),
     If {
         result_type: Option<Type>,
@@ -648,6 +649,11 @@ impl InstructionsBuilder {
         self
     }
 
+    pub fn unreachable(&mut self) -> &mut Self {
+        self.instructions.push(Instruction::Unreachable);
+        self
+    }
+
     pub fn call<T: Into<String>>(&mut self, name: T) -> &mut Self {
         self.instructions
             .push(Instruction::Call(Index::Id(Identifier(name.into()))));
@@ -1181,6 +1187,11 @@ impl Printer {
                 self.start_plain();
                 self.buffer.push_str("global.set ");
                 self.write_index(&idx);
+                self.end_plain();
+            }
+            Instruction::Unreachable => {
+                self.start_plain();
+                self.buffer.push_str("unreachable");
                 self.end_plain();
             }
             Instruction::Call(idx) => {

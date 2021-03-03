@@ -238,6 +238,11 @@ const cases: TestCase[] = [
   },
   // Array
   {
+    input: "[1][0]",
+    expected: 1
+  }
+  /* 
+  {
     focus: true,
     // prettier-ignore
     input: [
@@ -252,6 +257,7 @@ const cases: TestCase[] = [
     ].join("\n"),
     expected: 105
   }
+  */
 ];
 
 // filter
