@@ -267,10 +267,8 @@ const cases: TestCase[] = [
       "[foo(1), foo(2)][bar()]",
     ].join("\n"),
     expected: 10
-  }
-  /*
+  },
   {
-    focus: true,
     // prettier-ignore
     input: [
       "fun foo(x)",
@@ -284,7 +282,6 @@ const cases: TestCase[] = [
     ].join("\n"),
     expected: 105
   }
-   */
 ];
 
 // filter

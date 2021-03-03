@@ -347,12 +347,12 @@ impl AsmBuilder {
                     Type::Array(element_type) => Rc::clone(element_type),
                     ty => panic!("Operand must be an array, but was {:?}", ty),
                 };
-                let element_wasm_type = wasm_type(&element_type).unwrap();
+                let element_size = wasm_type(&element_type).unwrap().num_bytes();
                 let num_elements = elements.len();
                 let object_offset = frame.static_size() - object_offset.unwrap();
 
                 builder.comment(format!(
-                    "-- literal {}[{}]",
+                    "-- Literal {}[{}]",
                     element_type.borrow(),
                     num_elements
                 ));
@@ -360,16 +360,16 @@ impl AsmBuilder {
                 for (i, element) in elements.iter().enumerate() {
                     builder
                         .comment(format!(
-                            "Store the result of {}[{}] at `FP + {} + element size({}) * index({})`",
+                            "store the result of {}[{}] at `FP + {} + element size({}) * index({})`",
                             element_type.borrow(),
                             i,
                             object_offset,
-                            element_wasm_type.num_bytes(),
+                            element_size,
                             i
                         ))
                         .global_get("fp");
 
-                    let offset = object_offset + element_wasm_type.num_bytes() * (i as wasm::Size);
+                    let offset = object_offset + element_size * (i as wasm::Size);
 
                     let t = self.build_expr(builder, element, frame);
                     locals.extend(&t);
@@ -380,7 +380,7 @@ impl AsmBuilder {
                 let reference_offset = object_offset - wasm::SIZE_BYTES * 2;
 
                 builder
-                    .comment(format!("Store a reference at `FP + {}`", reference_offset))
+                    .comment(format!("store a reference at `FP + {}`", reference_offset))
                     .comment(format!(
                         "  index  = `FP + object offset({})`",
                         object_offset
@@ -397,10 +397,11 @@ impl AsmBuilder {
 
                 // Returns a reference
                 builder
-                    .comment(format!("Push a reference `FP + {}`", reference_offset))
-                    .global_get("fp")
-                    .u32_const(reference_offset)
-                    .i32_add();
+                    .comment(format!("push a reference `FP + {}`", reference_offset))
+                    .global_get("fp");
+                if reference_offset > 0 {
+                    builder.u32_const(reference_offset).i32_add();
+                }
             }
             Expr::Subscript { operand, index } => {
                 let element_type = match &*operand.r#type.borrow() {
@@ -411,6 +412,8 @@ impl AsmBuilder {
                 let element_size = wasm_type(&element_type).unwrap().num_bytes();
 
                 // Load the reference of the operand to a local variable
+                builder.comment(format!("-- Subscript {}", operand.r#type.borrow()));
+
                 let tmp_memidx = locals.reserve_i32();
                 let tmp_length = locals.reserve_i32();
                 let tmp_index = locals.reserve_i32();
@@ -419,6 +422,7 @@ impl AsmBuilder {
                 locals.extend(&t);
 
                 builder
+                    .comment("load the reference (index, length) of an array to local variables")
                     .i32_load(0)
                     .local_tee(&tmp_memidx)
                     .i32_load(wasm::SIZE_BYTES)
@@ -430,6 +434,7 @@ impl AsmBuilder {
                 builder.local_tee(&tmp_index);
 
                 // Check overflow
+                builder.comment("boundary check");
                 builder.i32_lt_s();
                 builder.push(wasm::Instruction::If {
                     result_type: None,
@@ -447,8 +452,13 @@ impl AsmBuilder {
 
                 // Access
                 builder
+                    .comment(format!(
+                        "access {}[i] at memory index + element size({}) * index",
+                        element_type.borrow(),
+                        element_size
+                    ))
                     .u32_const(element_size)
-                    .local_get(&tmp_length)
+                    .local_get(&tmp_index)
                     .i32_mul()
                     .local_get(&tmp_memidx)
                     .i32_add()
