@@ -249,10 +249,8 @@ impl AsmBuilder {
         }
 
         // params
-        match *Type::unwrap(&fun_node.r#type).borrow() {
-            Type::Function {
-                ref return_type, ..
-            } => {
+        match &*fun_node.r#type.borrow() {
+            Type::Function { return_type, .. } => {
                 if let Some(return_type) = wasm_type(return_type) {
                     builder.result_type(return_type);
                 }
@@ -304,7 +302,7 @@ impl AsmBuilder {
                 let t = self.build_expr(builder, expr, frame);
                 locals.extend(&t);
 
-                match *Type::unwrap(&expr.r#type).borrow() {
+                match *expr.r#type.borrow() {
                     Type::Void => {}
                     _ => {
                         builder.drop();
@@ -374,7 +372,7 @@ impl AsmBuilder {
                     .i32_add();
             }
             Expr::Subscript { operand, index } => {
-                let element_type = match &*Type::unwrap(&operand.r#type).borrow() {
+                let element_type = match &*operand.r#type.borrow() {
                     Type::Array(element_type) => Rc::clone(element_type),
                     ty => panic!("Operand must be an array, but was {:?}", ty),
                 };

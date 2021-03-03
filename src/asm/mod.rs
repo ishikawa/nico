@@ -75,7 +75,6 @@ fn align(n: wasm::Size) -> wasm::Size {
 }
 
 fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
-    let ty = Type::unwrap(ty);
     let wty = match *ty.borrow() {
         Type::Int32 => Some(wasm::Type::I32),
         Type::Boolean => Some(wasm::Type::I32),

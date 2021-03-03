@@ -19,10 +19,10 @@ pub enum Type {
     Int32,
     Boolean,
     String,
-    Array(Rc<RefCell<Type>>),
     // Unit type. In many functional programming languages, this is
     // written as `()`, but I am more familiar with `Void`.
     Void,
+    Array(Rc<RefCell<Type>>),
     Function {
         params: Vec<Rc<RefCell<Type>>>,
         return_type: Rc<RefCell<Type>>,
@@ -131,23 +131,30 @@ impl Environment {
     }
 }
 
-impl Type {
-    /// Unwrap a type variable to its instance. Otherwise returns type itself.
-    /// `panic!` if a type variable is not instantiated.
-    pub fn unwrap(ty: &Rc<RefCell<Self>>) -> Rc<RefCell<Self>> {
-        match *ty.borrow() {
-            Type::TypeVariable {
-                instance: Some(ref instance),
-                ..
-            } => Rc::clone(instance),
-            Type::TypeVariable {
-                ref name,
-                instance: None,
-            } => panic!("Type variable `{}` must be unified", name),
-            _ => Rc::clone(ty),
+impl Clone for Type {
+    fn clone(&self) -> Self {
+        match self {
+            Type::Int32 => Type::Int32,
+            Type::Boolean => Type::Boolean,
+            Type::String => Type::String,
+            Type::Void => Type::Void,
+            Type::Array(element_type) => Type::Array(Rc::clone(element_type)),
+            Type::Function {
+                params,
+                return_type,
+            } => Type::Function {
+                params: params.clone(),
+                return_type: Rc::clone(return_type),
+            },
+            Type::TypeVariable { name, instance } => Type::TypeVariable {
+                name: name.clone(),
+                instance: instance.as_ref().map(|x| Rc::clone(&x)),
+            },
         }
     }
+}
 
+impl Type {
     pub fn new_type_var(name: &str) -> Self {
         Type::TypeVariable {
             name: name.to_string(),

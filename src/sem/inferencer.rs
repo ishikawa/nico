@@ -131,7 +131,7 @@ impl TypeInferencer {
                         )))),
                     );
 
-                    Type::unwrap(&operand_type)
+                    operand_type
                 };
 
                 let element_type = match &*operand_type.borrow() {
@@ -325,7 +325,7 @@ impl TypeInferencer {
         generic_vars: &mut HashSet<String>,
         type_var_cache: &mut HashMap<String, Rc<RefCell<Type>>>,
     ) -> Rc<RefCell<Type>> {
-        let ty = self.prune(ty);
+        self.prune(ty);
 
         let freshed = match *ty.borrow() {
             Type::TypeVariable { ref name, .. } => {
@@ -370,12 +370,7 @@ impl TypeInferencer {
     }
 
     /// Prune the instance chain of type variables as much as possible.
-    /// Note, this function leaves unresolvable variable like
-    /// - `T -> U -> (None)`
-    /// - `T -> (Not primitive type)`
-    ///
-    /// But the function returns TERMINAL type.
-    fn prune(&mut self, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+    fn prune(&mut self, ty: &Rc<RefCell<Type>>) {
         // Prune descendants and retrieve the type at the deepest level.
         let terminal = match &*ty.borrow_mut() {
             Type::TypeVariable {
@@ -394,36 +389,12 @@ impl TypeInferencer {
             }
             _ => {
                 // We don't need to prune anymore.
-                return Rc::clone(ty);
+                return;
             }
         };
 
         // Replace instance with terminal type.
-        // If the terminal is one of primitive type, clone and replace type itself with termal.
-        match *terminal.borrow() {
-            Type::Int32 => {
-                ty.replace(Type::Int32);
-            }
-            Type::String => {
-                ty.replace(Type::String);
-            }
-            Type::Boolean => {
-                ty.replace(Type::Boolean);
-            }
-            Type::Void => {
-                ty.replace(Type::Void);
-            }
-            _ => {
-                if let Type::TypeVariable {
-                    ref mut instance, ..
-                } = *ty.borrow_mut()
-                {
-                    instance.replace(Rc::clone(&terminal));
-                }
-            }
-        };
-
-        Rc::clone(&terminal)
+        ty.replace(terminal.borrow().clone());
     }
 
     fn new_type_var(&mut self) -> Type {
@@ -454,8 +425,8 @@ impl TypeInferencer {
         ty1: &Rc<RefCell<Type>>,
         ty2: &Rc<RefCell<Type>>,
     ) -> Option<UnificationError> {
-        let ty1 = &self.prune(ty1);
-        let ty2 = &self.prune(ty2);
+        self.prune(ty1);
+        self.prune(ty2);
 
         let action = match &*ty1.borrow() {
             Type::TypeVariable { .. } => {
@@ -798,16 +769,8 @@ mod tests {
             ref name,
             ref instance,
         } => {
-            assert_eq!(name, "a");
-            assert_matches!(instance, Some(instance) => {
-                assert_matches!(*instance.borrow(), Type::TypeVariable {
-                    ref name,
-                    ref instance,
-                } => {
-                    assert_eq!(name, "b");
-                    assert!(instance.is_none());
-                });
-            })
+            assert_eq!(name, "b");
+            assert!(instance.is_none());
         });
         assert_matches!(*pty1.borrow(), Type::TypeVariable {
             ref name,
@@ -1083,8 +1046,6 @@ mod tests {
 
         assert_matches!(function.r#type, ref ty => {
             assert_matches!(*ty.borrow(), Type::Function{ ref return_type, .. } => {
-                let return_type = Type::unwrap(return_type);
-
                 assert_matches!(*return_type.borrow(), Type::Array( ref element_type ) => {
                     assert_eq!(*element_type.borrow(), Type::Int32);
                 });
@@ -1092,8 +1053,6 @@ mod tests {
         });
 
         assert_matches!(body[0].r#type, ref ty => {
-            let ty = Type::unwrap(ty);
-
             assert_matches!(*ty.borrow(), Type::Array( ref element_type ) => {
                 assert_eq!(*element_type.borrow(), Type::Int32);
             });
