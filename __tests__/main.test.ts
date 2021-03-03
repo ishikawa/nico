@@ -242,9 +242,31 @@ const cases: TestCase[] = [
     expected: 1
   },
   {
-    focus: true,
     input: ["let x = [5]", "x[0]"].join("\n"),
     expected: 5
+  },
+  {
+    // prettier-ignore
+    input: [
+      "fun foo(x)",
+      "    x * 5",
+      "end",
+      "[foo(11)][0]",
+    ].join("\n"),
+    expected: 55
+  },
+  {
+    // prettier-ignore
+    input: [
+      "fun foo(x)",
+      "    x * 5",
+      "end",
+      "fun bar()",
+      "    1",
+      "end",
+      "[foo(1), foo(2)][bar()]",
+    ].join("\n"),
+    expected: 10
   }
   /*
   {
@@ -261,7 +283,8 @@ const cases: TestCase[] = [
       "x[(2 - 2)] + x[bar()] + x[2]"
     ].join("\n"),
     expected: 105
-  } */
+  }
+   */
 ];
 
 // filter
