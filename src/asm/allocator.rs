@@ -100,7 +100,9 @@ impl Allocator {
 
                     let element_type = match &*node.r#type.borrow() {
                         Type::Array(element_type) => Rc::clone(element_type),
-                        ty => panic!("Expected Array<T> but was `{:?}` for node `{:?}`", ty, node),
+                        ty => {
+                            panic!("Expected Array<T> but was `{:?}` for node `{:?}`", ty, node)
+                        }
                     };
 
                     let element_size = wasm_type(&element_type).unwrap().num_bytes();

@@ -75,7 +75,7 @@ fn align(n: wasm::Size) -> wasm::Size {
 }
 
 fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
-    let wty = match *Type::unwrap(ty).borrow() {
+    let wty = match *ty.borrow() {
         Type::Int32 => Some(wasm::Type::I32),
         Type::Boolean => Some(wasm::Type::I32),
         Type::String => Some(wasm::Type::I32),
@@ -117,7 +117,7 @@ impl StackFrame {
 #[derive(Debug, PartialEq)]
 pub struct LocalStorage {
     name: String,
-    r#type: Rc<RefCell<Type>>,
+    pub r#type: Rc<RefCell<Type>>,
 }
 
 /// String literal allocation in constant pool that is allocated at compile time.

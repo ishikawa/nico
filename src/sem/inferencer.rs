@@ -139,10 +139,10 @@ impl TypeInferencer {
                         )))),
                     );
 
-                    operand_type
+                    Type::fixed_type(&operand_type)
                 };
 
-                let element_type = match &*Type::unwrap(&operand_type).borrow() {
+                let element_type = match &*operand_type.borrow() {
                     Type::Array(element_type) => Rc::clone(element_type),
                     ty => panic!("Operand must be an array, but was {:?}", ty),
                 };

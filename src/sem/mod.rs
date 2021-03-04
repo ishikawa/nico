@@ -170,19 +170,30 @@ impl fmt::Display for Type {
 }
 
 impl Type {
-    pub fn unwrap(ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
-        match *ty.borrow() {
+    // Remmove type variable indirection.
+    pub fn fixed_type(ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+        match &*ty.borrow() {
+            Type::Array(element_type) => wrap(Type::Array(Type::fixed_type(&element_type))),
+            Type::Function {
+                params,
+                return_type,
+            } => wrap(Type::Function {
+                params: params.iter().map(|p| Type::fixed_type(p)).collect(),
+                return_type: Type::fixed_type(return_type),
+            }),
             Type::TypeVariable {
-                instance: Some(ref instance),
+                instance: Some(instance),
                 ..
-            } => Type::unwrap(instance),
+            } => Type::fixed_type(instance),
+            /*
             Type::TypeVariable {
-                ref name,
+                name,
                 instance: None,
             } => {
                 panic!("Type variable `{}` must be unified", name)
             }
-            _ => Rc::clone(&ty),
+            */
+            _ => Rc::clone(ty),
         }
     }
 
