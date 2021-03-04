@@ -7,6 +7,8 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+const DEBUG: bool = false;
+
 #[derive(Debug)]
 pub struct TypeInferencer {
     generic_type_var_naming: PrefixNaming,
@@ -42,7 +44,27 @@ impl TypeInferencer {
 
         // Unify return type from body.
         match &*function.r#type.borrow() {
-            Type::Function { return_type, .. } => self.unify(&retty, return_type),
+            Type::Function { return_type, .. } => {
+                if DEBUG {
+                    eprintln!(
+                        "Unify return type of fun `{}`: body = {}, ret = {}",
+                        function.name,
+                        retty.borrow(),
+                        return_type.borrow()
+                    );
+                }
+
+                self.unify(&retty, return_type);
+
+                if DEBUG {
+                    eprintln!(
+                        "--> Unify return type of fun `{}`: body = {}, ret = {}",
+                        function.name,
+                        retty.borrow(),
+                        return_type.borrow()
+                    );
+                }
+            }
             ty => panic!("Expected function type but was {:?}", ty),
         }
 

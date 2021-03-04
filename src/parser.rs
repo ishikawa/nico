@@ -427,32 +427,34 @@ impl Parser {
 
     // `... [...]`, `... (...)`
     fn parse_access(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
-        let node = self.parse_primary(tokenizer)?;
+        let mut node = self.parse_primary(tokenizer)?;
 
-        let token = match tokenizer.peek() {
-            None => return Some(node),
-            Some(token) => token,
-        };
+        loop {
+            let token = match tokenizer.peek() {
+                None => return Some(node),
+                Some(token) => token,
+            };
 
-        match token {
-            Token::Char('[') => {
-                consume_char(tokenizer, '[');
-                let mut arguments = self.parse_elements(tokenizer, ']');
-                consume_char(tokenizer, ']');
+            match token {
+                Token::Char('[') => {
+                    consume_char(tokenizer, '[');
+                    let mut arguments = self.parse_elements(tokenizer, ']');
+                    consume_char(tokenizer, ']');
 
-                if arguments.len() != 1 {
-                    panic!(
-                        "subscript operator `[]` takes 1 argument, but {} arguments given",
-                        arguments.len()
-                    );
+                    if arguments.len() != 1 {
+                        panic!(
+                            "subscript operator `[]` takes 1 argument, but {} arguments given",
+                            arguments.len()
+                        );
+                    }
+
+                    node = self.typed_expr(Expr::Subscript {
+                        operand: Box::new(node),
+                        index: Box::new(arguments.remove(0)),
+                    });
                 }
-
-                Some(self.typed_expr(Expr::Subscript {
-                    operand: Box::new(node),
-                    index: Box::new(arguments.remove(0)),
-                }))
+                _ => return Some(node),
             }
-            _ => Some(node),
         }
     }
 

@@ -242,6 +242,10 @@ const cases: TestCase[] = [
     expected: 1
   },
   {
+    input: "[[3]][0][0]",
+    expected: 3
+  },
+  {
     input: ["let x = [5]", "x[0]"].join("\n"),
     expected: 5
   },
