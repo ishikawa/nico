@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 #[derive(Debug)]
 pub struct TypeInferencer {
@@ -21,6 +21,14 @@ impl SemanticAnalyzer for TypeInferencer {
         }
         if let Some(ref mut function) = module.main {
             self.analyze_function(function);
+        }
+
+        // All types should be resolved. Run validation.
+        for function in &mut module.functions {
+            self.validate_function(function);
+        }
+        if let Some(ref mut function) = module.main {
+            self.validate_function(function);
         }
     }
 }
@@ -45,48 +53,38 @@ impl TypeInferencer {
         // Unify return type from body.
         match &*function.r#type.borrow() {
             Type::Function { return_type, .. } => {
-                if DEBUG {
-                    eprintln!(
-                        "Unify return type of fun `{}`: body = {}, ret = {}",
-                        function.name,
-                        retty.borrow(),
-                        return_type.borrow()
-                    );
-                }
-
-                self.unify(&retty, return_type);
-
-                if DEBUG {
-                    eprintln!(
-                        "--> Unify return type of fun `{}`: body = {}, ret = {}",
-                        function.name,
-                        retty.borrow(),
-                        return_type.borrow()
-                    );
-                }
+                self.unify_and_log(
+                    format!("return type of fun `{}` (body, ret)", function.name),
+                    &retty,
+                    return_type,
+                );
             }
             ty => panic!("Expected function type but was {:?}", ty),
         }
 
-        // Validation
-        match &*retty.borrow() {
-            Type::Array(_) => {
-                panic!(
-                    "Attempt to return array {} from function `{}`",
-                    retty.borrow(),
-                    function.name
-                );
-            }
-            Type::TypeVariable { .. } => {
-                panic!(
-                    "Type of return value of function `{}` is unresolved.",
-                    function.name
-                );
-            }
-            _ => {}
-        }
-
         Rc::clone(&function.r#type)
+    }
+
+    fn validate_function(&mut self, function: &mut parser::Function) {
+        match &*function.r#type.borrow() {
+            Type::Function { return_type, .. } => match &*return_type.borrow() {
+                Type::Array(_) => {
+                    panic!(
+                        "Attempt to return array {} from function `{}`",
+                        return_type.borrow(),
+                        function.name
+                    );
+                }
+                Type::TypeVariable { .. } => {
+                    panic!(
+                        "Type of return value of function `{}` is unresolved: {:?}",
+                        function.name, function
+                    );
+                }
+                _ => {}
+            },
+            ty => panic!("Expected function type but was {:?}", ty),
+        }
     }
 
     fn analyze_invocation(
@@ -105,7 +103,8 @@ impl TypeInferencer {
             return_type: Rc::clone(retty),
         });
 
-        self.unify(&function_type, &callsite);
+        self.unify_and_log("type of invocation (f, call)", &function_type, &callsite);
+
         Rc::clone(retty)
     }
 
@@ -157,14 +156,14 @@ impl TypeInferencer {
             }
             Expr::Subscript { operand, index } => {
                 let operand_type = {
-                    let mut scoped_generic_vars = generic_vars.clone();
                     let generic_element_typename = self.generic_type_var_naming.next();
 
                     //scoped_generic_vars.insert(generic_element_typename.clone());
 
-                    let operand_type = self.analyze_expr(operand, &mut scoped_generic_vars);
+                    let operand_type = self.analyze_expr(operand, generic_vars);
 
-                    self.unify(
+                    self.unify_and_log(
+                        "subscript (operand, T[])",
                         &operand_type,
                         &wrap(Type::Array(wrap(Type::new_type_var(
                             &generic_element_typename,
@@ -181,7 +180,7 @@ impl TypeInferencer {
 
                 // `index` must be an integer
                 let index_type = self.analyze_expr(index, generic_vars);
-                self.unify(&index_type, &wrap(Type::Int32));
+                self.unify_and_log("subscript (index, i32)", &index_type, &wrap(Type::Int32));
 
                 element_type
             }
@@ -295,7 +294,7 @@ impl TypeInferencer {
         };
 
         // To update node's type
-        self.unify(&ty, &node.r#type);
+        self.unify_and_log("(ty, node)", &ty, &node.r#type);
         ty
     }
 }
@@ -441,6 +440,33 @@ impl TypeInferencer {
         Type::new_type_var(&self.generic_type_var_naming.next())
     }
 
+    fn unify_and_log<S: AsRef<str>>(
+        &mut self,
+        message: S,
+        ty1: &Rc<RefCell<Type>>,
+        ty2: &Rc<RefCell<Type>>,
+    ) {
+        if DEBUG {
+            eprintln!(
+                "[unify] {}: {}, {}",
+                message.as_ref(),
+                ty1.borrow(),
+                ty2.borrow()
+            );
+        }
+
+        self.unify(ty1, ty2);
+
+        if DEBUG {
+            eprintln!(
+                "[unify] --> {}: {}, {}",
+                message.as_ref(),
+                ty1.borrow(),
+                ty2.borrow()
+            );
+        }
+    }
+
     fn unify(&mut self, ty1: &Rc<RefCell<Type>>, ty2: &Rc<RefCell<Type>>) {
         if let Some(error) = self._unify(ty1, ty2) {
             match error {
@@ -545,7 +571,7 @@ impl TypeInferencer {
             },
         };
 
-        match action {
+        match &action {
             Unification::ReplaceInstance(new_instance) => {
                 if let Type::TypeVariable {
                     ref mut instance, ..
@@ -556,7 +582,7 @@ impl TypeInferencer {
                 self.prune(ty1);
                 None
             }
-            Unification::Unify(ref ty1, ref ty2) => self._unify(&Rc::clone(ty1), &Rc::clone(ty2)),
+            Unification::Unify(ty1, ty2) => self._unify(&Rc::clone(ty1), &Rc::clone(ty2)),
             Unification::Done => None,
         }
     }

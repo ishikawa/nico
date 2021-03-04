@@ -158,11 +158,11 @@ impl fmt::Display for Type {
             Type::TypeVariable {
                 name,
                 instance: None,
-            } => write!(f, "?{}", name),
+            } => write!(f, "{}", name),
             Type::TypeVariable {
                 name,
                 instance: Some(instance),
-            } => write!(f, "?{}<{}>", name, instance.borrow()),
+            } => write!(f, "{}<{}>", name, instance.borrow()),
         }
     }
 }
@@ -183,7 +183,7 @@ impl Clone for Type {
                 return_type: Rc::clone(return_type),
             },
             Type::TypeVariable { name, instance } => Type::TypeVariable {
-                name: name.clone(),
+                name: format!("{}.", name),
                 instance: instance.as_ref().map(|x| Rc::clone(&x)),
             },
         }

@@ -260,6 +260,17 @@ const cases: TestCase[] = [
     expected: 55
   },
   {
+    focus: true,
+    // prettier-ignore
+    input: [
+      "fun get(ar, i)",
+      "    ar[i]",
+      "end",
+      "get([5, 4, 3], 1)",
+    ].join("\n"),
+    expected: 4
+  },
+  {
     // prettier-ignore
     input: [
       "fun foo(x)",
