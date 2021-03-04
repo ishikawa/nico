@@ -75,7 +75,6 @@ fn align(n: wasm::Size) -> wasm::Size {
 }
 
 fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
-    let ty = Type::unwrap(ty);
     let wty = match *ty.borrow() {
         Type::Int32 => Some(wasm::Type::I32),
         Type::Boolean => Some(wasm::Type::I32),
@@ -83,9 +82,15 @@ fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
         Type::Void => None,
         Type::Array(_) => Some(wasm::Type::I32),
         Type::TypeVariable { .. } => {
-            panic!("Type variable `{:?}` can't be resolved to WASM type.", ty)
+            panic!(
+                "Type variable `{}` can't be resolved to WASM type.",
+                ty.borrow()
+            )
         }
-        Type::Function { .. } => panic!("Function type `{:?}` can't be resolved to WASM type.", ty),
+        Type::Function { .. } => panic!(
+            "Function type `{}` can't be resolved to WASM type.",
+            ty.borrow()
+        ),
     };
     wty
 }
@@ -112,7 +117,7 @@ impl StackFrame {
 #[derive(Debug, PartialEq)]
 pub struct LocalStorage {
     name: String,
-    r#type: Rc<RefCell<Type>>,
+    pub r#type: Rc<RefCell<Type>>,
 }
 
 /// String literal allocation in constant pool that is allocated at compile time.

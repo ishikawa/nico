@@ -49,7 +49,7 @@ impl Allocator {
                 } => {
                     let v = wrap(LocalStorage {
                         name: naming.next(name),
-                        r#type: Type::unwrap(r#type),
+                        r#type: Rc::clone(r#type),
                     });
 
                     storage.replace(Rc::clone(&v));
@@ -98,9 +98,11 @@ impl Allocator {
                 {
                     let length = elements.len();
 
-                    let element_type = match &*Type::unwrap(&node.r#type).borrow() {
+                    let element_type = match &*node.r#type.borrow() {
                         Type::Array(element_type) => Rc::clone(element_type),
-                        ty => panic!("Expected Array<T> but was {:?}", ty),
+                        ty => {
+                            panic!("Expected Array<T> but was `{:?}` for node `{:?}`", ty, node)
+                        }
                     };
 
                     let element_size = wasm_type(&element_type).unwrap().num_bytes();
@@ -120,6 +122,10 @@ impl Allocator {
                 for element in elements {
                     self.analyze_expr(element, naming, locals, strings, frame);
                 }
+            }
+            Expr::Subscript { operand, index } => {
+                self.analyze_expr(operand, naming, locals, strings, frame);
+                self.analyze_expr(index, naming, locals, strings, frame);
             }
             Expr::Invocation {
                 name: _, arguments, ..
@@ -169,7 +175,7 @@ impl Allocator {
                 {
                     let temp = wrap(LocalStorage {
                         name: naming.next("_case_head"),
-                        r#type: Type::unwrap(&head.r#type),
+                        r#type: Rc::clone(&head.r#type),
                     });
 
                     locals.push(Rc::clone(&temp));
@@ -229,7 +235,7 @@ impl Allocator {
                     } => {
                         let v = wrap(LocalStorage {
                             name: naming.next(name),
-                            r#type: Type::unwrap(&r#type),
+                            r#type: Rc::clone(&r#type),
                         });
 
                         locals.push(Rc::clone(&v));

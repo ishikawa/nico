@@ -1,5 +1,6 @@
 pub mod binder;
 pub mod inferencer;
+pub mod validator;
 use crate::asm;
 use crate::parser;
 use crate::util::wrap;
@@ -8,7 +9,9 @@ pub use inferencer::TypeInferencer;
 use std::cell::RefCell;
 use std::collections::hash_map;
 use std::collections::HashMap;
+use std::fmt;
 use std::rc::Rc;
+pub use validator::TypeValidator;
 
 pub trait SemanticAnalyzer {
     fn analyze(&mut self, module: &mut parser::Module);
@@ -19,10 +22,10 @@ pub enum Type {
     Int32,
     Boolean,
     String,
-    Array(Rc<RefCell<Type>>),
     // Unit type. In many functional programming languages, this is
     // written as `()`, but I am more familiar with `Void`.
     Void,
+    Array(Rc<RefCell<Type>>),
     Function {
         params: Vec<Rc<RefCell<Type>>>,
         return_type: Rc<RefCell<Type>>,
@@ -131,19 +134,65 @@ impl Environment {
     }
 }
 
-impl Type {
-    /// Unwrap a type variable to its instance. Otherwise returns type itself.
-    /// `panic!` if a type variable is not instantiated.
-    pub fn unwrap(ty: &Rc<RefCell<Self>>) -> Rc<RefCell<Self>> {
-        match *ty.borrow() {
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Int32 => write!(f, "i32"),
+            Type::Boolean => write!(f, "bool"),
+            Type::String => write!(f, "str"),
+            Type::Void => write!(f, "void"),
+            Type::Array(element_type) => write!(f, "{}[]", element_type.borrow()),
+            Type::Function {
+                params,
+                return_type,
+            } => {
+                let mut it = params.iter().peekable();
+
+                write!(f, "(")?;
+                while let Some(param) = it.next() {
+                    write!(f, "{}", param.borrow())?;
+                    if it.peek().is_some() {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, ") -> {}", return_type.borrow())
+            }
             Type::TypeVariable {
-                instance: Some(ref instance),
-                ..
-            } => Rc::clone(instance),
-            Type::TypeVariable {
-                ref name,
+                name,
                 instance: None,
-            } => panic!("Type variable `{}` must be unified", name),
+            } => write!(f, "{}", name),
+            Type::TypeVariable {
+                name,
+                instance: Some(instance),
+            } => write!(f, "{}<{}>", name, instance.borrow()),
+        }
+    }
+}
+
+impl Type {
+    // Remmove type variable indirection.
+    pub fn fixed_type(ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+        match &*ty.borrow() {
+            Type::Array(element_type) => wrap(Type::Array(Type::fixed_type(&element_type))),
+            Type::Function {
+                params,
+                return_type,
+            } => wrap(Type::Function {
+                params: params.iter().map(|p| Type::fixed_type(p)).collect(),
+                return_type: Type::fixed_type(return_type),
+            }),
+            Type::TypeVariable {
+                instance: Some(instance),
+                ..
+            } => Type::fixed_type(instance),
+            /*
+            Type::TypeVariable {
+                name,
+                instance: None,
+            } => {
+                panic!("Type variable `{}` must be unified", name)
+            }
+            */
             _ => Rc::clone(ty),
         }
     }

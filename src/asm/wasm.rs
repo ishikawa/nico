@@ -78,6 +78,7 @@ pub enum Instruction {
     I32Store(MemArg),
 
     // Control Instructions
+    Unreachable,
     Call(Index),
     If {
         result_type: Option<Type>,
@@ -87,6 +88,9 @@ pub enum Instruction {
 
     // For unsigned values
     U32Const(u32),
+
+    // line comment
+    Comment(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -648,9 +652,19 @@ impl InstructionsBuilder {
         self
     }
 
+    pub fn unreachable(&mut self) -> &mut Self {
+        self.instructions.push(Instruction::Unreachable);
+        self
+    }
+
     pub fn call<T: Into<String>>(&mut self, name: T) -> &mut Self {
         self.instructions
             .push(Instruction::Call(Index::Id(Identifier(name.into()))));
+        self
+    }
+
+    pub fn comment<T: Into<String>>(&mut self, comment: T) -> &mut Self {
+        self.instructions.push(Instruction::Comment(comment.into()));
         self
     }
 
@@ -1183,6 +1197,11 @@ impl Printer {
                 self.write_index(&idx);
                 self.end_plain();
             }
+            Instruction::Unreachable => {
+                self.start_plain();
+                self.buffer.push_str("unreachable");
+                self.end_plain();
+            }
             Instruction::Call(idx) => {
                 self.start_plain();
                 self.buffer.push_str("call ");
@@ -1254,6 +1273,12 @@ impl Printer {
                 }
 
                 self.close_indent();
+            }
+            Instruction::Comment(comment) => {
+                self.start_plain();
+                self.buffer.push_str(";; ");
+                self.buffer.push_str(comment);
+                self.end_plain();
             }
         }
     }

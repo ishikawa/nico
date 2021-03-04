@@ -7,6 +7,8 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+const DEBUG: bool = false;
+
 #[derive(Debug)]
 pub struct TypeInferencer {
     generic_type_var_naming: PrefixNaming,
@@ -41,15 +43,15 @@ impl TypeInferencer {
         let retty = self.analyze_body(&mut function.body, &mut generic_vars);
 
         // Unify return type from body.
-        match *function.r#type.borrow() {
-            Type::Function {
-                ref return_type, ..
-            } => {
-                if let Some(error) = self.unify(&retty, return_type) {
-                    self.handle_unification_error(&error);
-                }
+        match &*function.r#type.borrow() {
+            Type::Function { return_type, .. } => {
+                self.unify_and_log(
+                    format!("return type of fun `{}` (body, ret)", function.name),
+                    &retty,
+                    return_type,
+                );
             }
-            _ => unreachable!(),
+            ty => panic!("Expected function type but was {:?}", ty),
         }
 
         Rc::clone(&function.r#type)
@@ -71,10 +73,7 @@ impl TypeInferencer {
             return_type: Rc::clone(retty),
         });
 
-        if let Some(error) = self.unify(&function_type, &callsite) {
-            self.handle_unification_error(&error);
-        }
-
+        self.unify_and_log("type of invocation (f, call)", &function_type, &callsite);
         Rc::clone(retty)
     }
 
@@ -118,14 +117,41 @@ impl TypeInferencer {
                     element_types
                         .iter_mut()
                         .fold(&first_type, |previous_type, current_type| {
-                            if let Some(error) = self.unify(&previous_type, &current_type) {
-                                self.handle_unification_error(&error);
-                                unreachable!();
-                            }
+                            self.unify(&previous_type, &current_type);
                             current_type
                         });
 
                 wrap(Type::Array(Rc::clone(element_type)))
+            }
+            Expr::Subscript { operand, index } => {
+                let operand_type = {
+                    let generic_element_typename = self.generic_type_var_naming.next();
+
+                    //scoped_generic_vars.insert(generic_element_typename.clone());
+
+                    let operand_type = self.analyze_expr(operand, generic_vars);
+
+                    self.unify_and_log(
+                        "subscript (operand, T[])",
+                        &operand_type,
+                        &wrap(Type::Array(wrap(Type::new_type_var(
+                            &generic_element_typename,
+                        )))),
+                    );
+
+                    Type::fixed_type(&operand_type)
+                };
+
+                let element_type = match &*operand_type.borrow() {
+                    Type::Array(element_type) => Rc::clone(element_type),
+                    ty => panic!("Operand must be an array, but was {:?}", ty),
+                };
+
+                // `index` must be an integer
+                let index_type = self.analyze_expr(index, generic_vars);
+                self.unify_and_log("subscript (index, i32)", &index_type, &wrap(Type::Int32));
+
+                element_type
             }
             Expr::Identifier {
                 ref name,
@@ -177,19 +203,13 @@ impl TypeInferencer {
             } => {
                 let cond_type = self.analyze_expr(condition, generic_vars);
 
-                if let Some(error) = self.unify(&cond_type, &wrap(Type::Boolean)) {
-                    self.handle_unification_error(&error);
-                }
+                self.unify(&cond_type, &wrap(Type::Boolean));
 
                 let then_type = self.analyze_body(then_body, generic_vars);
                 let else_type = self.analyze_body(else_body, generic_vars);
 
-                if let Some(error) = self.unify(&then_type, &else_type) {
-                    self.handle_unification_error(&error);
-                }
-                if let Some(error) = self.unify(&then_type, &node.r#type) {
-                    self.handle_unification_error(&error);
-                }
+                self.unify(&then_type, &else_type);
+                self.unify(&then_type, &node.r#type);
 
                 then_type
             }
@@ -228,12 +248,8 @@ impl TypeInferencer {
                     body_types
                         .iter()
                         .fold(&else_type, |previous_type, current_type| {
-                            if let Some(error) = self.unify(previous_type, current_type) {
-                                self.handle_unification_error(&error);
-                                unreachable!();
-                            } else {
-                                current_type
-                            }
+                            self.unify(previous_type, current_type);
+                            current_type
                         });
 
                 Rc::clone(case_type)
@@ -247,7 +263,7 @@ impl TypeInferencer {
         };
 
         // To update node's type
-        self.unify(&ty, &node.r#type);
+        self.unify_and_log("(ty, node)", &ty, &node.r#type);
         ty
     }
 }
@@ -317,7 +333,7 @@ impl TypeInferencer {
         generic_vars: &mut HashSet<String>,
         type_var_cache: &mut HashMap<String, Rc<RefCell<Type>>>,
     ) -> Rc<RefCell<Type>> {
-        self.prune(ty);
+        let ty = self.prune(ty);
 
         let freshed = match *ty.borrow() {
             Type::TypeVariable { ref name, .. } => {
@@ -362,66 +378,104 @@ impl TypeInferencer {
     }
 
     /// Prune the instance chain of type variables as much as possible.
-    /// Note, this function leaves unresolvable variable like
-    /// - `T -> U -> (None)`
-    /// - `T -> (Not primitive type)`
-    fn prune(&mut self, ty: &Rc<RefCell<Type>>) {
-        // 1. Roll up instance chain until meets primitive type.
-        // 2. Replace the content of RefCall with an instance if it is primitive type.
-        let ty2 = match *ty.borrow_mut() {
+    /// However this function can't replace top TypeVariable with
+    /// a composite type (like Function, Array).
+    ///
+    /// This function returns the instance type of top TypeVariable instead.
+    fn prune(&mut self, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+        // Prune descendants and retrieve the type at the deepest level.
+        let terminal = match *ty.borrow_mut() {
             Type::TypeVariable {
-                instance: Some(ref mut instance),
-                ..
-            } => {
-                self.prune(instance);
-                *instance = Rc::clone(instance);
+                ref mut instance, ..
+            } => match instance {
+                None => return Rc::clone(ty),
+                Some(ref i) => {
+                    let n = self.prune(i);
 
-                match *instance.borrow() {
-                    Type::Int32 => Type::Int32,
-                    Type::String => Type::String,
-                    Type::Boolean => Type::Boolean,
-                    Type::Void => Type::Void,
-                    _ => return,
+                    instance.replace(Rc::clone(&n));
+                    Rc::clone(&n)
                 }
-            }
+            },
             _ => {
-                return;
+                // We don't need to prune anymore.
+                return Rc::clone(ty);
             }
         };
 
-        *ty.borrow_mut() = ty2;
+        // Replace instance with terminal type if it is
+        // a primitive type.
+        match *terminal.borrow() {
+            Type::Int32 => ty.replace(Type::Int32),
+            Type::Boolean => ty.replace(Type::Boolean),
+            Type::String => ty.replace(Type::String),
+            Type::Void => ty.replace(Type::Void),
+            _ => {
+                return Rc::clone(&terminal);
+            }
+        };
+
+        Rc::clone(ty)
     }
 
     fn new_type_var(&mut self) -> Type {
         Type::new_type_var(&self.generic_type_var_naming.next())
     }
 
-    fn handle_unification_error(&self, e: &UnificationError) {
-        match e {
-            UnificationError::RecursiveReference(_ty1, _ty2) => {
-                panic!("Recursive type reference detected.");
-            }
-            UnificationError::NumberOfParamsMismatch(ty1, ty2, n1, n2) => {
-                panic!(
-                    "Wrong number of parameters. Expected {} but was {} in `{:?}` and `{:?}`",
-                    n1, n2, ty1, ty2
-                );
-            }
-            UnificationError::TypeMismatch(ty1, ty2) => {
-                panic!("Type mismatch in `{:?}` and `{:?}`", ty1, ty2);
-            }
-        };
+    fn unify_and_log<S: AsRef<str>>(
+        &mut self,
+        message: S,
+        ty1: &Rc<RefCell<Type>>,
+        ty2: &Rc<RefCell<Type>>,
+    ) {
+        if DEBUG {
+            eprintln!(
+                "[unify] {}: {}, {}",
+                message.as_ref(),
+                ty1.borrow(),
+                ty2.borrow()
+            );
+        }
+
+        self.unify(ty1, ty2);
+
+        if DEBUG {
+            eprintln!(
+                "[unify] --> {}: {}, {}",
+                message.as_ref(),
+                ty1.borrow(),
+                ty2.borrow()
+            );
+        }
     }
 
-    fn unify(
+    fn unify(&mut self, ty1: &Rc<RefCell<Type>>, ty2: &Rc<RefCell<Type>>) {
+        if let Some(error) = self._unify(ty1, ty2) {
+            match error {
+                UnificationError::RecursiveReference(_ty1, _ty2) => {
+                    panic!("Recursive type reference detected.");
+                }
+                UnificationError::NumberOfParamsMismatch(ty1, ty2, n1, n2) => {
+                    panic!(
+                        "Wrong number of parameters. Expected {} but was {} in `{:?}` and `{:?}`",
+                        n1, n2, ty1, ty2
+                    );
+                }
+                UnificationError::TypeMismatch(ty1, ty2) => {
+                    panic!("Type mismatch in `{:?}` and `{:?}`", ty1, ty2);
+                }
+            };
+        }
+    }
+
+    fn _unify(
         &mut self,
         ty1: &Rc<RefCell<Type>>,
         ty2: &Rc<RefCell<Type>>,
     ) -> Option<UnificationError> {
-        self.prune(ty1);
-        self.prune(ty2);
+        let ty1 = &self.prune(ty1);
+        let ty2 = &self.prune(ty2);
 
-        let action = match *ty1.borrow() {
+        let action = match &*ty1.borrow() {
             Type::TypeVariable { .. } => {
                 if *ty1 != *ty2 {
                     if (*ty1).borrow().contains(&*ty2.borrow()) {
@@ -430,11 +484,27 @@ impl TypeInferencer {
                             Rc::clone(ty2),
                         ));
                     }
+
                     Unification::ReplaceInstance(Rc::clone(ty2))
                 } else {
                     Unification::Done
                 }
             }
+            Type::Array(element_type1) => match &*ty2.borrow() {
+                Type::Array(element_type2) => {
+                    if let Some(error) = self._unify(element_type1, element_type2) {
+                        return Some(error);
+                    }
+                    Unification::Done
+                }
+                Type::TypeVariable { .. } => Unification::Unify(Rc::clone(ty2), Rc::clone(ty1)),
+                _ => {
+                    return Some(UnificationError::TypeMismatch(
+                        Rc::clone(ty1),
+                        Rc::clone(ty2),
+                    ));
+                }
+            },
             Type::Function {
                 params: ref params1,
                 return_type: ref return_type1,
@@ -453,12 +523,13 @@ impl TypeInferencer {
                     }
 
                     for (x, y) in params1.iter().zip(params2.iter()) {
-                        if let Some(error) = self.unify(x, y) {
+                        if let Some(error) = self._unify(x, y) {
                             return Some(error);
                         }
                     }
-
-                    self.unify(return_type1, return_type2);
+                    if let Some(error) = self._unify(return_type1, return_type2) {
+                        return Some(error);
+                    }
                     Unification::Done
                 }
                 Type::TypeVariable { .. } => Unification::Unify(Rc::clone(ty2), Rc::clone(ty1)),
@@ -481,7 +552,7 @@ impl TypeInferencer {
             },
         };
 
-        match action {
+        match &action {
             Unification::ReplaceInstance(new_instance) => {
                 if let Type::TypeVariable {
                     ref mut instance, ..
@@ -492,7 +563,7 @@ impl TypeInferencer {
                 self.prune(ty1);
                 None
             }
-            Unification::Unify(ref ty1, ref ty2) => self.unify(&Rc::clone(ty1), &Rc::clone(ty2)),
+            Unification::Unify(ty1, ty2) => self._unify(&Rc::clone(ty1), &Rc::clone(ty2)),
             Unification::Done => None,
         }
     }
@@ -663,7 +734,7 @@ mod tests {
         let pty0 = wrap(Type::Int32);
         let pty1 = wrap(Type::Int32);
 
-        let error = inferencer.unify(&pty0, &pty1);
+        let error = inferencer._unify(&pty0, &pty1);
         assert!(error.is_none());
 
         assert_matches!(*pty0.borrow(), Type::Int32);
@@ -676,7 +747,7 @@ mod tests {
         let pty0 = wrap(Type::Boolean);
         let pty1 = wrap(Type::Boolean);
 
-        let error = inferencer.unify(&pty0, &pty1);
+        let error = inferencer._unify(&pty0, &pty1);
         assert!(error.is_none());
 
         assert_matches!(*pty0.borrow(), Type::Boolean);
@@ -689,7 +760,7 @@ mod tests {
         let pty0 = wrap(Type::String);
         let pty1 = wrap(Type::String);
 
-        let error = inferencer.unify(&pty0, &pty1);
+        let error = inferencer._unify(&pty0, &pty1);
         assert!(error.is_none());
 
         assert_matches!(*pty0.borrow(), Type::String);
@@ -708,7 +779,7 @@ mod tests {
             instance: None,
         }));
 
-        let error = inferencer.unify(&pty0, &pty1);
+        let error = inferencer._unify(&pty0, &pty1);
         assert!(error.is_none());
 
         assert_matches!(*pty0.borrow(), Type::TypeVariable {
@@ -738,7 +809,7 @@ mod tests {
             instance: None,
         }));
 
-        let error = inferencer.unify(&pty0, &pty1);
+        let error = inferencer._unify(&pty0, &pty1);
         assert!(error.is_none());
 
         assert_matches!(*pty0.borrow(), Type::TypeVariable {
@@ -746,15 +817,14 @@ mod tests {
             ref instance,
         } => {
             assert_eq!(name, "a");
-            assert_matches!(instance, Some(instance) => {
-                assert_matches!(*instance.borrow(), Type::TypeVariable {
-                    ref name,
-                    ref instance,
-                } => {
-                    assert_eq!(name, "b");
-                    assert!(instance.is_none());
-                });
-            })
+            assert!(instance.is_some());
+            assert_matches!(*instance.as_ref().unwrap().borrow(), Type::TypeVariable {
+                ref name,
+                ref instance,
+            } => {
+                assert_eq!(name, "b");
+                assert!(instance.is_none());
+            });
         });
         assert_matches!(*pty1.borrow(), Type::TypeVariable {
             ref name,
@@ -1016,34 +1086,6 @@ mod tests {
 
         assert_matches!(body[0].r#type, ref ty => {
             assert_eq!(*ty.borrow(), Type::Int32);
-        });
-    }
-
-    #[test]
-    fn array_1() {
-        let mut module = parser::parse_string("[1, 2]");
-
-        analyze(&mut module);
-
-        let function = &module.main.unwrap();
-        let body = &function.body;
-
-        assert_matches!(function.r#type, ref ty => {
-            assert_matches!(*ty.borrow(), Type::Function{ ref return_type, .. } => {
-                let return_type = Type::unwrap(return_type);
-
-                assert_matches!(*return_type.borrow(), Type::Array( ref element_type ) => {
-                    assert_eq!(*element_type.borrow(), Type::Int32);
-                });
-            });
-        });
-
-        assert_matches!(body[0].r#type, ref ty => {
-            let ty = Type::unwrap(ty);
-
-            assert_matches!(*ty.borrow(), Type::Array( ref element_type ) => {
-                assert_eq!(*element_type.borrow(), Type::Int32);
-            });
         });
     }
 

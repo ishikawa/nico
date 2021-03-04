@@ -9,6 +9,7 @@ use sem::SemanticAnalyzer;
 pub struct CompilerPasses {
     binder: sem::Binder,
     inferencer: sem::TypeInferencer,
+    validator: sem::TypeValidator,
     allocator: asm::Allocator,
 }
 
@@ -25,6 +26,10 @@ impl CompilerPasses {
         &self.inferencer
     }
 
+    pub fn validator(&self) -> &sem::TypeValidator {
+        &self.validator
+    }
+
     pub fn allocator(&self) -> &asm::Allocator {
         &self.allocator
     }
@@ -32,6 +37,7 @@ impl CompilerPasses {
     pub fn apply(&mut self, module: &mut parser::Module) {
         self.binder.analyze(module);
         self.inferencer.analyze(module);
+        self.validator.analyze(module);
         self.allocator.analyze(module);
     }
 }
