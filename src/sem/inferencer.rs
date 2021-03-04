@@ -18,6 +18,12 @@ pub struct TypeInferencer {
     generic_type_var_naming: PrefixNaming,
 }
 
+impl Default for TypeInferencer {
+    fn default() -> Self {
+        TypeInferencer::new()
+    }
+}
+
 impl SemanticAnalyzer for TypeInferencer {
     fn analyze(&mut self, module: &mut parser::Module) {
         for function in &mut module.functions {
@@ -25,6 +31,14 @@ impl SemanticAnalyzer for TypeInferencer {
         }
         if let Some(ref mut function) = module.main {
             self.analyze_function(function);
+        }
+
+        // Replace type variables whose actual type is fixed with the actual type.
+        for function in &mut module.functions {
+            self.fix_function(function);
+        }
+        if let Some(ref mut function) = module.main {
+            self.fix_function(function);
         }
     }
 }
@@ -141,7 +155,7 @@ impl TypeInferencer {
                         )))),
                     );
 
-                    Type::fixed_type(&operand_type)
+                    fixed_type(&operand_type)
                 };
 
                 let element_type = match &*operand_type.borrow() {
@@ -571,9 +585,147 @@ impl TypeInferencer {
     }
 }
 
-impl Default for TypeInferencer {
-    fn default() -> Self {
-        TypeInferencer::new()
+// Prune fixed type variables and remove indirection.
+pub fn fixed_type(ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+    match &*ty.borrow() {
+        Type::Array(element_type) => wrap(Type::Array(fixed_type(&element_type))),
+        Type::Function {
+            params,
+            return_type,
+        } => wrap(Type::Function {
+            params: params.iter().map(|p| fixed_type(p)).collect(),
+            return_type: fixed_type(return_type),
+        }),
+        Type::TypeVariable {
+            instance: Some(instance),
+            ..
+        } => fixed_type(instance),
+
+        Type::TypeVariable { instance: None, .. } => {
+            // If the type is not yet fixed, returns it.
+            Rc::clone(ty)
+        }
+        _ => Rc::clone(ty),
+    }
+}
+
+impl TypeInferencer {
+    fn fix_function(&self, function: &mut parser::Function) {
+        for binding in &function.params {
+            match *binding.borrow_mut() {
+                Binding::Variable { ref mut r#type, .. } => *r#type = fixed_type(r#type),
+                _ => panic!("Invalid binding or allocation"),
+            };
+        }
+
+        self.fix_body(&mut function.body);
+        function.r#type = fixed_type(&function.r#type);
+    }
+
+    fn fix_body(&self, body: &mut Vec<parser::Node>) {
+        for node in body {
+            self.fix_expr(node);
+        }
+    }
+
+    fn fix_expr(&self, node: &mut parser::Node) {
+        node.r#type = fixed_type(&node.r#type);
+
+        match &mut node.expr {
+            Expr::Stmt(expr) => {
+                self.fix_expr(expr);
+            }
+            Expr::Integer(_) => {}
+            Expr::String { .. } => {}
+            Expr::Array {
+                ref mut elements, ..
+            } => {
+                for element in elements {
+                    self.fix_expr(element);
+                }
+            }
+            Expr::Subscript { operand, index } => {
+                self.fix_expr(operand);
+                self.fix_expr(index);
+            }
+            Expr::Identifier { .. } => {}
+            Expr::Invocation { arguments, .. } => {
+                for argument in arguments {
+                    self.fix_expr(argument);
+                }
+            }
+            // binop
+            Expr::Add(lhs, rhs, ..)
+            | Expr::Sub(lhs, rhs, ..)
+            | Expr::Rem(lhs, rhs, ..)
+            | Expr::Mul(lhs, rhs, ..)
+            | Expr::Div(lhs, rhs, ..)
+            | Expr::LT(lhs, rhs, ..)
+            | Expr::GT(lhs, rhs, ..)
+            | Expr::LE(lhs, rhs, ..)
+            | Expr::GE(lhs, rhs, ..)
+            | Expr::EQ(lhs, rhs, ..)
+            | Expr::NE(lhs, rhs, ..) => {
+                self.fix_expr(lhs);
+                self.fix_expr(rhs);
+            }
+            Expr::If {
+                condition,
+                then_body,
+                else_body,
+            } => {
+                self.fix_expr(condition);
+                self.fix_body(then_body);
+                self.fix_body(else_body);
+            }
+            Expr::Case {
+                arms,
+                else_body,
+                head,
+                head_storage: _,
+            } => {
+                self.fix_expr(head);
+
+                for parser::CaseArm {
+                    condition,
+                    then_body,
+                    pattern,
+                } in arms
+                {
+                    self.fix_pattern(pattern);
+
+                    if let Some(condition) = condition {
+                        self.fix_expr(condition);
+                    }
+
+                    self.fix_body(then_body);
+                }
+
+                self.fix_body(else_body);
+            }
+            Expr::Var { pattern, init } => {
+                self.fix_expr(init);
+                self.fix_pattern(pattern);
+            }
+        };
+    }
+
+    fn fix_pattern(&self, pattern: &mut parser::Pattern) {
+        // Currntly, only "Variable pattern" is supported.
+        match pattern {
+            parser::Pattern::Variable(ref name, ref mut binding) => {
+                let binding = binding
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
+
+                match *(binding.borrow_mut()) {
+                    Binding::Variable { ref mut r#type, .. } => {
+                        *r#type = fixed_type(r#type);
+                    }
+                    Binding::Function { .. } => panic!("Unexpected binding"),
+                }
+            }
+        };
     }
 }
 

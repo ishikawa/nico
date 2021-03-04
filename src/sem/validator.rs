@@ -1,6 +1,6 @@
 use crate::parser;
 use crate::parser::Expr;
-use crate::sem::{Binding, SemanticAnalyzer, Type};
+use crate::sem::{SemanticAnalyzer, Type};
 
 #[derive(Debug, Default)]
 pub struct TypeValidator {}
@@ -23,16 +23,7 @@ impl TypeValidator {
     }
 
     fn validate_function(&self, function: &mut parser::Function) {
-        for binding in &function.params {
-            match *binding.borrow_mut() {
-                Binding::Variable { ref mut r#type, .. } => *r#type = Type::fixed_type(r#type),
-                _ => panic!("Invalid binding or allocation"),
-            };
-        }
-
         self.validate_body(&mut function.body);
-
-        function.r#type = Type::fixed_type(&function.r#type);
 
         match *function.r#type.borrow() {
             Type::Function {
@@ -67,8 +58,6 @@ impl TypeValidator {
     }
 
     fn validate_expr(&self, node: &mut parser::Node) {
-        node.r#type = Type::fixed_type(&node.r#type);
-
         match &mut node.expr {
             Expr::Stmt(expr) => {
                 self.validate_expr(expr);
@@ -148,21 +137,5 @@ impl TypeValidator {
         };
     }
 
-    fn validate_pattern(&self, pattern: &mut parser::Pattern) {
-        // Currntly, only "Variable pattern" is supported.
-        match pattern {
-            parser::Pattern::Variable(ref name, ref mut binding) => {
-                let binding = binding
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
-
-                match *(binding.borrow_mut()) {
-                    Binding::Variable { ref mut r#type, .. } => {
-                        *r#type = Type::fixed_type(r#type);
-                    }
-                    Binding::Function { .. } => panic!("Unexpected binding"),
-                }
-            }
-        };
-    }
+    fn validate_pattern(&self, _: &mut parser::Pattern) {}
 }
