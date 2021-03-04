@@ -1,3 +1,7 @@
+//! Implements type inference.
+//!
+//! Hindley–Milner type system and Algorithm W
+//! https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Algorithm_W
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem::{Binding, SemanticAnalyzer, Type};
@@ -32,8 +36,6 @@ impl TypeInferencer {
         }
     }
 
-    // `generic_vars` - Non
-    // `vars` - Identifier, Type
     fn analyze_function(&mut self, function: &mut parser::Function) -> Rc<RefCell<Type>> {
         // Generic type var names. Nico doesn't support generic type vars though.
         // See `freshrec()` funciton.
