@@ -260,7 +260,6 @@ const cases: TestCase[] = [
     expected: 55
   },
   {
-    focus: true,
     // prettier-ignore
     input: [
       "fun get(ar, i)",

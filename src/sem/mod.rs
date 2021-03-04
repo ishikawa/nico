@@ -1,5 +1,6 @@
 pub mod binder;
 pub mod inferencer;
+pub mod validator;
 use crate::asm;
 use crate::parser;
 use crate::util::wrap;
@@ -10,6 +11,7 @@ use std::collections::hash_map;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+pub use validator::TypeValidator;
 
 pub trait SemanticAnalyzer {
     fn analyze(&mut self, module: &mut parser::Module);
@@ -167,30 +169,23 @@ impl fmt::Display for Type {
     }
 }
 
-impl Clone for Type {
-    fn clone(&self) -> Self {
-        match self {
-            Type::Int32 => Type::Int32,
-            Type::Boolean => Type::Boolean,
-            Type::String => Type::String,
-            Type::Void => Type::Void,
-            Type::Array(element_type) => Type::Array(Rc::clone(element_type)),
-            Type::Function {
-                params,
-                return_type,
-            } => Type::Function {
-                params: params.clone(),
-                return_type: Rc::clone(return_type),
-            },
-            Type::TypeVariable { name, instance } => Type::TypeVariable {
-                name: format!("{}.", name),
-                instance: instance.as_ref().map(|x| Rc::clone(&x)),
-            },
+impl Type {
+    pub fn unwrap(ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+        match *ty.borrow() {
+            Type::TypeVariable {
+                instance: Some(ref instance),
+                ..
+            } => Type::unwrap(instance),
+            Type::TypeVariable {
+                ref name,
+                instance: None,
+            } => {
+                panic!("Type variable `{}` must be unified", name)
+            }
+            _ => Rc::clone(&ty),
         }
     }
-}
 
-impl Type {
     pub fn new_type_var(name: &str) -> Self {
         Type::TypeVariable {
             name: name.to_string(),

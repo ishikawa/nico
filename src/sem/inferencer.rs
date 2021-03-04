@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 #[derive(Debug)]
 pub struct TypeInferencer {
@@ -21,14 +21,6 @@ impl SemanticAnalyzer for TypeInferencer {
         }
         if let Some(ref mut function) = module.main {
             self.analyze_function(function);
-        }
-
-        // All types should be resolved. Run validation.
-        for function in &mut module.functions {
-            self.validate_function(function);
-        }
-        if let Some(ref mut function) = module.main {
-            self.validate_function(function);
         }
     }
 }
@@ -65,28 +57,6 @@ impl TypeInferencer {
         Rc::clone(&function.r#type)
     }
 
-    fn validate_function(&mut self, function: &mut parser::Function) {
-        match &*function.r#type.borrow() {
-            Type::Function { return_type, .. } => match &*return_type.borrow() {
-                Type::Array(_) => {
-                    panic!(
-                        "Attempt to return array {} from function `{}`",
-                        return_type.borrow(),
-                        function.name
-                    );
-                }
-                Type::TypeVariable { .. } => {
-                    panic!(
-                        "Type of return value of function `{}` is unresolved: {:?}",
-                        function.name, function
-                    );
-                }
-                _ => {}
-            },
-            ty => panic!("Expected function type but was {:?}", ty),
-        }
-    }
-
     fn analyze_invocation(
         &mut self,
         function_type: Rc<RefCell<Type>>,
@@ -104,7 +74,6 @@ impl TypeInferencer {
         });
 
         self.unify_and_log("type of invocation (f, call)", &function_type, &callsite);
-
         Rc::clone(retty)
     }
 
@@ -173,7 +142,7 @@ impl TypeInferencer {
                     operand_type
                 };
 
-                let element_type = match &*operand_type.borrow() {
+                let element_type = match &*Type::unwrap(&operand_type).borrow() {
                     Type::Array(element_type) => Rc::clone(element_type),
                     ty => panic!("Operand must be an array, but was {:?}", ty),
                 };
@@ -364,7 +333,7 @@ impl TypeInferencer {
         generic_vars: &mut HashSet<String>,
         type_var_cache: &mut HashMap<String, Rc<RefCell<Type>>>,
     ) -> Rc<RefCell<Type>> {
-        self.prune(ty);
+        let ty = self.prune(ty);
 
         let freshed = match *ty.borrow() {
             Type::TypeVariable { ref name, .. } => {
@@ -409,31 +378,43 @@ impl TypeInferencer {
     }
 
     /// Prune the instance chain of type variables as much as possible.
-    fn prune(&mut self, ty: &Rc<RefCell<Type>>) {
+    /// However this function can't replace top TypeVariable with
+    /// a composite type (like Function, Array).
+    ///
+    /// This function returns the instance type of top TypeVariable instead.
+    fn prune(&mut self, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
         // Prune descendants and retrieve the type at the deepest level.
-        let terminal = match &*ty.borrow_mut() {
+        let terminal = match *ty.borrow_mut() {
             Type::TypeVariable {
-                instance: Some(instance),
-                ..
-            } => {
-                self.prune(instance);
+                ref mut instance, ..
+            } => match instance {
+                None => return Rc::clone(ty),
+                Some(ref i) => {
+                    let n = self.prune(i);
 
-                match &*instance.borrow() {
-                    Type::TypeVariable {
-                        instance: Some(instance2),
-                        ..
-                    } => Rc::clone(instance2),
-                    _ => Rc::clone(instance),
+                    instance.replace(Rc::clone(&n));
+                    Rc::clone(&n)
                 }
-            }
+            },
             _ => {
                 // We don't need to prune anymore.
-                return;
+                return Rc::clone(ty);
             }
         };
 
-        // Replace instance with terminal type.
-        ty.replace(terminal.borrow().clone());
+        // Replace instance with terminal type if it is
+        // a primitive type.
+        match *terminal.borrow() {
+            Type::Int32 => ty.replace(Type::Int32),
+            Type::Boolean => ty.replace(Type::Boolean),
+            Type::String => ty.replace(Type::String),
+            Type::Void => ty.replace(Type::Void),
+            _ => {
+                return Rc::clone(&terminal);
+            }
+        };
+
+        Rc::clone(ty)
     }
 
     fn new_type_var(&mut self) -> Type {
@@ -491,8 +472,8 @@ impl TypeInferencer {
         ty1: &Rc<RefCell<Type>>,
         ty2: &Rc<RefCell<Type>>,
     ) -> Option<UnificationError> {
-        self.prune(ty1);
-        self.prune(ty2);
+        let ty1 = &self.prune(ty1);
+        let ty2 = &self.prune(ty2);
 
         let action = match &*ty1.borrow() {
             Type::TypeVariable { .. } => {
@@ -835,8 +816,15 @@ mod tests {
             ref name,
             ref instance,
         } => {
-            assert_eq!(name, "b");
-            assert!(instance.is_none());
+            assert_eq!(name, "a");
+            assert!(instance.is_some());
+            assert_matches!(*instance.as_ref().unwrap().borrow(), Type::TypeVariable {
+                ref name,
+                ref instance,
+            } => {
+                assert_eq!(name, "b");
+                assert!(instance.is_none());
+            });
         });
         assert_matches!(*pty1.borrow(), Type::TypeVariable {
             ref name,

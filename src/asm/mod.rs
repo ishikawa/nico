@@ -75,16 +75,22 @@ fn align(n: wasm::Size) -> wasm::Size {
 }
 
 fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
-    let wty = match *ty.borrow() {
+    let wty = match *Type::unwrap(ty).borrow() {
         Type::Int32 => Some(wasm::Type::I32),
         Type::Boolean => Some(wasm::Type::I32),
         Type::String => Some(wasm::Type::I32),
         Type::Void => None,
         Type::Array(_) => Some(wasm::Type::I32),
         Type::TypeVariable { .. } => {
-            panic!("Type variable `{:?}` can't be resolved to WASM type.", ty)
+            panic!(
+                "Type variable `{}` can't be resolved to WASM type.",
+                ty.borrow()
+            )
         }
-        Type::Function { .. } => panic!("Function type `{:?}` can't be resolved to WASM type.", ty),
+        Type::Function { .. } => panic!(
+            "Function type `{}` can't be resolved to WASM type.",
+            ty.borrow()
+        ),
     };
     wty
 }
