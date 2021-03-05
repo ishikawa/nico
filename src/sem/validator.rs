@@ -103,7 +103,9 @@ impl TypeValidator {
             } => {
                 self.validate_expr(condition);
                 self.validate_body(then_body);
-                self.validate_body(else_body);
+                if let Some(else_body) = else_body {
+                    self.validate_body(else_body);
+                }
             }
             Expr::Case {
                 arms,

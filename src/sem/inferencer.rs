@@ -222,9 +222,12 @@ impl TypeInferencer {
                 self.unify(&cond_type, &wrap(Type::Boolean));
 
                 let then_type = self.analyze_body(then_body, generic_vars);
-                let else_type = self.analyze_body(else_body, generic_vars);
 
-                self.unify(&then_type, &else_type);
+                if let Some(else_body) = else_body {
+                    let else_type = self.analyze_body(else_body, generic_vars);
+                    self.unify(&then_type, &else_type);
+                }
+
                 self.unify(&then_type, &node.r#type);
 
                 then_type
@@ -676,7 +679,9 @@ impl TypeInferencer {
             } => {
                 self.fix_expr(condition);
                 self.fix_body(then_body);
-                self.fix_body(else_body);
+                if let Some(else_body) = else_body {
+                    self.fix_body(else_body);
+                }
             }
             Expr::Case {
                 arms,

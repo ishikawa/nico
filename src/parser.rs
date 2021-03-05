@@ -91,7 +91,7 @@ pub enum Expr {
     If {
         condition: Box<Node>,
         then_body: Vec<Node>,
-        else_body: Vec<Node>,
+        else_body: Option<Vec<Node>>,
     },
     Case {
         head: Box<Node>, // head expression
@@ -524,51 +524,51 @@ impl Parser {
                 // TODO: check line separator before reading body
 
                 let mut then_body = vec![];
-                let mut else_body = vec![];
-                let mut has_else = false;
+                let mut else_body = None;
 
                 loop {
                     match tokenizer.peek() {
                         None => panic!("Premature EOF"),
-                        Some(Token::Else) => {
-                            // TODO: check line separator before reading body
-                            has_else = true;
-                            break;
-                        }
+                        Some(Token::Else) => break,
                         Some(Token::End) => break,
-                        _ => {}
-                    };
-
-                    match self.parse_stmt(tokenizer) {
-                        None => break,
-                        Some(node) => then_body.push(Some(node)),
+                        _ => {
+                            let stmt = self
+                                .parse_stmt(tokenizer)
+                                .unwrap_or_else(|| panic!("Premature EOF"));
+                            then_body.push(Some(stmt));
+                        }
                     };
                 }
 
-                if has_else {
+                let mut then_body = self.wrap_stmts(&mut then_body);
+
+                if let Some(Token::Else) = tokenizer.peek() {
+                    let mut body = vec![];
+
                     consume_token(tokenizer, Token::Else);
 
+                    // TODO: check line separator before reading body
                     loop {
                         match tokenizer.peek() {
                             None => panic!("Premature EOF"),
-                            Some(Token::End) => break,
-                            _ => {}
-                        };
-
-                        match self.parse_stmt(tokenizer) {
-                            None => break,
-                            Some(node) => else_body.push(Some(node)),
+                            Some(Token::End) => {
+                                else_body.replace(self.wrap_stmts(&mut body));
+                                break;
+                            }
+                            _ => {
+                                let stmt = self
+                                    .parse_stmt(tokenizer)
+                                    .unwrap_or_else(|| panic!("Premature EOF"));
+                                body.push(Some(stmt));
+                            }
                         };
                     }
                 }
 
                 consume_token(tokenizer, Token::End);
 
-                let mut then_body = self.wrap_stmts(&mut then_body);
-                let else_body = self.wrap_stmts(&mut else_body);
-
                 // If `else` clause is empty or omitted, convert the body of `then` to statements.
-                if !has_else {
+                if else_body.is_none() || else_body.as_ref().unwrap().is_empty() {
                     self.replace_last_expr_to_stmt(&mut then_body);
                 }
 

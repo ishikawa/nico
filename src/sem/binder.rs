@@ -139,14 +139,17 @@ impl Binder {
             } => {
                 let node_env = wrap(Environment::with_parent(Rc::clone(env)));
                 let then_env = wrap(Environment::with_parent(Rc::clone(&node_env)));
-                let else_env = wrap(Environment::with_parent(Rc::clone(&node_env)));
 
                 self.analyze_expr(condition, &node_env);
                 for node in then_body {
                     self.analyze_expr(node, &then_env);
                 }
-                for node in else_body {
-                    self.analyze_expr(node, &else_env);
+                if let Some(else_body) = else_body {
+                    let else_env = wrap(Environment::with_parent(Rc::clone(&node_env)));
+
+                    for node in else_body {
+                        self.analyze_expr(node, &else_env);
+                    }
                 }
             }
             Expr::Case {

@@ -568,15 +568,17 @@ impl AsmBuilder {
                     then_builder.build()
                 };
 
-                let else_insts = if !else_body.is_empty() {
-                    let mut else_builder = wasm::Builders::instructions();
-                    let t = self.build_expr_nodes(&mut else_builder, else_body, frame);
+                let mut else_insts = None;
 
-                    locals.extend(&t);
-                    Some(else_builder.build())
-                } else {
-                    None
-                };
+                if let Some(else_body) = else_body {
+                    if !else_body.is_empty() {
+                        let mut else_builder = wasm::Builders::instructions();
+                        let t = self.build_expr_nodes(&mut else_builder, else_body, frame);
+
+                        locals.extend(&t);
+                        else_insts.replace(else_builder.build());
+                    }
+                }
 
                 builder.push(wasm::Instruction::If {
                     result_type: wasm_type(&node.r#type),

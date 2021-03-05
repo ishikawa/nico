@@ -159,8 +159,10 @@ impl Allocator {
                 for node in then_body {
                     self.analyze_expr(node, naming, locals, strings, frame);
                 }
-                for node in else_body {
-                    self.analyze_expr(node, naming, locals, strings, frame);
+                if let Some(else_body) = else_body {
+                    for node in else_body {
+                        self.analyze_expr(node, naming, locals, strings, frame);
+                    }
                 }
             }
             Expr::Case {
