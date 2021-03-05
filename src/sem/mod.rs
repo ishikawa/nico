@@ -231,6 +231,58 @@ impl PartialEq for Type {
     }
 }
 
+// Pattern Matching Exhaustivity
+//
+// References
+// ----------
+// A Generic Algorithm for Checking Exhaustivity of Pattern Matching
+// https://infoscience.epfl.ch/record/225497
+#[derive(Debug, PartialEq, Clone)]
+enum Space<'a> {
+    // An empty space.
+    Empty,
+    // All possible values of the type T. It's an infinite set of values.
+    Everything(Rc<RefCell<Type>>),
+    // A concrete value.
+    Something(Rc<RefCell<Type>>, Value),
+    // a union space.
+    Union(&'a Space<'a>, &'a Space<'a>),
+}
+
+// Concrete value of a type.
+#[derive(Debug, PartialEq, Clone)]
+enum Value {
+    Int(i32),
+    Boolean(bool),
+    String(String),
+}
+
+impl<'a> Space<'a> {
+    /// `self` <: `other`: whether `self` is a subtype of `other`
+    pub fn is_subspace_of(&self, other: &Space) -> bool {
+        match self {
+            Space::Empty => true,
+            Space::Everything(ty1) => match other {
+                Space::Empty => false,
+                Space::Everything(ty2) => ty1 == ty2,
+                Space::Something(_, _) => false,
+                Space::Union(a, b) => self.is_subspace_of(a) || self.is_subspace_of(b),
+            },
+            Space::Something(ty1, value1) => match other {
+                Space::Empty => false,
+                Space::Everything(ty2) => ty1 == ty2,
+                Space::Something(ty2, value2) => ty1 == ty2 && value1 == value2,
+                Space::Union(a, b) => self.is_subspace_of(a) || self.is_subspace_of(b),
+            },
+            Space::Union(a, b) => a.is_subspace_of(other) && b.is_subspace_of(other),
+        }
+    }
+
+    pub fn union(&'a self, other: &'a Space<'a>) -> Space<'a> {
+        Space::Union(self, other)
+    }
+}
+
 #[cfg(test)]
 mod type_tests {
     use super::*;
@@ -306,5 +358,27 @@ mod type_tests {
             name: "a".to_string(),
             instance: None,
         }));
+    }
+}
+
+#[cfg(test)]
+mod space_tests {
+    use super::*;
+
+    #[test]
+    fn boolean_exhaustivity() {
+        let true_space = Space::Something(wrap(Type::Boolean), Value::Boolean(true));
+        let false_space = Space::Something(wrap(Type::Boolean), Value::Boolean(false));
+        let boolean_space = true_space.union(&false_space);
+
+        assert!(true_space.is_subspace_of(&true_space));
+        assert!(true_space.is_subspace_of(&boolean_space));
+        assert!(false_space.is_subspace_of(&false_space));
+        assert!(false_space.is_subspace_of(&boolean_space));
+        assert!(boolean_space.is_subspace_of(&boolean_space));
+
+        assert!(!true_space.is_subspace_of(&false_space));
+        assert!(!boolean_space.is_subspace_of(&true_space));
+        assert!(!boolean_space.is_subspace_of(&false_space));
     }
 }
