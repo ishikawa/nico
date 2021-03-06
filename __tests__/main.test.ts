@@ -168,6 +168,23 @@ const cases: TestCase[] = [
     ].join("\n"),
     compileError: /unreachable `else` clause/i
   },
+  {
+    // prettier-ignore
+    input: [
+      "export fun foo(n)",
+      "    case n",
+      "    when 1",
+      "        10",
+      "    when 2",
+      "        20",
+      "    when x",
+      "        x",
+      "    end",
+      "end"
+    ].join("\n"),
+    exec: exports => [exports.foo(1), exports.foo(2), exports.foo(3)],
+    expected: [10, 20, 3]
+  },
   // Function
   {
     file: "input/fun_55.nico",

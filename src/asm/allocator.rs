@@ -248,6 +248,7 @@ impl Allocator {
                     Binding::Function { .. } => panic!("Unexpected binding"),
                 }
             }
+            parser::Pattern::Integer(_) => {}
         };
     }
 }

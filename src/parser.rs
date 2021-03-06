@@ -110,6 +110,7 @@ pub enum Expr {
 #[derive(Debug)]
 pub enum Pattern {
     Variable(String, Option<Rc<RefCell<sem::Binding>>>),
+    Integer(i32),
 }
 
 #[derive(Debug)]
@@ -677,6 +678,11 @@ impl Parser {
         match tokenizer.peek() {
             Some(Token::Identifier(ref name)) => {
                 let pat = Pattern::Variable(name.clone(), None);
+                tokenizer.next();
+                Some(pat)
+            }
+            Some(Token::Integer(i)) => {
+                let pat = Pattern::Integer(*i);
                 tokenizer.next();
                 Some(pat)
             }

@@ -162,6 +162,22 @@ impl TypeValidator {
             Expr::Var { pattern, init } => {
                 self.validate_expr(init);
                 self.validate_pattern(pattern);
+
+                // assignable?
+                match pattern {
+                    parser::Pattern::Variable(_, _) => {}
+                    parser::Pattern::Integer(_) => {
+                        panic!("Can't assign value to `int`.")
+                    }
+                };
+
+                // exhaustivity check
+                let right_space = sem::Space::from_type(&init.r#type);
+                let pattern_space = sem::Space::from_pattern(&pattern);
+
+                if !right_space.is_subspace_of(&pattern_space) {
+                    panic!("refutable pattern in local binding");
+                }
             }
         };
     }

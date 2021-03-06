@@ -248,9 +248,19 @@ impl TypeInferencer {
                 for parser::CaseArm {
                     condition,
                     then_body,
-                    ..
+                    pattern,
                 } in arms
                 {
+                    // Type check for pattern match
+                    match pattern {
+                        parser::Pattern::Variable(..) => {
+                            // The binder would assign the same type of `head` expression.
+                        }
+                        parser::Pattern::Integer(_) => {
+                            self.unify(&wrap(Type::Int32), &head.r#type);
+                        }
+                    };
+
                     // Guard' type must be boolean.
                     if let Some(condition) = condition {
                         let cond_type = self.analyze_expr(condition, generic_vars);
@@ -721,7 +731,6 @@ impl TypeInferencer {
     }
 
     fn fix_pattern(&self, pattern: &mut parser::Pattern) {
-        // Currntly, only "Variable pattern" is supported.
         match pattern {
             parser::Pattern::Variable(ref name, ref mut binding) => {
                 let binding = binding
@@ -735,6 +744,7 @@ impl TypeInferencer {
                     Binding::Function { .. } => panic!("Unexpected binding"),
                 }
             }
+            parser::Pattern::Integer(_) => {}
         };
     }
 }

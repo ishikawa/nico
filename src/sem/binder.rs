@@ -176,23 +176,8 @@ impl Binder {
                     then_body,
                 } in arms
                 {
-                    // Currntly, only "Variable pattern" is supported.
-                    // - A variable pattern introduces a new environment into arm body.
-                    // - The type of a this kind of pattern is always equal to the type of head.
                     let mut arm_env = Environment::with_parent(Rc::clone(&node_env));
-
-                    match pattern {
-                        parser::Pattern::Variable(ref name, binding) => {
-                            let b = wrap(Binding::Variable {
-                                name: name.clone(),
-                                r#type: Rc::clone(&head.r#type),
-                                storage: None,
-                            });
-
-                            binding.replace(Rc::clone(&b));
-                            arm_env.insert(Rc::clone(&b));
-                        }
-                    };
+                    self.bind_pattern(pattern, head, &mut arm_env);
 
                     let arm_env = wrap(arm_env);
 
@@ -208,20 +193,26 @@ impl Binder {
             }
             Expr::Var { pattern, init } => {
                 self.analyze_expr(init, env);
-
-                match pattern {
-                    parser::Pattern::Variable(ref name, binding) => {
-                        let b = wrap(Binding::Variable {
-                            name: name.clone(),
-                            r#type: Rc::clone(&init.r#type),
-                            storage: None,
-                        });
-
-                        binding.replace(Rc::clone(&b));
-                        env.borrow_mut().insert(Rc::clone(&b));
-                    }
-                };
+                self.bind_pattern(pattern, init, &mut *env.borrow_mut());
             }
+        };
+    }
+
+    fn bind_pattern(&self, pattern: &mut parser::Pattern, target: &Node, env: &mut Environment) {
+        match pattern {
+            // - A variable pattern introduces a new environment into arm body.
+            // - The type of a this kind of pattern is always equal to the type of head.
+            parser::Pattern::Variable(ref name, binding) => {
+                let b = wrap(Binding::Variable {
+                    name: name.clone(),
+                    r#type: Rc::clone(&target.r#type),
+                    storage: None,
+                });
+
+                binding.replace(Rc::clone(&b));
+                env.insert(Rc::clone(&b));
+            }
+            parser::Pattern::Integer(_) => {}
         };
     }
 

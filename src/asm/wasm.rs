@@ -61,6 +61,8 @@ pub enum Instruction {
     I32DivU,
     I32RemS,
     I32RemU,
+    I32And,
+    I32Or,
 
     // Parametric instructions.
     Drop,
@@ -593,6 +595,16 @@ impl InstructionsBuilder {
 
     pub fn i32_rem_u(&mut self) -> &mut Self {
         self.instructions.push(Instruction::I32RemU);
+        self
+    }
+
+    pub fn i32_and(&mut self) -> &mut Self {
+        self.instructions.push(Instruction::I32And);
+        self
+    }
+
+    pub fn i32_or(&mut self) -> &mut Self {
+        self.instructions.push(Instruction::I32Or);
         self
     }
 
@@ -1155,6 +1167,16 @@ impl Printer {
             Instruction::I32RemU => {
                 self.start_plain();
                 self.buffer.push_str("i32.rem_u");
+                self.end_plain();
+            }
+            Instruction::I32And => {
+                self.start_plain();
+                self.buffer.push_str("i32.and");
+                self.end_plain();
+            }
+            Instruction::I32Or => {
+                self.start_plain();
+                self.buffer.push_str("i32.or");
                 self.end_plain();
             }
             Instruction::Drop => {

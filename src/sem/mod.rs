@@ -276,6 +276,7 @@ impl Space {
                     Binding::Function { .. } => panic!("Unexpected binding"),
                 }
             }
+            parser::Pattern::Integer(i) => Self::Something(wrap(Type::Int32), Value::Int(*i)),
         }
     }
 

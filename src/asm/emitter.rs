@@ -605,20 +605,23 @@ impl AsmBuilder {
                 builder.local_set(head_temp.clone());
 
                 // Build all arms, including the `else` clause, in reverse order.
-                let mut else_insts = None;
+                let mut else_builder = wasm::Builders::instructions();
 
                 if let Some(else_body) = else_body {
-                    if !else_body.is_empty() {
-                        let mut else_builder = wasm::Builders::instructions();
-                        let t = self.build_expr_nodes(&mut else_builder, else_body, frame);
-
-                        work.extend(&t);
-                        else_insts.replace(else_builder.build());
-                    }
+                    // `else` must not be empty.
+                    let t = self.build_expr_nodes(&mut else_builder, else_body, frame);
+                    work.extend(&t);
+                } else {
+                    // if omitted, all arms must be exhausted.
+                    // TODO: remove redundant `if`
+                    else_builder.unreachable();
                 }
+
+                let else_insts = Some(else_builder.build());
 
                 let arm_insts = arms.iter().rev().fold(else_insts, |acc, arm| {
                     let mut arm_builder = wasm::Builders::instructions();
+                    let mut is_pattern_pushed_value = false;
 
                     // 2. Bind the head value to local variable.
                     match arm.pattern {
@@ -645,8 +648,18 @@ impl AsmBuilder {
                                 Binding::Function { .. } => panic!("Unexpected binding"),
                             }
                         }
+                        parser::Pattern::Integer(i) => {
+                            // Constant pattern is semantically identical to `_ if head == pattern`,
+                            // but it can be more preciously handled in exhaustivity check.
+                            arm_builder
+                                .local_get(head_temp.clone())
+                                .i32_const(i)
+                                .i32_eq();
+                            is_pattern_pushed_value = true;
+                        }
                     };
 
+                    // TODO: remove redundant `i32_const`, `if`
                     // 3. Build a guard condition.
                     if let Some(ref condition) = arm.condition {
                         let t = self.build_expr(&mut arm_builder, condition, frame);
@@ -654,6 +667,10 @@ impl AsmBuilder {
                     } else {
                         // Pattern without guard always push `true` value.
                         arm_builder.i32_const(1);
+                    }
+
+                    if is_pattern_pushed_value {
+                        arm_builder.i32_and();
                     }
 
                     // 4. Build an `if` instruction for arm body and `else` to the next arm or `else` clause.
@@ -705,6 +722,9 @@ impl AsmBuilder {
                             }
                             Binding::Function { .. } => panic!("Unexpected binding"),
                         }
+                    }
+                    parser::Pattern::Integer(_) => {
+                        panic!("invalid local binding");
                     }
                 };
                 builder
