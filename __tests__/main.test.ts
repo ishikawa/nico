@@ -199,6 +199,41 @@ const cases: TestCase[] = [
     ].join("\n"),
     compileError: /Missing match arm. non-exhaustive patterns/i
   },
+  {
+    // prettier-ignore
+    input: [
+      "export fun foo(a)",
+      "    case a",
+      "    when []",
+      "        10",
+      "    when [1]",
+      "        20",
+      "    when [x]",
+      "        x",
+      "    end",
+      "end"
+    ].join("\n"),
+    compileError: /Missing match arm. non-exhaustive patterns/i
+  },
+  {
+    // prettier-ignore
+    input: [
+      "export fun foo(a)",
+      "    case a",
+      "    when []",
+      "        10",
+      "    when [1]",
+      "        20",
+      "    when [x]",
+      "        x",
+      "    when x",
+      "        x[1]",
+      "    end",
+      "end"
+    ].join("\n"),
+    exec: exports => [exports.foo([]), exports.foo([1]), exports.foo([2]), exports.foo([3, 4])],
+    expected: [10, 20, 2, 4]
+  },
   // Function
   {
     file: "input/fun_55.nico",
