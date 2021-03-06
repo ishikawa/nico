@@ -185,6 +185,20 @@ const cases: TestCase[] = [
     exec: exports => [exports.foo(1), exports.foo(2), exports.foo(3)],
     expected: [10, 20, 3]
   },
+  {
+    // prettier-ignore
+    input: [
+      "export fun foo(n)",
+      "    case n",
+      "    when 1",
+      "        10",
+      "    when 2",
+      "        20",
+      "    end",
+      "end"
+    ].join("\n"),
+    compileError: /Missing match arm. non-exhaustive patterns/i
+  },
   // Function
   {
     file: "input/fun_55.nico",
@@ -368,6 +382,9 @@ const focused = cases.filter(x => x.focus);
       } else {
         throw e;
       }
+    }
+    if (compileError) {
+      throw "compile error expected";
     }
 
     const module = await WebAssembly.compile(buffer);

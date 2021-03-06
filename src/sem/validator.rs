@@ -151,12 +151,17 @@ impl TypeValidator {
                 }
 
                 if let Some(else_body) = else_body {
-                    // exhaustivity check
+                    // exhaustivity check for `else`
                     if head_space.is_subspace_of(&arms_space) {
                         panic!("Unreachable `else` clause");
                     }
-
+                    arms_space = arms_space.union(&sem::Space::from_type(&head.r#type));
                     self.validate_body(else_body);
+                }
+
+                // exhaustivity check
+                if !head_space.is_subspace_of(&arms_space) {
+                    panic!("Missing match arm. non-exhaustive patterns");
                 }
             }
             Expr::Var { pattern, init } => {
