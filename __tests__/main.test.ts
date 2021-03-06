@@ -10,9 +10,10 @@ type Exports = Record<string, any>;
 interface TestCase {
   input?: string;
   file?: string;
-  expected: any;
+  expected?: any;
   exec?: (exports: Exports) => any[];
   captureOutput?: boolean;
+  compileError?: RegExp;
 
   // filter
   focus?: boolean;
@@ -133,7 +134,7 @@ const cases: TestCase[] = [
     input: [
       "export fun foo(n)",
       "    case n + 1",
-      "    when x",
+      "    when x if x > 0",
       "        x",
       "    else",
       "        n",
@@ -142,6 +143,61 @@ const cases: TestCase[] = [
     ].join("\n"),
     exec: exports => exports.foo(100),
     expected: 101
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case 1",
+      "when x",
+      "    x",
+      "when n",
+      "    n",
+      "end",
+    ].join("\n"),
+    compileError: /unreachable pattern/i
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case 1",
+      "when x",
+      "    x",
+      "else",
+      "    2",
+      "end",
+    ].join("\n"),
+    compileError: /unreachable `else` clause/i
+  },
+  {
+    // prettier-ignore
+    input: [
+      "export fun foo(n)",
+      "    case n",
+      "    when 1",
+      "        10",
+      "    when 2",
+      "        20",
+      "    when x",
+      "        x",
+      "    end",
+      "end"
+    ].join("\n"),
+    exec: exports => [exports.foo(1), exports.foo(2), exports.foo(3)],
+    expected: [10, 20, 3]
+  },
+  {
+    // prettier-ignore
+    input: [
+      "export fun foo(n)",
+      "    case n",
+      "    when 1",
+      "        10",
+      "    when 2",
+      "        20",
+      "    end",
+      "end"
+    ].join("\n"),
+    compileError: /Missing match arm. non-exhaustive patterns/i
   },
   // Function
   {
@@ -301,7 +357,7 @@ const cases: TestCase[] = [
 // filter
 const focused = cases.filter(x => x.focus);
 
-(focused.length === 0 ? cases : focused).forEach(({ input, file, expected, exec, captureOutput }) => {
+(focused.length === 0 ? cases : focused).forEach(({ input, file, expected, compileError, exec, captureOutput }) => {
   test(`given '${input || file}'`, async () => {
     let src = temporaryCodePath;
 
@@ -315,7 +371,22 @@ const focused = cases.filter(x => x.focus);
     const printer = captureOutput ? new BufferedPrinter(memory) : new ConsolePrinter(memory);
     const imports = buildImportObject({ memory, printer });
 
-    const buffer = await compileFile(src);
+    let buffer;
+
+    try {
+      buffer = await compileFile(src);
+    } catch (e) {
+      if (compileError) {
+        expect(e.toString()).toMatch(compileError);
+        return;
+      } else {
+        throw e;
+      }
+    }
+    if (compileError) {
+      throw "compile error expected";
+    }
+
     const module = await WebAssembly.compile(buffer);
 
     const instance = await WebAssembly.instantiate(module, imports);

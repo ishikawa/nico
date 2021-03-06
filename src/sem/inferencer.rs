@@ -112,7 +112,9 @@ impl TypeInferencer {
         let ty = match &mut node.expr {
             Expr::Stmt(expr) => {
                 self.analyze_expr(expr, generic_vars);
-                Rc::clone(&node.r#type)
+
+                // The type of a statement is always `Void`.
+                wrap(Type::Void)
             }
             Expr::Integer(_) => Rc::clone(&node.r#type),
             Expr::String { .. } => Rc::clone(&node.r#type),
@@ -211,7 +213,6 @@ impl TypeInferencer {
                     generic_vars,
                 ),
             },
-
             Expr::If {
                 condition,
                 then_body,
@@ -222,12 +223,16 @@ impl TypeInferencer {
                 self.unify(&cond_type, &wrap(Type::Boolean));
 
                 let then_type = self.analyze_body(then_body, generic_vars);
-                let else_type = self.analyze_body(else_body, generic_vars);
 
-                self.unify(&then_type, &else_type);
-                self.unify(&then_type, &node.r#type);
-
-                then_type
+                if let Some(else_body) = else_body {
+                    let else_type = self.analyze_body(else_body, generic_vars);
+                    self.unify(&then_type, &else_type);
+                    then_type
+                } else {
+                    // The return type of a `if` expression without `else` is
+                    // always `Void`.
+                    wrap(Type::Void)
+                }
             }
             Expr::Case {
                 arms,
@@ -238,37 +243,48 @@ impl TypeInferencer {
                 self.analyze_expr(head, generic_vars);
 
                 // arms
-                let mut body_types = vec![];
+                let mut case_type = None;
 
                 for parser::CaseArm {
                     condition,
                     then_body,
-                    ..
+                    pattern,
                 } in arms
                 {
-                    // guard
+                    // Type check for pattern match
+                    match pattern {
+                        parser::Pattern::Variable(..) => {
+                            // The binder would assign the same type of `head` expression.
+                        }
+                        parser::Pattern::Integer(_) => {
+                            self.unify(&wrap(Type::Int32), &head.r#type);
+                        }
+                    };
+
+                    // Guard' type must be boolean.
                     if let Some(condition) = condition {
                         let cond_type = self.analyze_expr(condition, generic_vars);
                         self.unify(&cond_type, &wrap(Type::Boolean));
                     }
 
-                    // body - unify each arm body with else body
                     let body_type = self.analyze_body(then_body, generic_vars);
-                    body_types.push(body_type);
+
+                    if let Some(ref case_type) = case_type {
+                        self.unify(case_type, &body_type);
+                    } else {
+                        case_type = Some(body_type)
+                    }
                 }
 
-                let else_type = self.analyze_body(else_body, generic_vars);
+                let case_type = case_type.unwrap();
 
-                // Unify body types with else clause's type.
-                let case_type =
-                    body_types
-                        .iter()
-                        .fold(&else_type, |previous_type, current_type| {
-                            self.unify(previous_type, current_type);
-                            current_type
-                        });
+                if let Some(else_body) = else_body {
+                    let else_type = self.analyze_body(else_body, generic_vars);
 
-                Rc::clone(case_type)
+                    self.unify(&case_type, &else_type);
+                }
+
+                Rc::clone(&case_type)
             }
             Expr::Var { pattern: _, init } => {
                 self.analyze_expr(init, generic_vars);
@@ -676,7 +692,9 @@ impl TypeInferencer {
             } => {
                 self.fix_expr(condition);
                 self.fix_body(then_body);
-                self.fix_body(else_body);
+                if let Some(else_body) = else_body {
+                    self.fix_body(else_body);
+                }
             }
             Expr::Case {
                 arms,
@@ -701,7 +719,9 @@ impl TypeInferencer {
                     self.fix_body(then_body);
                 }
 
-                self.fix_body(else_body);
+                if let Some(else_body) = else_body {
+                    self.fix_body(else_body);
+                }
             }
             Expr::Var { pattern, init } => {
                 self.fix_expr(init);
@@ -711,7 +731,6 @@ impl TypeInferencer {
     }
 
     fn fix_pattern(&self, pattern: &mut parser::Pattern) {
-        // Currntly, only "Variable pattern" is supported.
         match pattern {
             parser::Pattern::Variable(ref name, ref mut binding) => {
                 let binding = binding
@@ -725,6 +744,7 @@ impl TypeInferencer {
                     Binding::Function { .. } => panic!("Unexpected binding"),
                 }
             }
+            parser::Pattern::Integer(_) => {}
         };
     }
 }

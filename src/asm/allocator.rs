@@ -159,8 +159,10 @@ impl Allocator {
                 for node in then_body {
                     self.analyze_expr(node, naming, locals, strings, frame);
                 }
-                for node in else_body {
-                    self.analyze_expr(node, naming, locals, strings, frame);
+                if let Some(else_body) = else_body {
+                    for node in else_body {
+                        self.analyze_expr(node, naming, locals, strings, frame);
+                    }
                 }
             }
             Expr::Case {
@@ -182,8 +184,10 @@ impl Allocator {
                     head_storage.replace(Rc::clone(&temp));
                 }
 
-                for node in else_body {
-                    self.analyze_expr(node, naming, locals, strings, frame);
+                if let Some(else_body) = else_body {
+                    for node in else_body {
+                        self.analyze_expr(node, naming, locals, strings, frame);
+                    }
                 }
 
                 for parser::CaseArm {
@@ -244,6 +248,7 @@ impl Allocator {
                     Binding::Function { .. } => panic!("Unexpected binding"),
                 }
             }
+            parser::Pattern::Integer(_) => {}
         };
     }
 }

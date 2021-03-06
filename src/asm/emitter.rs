@@ -13,11 +13,11 @@ const STACK_BASE: wasm::Size = STACK_SIZE;
 const CONSTANT_POOL_BASE: wasm::Size = STACK_SIZE;
 
 #[derive(Debug)]
-struct TemporaryVariables {
+struct BuildWork {
     i32_naming: PrefixNaming,
 }
 
-impl TemporaryVariables {
+impl BuildWork {
     pub fn new() -> Self {
         Self {
             // To avoid colision with user's local variables, use special prefix,
@@ -278,31 +278,19 @@ impl AsmBuilder {
         builder.build()
     }
 
-    fn build_expr_nodes(
-        &mut self,
-        builder: &mut wasm::InstructionsBuilder,
-        body: &[parser::Node],
-        frame: &StackFrame,
-    ) -> TemporaryVariables {
-        body.iter().fold(TemporaryVariables::new(), |locals, node| {
-            let t = self.build_expr(builder, node, frame);
-            locals.union(&t)
-        })
-    }
-
     fn build_expr(
         &mut self,
         builder: &mut wasm::InstructionsBuilder,
         node: &parser::Node,
         frame: &StackFrame,
-    ) -> TemporaryVariables {
-        let mut locals = TemporaryVariables::new();
+    ) -> BuildWork {
+        let mut work = BuildWork::new();
 
         match &node.expr {
             Expr::Stmt(expr) => {
                 // Drop a value if the type of expression is not Void.
                 let t = self.build_expr(builder, expr, frame);
-                locals.extend(&t);
+                work.extend(&t);
 
                 match *expr.r#type.borrow() {
                     Type::Void => {}
@@ -324,7 +312,9 @@ impl AsmBuilder {
                             .as_ref()
                             .unwrap_or_else(|| panic!("Unbound local variable `{}`", name));
                         match *storage.borrow() {
-                            LocalStorage { ref name, .. } => builder.local_get(name),
+                            LocalStorage { ref name, .. } => {
+                                builder.local_get(name);
+                            }
                         };
                     }
                     _ => panic!("Invalid binding for local variable `{}`", name),
@@ -337,6 +327,7 @@ impl AsmBuilder {
                 let storage = storage
                     .as_ref()
                     .unwrap_or_else(|| panic!("The constant string was not allocated."));
+
                 builder.u32_const(CONSTANT_POOL_BASE + storage.borrow().offset());
             }
             Expr::Array {
@@ -372,7 +363,7 @@ impl AsmBuilder {
                     let offset = object_offset + element_size * (i as wasm::Size);
 
                     let t = self.build_expr(builder, element, frame);
-                    locals.extend(&t);
+                    work.extend(&t);
                     builder.i32_store(offset);
                 }
 
@@ -414,12 +405,12 @@ impl AsmBuilder {
                 // Load the reference of the operand to a local variable
                 builder.comment(format!("-- Subscript {}", operand.r#type.borrow()));
 
-                let tmp_memidx = locals.reserve_i32();
-                let tmp_length = locals.reserve_i32();
-                let tmp_index = locals.reserve_i32();
+                let tmp_memidx = work.reserve_i32();
+                let tmp_length = work.reserve_i32();
+                let tmp_index = work.reserve_i32();
 
                 let t = self.build_expr(builder, operand, frame);
-                locals.extend(&t);
+                work.extend(&t);
 
                 builder
                     .comment("load the reference (index, length) of an array to local variables")
@@ -430,7 +421,7 @@ impl AsmBuilder {
 
                 // index
                 let t = self.build_expr(builder, index, frame);
-                locals.extend(&t);
+                work.extend(&t);
                 builder.local_tee(&tmp_index);
 
                 // Check overflow
@@ -477,7 +468,7 @@ impl AsmBuilder {
                     Binding::Function { ref name, .. } => {
                         for arg in arguments {
                             let t = self.build_expr(builder, arg, frame);
-                            locals.extend(&t);
+                            work.extend(&t);
                         }
                         builder.call(name);
                     }
@@ -488,68 +479,68 @@ impl AsmBuilder {
             Expr::Add(lhs, rhs, _) => {
                 let t1 = self.build_expr(builder, lhs, frame);
                 let t2 = self.build_expr(builder, rhs, frame);
-                locals.extend(&t1).extend(&t2);
+                work.extend(&t1).extend(&t2);
                 builder.i32_add();
             }
             Expr::Sub(lhs, rhs, _) => {
                 let t1 = self.build_expr(builder, lhs, frame);
                 let t2 = self.build_expr(builder, rhs, frame);
-                locals.extend(&t1).extend(&t2);
+                work.extend(&t1).extend(&t2);
                 builder.i32_sub();
             }
             Expr::Rem(lhs, rhs, _) => {
                 let t1 = self.build_expr(builder, lhs, frame);
                 let t2 = self.build_expr(builder, rhs, frame);
-                locals.extend(&t1).extend(&t2);
+                work.extend(&t1).extend(&t2);
                 builder.i32_rem_s();
             }
             Expr::Mul(lhs, rhs, _) => {
                 let t1 = self.build_expr(builder, lhs, frame);
                 let t2 = self.build_expr(builder, rhs, frame);
-                locals.extend(&t1).extend(&t2);
+                work.extend(&t1).extend(&t2);
                 builder.i32_mul();
             }
             Expr::Div(lhs, rhs, _) => {
                 let t1 = self.build_expr(builder, lhs, frame);
                 let t2 = self.build_expr(builder, rhs, frame);
-                locals.extend(&t1).extend(&t2);
+                work.extend(&t1).extend(&t2);
                 builder.i32_div_s();
             }
             // relation
             Expr::LT(lhs, rhs, _) => {
                 let t1 = self.build_expr(builder, lhs, frame);
                 let t2 = self.build_expr(builder, rhs, frame);
-                locals.extend(&t1).extend(&t2);
+                work.extend(&t1).extend(&t2);
                 builder.i32_lt_s();
             }
             Expr::GT(lhs, rhs, _) => {
                 let t1 = self.build_expr(builder, lhs, frame);
                 let t2 = self.build_expr(builder, rhs, frame);
-                locals.extend(&t1).extend(&t2);
+                work.extend(&t1).extend(&t2);
                 builder.i32_gt_s();
             }
             Expr::LE(lhs, rhs, _) => {
                 let t1 = self.build_expr(builder, lhs, frame);
                 let t2 = self.build_expr(builder, rhs, frame);
-                locals.extend(&t1).extend(&t2);
+                work.extend(&t1).extend(&t2);
                 builder.i32_le_s();
             }
             Expr::GE(lhs, rhs, _) => {
                 let t1 = self.build_expr(builder, lhs, frame);
                 let t2 = self.build_expr(builder, rhs, frame);
-                locals.extend(&t1).extend(&t2);
+                work.extend(&t1).extend(&t2);
                 builder.i32_ge_s();
             }
             Expr::EQ(lhs, rhs, _) => {
                 let t1 = self.build_expr(builder, lhs, frame);
                 let t2 = self.build_expr(builder, rhs, frame);
-                locals.extend(&t1).extend(&t2);
+                work.extend(&t1).extend(&t2);
                 builder.i32_eq();
             }
             Expr::NE(lhs, rhs, _) => {
                 let t1 = self.build_expr(builder, lhs, frame);
                 let t2 = self.build_expr(builder, rhs, frame);
-                locals.extend(&t1).extend(&t2);
+                work.extend(&t1).extend(&t2);
                 builder.i32_neq();
             }
             Expr::If {
@@ -557,29 +548,38 @@ impl AsmBuilder {
                 then_body,
                 else_body,
             } => {
+                let result_type = wasm_type(&node.r#type);
                 let t = self.build_expr(builder, condition, frame);
-                locals.extend(&t);
+                work.extend(&t);
 
                 let then_insts = {
                     let mut then_builder = wasm::Builders::instructions();
                     let t = self.build_expr_nodes(&mut then_builder, then_body, frame);
+                    work.extend(&t);
 
-                    locals.extend(&t);
+                    if result_type.is_none() {
+                        self.drop_values(&mut then_builder, then_body);
+                    }
                     then_builder.build()
                 };
 
-                let else_insts = if !else_body.is_empty() {
-                    let mut else_builder = wasm::Builders::instructions();
-                    let t = self.build_expr_nodes(&mut else_builder, else_body, frame);
+                let mut else_insts = None;
 
-                    locals.extend(&t);
-                    Some(else_builder.build())
-                } else {
-                    None
-                };
+                if let Some(else_body) = else_body {
+                    if !else_body.is_empty() {
+                        let mut else_builder = wasm::Builders::instructions();
+                        let t = self.build_expr_nodes(&mut else_builder, else_body, frame);
+                        work.extend(&t);
+
+                        if result_type.is_none() {
+                            self.drop_values(&mut else_builder, else_body);
+                        }
+                        else_insts.replace(else_builder.build());
+                    }
+                }
 
                 builder.push(wasm::Instruction::If {
-                    result_type: wasm_type(&node.r#type),
+                    result_type,
                     then: then_insts,
                     r#else: else_insts,
                 });
@@ -593,7 +593,7 @@ impl AsmBuilder {
                 // 1. head - push the result of head expression and copy it to
                 // the temporary variable.
                 let t = self.build_expr(builder, head, frame);
-                locals.extend(&t);
+                work.extend(&t);
 
                 let head_temp = match head_storage {
                     Some(head_storage) => match *head_storage.borrow() {
@@ -605,20 +605,23 @@ impl AsmBuilder {
                 builder.local_set(head_temp.clone());
 
                 // Build all arms, including the `else` clause, in reverse order.
-                let else_insts = {
-                    if !else_body.is_empty() {
-                        let mut else_builder = wasm::Builders::instructions();
-                        let t = self.build_expr_nodes(&mut else_builder, else_body, frame);
+                let mut else_builder = wasm::Builders::instructions();
 
-                        locals.extend(&t);
-                        Some(else_builder.build())
-                    } else {
-                        None
-                    }
-                };
+                if let Some(else_body) = else_body {
+                    // `else` must not be empty.
+                    let t = self.build_expr_nodes(&mut else_builder, else_body, frame);
+                    work.extend(&t);
+                } else {
+                    // if omitted, all arms must be exhausted.
+                    // TODO: remove redundant `if`
+                    else_builder.unreachable();
+                }
+
+                let else_insts = Some(else_builder.build());
 
                 let arm_insts = arms.iter().rev().fold(else_insts, |acc, arm| {
                     let mut arm_builder = wasm::Builders::instructions();
+                    let mut is_pattern_pushed_value = false;
 
                     // 2. Bind the head value to local variable.
                     match arm.pattern {
@@ -645,15 +648,29 @@ impl AsmBuilder {
                                 Binding::Function { .. } => panic!("Unexpected binding"),
                             }
                         }
+                        parser::Pattern::Integer(i) => {
+                            // Constant pattern is semantically identical to `_ if head == pattern`,
+                            // but it can be more preciously handled in exhaustivity check.
+                            arm_builder
+                                .local_get(head_temp.clone())
+                                .i32_const(i)
+                                .i32_eq();
+                            is_pattern_pushed_value = true;
+                        }
                     };
 
+                    // TODO: remove redundant `i32_const`, `if`
                     // 3. Build a guard condition.
                     if let Some(ref condition) = arm.condition {
                         let t = self.build_expr(&mut arm_builder, condition, frame);
-                        locals.extend(&t);
+                        work.extend(&t);
                     } else {
                         // Pattern without guard always push `true` value.
                         arm_builder.i32_const(1);
+                    }
+
+                    if is_pattern_pushed_value {
+                        arm_builder.i32_and();
                     }
 
                     // 4. Build an `if` instruction for arm body and `else` to the next arm or `else` clause.
@@ -661,7 +678,7 @@ impl AsmBuilder {
                         let mut then_builder = wasm::Builders::instructions();
                         let t = self.build_expr_nodes(&mut then_builder, &arm.then_body, frame);
 
-                        locals.extend(&t);
+                        work.extend(&t);
                         then_builder.build()
                     };
 
@@ -682,7 +699,7 @@ impl AsmBuilder {
             }
             Expr::Var { pattern, init } => {
                 let t = self.build_expr(builder, init, frame);
-                locals.extend(&t);
+                work.extend(&t);
 
                 match pattern {
                     // variable pattern
@@ -706,6 +723,9 @@ impl AsmBuilder {
                             Binding::Function { .. } => panic!("Unexpected binding"),
                         }
                     }
+                    parser::Pattern::Integer(_) => {
+                        panic!("invalid local binding");
+                    }
                 };
                 builder
                     .comment("Pattern without guard always push `true` value.")
@@ -713,6 +733,32 @@ impl AsmBuilder {
             }
         };
 
-        locals
+        work
+    }
+}
+
+impl AsmBuilder {
+    fn build_expr_nodes(
+        &mut self,
+        builder: &mut wasm::InstructionsBuilder,
+        body: &[parser::Node],
+        frame: &StackFrame,
+    ) -> BuildWork {
+        body.iter().fold(BuildWork::new(), |locals, node| {
+            let t = self.build_expr(builder, node, frame);
+            locals.union(&t)
+        })
+    }
+
+    fn drop_values(&mut self, builder: &mut wasm::InstructionsBuilder, body: &[parser::Node]) {
+        let node = match body.last() {
+            None => return,
+            Some(node) => node,
+        };
+
+        if wasm_type(&node.r#type).is_some() {
+            // Currently, only one value will be remian on the stack.
+            builder.drop();
+        }
     }
 }
