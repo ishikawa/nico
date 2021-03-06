@@ -439,7 +439,10 @@ impl Parser {
             match token {
                 Token::Char('[') => {
                     consume_char(tokenizer, '[');
-                    let mut arguments = self.parse_expr_elements(tokenizer, ']');
+                    let mut arguments = parse_elements(tokenizer, ']', &mut |tokenizer| {
+                        self.parse_expr(tokenizer)
+                            .expect("Expected subscript argument")
+                    });
                     consume_char(tokenizer, ']');
 
                     if arguments.len() != 1 {
@@ -474,7 +477,9 @@ impl Parser {
             }
             Token::Char('[') => {
                 consume_char(tokenizer, '[');
-                let elements = self.parse_expr_elements(tokenizer, ']');
+                let elements = parse_elements(tokenizer, ']', &mut |tokenizer| {
+                    self.parse_expr(tokenizer).expect("Expected element")
+                });
                 consume_char(tokenizer, ']');
 
                 Some(self.typed_expr(Expr::Array {
@@ -490,7 +495,9 @@ impl Parser {
                 // TODO: Move to parse_access()
                 if let Some(Token::Char('(')) = tokenizer.peek() {
                     consume_char(tokenizer, '(');
-                    let arguments = self.parse_expr_elements(tokenizer, ')');
+                    let arguments = parse_elements(tokenizer, ')', &mut |tokenizer| {
+                        self.parse_expr(tokenizer).expect("Expected argument")
+                    });
                     consume_char(tokenizer, ')');
 
                     Some(self.typed_expr(Expr::Invocation {
@@ -689,37 +696,40 @@ impl Parser {
             _ => None,
         }
     }
+}
 
-    fn parse_expr_elements(
-        &mut self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
-        stop_char: char,
-    ) -> Vec<Node> {
-        let mut elements = vec![];
+fn parse_elements<F, T>(
+    tokenizer: &mut Peekable<&mut Tokenizer>,
+    stop_char: char,
+    parser: &mut F,
+) -> Vec<T>
+where
+    F: FnMut(&mut Peekable<&mut Tokenizer>) -> T,
+{
+    let mut elements = vec![];
 
-        loop {
-            match tokenizer.peek() {
-                None => panic!("Premature EOF"),
-                Some(Token::Char(c)) => {
-                    if *c == stop_char {
-                        break;
-                    }
+    loop {
+        match tokenizer.peek() {
+            None => panic!("Premature EOF"),
+            Some(Token::Char(c)) => {
+                if *c == stop_char {
+                    break;
                 }
-                _ => {}
-            };
-
-            let expr = self.parse_expr(tokenizer).expect("Expected element");
-            elements.push(expr);
-
-            if let Some(Token::Char(',')) = tokenizer.peek() {
-                tokenizer.next();
-            } else {
-                break;
             }
-        }
+            _ => {}
+        };
 
-        elements
+        let element = parser(tokenizer);
+        elements.push(element);
+
+        if let Some(Token::Char(',')) = tokenizer.peek() {
+            tokenizer.next();
+        } else {
+            break;
+        }
     }
+
+    elements
 }
 
 impl Parser {
@@ -748,15 +758,6 @@ impl Parser {
 
         stmts
     }
-
-    /*
-    fn replace_last_expr_to_stmt(&mut self, nodes: &mut Vec<Node>) {
-        if !nodes.is_empty() {
-            let node = nodes.remove(nodes.len() - 1);
-            nodes.push(self.wrap_stmt(node));
-        }
-    }
-    */
 
     fn typed_expr(&mut self, expr: Expr) -> Node {
         let ty = match expr {
