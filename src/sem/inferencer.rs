@@ -321,9 +321,8 @@ impl TypeInferencer {
         generic_vars: &mut HashSet<String>,
     ) -> Option<Rc<RefCell<Type>>> {
         if let Some(binding) = binding {
-            if let Binding::Variable { r#type: ref ty, .. } = *binding.borrow() {
-                return Some(self.fresh(ty, generic_vars));
-            }
+            let binding = binding.borrow();
+            return Some(self.fresh(&binding.r#type, generic_vars));
         };
 
         None
@@ -335,9 +334,16 @@ impl TypeInferencer {
         generic_vars: &mut HashSet<String>,
     ) -> Option<Rc<RefCell<Type>>> {
         if let Some(binding) = binding {
-            if let Binding::Function { r#type: ref ty, .. } = *binding.borrow() {
-                return Some(self.fresh(ty, generic_vars));
+            let binding = binding.borrow();
+
+            match *binding.r#type.borrow() {
+                Type::Function { .. } => {}
+                ref ty => panic!(
+                    "Missing function named `{}` found type `{}`",
+                    binding.name, ty
+                ),
             }
+            return Some(self.fresh(&binding.r#type, generic_vars));
         };
 
         None
@@ -627,10 +633,9 @@ pub fn fixed_type(ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
 
 impl TypeInferencer {
     fn fix_function(&self, function: &mut parser::Function) {
-        for binding in &function.params {
+        for binding in &mut function.params {
             match *binding.borrow_mut() {
-                Binding::Variable { ref mut r#type, .. } => *r#type = fixed_type(r#type),
-                _ => panic!("Invalid binding or allocation"),
+                Binding { ref mut r#type, .. } => *r#type = fixed_type(r#type),
             };
         }
 
@@ -738,10 +743,9 @@ impl TypeInferencer {
                     .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
 
                 match *(binding.borrow_mut()) {
-                    Binding::Variable { ref mut r#type, .. } => {
+                    Binding { ref mut r#type, .. } => {
                         *r#type = fixed_type(r#type);
                     }
-                    Binding::Function { .. } => panic!("Unexpected binding"),
                 }
             }
             parser::Pattern::Integer(_) => {}

@@ -41,7 +41,7 @@ impl Allocator {
         // Storage for parameters
         for ref mut binding in &function.params {
             match *binding.borrow_mut() {
-                Binding::Variable {
+                Binding {
                     ref name,
                     ref mut storage,
                     ref r#type,
@@ -54,7 +54,6 @@ impl Allocator {
 
                     storage.replace(Rc::clone(&v));
                 }
-                Binding::Function { .. } => panic!("Unexpected binding"),
             }
         }
 
@@ -232,7 +231,7 @@ impl Allocator {
                     .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
 
                 match *(binding.borrow_mut()) {
-                    Binding::Variable {
+                    Binding {
                         ref name,
                         ref r#type,
                         ref mut storage,
@@ -245,7 +244,6 @@ impl Allocator {
                         locals.push(Rc::clone(&v));
                         storage.replace(Rc::clone(&v));
                     }
-                    Binding::Function { .. } => panic!("Unexpected binding"),
                 }
             }
             parser::Pattern::Integer(_) => {}

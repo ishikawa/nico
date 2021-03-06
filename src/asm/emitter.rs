@@ -1,7 +1,7 @@
 use super::{wasm, wasm_type, LocalStorage, StackFrame};
 use crate::parser;
 use crate::parser::Expr;
-use crate::sem::{Binding, Type};
+use crate::sem::Type;
 use crate::util::naming::PrefixNaming;
 use std::rc::Rc;
 
@@ -236,18 +236,17 @@ impl AsmBuilder {
 
         // typeuse
         for binding in &fun_node.params {
-            match *binding.borrow() {
-                Binding::Variable {
-                    storage: Some(ref storage),
-                    ..
-                } => match *storage.borrow() {
-                    LocalStorage {
-                        ref name,
-                        ref r#type,
-                    } => builder.named_param(name, wasm_type(r#type).unwrap()),
-                },
-                _ => panic!("Invalid binding or allocation"),
-            };
+            let binding = binding.borrow();
+            let storage = binding
+                .storage
+                .as_ref()
+                .unwrap_or_else(|| panic!("Invalid binding or allocation"))
+                .borrow();
+
+            let name = &storage.name;
+            let r#type = &storage.r#type;
+
+            builder.named_param(name, wasm_type(r#type).unwrap());
         }
 
         // params
@@ -304,21 +303,15 @@ impl AsmBuilder {
             Expr::Identifier { name, binding } => {
                 let binding = binding
                     .as_ref()
-                    .unwrap_or_else(|| panic!("Undefined local variable `{}`", name));
+                    .unwrap_or_else(|| panic!("Undefined local variable `{}`", name))
+                    .borrow();
 
-                match *binding.borrow() {
-                    Binding::Variable { ref storage, .. } => {
-                        let storage = storage
-                            .as_ref()
-                            .unwrap_or_else(|| panic!("Unbound local variable `{}`", name));
-                        match *storage.borrow() {
-                            LocalStorage { ref name, .. } => {
-                                builder.local_get(name);
-                            }
-                        };
-                    }
-                    _ => panic!("Invalid binding for local variable `{}`", name),
-                };
+                let storage = binding
+                    .storage
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("Unbound local variable `{}`", name));
+
+                builder.local_get(&storage.borrow().name);
             }
             Expr::Integer(n) => {
                 builder.i32_const(*n);
@@ -462,18 +455,19 @@ impl AsmBuilder {
             } => {
                 let binding = binding
                     .as_ref()
-                    .unwrap_or_else(|| panic!("Undefined function `{}`", name));
+                    .unwrap_or_else(|| panic!("Undefined function `{}`", name))
+                    .borrow();
+                let storage = binding
+                    .storage
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("no storage for function `{}`", name));
 
-                match *binding.borrow() {
-                    Binding::Function { ref name, .. } => {
-                        for arg in arguments {
-                            let t = self.build_expr(builder, arg, frame);
-                            work.extend(&t);
-                        }
-                        builder.call(name);
-                    }
-                    _ => panic!("Invalid binding for function `{}`", name),
+                for arg in arguments {
+                    let t = self.build_expr(builder, arg, frame);
+                    work.extend(&t);
                 }
+
+                builder.call(&storage.borrow().name);
             }
             // binop
             Expr::Add(lhs, rhs, _) => {
@@ -629,24 +623,17 @@ impl AsmBuilder {
                         parser::Pattern::Variable(ref name, ref binding) => {
                             let binding = binding
                                 .as_ref()
-                                .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
+                                .unwrap_or_else(|| panic!("Unbound pattern `{}`", name))
+                                .borrow();
 
-                            match *(binding.borrow_mut()) {
-                                Binding::Variable { ref storage, .. } => {
-                                    let storage = storage.as_ref().unwrap_or_else(|| {
-                                        panic!("Unallocated pattern `{}`", name)
-                                    });
+                            let storage = binding
+                                .storage
+                                .as_ref()
+                                .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name));
 
-                                    match *storage.borrow() {
-                                        LocalStorage { ref name, .. } => {
-                                            // set the result of head expression to the variable.
-                                            arm_builder.local_get(head_temp.clone());
-                                            arm_builder.local_set(name);
-                                        }
-                                    };
-                                }
-                                Binding::Function { .. } => panic!("Unexpected binding"),
-                            }
+                            // set the result of head expression to the variable.
+                            arm_builder.local_get(head_temp.clone());
+                            arm_builder.local_set(&storage.borrow().name);
                         }
                         parser::Pattern::Integer(i) => {
                             // Constant pattern is semantically identical to `_ if head == pattern`,
@@ -706,22 +693,14 @@ impl AsmBuilder {
                     parser::Pattern::Variable(ref name, ref binding) => {
                         let binding = binding
                             .as_ref()
-                            .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
+                            .unwrap_or_else(|| panic!("Unbound pattern `{}`", name))
+                            .borrow();
+                        let storage = binding
+                            .storage
+                            .as_ref()
+                            .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name));
 
-                        match *(binding.borrow_mut()) {
-                            Binding::Variable { ref storage, .. } => {
-                                let storage = storage
-                                    .as_ref()
-                                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name));
-
-                                match *storage.borrow() {
-                                    LocalStorage { ref name, .. } => {
-                                        builder.local_set(name);
-                                    }
-                                };
-                            }
-                            Binding::Function { .. } => panic!("Unexpected binding"),
-                        }
+                        builder.local_set(&storage.borrow().name);
                     }
                     parser::Pattern::Integer(_) => {
                         panic!("invalid local binding");

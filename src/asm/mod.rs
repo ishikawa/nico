@@ -116,7 +116,7 @@ impl StackFrame {
 // local variables and function parameters.
 #[derive(Debug, PartialEq)]
 pub struct LocalStorage {
-    name: String,
+    pub name: String,
     pub r#type: Rc<RefCell<Type>>,
 }
 

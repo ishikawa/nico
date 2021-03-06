@@ -251,13 +251,7 @@ impl Parser {
             let params = param_names
                 .iter()
                 .zip(&param_types)
-                .map(|(name, ty)| {
-                    wrap(sem::Binding::Variable {
-                        name: name.clone(),
-                        r#type: Rc::clone(ty),
-                        storage: None,
-                    })
-                })
+                .map(|(name, ty)| wrap(sem::Binding::typed_name(name, &ty)))
                 .collect::<Vec<_>>();
 
             let function_type = wrap(sem::Type::Function {
