@@ -163,9 +163,11 @@ impl Binder {
                 self.analyze_expr(head, &node_env);
 
                 // else
-                for node in else_body {
-                    let else_env = wrap(Environment::with_parent(Rc::clone(&node_env)));
-                    self.analyze_expr(node, &else_env);
+                if let Some(else_body) = else_body {
+                    for node in else_body {
+                        let else_env = wrap(Environment::with_parent(Rc::clone(&node_env)));
+                        self.analyze_expr(node, &else_env);
+                    }
                 }
 
                 for parser::CaseArm {

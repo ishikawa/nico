@@ -97,7 +97,7 @@ pub enum Expr {
         head: Box<Node>, // head expression
         head_storage: Option<Rc<RefCell<asm::LocalStorage>>>,
         arms: Vec<CaseArm>,
-        else_body: Vec<Node>,
+        else_body: Option<Vec<Node>>,
     },
 
     // Variable binding
@@ -540,7 +540,7 @@ impl Parser {
                     };
                 }
 
-                let mut then_body = self.wrap_stmts(&mut then_body);
+                let then_body = self.wrap_stmts(&mut then_body);
 
                 if let Some(Token::Else) = tokenizer.peek() {
                     let mut body = vec![];
@@ -564,13 +564,7 @@ impl Parser {
                         };
                     }
                 }
-
                 consume_token(tokenizer, Token::End);
-
-                // If `else` clause is empty or omitted, convert the body of `then` to statements.
-                if else_body.is_none() || else_body.as_ref().unwrap().is_empty() {
-                    self.replace_last_expr_to_stmt(&mut then_body);
-                }
 
                 let expr = Expr::If {
                     condition: Box::new(condition),
@@ -609,6 +603,7 @@ impl Parser {
                         }
                         _ => None,
                     };
+
                     // TODO: check line separator before reading body
                     let mut then_body = vec![];
 
@@ -618,12 +613,12 @@ impl Parser {
                             Some(Token::When) => break,
                             Some(Token::Else) => break,
                             Some(Token::End) => break,
-                            _ => {}
-                        };
-
-                        match self.parse_stmt(tokenizer) {
-                            None => break,
-                            Some(node) => then_body.push(Some(node)),
+                            _ => {
+                                let stmt = self
+                                    .parse_stmt(tokenizer)
+                                    .unwrap_or_else(|| panic!("Premature EOF"));
+                                then_body.push(Some(stmt));
+                            }
                         };
                     }
 
@@ -637,36 +632,34 @@ impl Parser {
                 }
 
                 // else
-                let mut else_body = vec![];
+                let mut else_body = None;
 
                 if let Some(Token::Else) = tokenizer.peek() {
+                    let mut body = vec![];
                     tokenizer.next();
 
                     loop {
                         match tokenizer.peek() {
                             None => panic!("Premature EOF"),
-                            Some(Token::End) => break,
-                            _ => {}
+                            Some(Token::End) => {
+                                let body = self.wrap_stmts(&mut body);
+                                else_body.replace(body);
+                                break;
+                            }
+                            _ => {
+                                let stmt = self
+                                    .parse_stmt(tokenizer)
+                                    .unwrap_or_else(|| panic!("Premature EOF"));
+                                body.push(Some(stmt));
+                            }
                         };
-
-                        match self.parse_stmt(tokenizer) {
-                            None => break,
-                            Some(node) => else_body.push(Some(node)),
-                        };
-                    }
-                } else {
-                    // If `else` clause is empty or omitted, convert the body of `then` to statements.
-                    for CaseArm {
-                        ref mut then_body, ..
-                    } in &mut arms
-                    {
-                        self.replace_last_expr_to_stmt(then_body);
                     }
                 }
-
                 consume_token(tokenizer, Token::End);
 
-                let else_body = self.wrap_stmts(&mut else_body);
+                if arms.is_empty() {
+                    panic!("At least one arm required for `case`")
+                }
 
                 let expr = Expr::Case {
                     head: Box::new(head),
@@ -750,12 +743,14 @@ impl Parser {
         stmts
     }
 
+    /*
     fn replace_last_expr_to_stmt(&mut self, nodes: &mut Vec<Node>) {
         if !nodes.is_empty() {
             let node = nodes.remove(nodes.len() - 1);
             nodes.push(self.wrap_stmt(node));
         }
     }
+    */
 
     fn typed_expr(&mut self, expr: Expr) -> Node {
         let ty = match expr {
