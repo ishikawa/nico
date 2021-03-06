@@ -439,7 +439,7 @@ impl Parser {
             match token {
                 Token::Char('[') => {
                     consume_char(tokenizer, '[');
-                    let mut arguments = self.parse_elements(tokenizer, ']');
+                    let mut arguments = self.parse_expr_elements(tokenizer, ']');
                     consume_char(tokenizer, ']');
 
                     if arguments.len() != 1 {
@@ -474,7 +474,7 @@ impl Parser {
             }
             Token::Char('[') => {
                 consume_char(tokenizer, '[');
-                let elements = self.parse_elements(tokenizer, ']');
+                let elements = self.parse_expr_elements(tokenizer, ']');
                 consume_char(tokenizer, ']');
 
                 Some(self.typed_expr(Expr::Array {
@@ -490,7 +490,7 @@ impl Parser {
                 // TODO: Move to parse_access()
                 if let Some(Token::Char('(')) = tokenizer.peek() {
                     consume_char(tokenizer, '(');
-                    let arguments = self.parse_elements(tokenizer, ')');
+                    let arguments = self.parse_expr_elements(tokenizer, ')');
                     consume_char(tokenizer, ')');
 
                     Some(self.typed_expr(Expr::Invocation {
@@ -690,7 +690,7 @@ impl Parser {
         }
     }
 
-    fn parse_elements(
+    fn parse_expr_elements(
         &mut self,
         tokenizer: &mut Peekable<&mut Tokenizer>,
         stop_char: char,
