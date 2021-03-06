@@ -253,8 +253,6 @@ enum Space {
 #[derive(Debug, PartialEq, Clone)]
 enum Value {
     Int(i32),
-    Boolean(bool),
-    String(String),
 }
 
 impl Space {
@@ -391,8 +389,8 @@ mod space_tests {
 
     #[test]
     fn boolean_exhaustivity() {
-        let true_space = Space::Something(wrap(Type::Boolean), Value::Boolean(true));
-        let false_space = Space::Something(wrap(Type::Boolean), Value::Boolean(false));
+        let true_space = Space::Something(wrap(Type::Boolean), Value::Int(1));
+        let false_space = Space::Something(wrap(Type::Boolean), Value::Int(0));
         let boolean_space = true_space.union(&false_space);
 
         assert!(true_space.is_subspace_of(&true_space));
