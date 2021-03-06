@@ -123,9 +123,6 @@ pub struct CaseArm {
 #[derive(Debug)]
 pub struct Parser {
     naming: PrefixNaming,
-    // This is the environment that will be used as a placeholder
-    // until the correct scope chain is assigned in the semantic analysis.
-    empty_env: Rc<RefCell<sem::Environment>>,
 }
 
 impl Default for Parser {
@@ -138,7 +135,6 @@ impl Parser {
     pub fn new() -> Self {
         Self {
             naming: PrefixNaming::new("?"),
-            empty_env: Rc::new(RefCell::new(sem::Environment::new())),
         }
     }
 
