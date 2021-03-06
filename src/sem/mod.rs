@@ -238,7 +238,7 @@ impl PartialEq for Type {
 // A Generic Algorithm for Checking Exhaustivity of Pattern Matching
 // https://infoscience.epfl.ch/record/225497
 #[derive(Debug, PartialEq, Clone)]
-enum Space<'a> {
+enum Space {
     // An empty space.
     Empty,
     // All possible values of the type T. It's an infinite set of values.
@@ -246,7 +246,7 @@ enum Space<'a> {
     // A concrete value.
     Something(Rc<RefCell<Type>>, Value),
     // a union space.
-    Union(&'a Space<'a>, &'a Space<'a>),
+    Union(Box<Space>, Box<Space>),
 }
 
 // Concrete value of a type.
@@ -257,7 +257,30 @@ enum Value {
     String(String),
 }
 
-impl<'a> Space<'a> {
+impl Space {
+    // -- Projections
+
+    pub fn from_type(r#type: &Rc<RefCell<Type>>) -> Space {
+        Space::Everything(Rc::clone(r#type))
+    }
+
+    pub fn from_pattern(pattern: &parser::Pattern) -> Space {
+        match pattern {
+            parser::Pattern::Variable(ref name, ref binding) => {
+                let binding = binding
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
+
+                match *binding.borrow() {
+                    Binding::Variable { ref r#type, .. } => Space::from_type(r#type),
+                    Binding::Function { .. } => panic!("Unexpected binding"),
+                }
+            }
+        }
+    }
+
+    // -- Operations
+
     /// `self` <: `other`: whether `self` is a subtype of `other`
     pub fn is_subspace_of(&self, other: &Space) -> bool {
         match self {
@@ -278,8 +301,8 @@ impl<'a> Space<'a> {
         }
     }
 
-    pub fn union(&'a self, other: &'a Space<'a>) -> Space<'a> {
-        Space::Union(self, other)
+    pub fn union(&self, other: &Space) -> Space {
+        Space::Union(Box::new(self.clone()), Box::new(other.clone()))
     }
 }
 

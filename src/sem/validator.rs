@@ -1,5 +1,6 @@
 use crate::parser;
 use crate::parser::Expr;
+use crate::sem;
 use crate::sem::{SemanticAnalyzer, Type};
 
 #[derive(Debug, Default)]
@@ -115,22 +116,46 @@ impl TypeValidator {
             } => {
                 self.validate_expr(head);
 
+                // If the expression node were a constant, we could convert it to a space containing
+                // all the actual values, but we won't do that. This is because I want the conversion to
+                // space to be completed only in the type system.
+                let head_space = sem::Space::from_type(&head.r#type);
+                let mut arms_space = sem::Space::Empty;
+
                 for parser::CaseArm {
                     condition,
                     then_body,
                     pattern,
                 } in arms
                 {
+                    // exhaustivity check
+                    if head_space.is_subspace_of(&arms_space) {
+                        panic!("Unreachable pattern.: {:?}", pattern)
+                    }
+
                     self.validate_pattern(pattern);
 
-                    if let Some(condition) = condition {
+                    let space = if let Some(condition) = condition {
                         self.validate_expr(condition);
-                    }
+
+                        // If the arm has a guard, I can't express pattern as
+                        // type space. Or can I express it in some guards?
+                        sem::Space::Empty
+                    } else {
+                        sem::Space::from_pattern(pattern)
+                    };
+
+                    arms_space = arms_space.union(&space);
 
                     self.validate_body(then_body);
                 }
 
                 if let Some(else_body) = else_body {
+                    // exhaustivity check
+                    if head_space.is_subspace_of(&arms_space) {
+                        panic!("Unreachable `else` clause");
+                    }
+
                     self.validate_body(else_body);
                 }
             }
