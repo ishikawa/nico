@@ -120,30 +120,47 @@ pub struct CaseArm {
     pub then_body: Vec<Node>,
 }
 
+#[derive(Debug, Default)]
+pub struct Parser {}
+
 #[derive(Debug)]
-pub struct Parser {
+struct ParserContext {
     naming: PrefixNaming,
 }
 
-impl Default for Parser {
-    fn default() -> Self {
-        Self::new()
+impl ParserContext {
+    pub fn typed_expr(&mut self, expr: Expr) -> Node {
+        let ty = match expr {
+            Expr::Integer(_) => wrap(sem::Type::Int32),
+            Expr::String { .. } => wrap(sem::Type::String),
+            Expr::Stmt(..) => wrap(sem::Type::Void),
+            _ => self.type_var(),
+        };
+
+        Node { expr, r#type: ty }
+    }
+
+    /// Returns a new type variable.
+    pub fn type_var(&mut self) -> Rc<RefCell<sem::Type>> {
+        let name = self.naming.next();
+        wrap(sem::Type::new_type_var(&name))
     }
 }
 
 impl Parser {
     pub fn new() -> Self {
-        Self {
-            naming: PrefixNaming::new("?"),
-        }
+        Self::default()
     }
 
-    pub fn parse(&mut self, tokenizer: &mut Tokenizer) -> Box<Module> {
+    pub fn parse(&self, tokenizer: &mut Tokenizer) -> Box<Module> {
         let mut tokenizer = tokenizer.peekable();
+        let mut context = ParserContext {
+            naming: PrefixNaming::new("?"),
+        };
 
         let mut functions = vec![];
 
-        while let Some(function) = self.parse_function(&mut tokenizer) {
+        while let Some(function) = self.parse_function(&mut tokenizer, &mut context) {
             functions.push(function);
         }
 
@@ -151,11 +168,11 @@ impl Parser {
         // `main` function which is the entry point of a program.
         let mut body = vec![];
 
-        while let Some(expr) = self.parse_stmt(&mut tokenizer) {
+        while let Some(expr) = self.parse_stmt(&mut tokenizer, &mut context) {
             body.push(Some(expr));
         }
 
-        let body = self.wrap_stmts(&mut body);
+        let body = self.wrap_stmts(&mut body, &mut context);
 
         let main = if !body.is_empty() {
             let fun = Function {
@@ -166,7 +183,7 @@ impl Parser {
                 locals: vec![],
                 r#type: wrap(sem::Type::Function {
                     params: vec![],
-                    return_type: self.type_var(),
+                    return_type: context.type_var(),
                 }),
                 frame: None,
             };
@@ -183,7 +200,11 @@ impl Parser {
         })
     }
 
-    fn parse_function(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Function> {
+    fn parse_function(
+        &self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        context: &mut ParserContext,
+    ) -> Option<Function> {
         // modifiers
         let export = match tokenizer.peek() {
             Some(Token::Export) => {
@@ -233,19 +254,19 @@ impl Parser {
                 _ => {}
             };
 
-            match self.parse_stmt(tokenizer) {
+            match self.parse_stmt(tokenizer, context) {
                 None => break,
                 Some(node) => body.push(Some(node)),
             };
         }
         consume_token(tokenizer, Token::End);
 
-        let body = self.wrap_stmts(&mut body);
+        let body = self.wrap_stmts(&mut body, context);
 
         {
             let param_types = param_names
                 .iter()
-                .map(|_| self.type_var())
+                .map(|_| context.type_var())
                 .collect::<Vec<_>>();
 
             let params = param_names
@@ -256,7 +277,7 @@ impl Parser {
 
             let function_type = wrap(sem::Type::Function {
                 params: param_types,
-                return_type: self.type_var(),
+                return_type: context.type_var(),
             });
 
             let function = Function {
@@ -274,52 +295,67 @@ impl Parser {
     }
 
     /// Returns `Stmt` if the result of `parse_stmt_expr()` is a variable binding.
-    fn parse_stmt(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
-        let node = match self.parse_stmt_expr(tokenizer) {
+    fn parse_stmt(
+        &self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        context: &mut ParserContext,
+    ) -> Option<Node> {
+        let node = match self.parse_stmt_expr(tokenizer, context) {
             Some(node) => node,
             None => return None,
         };
 
         if let Expr::Var { .. } = node.expr {
-            return Some(self.wrap_stmt(node));
+            return Some(self.wrap_stmt(node, context));
         }
 
         Some(node)
     }
 
     /// Variable binding or `Expr`
-    fn parse_stmt_expr(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
+    fn parse_stmt_expr(
+        &self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        context: &mut ParserContext,
+    ) -> Option<Node> {
         match tokenizer.peek() {
             Some(Token::Let) => {
                 tokenizer.next();
             }
-            _ => return self.parse_expr(tokenizer),
+            _ => return self.parse_expr(tokenizer, context),
         };
 
         // Variable binding - Pattern
-        let pattern = self
-            .parse_pattern(tokenizer)
-            .unwrap_or_else(|| panic!("Missing pattern in `let`"));
+        let pattern =
+            parse_pattern(tokenizer, context).unwrap_or_else(|| panic!("Missing pattern in `let`"));
 
         consume_char(tokenizer, '=');
 
         let init = self
-            .parse_expr(tokenizer)
+            .parse_expr(tokenizer, context)
             .unwrap_or_else(|| panic!("No initializer"));
 
-        Some(self.typed_expr(Expr::Var {
+        Some(context.typed_expr(Expr::Var {
             pattern,
             init: Box::new(init),
         }))
     }
 
-    fn parse_expr(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
-        self.parse_relop1(tokenizer)
+    fn parse_expr(
+        &self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        context: &mut ParserContext,
+    ) -> Option<Node> {
+        self.parse_relop1(tokenizer, context)
     }
 
     // "==", "!="
-    fn parse_relop1(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
-        let lhs = match self.parse_relop2(tokenizer) {
+    fn parse_relop1(
+        &self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        context: &mut ParserContext,
+    ) -> Option<Node> {
+        let lhs = match self.parse_relop2(tokenizer, context) {
             Some(lhs) => lhs,
             None => return None,
         };
@@ -331,17 +367,21 @@ impl Parser {
         };
         tokenizer.next();
 
-        let rhs = match self.parse_relop2(tokenizer) {
+        let rhs = match self.parse_relop2(tokenizer, context) {
             None => panic!("Expected RHS"),
             Some(rhs) => rhs,
         };
 
-        Some(self.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
+        Some(context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
 
     // ">", "<", ">=", "<="
-    fn parse_relop2(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
-        let lhs = match self.parse_binop1(tokenizer) {
+    fn parse_relop2(
+        &self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        context: &mut ParserContext,
+    ) -> Option<Node> {
+        let lhs = match self.parse_binop1(tokenizer, context) {
             Some(lhs) => lhs,
             None => return None,
         };
@@ -355,16 +395,20 @@ impl Parser {
         };
         tokenizer.next();
 
-        let rhs = match self.parse_binop1(tokenizer) {
+        let rhs = match self.parse_binop1(tokenizer, context) {
             None => panic!("Expected RHS"),
             Some(rhs) => rhs,
         };
 
-        Some(self.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
+        Some(context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
 
-    fn parse_binop1(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
-        let mut lhs = match self.parse_binop2(tokenizer) {
+    fn parse_binop1(
+        &self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        context: &mut ParserContext,
+    ) -> Option<Node> {
+        let mut lhs = match self.parse_binop2(tokenizer, context) {
             None => return None,
             Some(lhs) => lhs,
         };
@@ -379,19 +423,23 @@ impl Parser {
             };
             tokenizer.next();
 
-            let rhs = match self.parse_binop2(tokenizer) {
+            let rhs = match self.parse_binop2(tokenizer, context) {
                 None => panic!("Expected RHS"),
                 Some(rhs) => rhs,
             };
 
-            lhs = self.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
+            lhs = context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
         }
 
         Some(lhs)
     }
 
-    fn parse_binop2(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
-        let mut lhs = match self.parse_access(tokenizer) {
+    fn parse_binop2(
+        &self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        context: &mut ParserContext,
+    ) -> Option<Node> {
+        let mut lhs = match self.parse_access(tokenizer, context) {
             None => return None,
             Some(lhs) => lhs,
         };
@@ -405,20 +453,24 @@ impl Parser {
             };
             tokenizer.next();
 
-            let rhs = match self.parse_access(tokenizer) {
+            let rhs = match self.parse_access(tokenizer, context) {
                 None => panic!("Expected RHS"),
                 Some(rhs) => rhs,
             };
 
-            lhs = self.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
+            lhs = context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
         }
 
         Some(lhs)
     }
 
     // `... [...]`, `... (...)`
-    fn parse_access(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
-        let mut node = self.parse_primary(tokenizer)?;
+    fn parse_access(
+        &self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        context: &mut ParserContext,
+    ) -> Option<Node> {
+        let mut node = self.parse_primary(tokenizer, context)?;
 
         loop {
             let token = match tokenizer.peek() {
@@ -429,10 +481,11 @@ impl Parser {
             match token {
                 Token::Char('[') => {
                     consume_char(tokenizer, '[');
-                    let mut arguments = parse_elements(tokenizer, ']', &mut |tokenizer| {
-                        self.parse_expr(tokenizer)
-                            .expect("Expected subscript argument")
-                    });
+                    let mut arguments =
+                        parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
+                            self.parse_expr(tokenizer, context)
+                                .expect("Expected subscript argument")
+                        });
                     consume_char(tokenizer, ']');
 
                     if arguments.len() != 1 {
@@ -442,7 +495,7 @@ impl Parser {
                         );
                     }
 
-                    node = self.typed_expr(Expr::Subscript {
+                    node = context.typed_expr(Expr::Subscript {
                         operand: Box::new(node),
                         index: Box::new(arguments.remove(0)),
                     });
@@ -452,7 +505,11 @@ impl Parser {
         }
     }
 
-    fn parse_primary(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Node> {
+    fn parse_primary(
+        &self,
+        tokenizer: &mut Peekable<&mut Tokenizer>,
+        context: &mut ParserContext,
+    ) -> Option<Node> {
         let token = match tokenizer.peek() {
             None => return None,
             Some(token) => token,
@@ -461,18 +518,20 @@ impl Parser {
         match token {
             Token::Char('(') => {
                 consume_char(tokenizer, '(');
-                let node = self.parse_expr(tokenizer);
+                let node = self.parse_expr(tokenizer, context);
                 consume_char(tokenizer, ')');
                 node
             }
             Token::Char('[') => {
                 consume_char(tokenizer, '[');
-                let elements = parse_elements(tokenizer, ']', &mut |tokenizer| {
-                    self.parse_expr(tokenizer).expect("Expected element")
-                });
+                let elements =
+                    parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
+                        self.parse_expr(tokenizer, context)
+                            .expect("Expected element")
+                    });
                 consume_char(tokenizer, ']');
 
-                Some(self.typed_expr(Expr::Array {
+                Some(context.typed_expr(Expr::Array {
                     elements,
                     object_offset: None,
                 }))
@@ -485,18 +544,20 @@ impl Parser {
                 // TODO: Move to parse_access()
                 if let Some(Token::Char('(')) = tokenizer.peek() {
                     consume_char(tokenizer, '(');
-                    let arguments = parse_elements(tokenizer, ')', &mut |tokenizer| {
-                        self.parse_expr(tokenizer).expect("Expected argument")
-                    });
+                    let arguments =
+                        parse_elements(tokenizer, context, ')', &mut |tokenizer, context| {
+                            self.parse_expr(tokenizer, context)
+                                .expect("Expected argument")
+                        });
                     consume_char(tokenizer, ')');
 
-                    Some(self.typed_expr(Expr::Invocation {
+                    Some(context.typed_expr(Expr::Invocation {
                         name,
                         arguments,
                         binding: None,
                     }))
                 } else {
-                    Some(self.typed_expr(Expr::Identifier {
+                    Some(context.typed_expr(Expr::Identifier {
                         name,
                         binding: None,
                     }))
@@ -505,7 +566,7 @@ impl Parser {
             Token::Integer(i) => {
                 let expr = Expr::Integer(*i);
                 tokenizer.next();
-                Some(self.typed_expr(expr))
+                Some(context.typed_expr(expr))
             }
             Token::String(s) => {
                 let expr = Expr::String {
@@ -513,12 +574,14 @@ impl Parser {
                     storage: None,
                 };
                 tokenizer.next();
-                Some(self.typed_expr(expr))
+                Some(context.typed_expr(expr))
             }
             Token::If => {
                 tokenizer.next();
 
-                let condition = self.parse_expr(tokenizer).expect("missing condition");
+                let condition = self
+                    .parse_expr(tokenizer, context)
+                    .expect("missing condition");
                 // TODO: check line separator before reading body
 
                 let mut then_body = vec![];
@@ -531,14 +594,14 @@ impl Parser {
                         Some(Token::End) => break,
                         _ => {
                             let stmt = self
-                                .parse_stmt(tokenizer)
+                                .parse_stmt(tokenizer, context)
                                 .unwrap_or_else(|| panic!("Premature EOF"));
                             then_body.push(Some(stmt));
                         }
                     };
                 }
 
-                let then_body = self.wrap_stmts(&mut then_body);
+                let then_body = self.wrap_stmts(&mut then_body, context);
 
                 if let Some(Token::Else) = tokenizer.peek() {
                     let mut body = vec![];
@@ -550,12 +613,12 @@ impl Parser {
                         match tokenizer.peek() {
                             None => panic!("Premature EOF"),
                             Some(Token::End) => {
-                                else_body.replace(self.wrap_stmts(&mut body));
+                                else_body.replace(self.wrap_stmts(&mut body, context));
                                 break;
                             }
                             _ => {
                                 let stmt = self
-                                    .parse_stmt(tokenizer)
+                                    .parse_stmt(tokenizer, context)
                                     .unwrap_or_else(|| panic!("Premature EOF"));
                                 body.push(Some(stmt));
                             }
@@ -570,13 +633,13 @@ impl Parser {
                     else_body,
                 };
 
-                Some(self.typed_expr(expr))
+                Some(context.typed_expr(expr))
             }
             Token::Case => {
                 tokenizer.next();
 
                 let head = self
-                    .parse_expr(tokenizer)
+                    .parse_expr(tokenizer, context)
                     .expect("Missing head expression after `case`");
 
                 // when, ...
@@ -586,8 +649,7 @@ impl Parser {
                     tokenizer.next();
 
                     // pattern
-                    let pattern = self
-                        .parse_pattern(tokenizer)
+                    let pattern = parse_pattern(tokenizer, context)
                         .unwrap_or_else(|| panic!("Missing pattern in `when`"));
 
                     // guard
@@ -595,7 +657,7 @@ impl Parser {
                         Some(Token::If) => {
                             tokenizer.next();
                             let cond = self
-                                .parse_expr(tokenizer)
+                                .parse_expr(tokenizer, context)
                                 .expect("Missing condition in `when if ...`");
                             Some(cond)
                         }
@@ -613,14 +675,14 @@ impl Parser {
                             Some(Token::End) => break,
                             _ => {
                                 let stmt = self
-                                    .parse_stmt(tokenizer)
+                                    .parse_stmt(tokenizer, context)
                                     .unwrap_or_else(|| panic!("Premature EOF"));
                                 then_body.push(Some(stmt));
                             }
                         };
                     }
 
-                    let then_body = self.wrap_stmts(&mut then_body);
+                    let then_body = self.wrap_stmts(&mut then_body, context);
 
                     arms.push(CaseArm {
                         pattern,
@@ -640,13 +702,13 @@ impl Parser {
                         match tokenizer.peek() {
                             None => panic!("Premature EOF"),
                             Some(Token::End) => {
-                                let body = self.wrap_stmts(&mut body);
+                                let body = self.wrap_stmts(&mut body, context);
                                 else_body.replace(body);
                                 break;
                             }
                             _ => {
                                 let stmt = self
-                                    .parse_stmt(tokenizer)
+                                    .parse_stmt(tokenizer, context)
                                     .unwrap_or_else(|| panic!("Premature EOF"));
                                 body.push(Some(stmt));
                             }
@@ -665,36 +727,68 @@ impl Parser {
                     arms,
                     else_body,
                 };
-                Some(self.typed_expr(expr))
+                Some(context.typed_expr(expr))
             }
             token => panic!("Unexpected token {:?}", token),
         }
     }
+}
 
-    fn parse_pattern(&mut self, tokenizer: &mut Peekable<&mut Tokenizer>) -> Option<Pattern> {
-        match tokenizer.peek() {
-            Some(Token::Identifier(ref name)) => {
-                let pat = Pattern::Variable(name.clone(), None);
-                tokenizer.next();
-                Some(pat)
-            }
-            Some(Token::Integer(i)) => {
-                let pat = Pattern::Integer(*i);
-                tokenizer.next();
-                Some(pat)
-            }
-            _ => None,
+impl Parser {
+    // Wrap an expression with statement if it is not statement.
+    fn wrap_stmt(&self, node: Node, context: &mut ParserContext) -> Node {
+        if let Expr::Stmt(..) = node.expr {
+            // Don't wrap stmt with stmt.
+            return node;
         }
+
+        context.typed_expr(Expr::Stmt(Box::new(node)))
+    }
+
+    // Wrap an expressions with statements if it is not the last one.
+    fn wrap_stmts(&self, nodes: &mut Vec<Option<Node>>, context: &mut ParserContext) -> Vec<Node> {
+        let mut stmts = vec![];
+        let mut it = nodes.iter_mut().peekable();
+
+        while let Some(node) = it.next() {
+            if it.peek().is_none() {
+                stmts.push(node.take().unwrap());
+            } else {
+                stmts.push(self.wrap_stmt(node.take().unwrap(), context));
+            }
+        }
+
+        stmts
+    }
+}
+
+fn parse_pattern(
+    tokenizer: &mut Peekable<&mut Tokenizer>,
+    _context: &mut ParserContext,
+) -> Option<Pattern> {
+    match tokenizer.peek() {
+        Some(Token::Identifier(ref name)) => {
+            let pat = Pattern::Variable(name.clone(), None);
+            tokenizer.next();
+            Some(pat)
+        }
+        Some(Token::Integer(i)) => {
+            let pat = Pattern::Integer(*i);
+            tokenizer.next();
+            Some(pat)
+        }
+        _ => None,
     }
 }
 
 fn parse_elements<F, T>(
     tokenizer: &mut Peekable<&mut Tokenizer>,
+    context: &mut ParserContext,
     stop_char: char,
     parser: &mut F,
 ) -> Vec<T>
 where
-    F: FnMut(&mut Peekable<&mut Tokenizer>) -> T,
+    F: Fn(&mut Peekable<&mut Tokenizer>, &mut ParserContext) -> T,
 {
     let mut elements = vec![];
 
@@ -709,7 +803,7 @@ where
             _ => {}
         };
 
-        let element = parser(tokenizer);
+        let element = parser(tokenizer, context);
         elements.push(element);
 
         if let Some(Token::Char(',')) = tokenizer.peek() {
@@ -722,54 +816,9 @@ where
     elements
 }
 
-impl Parser {
-    // Wrap an expression with statement if it is not statement.
-    fn wrap_stmt(&mut self, node: Node) -> Node {
-        if let Expr::Stmt(..) = node.expr {
-            // Don't wrap stmt with stmt.
-            return node;
-        }
-
-        self.typed_expr(Expr::Stmt(Box::new(node)))
-    }
-
-    // Wrap an expressions with statements if it is not the last one.
-    fn wrap_stmts(&mut self, nodes: &mut Vec<Option<Node>>) -> Vec<Node> {
-        let mut stmts = vec![];
-        let mut it = nodes.iter_mut().peekable();
-
-        while let Some(node) = it.next() {
-            if it.peek().is_none() {
-                stmts.push(node.take().unwrap());
-            } else {
-                stmts.push(self.wrap_stmt(node.take().unwrap()));
-            }
-        }
-
-        stmts
-    }
-
-    fn typed_expr(&mut self, expr: Expr) -> Node {
-        let ty = match expr {
-            Expr::Integer(_) => wrap(sem::Type::Int32),
-            Expr::String { .. } => wrap(sem::Type::String),
-            Expr::Stmt(..) => wrap(sem::Type::Void),
-            _ => self.type_var(),
-        };
-
-        Node { expr, r#type: ty }
-    }
-
-    /// Returns a new type variable.
-    fn type_var(&mut self) -> Rc<RefCell<sem::Type>> {
-        let name = self.naming.next();
-        wrap(sem::Type::new_type_var(&name))
-    }
-}
-
 pub fn parse_string<S: AsRef<str>>(src: S) -> Box<Module> {
     let mut tokenizer = Tokenizer::from_string(&src);
-    let mut parser = Parser::new();
+    let parser = Parser::new();
     parser.parse(&mut tokenizer)
 }
 
