@@ -200,7 +200,11 @@ impl Binder {
                 env.insert(b);
             }
             parser::Pattern::Integer(_) => {}
-            parser::Pattern::Array(_) => todo!(),
+            parser::Pattern::Array(patterns) => {
+                for pattern in patterns {
+                    self.bind_pattern(pattern, target, env);
+                }
+            }
         };
     }
 
