@@ -231,13 +231,13 @@ pub struct ImportBuilder {
 }
 
 impl ImportBuilder {
-    pub fn module<T: Into<String>>(&mut self, module: T) -> &mut Self {
-        self.module = Some(module.into());
+    pub fn module<T: AsRef<str>>(&mut self, module: T) -> &mut Self {
+        self.module = Some(module.as_ref().to_string());
         self
     }
 
-    pub fn name<T: Into<String>>(&mut self, name: T) -> &mut Self {
-        self.name = Some(name.into());
+    pub fn name<T: AsRef<str>>(&mut self, name: T) -> &mut Self {
+        self.name = Some(name.as_ref().to_string());
         self
     }
 
@@ -263,8 +263,8 @@ pub struct MemoryDescriptorBuilder {
 }
 
 impl MemoryDescriptorBuilder {
-    pub fn id<T: Into<String>>(&mut self, id: T) -> &mut Self {
-        self.id = Some(Identifier(id.into()));
+    pub fn id<T: AsRef<str>>(&mut self, id: T) -> &mut Self {
+        self.id = Some(Identifier(id.as_ref().to_string()));
         self
     }
 
@@ -295,8 +295,8 @@ pub struct GlobalDescriptorBuilder {
 }
 
 impl GlobalDescriptorBuilder {
-    pub fn id<T: Into<String>>(&mut self, id: T) -> &mut Self {
-        self.id = Some(Identifier(id.into()));
+    pub fn id<T: AsRef<str>>(&mut self, id: T) -> &mut Self {
+        self.id = Some(Identifier(id.as_ref().to_string()));
         self
     }
 
@@ -327,8 +327,8 @@ pub struct FunctionDescriptorBuilder {
 }
 
 impl FunctionDescriptorBuilder {
-    pub fn id<T: Into<String>>(&mut self, id: T) -> &mut Self {
-        self.id = Some(Identifier(id.into()));
+    pub fn id<T: AsRef<str>>(&mut self, id: T) -> &mut Self {
+        self.id = Some(Identifier(id.as_ref().to_string()));
         self
     }
 
@@ -387,8 +387,8 @@ pub struct GlobalBuilder {
 }
 
 impl GlobalBuilder {
-    pub fn id<T: Into<String>>(&mut self, id: T) -> &mut Self {
-        self.id = Some(Identifier(id.into()));
+    pub fn id<T: AsRef<str>>(&mut self, id: T) -> &mut Self {
+        self.id = Some(Identifier(id.as_ref().to_string()));
         self
     }
 
@@ -428,13 +428,13 @@ pub struct FunctionBuilder {
 }
 
 impl FunctionBuilder {
-    pub fn export<T: Into<String>>(&mut self, export: T) -> &mut Self {
-        self.export = Some(export.into());
+    pub fn export<T: AsRef<str>>(&mut self, export: T) -> &mut Self {
+        self.export = Some(export.as_ref().to_string());
         self
     }
 
-    pub fn id<T: Into<String>>(&mut self, id: T) -> &mut Self {
-        self.id = Some(Identifier(id.into()));
+    pub fn id<T: AsRef<str>>(&mut self, id: T) -> &mut Self {
+        self.id = Some(Identifier(id.as_ref().to_string()));
         self
     }
 
@@ -446,9 +446,9 @@ impl FunctionBuilder {
         self
     }
 
-    pub fn named_param<T: Into<String>>(&mut self, name: T, ty: Type) -> &mut Self {
+    pub fn named_param<T: AsRef<str>>(&mut self, name: T, ty: Type) -> &mut Self {
         self.params.push(Param {
-            id: Some(Identifier(name.into())),
+            id: Some(Identifier(name.as_ref().to_string())),
             r#type: ty,
         });
         self
@@ -462,9 +462,9 @@ impl FunctionBuilder {
         self
     }
 
-    pub fn named_local<T: Into<String>>(&mut self, name: T, ty: Type) -> &mut Self {
+    pub fn named_local<T: AsRef<str>>(&mut self, name: T, ty: Type) -> &mut Self {
         self.locals.push(Local {
-            id: Some(Identifier(name.into())),
+            id: Some(Identifier(name.as_ref().to_string())),
             r#type: ty,
         });
         self
@@ -618,33 +618,43 @@ impl InstructionsBuilder {
         self
     }
 
-    pub fn local_get<T: Into<String>>(&mut self, name: T) -> &mut Self {
+    pub fn local_get<T: AsRef<str>>(&mut self, name: T) -> &mut Self {
         self.instructions
-            .push(Instruction::LocalGet(Index::Id(Identifier(name.into()))));
+            .push(Instruction::LocalGet(Index::Id(Identifier(
+                name.as_ref().to_string(),
+            ))));
         self
     }
 
-    pub fn local_set<T: Into<String>>(&mut self, name: T) -> &mut Self {
+    pub fn local_set<T: AsRef<str>>(&mut self, name: T) -> &mut Self {
         self.instructions
-            .push(Instruction::LocalSet(Index::Id(Identifier(name.into()))));
+            .push(Instruction::LocalSet(Index::Id(Identifier(
+                name.as_ref().to_string(),
+            ))));
         self
     }
 
-    pub fn local_tee<T: Into<String>>(&mut self, name: T) -> &mut Self {
+    pub fn local_tee<T: AsRef<str>>(&mut self, name: T) -> &mut Self {
         self.instructions
-            .push(Instruction::LocalTee(Index::Id(Identifier(name.into()))));
+            .push(Instruction::LocalTee(Index::Id(Identifier(
+                name.as_ref().to_string(),
+            ))));
         self
     }
 
-    pub fn global_get<T: Into<String>>(&mut self, name: T) -> &mut Self {
+    pub fn global_get<T: AsRef<str>>(&mut self, name: T) -> &mut Self {
         self.instructions
-            .push(Instruction::GlobalGet(Index::Id(Identifier(name.into()))));
+            .push(Instruction::GlobalGet(Index::Id(Identifier(
+                name.as_ref().to_string(),
+            ))));
         self
     }
 
-    pub fn global_set<T: Into<String>>(&mut self, name: T) -> &mut Self {
+    pub fn global_set<T: AsRef<str>>(&mut self, name: T) -> &mut Self {
         self.instructions
-            .push(Instruction::GlobalSet(Index::Id(Identifier(name.into()))));
+            .push(Instruction::GlobalSet(Index::Id(Identifier(
+                name.as_ref().to_string(),
+            ))));
         self
     }
 
@@ -669,14 +679,17 @@ impl InstructionsBuilder {
         self
     }
 
-    pub fn call<T: Into<String>>(&mut self, name: T) -> &mut Self {
+    pub fn call<T: AsRef<str>>(&mut self, name: T) -> &mut Self {
         self.instructions
-            .push(Instruction::Call(Index::Id(Identifier(name.into()))));
+            .push(Instruction::Call(Index::Id(Identifier(
+                name.as_ref().to_string(),
+            ))));
         self
     }
 
-    pub fn comment<T: Into<String>>(&mut self, comment: T) -> &mut Self {
-        self.instructions.push(Instruction::Comment(comment.into()));
+    pub fn comment<T: AsRef<str>>(&mut self, comment: T) -> &mut Self {
+        self.instructions
+            .push(Instruction::Comment(comment.as_ref().to_string()));
         self
     }
 

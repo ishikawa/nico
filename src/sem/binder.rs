@@ -16,10 +16,10 @@ impl SemanticAnalyzer for Binder {
 
         // First, register functions defined in this module (except for `main`).
         for function in &module.functions {
-            env.insert(wrap(Binding::Function {
-                name: function.name.clone(),
-                r#type: Rc::clone(&function.r#type),
-            }));
+            env.insert(wrap(Binding::defined_function(
+                &function.name,
+                &function.r#type,
+            )));
         }
 
         let env = wrap(env);
@@ -75,13 +75,10 @@ impl Binder {
             Expr::Identifier { ref name, binding } => {
                 match env.borrow().get(&name) {
                     None => panic!("Undefined variable `{}`", name),
-                    Some(ref b) => match *b.borrow() {
-                        Binding::Variable { r#type: ref ty, .. } => {
-                            binding.replace(Rc::clone(&b));
-                            node.r#type = Rc::clone(ty);
-                        }
-                        _ => panic!("Invalid bound variable `{}`", name),
-                    },
+                    Some(ref b) => {
+                        binding.replace(Rc::clone(&b));
+                        node.r#type = Rc::clone(&b.borrow().r#type);
+                    }
                 };
             }
             Expr::Invocation {
@@ -91,29 +88,23 @@ impl Binder {
             } => {
                 match env.borrow().get(&name) {
                     None => panic!("Undefined function `{}`", name),
-                    Some(ref b) => match *b.borrow() {
-                        Binding::Function {
-                            r#type: ref function_type,
-                            ..
-                        } => {
-                            match *function_type.borrow() {
-                                Type::Function {
-                                    ref params,
-                                    ref return_type,
-                                    ..
-                                } => {
-                                    if params.len() != arguments.len() {
-                                        panic!("Wrong number of arguments. The function `{}` takes {} arguments, but {} given.", name, params.len(), arguments.len());
-                                    }
-
-                                    node.r#type = Rc::clone(return_type);
+                    Some(ref b) => {
+                        match *b.borrow().r#type.borrow() {
+                            Type::Function {
+                                ref params,
+                                ref return_type,
+                                ..
+                            } => {
+                                if params.len() != arguments.len() {
+                                    panic!("Wrong number of arguments. The function `{}` takes {} arguments, but {} given.", name, params.len(), arguments.len());
                                 }
-                                ref ty => panic!("function type expected, but was {:?}", ty),
-                            };
-                            binding.replace(Rc::clone(&b));
-                        }
-                        _ => panic!("Invalid bound function `{}`", name),
-                    },
+
+                                node.r#type = Rc::clone(return_type);
+                            }
+                            ref ty => panic!("function type expected, but was {:?}", ty),
+                        };
+                        binding.replace(Rc::clone(&b));
+                    }
                 };
 
                 for a in arguments {
@@ -203,14 +194,10 @@ impl Binder {
             // - A variable pattern introduces a new environment into arm body.
             // - The type of a this kind of pattern is always equal to the type of head.
             parser::Pattern::Variable(ref name, binding) => {
-                let b = wrap(Binding::Variable {
-                    name: name.clone(),
-                    r#type: Rc::clone(&target.r#type),
-                    storage: None,
-                });
+                let b = wrap(Binding::typed_name(name, &target.r#type));
 
                 binding.replace(Rc::clone(&b));
-                env.insert(Rc::clone(&b));
+                env.insert(b);
             }
             parser::Pattern::Integer(_) => {}
         };
@@ -230,11 +217,13 @@ impl Binder {
                 operator
             ),
             Some(ref b) => match *b.borrow() {
-                Binding::Function { .. } => binding.replace(Rc::clone(&b)),
-                _ => panic!(
-                    "Prelude not installed. Missing binary operator `{}`",
-                    operator
-                ),
+                Binding { ref r#type, .. } => match *r#type.borrow() {
+                    Type::Function { .. } => binding.replace(Rc::clone(&b)),
+                    ref ty => panic!(
+                        "Binary operator `{}` must be function, but was `{:?}`",
+                        operator, ty
+                    ),
+                },
             },
         };
         self.analyze_expr(lhs, env);
@@ -263,12 +252,13 @@ mod tests {
         let body = &function.body;
 
         assert_matches!(body[0].expr, parser::Expr::Identifier { binding: Some(ref binding), .. } => {
-            assert_matches!(*binding.borrow(), Binding::Variable { r#type: ref var_type, ..} => {
-                assert_eq!(*var_type.borrow(), *body[0].r#type.borrow(), "variable and node has the same type");
-                assert_matches!(*function.params[0].borrow(), Binding::Variable { r#type: ref param_type, ..} => {
-                    assert_eq!(*var_type.borrow(), *param_type.borrow(), "variable and params[0] has the same type");
-                });
-            });
+            let binding = binding.borrow();
+            let var_type = binding.r#type.borrow();
+            let param0 = function.params[0].borrow();
+            let param_type = param0.r#type.borrow();
+
+            assert_eq!(*var_type, *body[0].r#type.borrow(), "variable and node has the same type");
+            assert_eq!(*var_type, *param_type, "variable and params[0] has the same type");
         });
     }
 
@@ -296,15 +286,15 @@ mod tests {
             assert_matches!(arms[0].pattern, parser::Pattern::Variable(ref _name, ref binding) => {
                 assert!(!binding.is_none());
 
-                let binding = binding.as_ref().unwrap();
+                let binding = binding.as_ref().unwrap().borrow();
+                let param0 = function.params[0].borrow();
+                let param_type = param0.r#type.borrow();
 
-                assert_matches!(*function.params[0].borrow(), Binding::Variable { r#type: ref param_type, ..} => {
-                    assert_eq!(*head.r#type.borrow(), *param_type.borrow(), "head and param[0] has the same type");
-                });
+                assert_eq!(*head.r#type.borrow(), *param_type, "head and param[0] has the same type");
 
-                assert_matches!(*binding.borrow(), Binding::Variable { ref r#type, ..} => {
-                    assert_eq!(*head.r#type.borrow(), *r#type.borrow(), "head and variable pattern has the same type");
-                });
+                let r#type = binding.r#type.borrow();
+
+                assert_eq!(*head.r#type.borrow(), *r#type, "head and variable pattern has the same type");
             });
         });
     }
