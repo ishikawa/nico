@@ -47,12 +47,8 @@ impl Allocator {
                     ref r#type,
                     ..
                 } => {
-                    let v = wrap(LocalStorage {
-                        name: naming.next(name),
-                        r#type: Rc::clone(r#type),
-                    });
-
-                    storage.replace(Rc::clone(&v));
+                    let v = LocalStorage::shared(naming.next(name), r#type);
+                    storage.replace(v);
                 }
             }
         }
@@ -69,7 +65,7 @@ impl Allocator {
         &self,
         node: &mut Node,
         naming: &mut SequenceNaming,
-        locals: &mut Vec<Rc<RefCell<LocalStorage>>>,
+        locals: &mut Vec<Rc<LocalStorage>>,
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
         frame: &mut StackFrame,
     ) {
@@ -174,10 +170,7 @@ impl Allocator {
                 // head expression.
                 self.analyze_expr(head, naming, locals, strings, frame);
                 {
-                    let temp = wrap(LocalStorage {
-                        name: naming.next("_case_head"),
-                        r#type: Rc::clone(&head.r#type),
-                    });
+                    let temp = LocalStorage::shared(naming.next("_case_head"), &head.r#type);
 
                     locals.push(Rc::clone(&temp));
                     head_storage.replace(Rc::clone(&temp));
@@ -221,7 +214,7 @@ impl Allocator {
         &self,
         pattern: &mut parser::Pattern,
         naming: &mut SequenceNaming,
-        locals: &mut Vec<Rc<RefCell<LocalStorage>>>,
+        locals: &mut Vec<Rc<LocalStorage>>,
     ) {
         // Currntly, only "Variable pattern" is supported.
         match pattern {
@@ -236,10 +229,7 @@ impl Allocator {
                         ref r#type,
                         ref mut storage,
                     } => {
-                        let v = wrap(LocalStorage {
-                            name: naming.next(name),
-                            r#type: Rc::clone(&r#type),
-                        });
+                        let v = LocalStorage::shared(naming.next(name), r#type);
 
                         locals.push(Rc::clone(&v));
                         storage.replace(Rc::clone(&v));

@@ -44,7 +44,7 @@ pub struct Binding {
     // The type of a target being referenced.
     pub r#type: Rc<RefCell<Type>>,
     // The reference to a runtime storage
-    pub storage: Option<Rc<RefCell<asm::LocalStorage>>>,
+    pub storage: Option<Rc<asm::LocalStorage>>,
 }
 
 impl Binding {
@@ -57,10 +57,7 @@ impl Binding {
         Self {
             name: name.as_ref().to_string(),
             r#type: Rc::clone(&function_type),
-            storage: Some(wrap(asm::LocalStorage {
-                name: name.as_ref().to_string(),
-                r#type: Rc::clone(&function_type),
-            })),
+            storage: Some(asm::LocalStorage::shared(name, &function_type)),
         }
     }
 

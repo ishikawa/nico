@@ -1,4 +1,4 @@
-use super::{wasm, wasm_type, LocalStorage, StackFrame};
+use super::{wasm, wasm_type, StackFrame};
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem::Type;
@@ -240,8 +240,7 @@ impl AsmBuilder {
             let storage = binding
                 .storage
                 .as_ref()
-                .unwrap_or_else(|| panic!("Invalid binding or allocation"))
-                .borrow();
+                .unwrap_or_else(|| panic!("Invalid binding or allocation"));
 
             let name = &storage.name;
             let r#type = &storage.r#type;
@@ -261,12 +260,7 @@ impl AsmBuilder {
 
         // locals
         for storage in &fun_node.locals {
-            match *storage.borrow() {
-                LocalStorage {
-                    ref name,
-                    ref r#type,
-                } => builder.named_local(name, wasm_type(r#type).unwrap()),
-            };
+            builder.named_local(&storage.name, wasm_type(&storage.r#type).unwrap());
         }
 
         for name in locals.i32_locals() {
@@ -311,7 +305,7 @@ impl AsmBuilder {
                     .as_ref()
                     .unwrap_or_else(|| panic!("Unbound local variable `{}`", name));
 
-                builder.local_get(&storage.borrow().name);
+                builder.local_get(&storage.name);
             }
             Expr::Integer(n) => {
                 builder.i32_const(*n);
@@ -467,7 +461,7 @@ impl AsmBuilder {
                     work.extend(&t);
                 }
 
-                builder.call(&storage.borrow().name);
+                builder.call(&storage.name);
             }
             // binop
             Expr::Add(lhs, rhs, _) => {
@@ -589,14 +583,11 @@ impl AsmBuilder {
                 let t = self.build_expr(builder, head, frame);
                 work.extend(&t);
 
-                let head_temp = match head_storage {
-                    Some(head_storage) => match *head_storage.borrow() {
-                        LocalStorage { ref name, .. } => name.clone(),
-                    },
-                    None => panic!("No allocation for head expression."),
-                };
+                let head_storage = head_storage
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("No allocation for head expression."));
 
-                builder.local_set(head_temp.clone());
+                builder.local_set(&head_storage.name);
 
                 // Build all arms, including the `else` clause, in reverse order.
                 let mut else_builder = wasm::Builders::instructions();
@@ -632,14 +623,14 @@ impl AsmBuilder {
                                 .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name));
 
                             // set the result of head expression to the variable.
-                            arm_builder.local_get(head_temp.clone());
-                            arm_builder.local_set(&storage.borrow().name);
+                            arm_builder.local_get(&head_storage.name);
+                            arm_builder.local_set(&storage.name);
                         }
                         parser::Pattern::Integer(i) => {
                             // Constant pattern is semantically identical to `_ if head == pattern`,
                             // but it can be more preciously handled in exhaustivity check.
                             arm_builder
-                                .local_get(head_temp.clone())
+                                .local_get(&head_storage.name)
                                 .i32_const(i)
                                 .i32_eq();
                             is_pattern_pushed_value = true;
@@ -700,7 +691,7 @@ impl AsmBuilder {
                             .as_ref()
                             .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name));
 
-                        builder.local_set(&storage.borrow().name);
+                        builder.local_set(&storage.name);
                     }
                     parser::Pattern::Integer(_) => {
                         panic!("invalid local binding");

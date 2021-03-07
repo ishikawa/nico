@@ -112,12 +112,23 @@ impl StackFrame {
     }
 }
 
-/// The struct *LocalStorage* represents name and type for
-// local variables and function parameters.
-#[derive(Debug, PartialEq)]
+/// The struct *LocalStorage* represents name and type for local variables and
+/// function parameters.
+/// This struct can be cloned because the name of storage will be unchagend
+/// after fixed.
+#[derive(Debug, PartialEq, Clone)]
 pub struct LocalStorage {
-    pub name: String,
-    pub r#type: Rc<RefCell<Type>>,
+    name: String,
+    r#type: Rc<RefCell<Type>>,
+}
+
+impl LocalStorage {
+    pub fn shared<S: AsRef<str>>(name: S, r#type: &Rc<RefCell<Type>>) -> Rc<Self> {
+        Rc::new(Self {
+            name: name.as_ref().to_string(),
+            r#type: Rc::clone(&r#type),
+        })
+    }
 }
 
 /// String literal allocation in constant pool that is allocated at compile time.
