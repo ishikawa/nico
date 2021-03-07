@@ -251,18 +251,7 @@ impl TypeInferencer {
                     pattern,
                 } in arms
                 {
-                    // Type check for pattern match
-                    match pattern {
-                        parser::Pattern::Variable(_name, ref mut binding) => {
-                            // Variable patern's type must be identical to head expression.
-                            let binding_type = &binding.borrow().r#type;
-                            self.unify(binding_type, &head.r#type);
-                        }
-                        parser::Pattern::Integer(_) => {
-                            self.unify(&wrap(Type::Int32), &head.r#type);
-                        }
-                        parser::Pattern::Array(_) => todo!(),
-                    };
+                    self.analyze_pattern(pattern, head);
 
                     // Guard' type must be boolean.
                     if let Some(condition) = condition {
@@ -294,16 +283,7 @@ impl TypeInferencer {
                 init,
             } => {
                 self.analyze_expr(init, generic_vars);
-
-                match pattern {
-                    parser::Pattern::Variable(_name, ref mut binding) => {
-                        // Variable patern's type must be identical to init expression.
-                        let binding_type = &binding.borrow().r#type;
-                        self.unify(binding_type, &init.r#type);
-                    }
-                    parser::Pattern::Array(_) => todo!(),
-                    _ => {}
-                };
+                self.analyze_pattern(pattern, init);
 
                 // Variable binding pattern always succeeds and its type is boolean.
                 wrap(Type::Boolean)
@@ -313,6 +293,20 @@ impl TypeInferencer {
         // To update node's type
         self.unify_and_log("(ty, node)", &ty, &node.r#type);
         ty
+    }
+
+    fn analyze_pattern(&mut self, pattern: &mut parser::Pattern, target: &mut parser::Node) {
+        match pattern {
+            parser::Pattern::Variable(_name, ref mut binding) => {
+                // Variable patern's type must be identical to head expression.
+                let binding_type = &binding.borrow().r#type;
+                self.unify(binding_type, &target.r#type);
+            }
+            parser::Pattern::Integer(_) => {
+                self.unify(&wrap(Type::Int32), &target.r#type);
+            }
+            parser::Pattern::Array(_) => todo!(),
+        };
     }
 }
 
