@@ -36,20 +36,38 @@ pub enum Type {
     },
 }
 
-/// The name of the reference in the source code,
-/// the type of the target being referenced, and
-/// the reference to the runtime storage
+/// A variable and function representation.
 #[derive(Debug, PartialEq)]
-pub enum Binding {
-    Variable {
-        name: String,
-        r#type: Rc<RefCell<Type>>,
-        storage: Option<Rc<RefCell<asm::LocalStorage>>>,
-    },
-    Function {
-        name: String,
-        r#type: Rc<RefCell<Type>>,
-    },
+pub struct Binding {
+    // The variable name in the source code.
+    pub name: String,
+    // The type of a target being referenced.
+    pub r#type: Rc<RefCell<Type>>,
+    // The reference to a runtime storage
+    pub storage: Option<Rc<asm::LocalStorage>>,
+}
+
+impl Binding {
+    // -- initializers
+    pub fn builtin_function<S: AsRef<str>>(name: S, function_type: Type) -> Self {
+        Self::defined_function(name, &wrap(function_type))
+    }
+
+    pub fn defined_function<S: AsRef<str>>(name: S, function_type: &Rc<RefCell<Type>>) -> Self {
+        Self {
+            name: name.as_ref().to_string(),
+            r#type: Rc::clone(&function_type),
+            storage: Some(asm::LocalStorage::shared(name, &function_type)),
+        }
+    }
+
+    pub fn typed_name<S: AsRef<str>>(name: S, r#type: &Rc<RefCell<Type>>) -> Self {
+        Self {
+            name: name.as_ref().to_string(),
+            r#type: Rc::clone(r#type),
+            storage: None,
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -64,38 +82,38 @@ impl Environment {
 
         // Binary operators
         for op in &["+", "-", "%", "*", "/"] {
-            env.insert(wrap(Binding::Function {
-                name: op.to_string(),
-                r#type: wrap(Type::Function {
+            env.insert(wrap(Binding::builtin_function(
+                *op,
+                Type::Function {
                     params: vec![wrap(Type::Int32), wrap(Type::Int32)],
                     return_type: wrap(Type::Int32),
-                }),
-            }));
+                },
+            )));
         }
         for op in &["<", ">", "<=", ">=", "==", "!="] {
-            env.insert(wrap(Binding::Function {
-                name: op.to_string(),
-                r#type: wrap(Type::Function {
+            env.insert(wrap(Binding::builtin_function(
+                *op,
+                Type::Function {
                     params: vec![wrap(Type::Int32), wrap(Type::Int32)],
                     return_type: wrap(Type::Boolean),
-                }),
-            }));
+                },
+            )));
         }
         // print
-        env.insert(wrap(Binding::Function {
-            name: "println_str".to_string(),
-            r#type: wrap(Type::Function {
+        env.insert(wrap(Binding::builtin_function(
+            "println_str",
+            Type::Function {
                 params: vec![wrap(Type::String)],
                 return_type: wrap(Type::Int32),
-            }),
-        }));
-        env.insert(wrap(Binding::Function {
-            name: "println_i32".to_string(),
-            r#type: wrap(Type::Function {
+            },
+        )));
+        env.insert(wrap(Binding::builtin_function(
+            "println_i32",
+            Type::Function {
                 params: vec![wrap(Type::Int32)],
                 return_type: wrap(Type::Int32),
-            }),
-        }));
+            },
+        )));
 
         env
     }
@@ -112,11 +130,8 @@ impl Environment {
     }
 
     pub fn insert(&mut self, binding: Rc<RefCell<Binding>>) {
-        let name = match *binding.borrow() {
-            Binding::Variable { ref name, .. } | Binding::Function { ref name, .. } => name.clone(),
-        };
-
-        self.bindings.insert(name, binding);
+        let name = &binding.borrow().name;
+        self.bindings.insert(name.clone(), Rc::clone(&binding));
     }
 
     pub fn get(&self, name: &str) -> Option<Rc<RefCell<Binding>>> {
@@ -253,8 +268,6 @@ enum Space {
 #[derive(Debug, PartialEq, Clone)]
 enum Value {
     Int(i32),
-    Boolean(bool),
-    String(String),
 }
 
 impl Space {
@@ -271,10 +284,7 @@ impl Space {
                     .as_ref()
                     .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
 
-                match *binding.borrow() {
-                    Binding::Variable { ref r#type, .. } => Space::from_type(r#type),
-                    Binding::Function { .. } => panic!("Unexpected binding"),
-                }
+                Space::from_type(&binding.borrow().r#type)
             }
             parser::Pattern::Integer(i) => Self::Something(wrap(Type::Int32), Value::Int(*i)),
         }
@@ -391,8 +401,8 @@ mod space_tests {
 
     #[test]
     fn boolean_exhaustivity() {
-        let true_space = Space::Something(wrap(Type::Boolean), Value::Boolean(true));
-        let false_space = Space::Something(wrap(Type::Boolean), Value::Boolean(false));
+        let true_space = Space::Something(wrap(Type::Boolean), Value::Int(1));
+        let false_space = Space::Something(wrap(Type::Boolean), Value::Int(0));
         let boolean_space = true_space.union(&false_space);
 
         assert!(true_space.is_subspace_of(&true_space));
