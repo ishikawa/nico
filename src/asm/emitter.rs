@@ -690,7 +690,9 @@ impl AsmBuilder {
                     parser::Pattern::Integer(_) => {
                         panic!("invalid local binding");
                     }
-                    parser::Pattern::Array(_) => todo!(),
+                    parser::Pattern::Array(_) => {
+                        todo!("Local binding with array pattern is not yet implemented. ")
+                    }
                 };
                 builder
                     .comment("Pattern without guard always push `true` value.")

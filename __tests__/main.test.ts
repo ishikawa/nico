@@ -228,6 +228,15 @@ const cases: TestCase[] = [
   {
     // prettier-ignore
     input: [
+      "",
+      "let [x] = [100]",
+      "x",
+    ].join("\n"),
+    compileError: /refutable pattern in local binding/i
+  },
+  {
+    // prettier-ignore
+    input: [
       "export fun foo(a)",
       "    case a",
       "    when []",
