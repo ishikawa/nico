@@ -253,8 +253,10 @@ impl TypeInferencer {
                 {
                     // Type check for pattern match
                     match pattern {
-                        parser::Pattern::Variable(..) => {
-                            // The binder would assign the same type of `head` expression.
+                        parser::Pattern::Variable(_name, ref mut binding) => {
+                            // Variable patern's type must be identical to head expression.
+                            let binding_type = &binding.borrow().r#type;
+                            self.unify(binding_type, &head.r#type);
                         }
                         parser::Pattern::Integer(_) => {
                             self.unify(&wrap(Type::Int32), &head.r#type);
@@ -287,8 +289,21 @@ impl TypeInferencer {
 
                 Rc::clone(&case_type)
             }
-            Expr::Var { pattern: _, init } => {
+            Expr::Var {
+                ref mut pattern,
+                init,
+            } => {
                 self.analyze_expr(init, generic_vars);
+
+                match pattern {
+                    parser::Pattern::Variable(_name, ref mut binding) => {
+                        // Variable patern's type must be identical to init expression.
+                        let binding_type = &binding.borrow().r#type;
+                        self.unify(binding_type, &init.r#type);
+                    }
+                    parser::Pattern::Array(_) => todo!(),
+                    _ => {}
+                };
 
                 // Variable binding pattern always succeeds and its type is boolean.
                 wrap(Type::Boolean)
@@ -738,17 +753,11 @@ impl TypeInferencer {
 
     fn fix_pattern(&self, pattern: &mut parser::Pattern) {
         match pattern {
-            parser::Pattern::Variable(ref name, ref mut binding) => {
-                let binding = binding
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
-
-                match *(binding.borrow_mut()) {
-                    Binding { ref mut r#type, .. } => {
-                        *r#type = fixed_type(r#type);
-                    }
+            parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
+                Binding { ref mut r#type, .. } => {
+                    *r#type = fixed_type(r#type);
                 }
-            }
+            },
             parser::Pattern::Integer(_) => {}
             parser::Pattern::Array(_) => todo!(),
         };

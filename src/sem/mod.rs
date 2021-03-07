@@ -279,11 +279,7 @@ impl Space {
 
     pub fn from_pattern(pattern: &parser::Pattern) -> Space {
         match pattern {
-            parser::Pattern::Variable(ref name, ref binding) => {
-                let binding = binding
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
-
+            parser::Pattern::Variable(_name, ref binding) => {
                 Space::from_type(&binding.borrow().r#type)
             }
             parser::Pattern::Integer(i) => Self::Something(wrap(Type::Int32), Value::Int(*i)),

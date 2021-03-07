@@ -218,24 +218,18 @@ impl Allocator {
     ) {
         // Currntly, only "Variable pattern" is supported.
         match pattern {
-            parser::Pattern::Variable(ref name, ref mut binding) => {
-                let binding = binding
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
+            parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
+                Binding {
+                    ref name,
+                    ref r#type,
+                    ref mut storage,
+                } => {
+                    let v = LocalStorage::shared(naming.next(name), r#type);
 
-                match *(binding.borrow_mut()) {
-                    Binding {
-                        ref name,
-                        ref r#type,
-                        ref mut storage,
-                    } => {
-                        let v = LocalStorage::shared(naming.next(name), r#type);
-
-                        locals.push(Rc::clone(&v));
-                        storage.replace(Rc::clone(&v));
-                    }
+                    locals.push(Rc::clone(&v));
+                    storage.replace(Rc::clone(&v));
                 }
-            }
+            },
             parser::Pattern::Integer(_) => {}
             parser::Pattern::Array(_) => todo!(),
         };

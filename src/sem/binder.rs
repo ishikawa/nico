@@ -193,11 +193,8 @@ impl Binder {
         match pattern {
             // - A variable pattern introduces a new environment into arm body.
             // - The type of a this kind of pattern is always equal to the type of head.
-            parser::Pattern::Variable(ref name, binding) => {
-                let b = wrap(Binding::typed_name(name, &target.r#type));
-
-                binding.replace(Rc::clone(&b));
-                env.insert(b);
+            parser::Pattern::Variable(_name, ref binding) => {
+                env.insert(Rc::clone(binding));
             }
             parser::Pattern::Integer(_) => {}
             parser::Pattern::Array(patterns) => {
@@ -273,10 +270,8 @@ mod tests {
             "
             fun foo(i)
                 case i
-                when x if x == 5
-                    10
-                else
-                    20
+                when x
+                    x
                 end
             end
             ",
@@ -288,18 +283,18 @@ mod tests {
         let body = &function.body;
 
         assert_matches!(body[0].expr, Expr::Case { ref head, ref arms, ..} => {
+            let param0 = function.params[0].borrow();
+            let param_type = param0.r#type.borrow();
+            assert_eq!(*head.r#type.borrow(), *param_type, "head and param[0] has the same type");
+
             assert_matches!(arms[0].pattern, parser::Pattern::Variable(ref _name, ref binding) => {
-                assert!(!binding.is_none());
+                let binding = binding.borrow();
 
-                let binding = binding.as_ref().unwrap().borrow();
-                let param0 = function.params[0].borrow();
-                let param_type = param0.r#type.borrow();
-
-                assert_eq!(*head.r#type.borrow(), *param_type, "head and param[0] has the same type");
-
-                let r#type = binding.r#type.borrow();
-
-                assert_eq!(*head.r#type.borrow(), *r#type, "head and variable pattern has the same type");
+                assert_eq!(
+                    *binding.r#type.borrow(),
+                    *arms[0].then_body[0].r#type.borrow(),
+                    "variable pattern type and reference to it"
+                );
             });
         });
     }

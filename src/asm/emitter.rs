@@ -612,11 +612,7 @@ impl AsmBuilder {
                     match arm.pattern {
                         // variable pattern
                         parser::Pattern::Variable(ref name, ref binding) => {
-                            let binding = binding
-                                .as_ref()
-                                .unwrap_or_else(|| panic!("Unbound pattern `{}`", name))
-                                .borrow();
-
+                            let binding = binding.borrow();
                             let storage = binding
                                 .storage
                                 .as_ref()
@@ -683,10 +679,7 @@ impl AsmBuilder {
                 match pattern {
                     // variable pattern
                     parser::Pattern::Variable(ref name, ref binding) => {
-                        let binding = binding
-                            .as_ref()
-                            .unwrap_or_else(|| panic!("Unbound pattern `{}`", name))
-                            .borrow();
+                        let binding = binding.borrow();
                         let storage = binding
                             .storage
                             .as_ref()

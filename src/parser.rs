@@ -109,7 +109,7 @@ pub enum Expr {
 
 #[derive(Debug)]
 pub enum Pattern {
-    Variable(String, Option<Rc<RefCell<sem::Binding>>>),
+    Variable(String, Rc<RefCell<sem::Binding>>),
     Integer(i32),
     Array(Vec<Pattern>),
 }
@@ -769,7 +769,8 @@ fn parse_pattern(
 ) -> Option<Pattern> {
     match tokenizer.peek() {
         Some(Token::Identifier(ref name)) => {
-            let pat = Pattern::Variable(name.clone(), None);
+            let binding = wrap(sem::Binding::typed_name(name, &context.type_var()));
+            let pat = Pattern::Variable(name.clone(), binding);
             tokenizer.next();
             Some(pat)
         }
