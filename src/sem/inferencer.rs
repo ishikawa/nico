@@ -143,18 +143,15 @@ impl TypeInferencer {
             }
             Expr::Subscript { operand, index } => {
                 let operand_type = {
-                    let generic_element_typename = self.generic_type_var_naming.next();
-
-                    //scoped_generic_vars.insert(generic_element_typename.clone());
-
                     let operand_type = self.analyze_expr(operand, generic_vars);
+
+                    // Operand must be Array<T>
+                    let array_type = self.new_array_type_var();
 
                     self.unify_and_log(
                         "subscript (operand, T[])",
                         &operand_type,
-                        &wrap(Type::Array(wrap(Type::new_type_var(
-                            &generic_element_typename,
-                        )))),
+                        &wrap(array_type),
                     );
 
                     fixed_type(&operand_type)
@@ -251,7 +248,7 @@ impl TypeInferencer {
                     pattern,
                 } in arms
                 {
-                    self.analyze_pattern(pattern, head);
+                    self.analyze_pattern(pattern, &head.r#type);
 
                     // Guard' type must be boolean.
                     if let Some(condition) = condition {
@@ -283,7 +280,7 @@ impl TypeInferencer {
                 init,
             } => {
                 self.analyze_expr(init, generic_vars);
-                self.analyze_pattern(pattern, init);
+                self.analyze_pattern(pattern, &init.r#type);
 
                 // Variable binding pattern always succeeds and its type is boolean.
                 wrap(Type::Boolean)
@@ -295,17 +292,37 @@ impl TypeInferencer {
         ty
     }
 
-    fn analyze_pattern(&mut self, pattern: &mut parser::Pattern, target: &mut parser::Node) {
+    fn analyze_pattern(&mut self, pattern: &mut parser::Pattern, target_type: &Rc<RefCell<Type>>) {
         match pattern {
             parser::Pattern::Variable(_name, ref mut binding) => {
                 // Variable patern's type must be identical to head expression.
                 let binding_type = &binding.borrow().r#type;
-                self.unify(binding_type, &target.r#type);
+                self.unify_and_log(
+                    "variable pattern (pattern, target)",
+                    binding_type,
+                    target_type,
+                );
             }
             parser::Pattern::Integer(_) => {
-                self.unify(&wrap(Type::Int32), &target.r#type);
+                self.unify_and_log(
+                    "i32 pattern (pattern, target)",
+                    &wrap(Type::Int32),
+                    target_type,
+                );
             }
-            parser::Pattern::Array(_) => todo!(),
+            parser::Pattern::Array(patterns) => {
+                // node'type must be Array<T>
+                let head_type = fixed_type(target_type);
+
+                match *head_type.borrow() {
+                    Type::Array(ref element_type) => {
+                        for pattern in patterns {
+                            self.analyze_pattern(pattern, element_type);
+                        }
+                    }
+                    ref ty => panic!("mismatched type: expected T[], found {}", ty),
+                };
+            }
         };
     }
 }
@@ -465,8 +482,15 @@ impl TypeInferencer {
         Rc::clone(ty)
     }
 
+    /// T
     fn new_type_var(&mut self) -> Type {
         Type::new_type_var(&self.generic_type_var_naming.next())
+    }
+
+    /// Array<T>
+    fn new_array_type_var(&mut self) -> Type {
+        let ty = self.new_type_var();
+        Type::Array(wrap(ty))
     }
 
     fn unify_and_log<S: AsRef<str>>(
@@ -753,7 +777,11 @@ impl TypeInferencer {
                 }
             },
             parser::Pattern::Integer(_) => {}
-            parser::Pattern::Array(_) => todo!(),
+            parser::Pattern::Array(patterns) => {
+                for pattern in patterns {
+                    self.fix_pattern(pattern);
+                }
+            }
         };
     }
 }
