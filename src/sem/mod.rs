@@ -318,10 +318,13 @@ impl Space {
                 Space::Everything(..) => true,
                 Space::Something(..) => false,
                 Space::Union(a, b) => self.is_subspace_of(a) || self.is_subspace_of(b),
-                Space::Array(spaces2) => spaces1
-                    .iter()
-                    .zip(spaces2)
-                    .all(|(a, b)| a.is_subspace_of(b)),
+                Space::Array(spaces2) => {
+                    spaces1.len() == spaces2.len()
+                        && spaces1
+                            .iter()
+                            .zip(spaces2)
+                            .all(|(a, b)| a.is_subspace_of(b))
+                }
             },
         }
     }

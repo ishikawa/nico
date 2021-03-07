@@ -200,6 +200,19 @@ const cases: TestCase[] = [
     compileError: /Missing match arm. non-exhaustive patterns/i
   },
   {
+    // prettier-ignore
+    input: [
+      "",
+      "case 10",
+      "when [a]",
+      "    a",
+      "else",
+      "    3",
+      "end",
+    ].join("\n"),
+    compileError: /mismatched type: expected T\[\], found i32/i
+  },
+  {
     focus: true,
     // prettier-ignore
     input: [
@@ -213,7 +226,6 @@ const cases: TestCase[] = [
     ].join("\n"),
     expected: 6
   },
-  /* 
   {
     // prettier-ignore
     input: [
@@ -249,7 +261,6 @@ const cases: TestCase[] = [
     exec: exports => [exports.foo([]), exports.foo([1]), exports.foo([2]), exports.foo([3, 4])],
     expected: [10, 20, 2, 4]
   },
-  */
   // Function
   {
     file: "input/fun_55.nico",

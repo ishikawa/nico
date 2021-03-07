@@ -231,7 +231,11 @@ impl Allocator {
                 }
             },
             parser::Pattern::Integer(_) => {}
-            parser::Pattern::Array(_) => todo!(),
+            parser::Pattern::Array(patterns) => {
+                for pattern in patterns {
+                    self.analyze_pattern(pattern, naming, locals);
+                }
+            }
         };
     }
 }
