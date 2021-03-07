@@ -311,7 +311,15 @@ impl TypeInferencer {
                 );
             }
             parser::Pattern::Array(patterns) => {
-                // node'type must be Array<T>
+                // Head expression's type must be Array<T>
+                let array_type = self.new_array_type_var();
+
+                self.unify_and_log(
+                    "array pattern (patern, target)",
+                    &target_type,
+                    &wrap(array_type),
+                );
+
                 let head_type = fixed_type(target_type);
 
                 match *head_type.borrow() {
