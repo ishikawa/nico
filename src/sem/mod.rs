@@ -254,14 +254,16 @@ impl PartialEq for Type {
 // https://infoscience.epfl.ch/record/225497
 #[derive(Debug, PartialEq, Clone)]
 enum Space {
-    // An empty space.
+    // empty space.
     Empty,
-    // All possible values of the type T. It's an infinite set of values.
+    // all possible values of the type T. It's an infinite set of values.
     Everything(Rc<RefCell<Type>>),
-    // A concrete value.
+    // concrete value.
     Something(Rc<RefCell<Type>>, Value),
-    // a union space.
+    // union space.
     Union(Box<Space>, Box<Space>),
+    // array
+    Array(Vec<Space>),
 }
 
 // Concrete value of a type.
@@ -283,7 +285,10 @@ impl Space {
                 Space::from_type(&binding.borrow().r#type)
             }
             parser::Pattern::Integer(i) => Self::Something(wrap(Type::Int32), Value::Int(*i)),
-            parser::Pattern::Array(_) => todo!(),
+            parser::Pattern::Array(elements) => {
+                let elements = elements.iter().map(|p| Self::from_pattern(p)).collect();
+                Self::Array(elements)
+            }
         }
     }
 
@@ -298,14 +303,26 @@ impl Space {
                 Space::Everything(ty2) => ty1 == ty2,
                 Space::Something(_, _) => false,
                 Space::Union(a, b) => self.is_subspace_of(a) || self.is_subspace_of(b),
+                Space::Array(..) => false,
             },
             Space::Something(ty1, value1) => match other {
                 Space::Empty => false,
                 Space::Everything(ty2) => ty1 == ty2,
                 Space::Something(ty2, value2) => ty1 == ty2 && value1 == value2,
                 Space::Union(a, b) => self.is_subspace_of(a) || self.is_subspace_of(b),
+                Space::Array(..) => false,
             },
             Space::Union(a, b) => a.is_subspace_of(other) && b.is_subspace_of(other),
+            Space::Array(spaces1) => match other {
+                Space::Empty => false,
+                Space::Everything(..) => true,
+                Space::Something(..) => false,
+                Space::Union(a, b) => self.is_subspace_of(a) || self.is_subspace_of(b),
+                Space::Array(spaces2) => spaces1
+                    .iter()
+                    .zip(spaces2)
+                    .all(|(a, b)| a.is_subspace_of(b)),
+            },
         }
     }
 
