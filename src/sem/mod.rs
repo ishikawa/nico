@@ -287,6 +287,7 @@ impl Space {
                 Space::from_type(&binding.borrow().r#type)
             }
             parser::Pattern::Integer(i) => Self::Something(wrap(Type::Int32), Value::Int(*i)),
+            parser::Pattern::Array(_) => todo!(),
         }
     }
 

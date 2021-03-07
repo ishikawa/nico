@@ -111,6 +111,7 @@ pub enum Expr {
 pub enum Pattern {
     Variable(String, Option<Rc<RefCell<sem::Binding>>>),
     Integer(i32),
+    Array(Vec<Pattern>),
 }
 
 #[derive(Debug)]
@@ -764,7 +765,7 @@ impl Parser {
 
 fn parse_pattern(
     tokenizer: &mut Peekable<&mut Tokenizer>,
-    _context: &mut ParserContext,
+    context: &mut ParserContext,
 ) -> Option<Pattern> {
     match tokenizer.peek() {
         Some(Token::Identifier(ref name)) => {
@@ -777,6 +778,17 @@ fn parse_pattern(
             tokenizer.next();
             Some(pat)
         }
+        Some(Token::Char('[')) => {
+            consume_char(tokenizer, '[');
+
+            let elements = parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
+                parse_pattern(tokenizer, context).expect("Expected pattern")
+            });
+
+            consume_char(tokenizer, ']');
+            Some(Pattern::Array(elements))
+        }
+
         _ => None,
     }
 }

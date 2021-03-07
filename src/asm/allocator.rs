@@ -237,6 +237,7 @@ impl Allocator {
                 }
             }
             parser::Pattern::Integer(_) => {}
+            parser::Pattern::Array(_) => todo!(),
         };
     }
 }

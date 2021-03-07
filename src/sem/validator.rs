@@ -174,6 +174,7 @@ impl TypeValidator {
                     parser::Pattern::Integer(_) => {
                         panic!("Can't assign value to `int`.")
                     }
+                    parser::Pattern::Array(_) => todo!(),
                 };
 
                 // exhaustivity check

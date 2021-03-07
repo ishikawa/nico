@@ -259,6 +259,7 @@ impl TypeInferencer {
                         parser::Pattern::Integer(_) => {
                             self.unify(&wrap(Type::Int32), &head.r#type);
                         }
+                        parser::Pattern::Array(_) => todo!(),
                     };
 
                     // Guard' type must be boolean.
@@ -749,6 +750,7 @@ impl TypeInferencer {
                 }
             }
             parser::Pattern::Integer(_) => {}
+            parser::Pattern::Array(_) => todo!(),
         };
     }
 }

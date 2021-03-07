@@ -200,6 +200,7 @@ impl Binder {
                 env.insert(b);
             }
             parser::Pattern::Integer(_) => {}
+            parser::Pattern::Array(_) => todo!(),
         };
     }
 

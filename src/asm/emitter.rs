@@ -635,6 +635,7 @@ impl AsmBuilder {
                                 .i32_eq();
                             is_pattern_pushed_value = true;
                         }
+                        parser::Pattern::Array(_) => todo!(),
                     };
 
                     // TODO: remove redundant `i32_const`, `if`
@@ -696,6 +697,7 @@ impl AsmBuilder {
                     parser::Pattern::Integer(_) => {
                         panic!("invalid local binding");
                     }
+                    parser::Pattern::Array(_) => todo!(),
                 };
                 builder
                     .comment("Pattern without guard always push `true` value.")
