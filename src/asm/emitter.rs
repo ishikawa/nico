@@ -631,7 +631,20 @@ impl AsmBuilder {
                                 .i32_eq();
                             is_pattern_pushed_value = true;
                         }
-                        parser::Pattern::Array(_) => todo!(),
+                        parser::Pattern::Array(_) => {
+                            // `block` [i32] ->
+                            // - Push the result `0`
+                            // - Push the length of head (`L1`) on the stack
+                            // - Compare the length of pattern (`L2`) and `L1`
+                            // - Break if `L1` != `l2`
+                            // - Push the element at index `0` of head on the stack
+                            // - Evaluate a child pattern at index `0`
+                            // - Break if pottern match failed
+                            // - ... and so on
+                            // - Drop the result `0`
+                            // - Push the result `1`
+                            todo!()
+                        }
                     };
 
                     // TODO: remove redundant `i32_const`, `if`

@@ -87,6 +87,12 @@ pub enum Instruction {
         then: Vec<Instruction>,
         r#else: Option<Vec<Instruction>>,
     },
+    Block {
+        result_type: Option<Type>,
+        body: Vec<Instruction>,
+    },
+    Br(Index),
+    BrIf(Index),
 
     // For unsigned values
     U32Const(u32),
@@ -684,6 +690,16 @@ impl InstructionsBuilder {
             .push(Instruction::Call(Index::Id(Identifier(
                 name.as_ref().to_string(),
             ))));
+        self
+    }
+
+    pub fn br(&mut self, index: Size) -> &mut Self {
+        self.instructions.push(Instruction::Br(Index::Index(index)));
+        self
+    }
+
+    pub fn br_if(&mut self, index: Size) -> &mut Self {
+        self.instructions.push(Instruction::Br(Index::Index(index)));
         self
     }
 
@@ -1307,6 +1323,33 @@ impl Printer {
                     self.close_indent();
                 }
 
+                self.close_indent();
+            }
+            Instruction::Br(idx) => {
+                self.start_plain();
+                self.buffer.push_str("br ");
+                self.write_index(&idx);
+                self.end_plain();
+            }
+            Instruction::BrIf(idx) => {
+                self.start_plain();
+                self.buffer.push_str("br_if ");
+                self.write_index(&idx);
+                self.end_plain();
+            }
+            Instruction::Block {
+                ref result_type,
+                ref body,
+            } => {
+                self.indent();
+                self.buffer.push_str("(block ");
+                if let Some(result_type) = result_type {
+                    self.write_return_type(result_type);
+                }
+
+                self.push_indent();
+                self.push_indent();
+                self.write_instructions(body);
                 self.close_indent();
             }
             Instruction::Comment(comment) => {
