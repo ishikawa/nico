@@ -609,9 +609,9 @@ impl AsmBuilder {
                     let mut is_pattern_pushed_value = false;
 
                     // 2. Each pattern will push the value whether pattern matched or not.
-                    match arm.pattern {
+                    match &arm.pattern {
                         // variable pattern
-                        parser::Pattern::Variable(ref name, ref binding) => {
+                        parser::Pattern::Variable(name, binding) => {
                             let binding = binding.borrow();
                             let storage = binding
                                 .storage
@@ -627,11 +627,11 @@ impl AsmBuilder {
                             // but it can be more preciously handled in exhaustivity check.
                             arm_builder
                                 .local_get(&head_storage.name)
-                                .i32_const(i)
+                                .i32_const(*i)
                                 .i32_eq();
                             is_pattern_pushed_value = true;
                         }
-                        parser::Pattern::Array(_) => {
+                        pat @ parser::Pattern::Array(_) => {
                             // `block` [i32] ->
                             // - Push the result `0`
                             // - Push the length of head (`L1`) on the stack
@@ -643,7 +643,14 @@ impl AsmBuilder {
                             // - ... and so on
                             // - Drop the result `0`
                             // - Push the result `1`
-                            todo!()
+                            let mut block_builder = wasm::Builders::instructions();
+
+                            block_builder.comment(format!("array pattern -- {}", pat));
+
+                            arm_builder.push(wasm::Instruction::Block {
+                                result_type: Some(wasm::Type::I32),
+                                body: block_builder.build(),
+                            });
                         }
                     };
 

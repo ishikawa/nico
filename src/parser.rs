@@ -5,6 +5,7 @@ use crate::tokenizer::{Token, Tokenizer};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use std::cell::RefCell;
+use std::fmt;
 use std::iter::Peekable;
 use std::rc::Rc;
 
@@ -845,6 +846,27 @@ fn consume_token(tokenizer: &mut Peekable<&mut Tokenizer>, expected: Token) {
 
 fn consume_char(tokenizer: &mut Peekable<&mut Tokenizer>, expected: char) {
     consume_token(tokenizer, Token::Char(expected));
+}
+
+impl fmt::Display for Pattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Pattern::Variable(name, _) => write!(f, "{}", name),
+            Pattern::Integer(i) => write!(f, "{}", i),
+            Pattern::Array(patterns) => {
+                let mut it = patterns.iter().peekable();
+
+                write!(f, "[")?;
+                while let Some(pattern) = it.next() {
+                    write!(f, "{}", pattern)?;
+                    if let Some(_) = it.peek() {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, "]")
+            }
+        }
+    }
 }
 
 #[cfg(test)]

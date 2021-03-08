@@ -725,6 +725,7 @@ pub struct Printer {
     level: i32,
     pub indent: i32,
     pub pretty: bool,
+    indent_no_newline: bool,
 }
 
 impl ToString for Printer {
@@ -753,6 +754,7 @@ impl Printer {
             level: 0,
             indent: 2,
             pretty: false,
+            indent_no_newline: false,
         }
     }
 
@@ -765,7 +767,11 @@ impl Printer {
             return;
         }
         if self.pretty {
-            self.buffer.push('\n');
+            if !self.indent_no_newline {
+                self.buffer.push('\n');
+            }
+            self.indent_no_newline = false;
+
             for _ in 0..self.level {
                 for _ in 0..self.indent {
                     self.buffer.push(' ');
@@ -1348,15 +1354,15 @@ impl Printer {
                 }
 
                 self.push_indent();
-                self.push_indent();
                 self.write_instructions(body);
                 self.close_indent();
             }
             Instruction::Comment(comment) => {
-                self.start_plain();
+                self.indent();
                 self.buffer.push_str(";; ");
                 self.buffer.push_str(comment);
-                self.end_plain();
+                self.buffer.push('\n');
+                self.indent_no_newline = true;
             }
         }
     }
