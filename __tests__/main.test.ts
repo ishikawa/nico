@@ -17,6 +17,7 @@ interface TestCase {
 
   // filter
   focus?: boolean;
+  todo?: boolean;
 }
 
 const temporaryCodePath = path.join(os.tmpdir(), "nico_test_main.nico");
@@ -202,7 +203,6 @@ const cases: TestCase[] = [
   {
     // prettier-ignore
     input: [
-      "",
       "case 10",
       "when [a]",
       "    a",
@@ -216,6 +216,16 @@ const cases: TestCase[] = [
     // prettier-ignore
     input: [
       "",
+      "let [x] = [100]",
+      "x",
+    ].join("\n"),
+    compileError: /refutable pattern in local binding/i
+  },
+  {
+    todo: true,
+    // prettier-ignore
+    input: [
+      "",
       "case [1, 2, 3]",
       "when [a, b, c]",
       "    a + b + c",
@@ -226,15 +236,7 @@ const cases: TestCase[] = [
     expected: 6
   },
   {
-    // prettier-ignore
-    input: [
-      "",
-      "let [x] = [100]",
-      "x",
-    ].join("\n"),
-    compileError: /refutable pattern in local binding/i
-  },
-  {
+    todo: true,
     // prettier-ignore
     input: [
       "export fun foo(a)",
@@ -425,9 +427,11 @@ const cases: TestCase[] = [
 ];
 
 // filter
-const focused = cases.filter(x => x.focus);
+let focused = cases.filter(x => x.focus);
+focused = focused.length === 0 ? cases : focused;
+focused = focused.filter(x => !x.todo);
 
-(focused.length === 0 ? cases : focused).forEach(({ input, file, expected, compileError, exec, captureOutput }) => {
+focused.forEach(({ input, file, expected, compileError, exec, captureOutput }) => {
   test(`given '${input || file}'`, async () => {
     let src = temporaryCodePath;
 

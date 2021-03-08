@@ -608,7 +608,7 @@ impl AsmBuilder {
                     let mut arm_builder = wasm::Builders::instructions();
                     let mut is_pattern_pushed_value = false;
 
-                    // 2. Bind the head value to local variable.
+                    // 2. Each pattern will push the value whether pattern matched or not.
                     match arm.pattern {
                         // variable pattern
                         parser::Pattern::Variable(ref name, ref binding) => {

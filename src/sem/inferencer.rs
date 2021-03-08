@@ -314,11 +314,14 @@ impl TypeInferencer {
                 // Head expression's type must be Array<T>
                 let array_type = self.new_array_type_var();
 
-                self.unify_and_log(
-                    "array pattern (patern, target)",
-                    &target_type,
-                    &wrap(array_type),
-                );
+                if let Some(err) = self._unify(&target_type, &wrap(array_type)) {
+                    match err {
+                        UnificationError::TypeMismatch(actual, _expected) => {
+                            panic!("mismatched type: expected T[], found {}", actual.borrow());
+                        }
+                        _ => self._panic_unification_error(&err),
+                    };
+                };
 
                 let head_type = fixed_type(target_type);
 
@@ -530,21 +533,25 @@ impl TypeInferencer {
 
     fn unify(&mut self, ty1: &Rc<RefCell<Type>>, ty2: &Rc<RefCell<Type>>) {
         if let Some(error) = self._unify(ty1, ty2) {
-            match error {
-                UnificationError::RecursiveReference(_ty1, _ty2) => {
-                    panic!("Recursive type reference detected.");
-                }
-                UnificationError::NumberOfParamsMismatch(ty1, ty2, n1, n2) => {
-                    panic!(
-                        "Wrong number of parameters. Expected {} but was {} in `{:?}` and `{:?}`",
-                        n1, n2, ty1, ty2
-                    );
-                }
-                UnificationError::TypeMismatch(ty1, ty2) => {
-                    panic!("Type mismatch in `{:?}` and `{:?}`", ty1, ty2);
-                }
-            };
+            self._panic_unification_error(&error);
         }
+    }
+
+    fn _panic_unification_error(&self, error: &UnificationError) {
+        match error {
+            UnificationError::RecursiveReference(_ty1, _ty2) => {
+                panic!("Recursive type reference detected.");
+            }
+            UnificationError::NumberOfParamsMismatch(ty1, ty2, n1, n2) => {
+                panic!(
+                    "Wrong number of parameters. Expected {} but was {} in `{:?}` and `{:?}`",
+                    n1, n2, ty1, ty2
+                );
+            }
+            UnificationError::TypeMismatch(ty1, ty2) => {
+                panic!("Type mismatch in `{:?}` and `{:?}`", ty1, ty2);
+            }
+        };
     }
 
     fn _unify(
