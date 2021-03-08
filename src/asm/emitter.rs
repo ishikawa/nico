@@ -65,7 +65,7 @@ impl AsmBuilder {
         AsmBuilder::default()
     }
 
-    pub fn build_module(&mut self, module_node: &parser::Module) -> wasm::Module {
+    pub fn build_module(&self, module_node: &parser::Module) -> wasm::Module {
         let mut module = wasm::Module::new();
 
         // -- import: environment
@@ -138,11 +138,7 @@ impl AsmBuilder {
         module
     }
 
-    fn build_data_segments(
-        &mut self,
-        module: &mut wasm::Module,
-        module_node: &parser::Module,
-    ) -> u32 {
+    fn build_data_segments(&self, module: &mut wasm::Module, module_node: &parser::Module) -> u32 {
         let strings = module_node
             .strings
             .as_ref()
@@ -165,7 +161,7 @@ impl AsmBuilder {
         }
     }
 
-    fn build_module_functions(&mut self, module: &mut wasm::Module, module_node: &parser::Module) {
+    fn build_module_functions(&self, module: &mut wasm::Module, module_node: &parser::Module) {
         for function in &module_node.functions {
             module.functions.push(self.build_function(function));
         }
@@ -175,7 +171,7 @@ impl AsmBuilder {
         }
     }
 
-    fn build_function(&mut self, fun_node: &parser::Function) -> wasm::Function {
+    fn build_function(&self, fun_node: &parser::Function) -> wasm::Function {
         let mut body = wasm::Builders::instructions();
 
         // -- function body
@@ -272,7 +268,7 @@ impl AsmBuilder {
     }
 
     fn build_expr(
-        &mut self,
+        &self,
         builder: &mut wasm::InstructionsBuilder,
         node: &parser::Node,
         frame: &StackFrame,
@@ -606,67 +602,30 @@ impl AsmBuilder {
 
                 let arm_insts = arms.iter().rev().fold(else_insts, |acc, arm| {
                     let mut arm_builder = wasm::Builders::instructions();
-                    let mut is_pattern_pushed_value = false;
 
-                    // 2. Each pattern will push the value whether pattern matched or not.
-                    match &arm.pattern {
-                        // variable pattern
-                        parser::Pattern::Variable(name, binding) => {
-                            let binding = binding.borrow();
-                            let storage = binding
-                                .storage
-                                .as_ref()
-                                .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name));
+                    arm_builder.comment(format!("when {}", arm.pattern)).block(
+                        Some(wasm::Type::I32),
+                        &mut |builder| {
+                            // Pattern
+                            builder.local_get(&head_storage.name);
+                            let t = self.build_pattern(builder, &arm.pattern, frame);
+                            work.extend(&t);
 
-                            // set the result of head expression to the variable.
-                            arm_builder.local_get(&head_storage.name);
-                            arm_builder.local_set(&storage.name);
-                        }
-                        parser::Pattern::Integer(i) => {
-                            // Constant pattern is semantically identical to `_ if head == pattern`,
-                            // but it can be more preciously handled in exhaustivity check.
-                            arm_builder
-                                .local_get(&head_storage.name)
-                                .i32_const(*i)
-                                .i32_eq();
-                            is_pattern_pushed_value = true;
-                        }
-                        pat @ parser::Pattern::Array(_) => {
-                            // `block` [i32] ->
-                            // - Push the result `0`
-                            // - Push the length of head (`L1`) on the stack
-                            // - Compare the length of pattern (`L2`) and `L1`
-                            // - Break if `L1` != `l2`
-                            // - Push the element at index `0` of head on the stack
-                            // - Evaluate a child pattern at index `0`
-                            // - Break if pottern match failed
-                            // - ... and so on
-                            // - Drop the result `0`
-                            // - Push the result `1`
-                            let mut block_builder = wasm::Builders::instructions();
+                            // Build the guard expression if exists.
+                            if let Some(ref condition) = arm.condition {
+                                builder.i32_const(0);
 
-                            block_builder.comment(format!("array pattern -- {}", pat));
+                                let t = self.build_expr(builder, condition, frame);
+                                work.extend(&t);
 
-                            arm_builder.push(wasm::Instruction::Block {
-                                result_type: Some(wasm::Type::I32),
-                                body: block_builder.build(),
-                            });
-                        }
-                    };
-
-                    // TODO: remove redundant `i32_const`, `if`
-                    // 3. Build a guard condition.
-                    if let Some(ref condition) = arm.condition {
-                        let t = self.build_expr(&mut arm_builder, condition, frame);
-                        work.extend(&t);
-                    } else {
-                        // Pattern without guard always push `true` value.
-                        arm_builder.i32_const(1);
-                    }
-
-                    if is_pattern_pushed_value {
-                        arm_builder.i32_and();
-                    }
+                                builder
+                                    .comment("if the guard condition fails, return with `0`")
+                                    .i32_eqz()
+                                    .br_if(0)
+                                    .drop();
+                            }
+                        },
+                    );
 
                     // 4. Build an `if` instruction for arm body and `else` to the next arm or `else` clause.
                     let then_insts = {
@@ -722,11 +681,54 @@ impl AsmBuilder {
 
         work
     }
-}
 
-impl AsmBuilder {
+    /// Build a pattern. Assert: a value of target is on the top of the stack.
+    fn build_pattern(
+        &self,
+        builder: &mut wasm::InstructionsBuilder,
+        pattern: &parser::Pattern,
+        _frame: &StackFrame,
+    ) -> BuildWork {
+        // 2. Each pattern will push the value whether pattern matched or not.
+        match pattern {
+            // variable pattern
+            parser::Pattern::Variable(name, binding) => {
+                let binding = binding.borrow();
+                let storage = binding
+                    .storage
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name));
+
+                // set the result of head expression to the variable.
+                builder.local_set(&storage.name).i32_const(1);
+            }
+            parser::Pattern::Integer(i) => {
+                // Constant pattern is semantically identical to `_ if head == pattern`,
+                // but it can be more preciously handled in exhaustivity check.
+                builder.i32_const(*i).i32_eq();
+            }
+            parser::Pattern::Array(_) => {
+                // `block` [i32] ->
+                // - Push the result `0`
+                // - Push the length of head (`L1`) on the stack
+                // - Compare the length of pattern (`L2`) and `L1`
+                // - Break if `L1` != `l2`
+                // - Push the element at index `0` of head on the stack
+                // - Evaluate a child pattern at index `0`
+                // - Break if pottern match failed
+                // - ... and so on
+                // - Drop the result `0`
+                // - Push the result `1`
+
+                todo!();
+            }
+        };
+
+        BuildWork::new()
+    }
+
     fn build_expr_nodes(
-        &mut self,
+        &self,
         builder: &mut wasm::InstructionsBuilder,
         body: &[parser::Node],
         frame: &StackFrame,
@@ -737,7 +739,7 @@ impl AsmBuilder {
         })
     }
 
-    fn drop_values(&mut self, builder: &mut wasm::InstructionsBuilder, body: &[parser::Node]) {
+    fn drop_values(&self, builder: &mut wasm::InstructionsBuilder, body: &[parser::Node]) {
         let node = match body.last() {
             None => return,
             Some(node) => node,

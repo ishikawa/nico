@@ -699,7 +699,8 @@ impl InstructionsBuilder {
     }
 
     pub fn br_if(&mut self, index: Size) -> &mut Self {
-        self.instructions.push(Instruction::Br(Index::Index(index)));
+        self.instructions
+            .push(Instruction::BrIf(Index::Index(index)));
         self
     }
 
@@ -707,6 +708,22 @@ impl InstructionsBuilder {
         self.instructions
             .push(Instruction::Comment(comment.as_ref().to_string()));
         self
+    }
+
+    pub fn block<F>(&mut self, result_type: Option<Type>, builder_fn: &mut F) -> &mut Self
+    where
+        F: FnMut(&mut Self),
+    {
+        let mut builder = Self::default();
+
+        builder_fn(&mut builder);
+
+        let block = Instruction::Block {
+            result_type,
+            body: builder.build(),
+        };
+
+        self.push(block)
     }
 
     pub fn push(&mut self, instruction: Instruction) -> &mut Self {

@@ -859,7 +859,7 @@ impl fmt::Display for Pattern {
                 write!(f, "[")?;
                 while let Some(pattern) = it.next() {
                     write!(f, "{}", pattern)?;
-                    if let Some(_) = it.peek() {
+                    if it.peek().is_some() {
                         write!(f, ", ")?;
                     }
                 }
