@@ -222,7 +222,6 @@ const cases: TestCase[] = [
     compileError: /refutable pattern in local binding/i
   },
   {
-    todo: true,
     // prettier-ignore
     input: [
       "",

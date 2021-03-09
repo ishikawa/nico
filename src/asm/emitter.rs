@@ -3,7 +3,7 @@ use crate::parser;
 use crate::parser::Expr;
 use crate::sem::Type;
 use crate::util::naming::PrefixNaming;
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 // The size of the virtual stack segment (bytes). Default: 32KB (half of page size)
 const STACK_SIZE: wasm::Size = wasm::PAGE_SIZE / 2;
@@ -388,9 +388,9 @@ impl AsmBuilder {
                 // Load the reference of the operand to a local variable
                 builder.comment(format!("-- Subscript {}", operand.r#type.borrow()));
 
+                let tmp_index = work.reserve_i32();
                 let tmp_memidx = work.reserve_i32();
                 let tmp_length = work.reserve_i32();
-                let tmp_index = work.reserve_i32();
 
                 let t = self.build_expr(builder, operand, frame);
                 work.extend(&t);
@@ -608,7 +608,7 @@ impl AsmBuilder {
                         &mut |builder| {
                             // Pattern
                             builder.local_get(&head_storage.name);
-                            let t = self.build_pattern(builder, &arm.pattern, frame);
+                            let t = self.build_pattern(builder, &arm.pattern, &head.r#type, frame);
                             work.extend(&t);
 
                             // Build the guard expression if exists.
@@ -682,13 +682,18 @@ impl AsmBuilder {
         work
     }
 
-    /// Build a pattern. Assert: a value of target is on the top of the stack.
+    /// Build a pattern.
+    /// - Assert: a value of target is on the top of the stack.
+    /// - Push the value whether the pattern succeeded or not to the stack.
     fn build_pattern(
         &self,
         builder: &mut wasm::InstructionsBuilder,
         pattern: &parser::Pattern,
-        _frame: &StackFrame,
+        target_type: &Rc<RefCell<Type>>,
+        frame: &StackFrame,
     ) -> BuildWork {
+        let mut work = BuildWork::new();
+
         // 2. Each pattern will push the value whether pattern matched or not.
         match pattern {
             // variable pattern
@@ -707,7 +712,28 @@ impl AsmBuilder {
                 // but it can be more preciously handled in exhaustivity check.
                 builder.i32_const(*i).i32_eq();
             }
-            parser::Pattern::Array(_) => {
+            parser::Pattern::Array(ref patterns) => {
+                let element_type = match &*target_type.borrow() {
+                    Type::Array(element_type) => Rc::clone(element_type),
+                    ty => panic!("Operand must be an array, but was {}", ty),
+                };
+
+                let element_size = wasm_type(&element_type).unwrap().num_bytes();
+
+                // Before entering the block, save the target value.
+                let tmp_target = work.reserve_i32();
+                let tmp_memidx = work.reserve_i32();
+                let tmp_length = work.reserve_i32();
+
+                builder
+                    .comment("load the reference (index, length) of an array to local variables")
+                    .local_tee(&tmp_target)
+                    .i32_load(0)
+                    .local_set(&tmp_memidx)
+                    .local_get(&tmp_target)
+                    .i32_load(wasm::SIZE_BYTES)
+                    .local_set(&tmp_length);
+
                 // `block` [i32] ->
                 // - Push the result `0`
                 // - Push the length of head (`L1`) on the stack
@@ -719,12 +745,47 @@ impl AsmBuilder {
                 // - ... and so on
                 // - Drop the result `0`
                 // - Push the result `1`
+                builder.block(Some(wasm::Type::I32), &mut |block| {
+                    block
+                        .comment(format!(
+                            "Assert: target must be {}[{}]",
+                            element_type.borrow(),
+                            patterns.len()
+                        ))
+                        .i32_const(0)
+                        .local_get(&tmp_length)
+                        .u32_const(patterns.len() as u32)
+                        .i32_neq()
+                        .br_if(0)
+                        .drop();
 
-                todo!();
+                    // Push the value of the element
+                    for (i, pattern) in patterns.iter().enumerate() {
+                        // Access
+                        block
+                            .i32_const(0)
+                            .comment(format!(
+                                "access {}[{}] at memory index + element size({}) * index",
+                                element_type.borrow(),
+                                i,
+                                element_size
+                            ))
+                            .local_get(&tmp_memidx)
+                            .i32_load(element_size * (i as wasm::Size));
+
+                        // TODO: Reserve new local variables in nest pattern.
+                        let t = self.build_pattern(block, pattern, &element_type, frame);
+                        work.extend(&t);
+
+                        block.i32_eqz().br_if(0).drop();
+                    }
+
+                    block.i32_const(1);
+                });
             }
         };
 
-        BuildWork::new()
+        work
     }
 
     fn build_expr_nodes(
