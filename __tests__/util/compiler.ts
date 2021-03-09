@@ -5,7 +5,7 @@ import { execFile } from "child_process";
 import { StringDecoder } from "string_decoder";
 import loadWabt from "wabt";
 
-const DEBUG = true;
+const DEBUG = false;
 
 export async function compileFileToWATFile(filepath: string, outputFilepath: string): Promise<void> {
   return new Promise((resolve, reject) => {

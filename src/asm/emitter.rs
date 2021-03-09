@@ -388,6 +388,7 @@ impl AsmBuilder {
                 // Load the reference of the operand to a local variable
                 builder.comment(format!("-- Subscript {}", operand.r#type.borrow()));
 
+                let tmp_operand = work.reserve_i32();
                 let tmp_index = work.reserve_i32();
                 let tmp_memidx = work.reserve_i32();
                 let tmp_length = work.reserve_i32();
@@ -397,8 +398,10 @@ impl AsmBuilder {
 
                 builder
                     .comment("load the reference (index, length) of an array to local variables")
+                    .local_tee(&tmp_operand)
                     .i32_load(0)
-                    .local_tee(&tmp_memidx)
+                    .local_set(&tmp_memidx)
+                    .local_get(&tmp_operand)
                     .i32_load(wasm::SIZE_BYTES)
                     .local_tee(&tmp_length);
 

@@ -249,10 +249,14 @@ const cases: TestCase[] = [
       "    when x",
       "        x[1]",
       "    end",
-      "end"
+      "end",
+      "println_i32(foo([]))",
+      "println_i32(foo([1]))",
+      "println_i32(foo([2]))",
+      "println_i32(foo([3, 4]))",
     ].join("\n"),
-    exec: exports => [exports.foo([]), exports.foo([1]), exports.foo([2]), exports.foo([3, 4])],
-    expected: [10, 20, 2, 4]
+    captureOutput: true,
+    expected: ""
   },
   {
     // prettier-ignore
@@ -422,6 +426,16 @@ const cases: TestCase[] = [
       "x[(2 - 2)] + x[bar()] + x[2]"
     ].join("\n"),
     expected: 105
+  },
+  // array - the length of array a to be calculated as a[1].
+  {
+    // prettier-ignore
+    input: [
+      "let a = [1, 0, 3]",
+      "let b = [4, 0, 6]",
+      "a[2] + b[2]",
+    ].join("\n"),
+    expected: 9
   }
 ];
 
