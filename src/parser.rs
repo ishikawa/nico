@@ -869,6 +869,36 @@ impl fmt::Display for Pattern {
     }
 }
 
+impl Expr {
+    pub fn short_name(&self) -> String {
+        match self {
+            Expr::Integer(i) => format!("Integer({})", i),
+            Expr::String { content, .. } => format!("String(\"{}\")", content),
+            Expr::Identifier { name, .. } => format!("Identifier(`{}`)", name),
+            Expr::Array { elements, .. } => format!("Array[{}]", elements.len()),
+            Expr::Subscript { .. } => "x[...]".to_string(),
+            Expr::Invocation {
+                name, arguments, ..
+            } => format!("{}({} args)", name, arguments.len()),
+            Expr::Add(_, _, _) => "a + b".to_string(),
+            Expr::Sub(_, _, _) => "a - b".to_string(),
+            Expr::Rem(_, _, _) => "a % b".to_string(),
+            Expr::Mul(_, _, _) => "a * b".to_string(),
+            Expr::Div(_, _, _) => "a / b".to_string(),
+            Expr::LT(_, _, _) => "a < b".to_string(),
+            Expr::GT(_, _, _) => "a > b".to_string(),
+            Expr::LE(_, _, _) => "a <= b".to_string(),
+            Expr::GE(_, _, _) => "a >= b".to_string(),
+            Expr::EQ(_, _, _) => "a == b".to_string(),
+            Expr::NE(_, _, _) => "a != b".to_string(),
+            Expr::Stmt(node) => format!("Stmt({})", node.expr.short_name()),
+            Expr::If { .. } => "if".to_string(),
+            Expr::Case { .. } => "case".to_string(),
+            Expr::Var { .. } => "let".to_string(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

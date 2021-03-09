@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 #[derive(Debug)]
 pub struct TypeInferencer {
@@ -75,6 +75,7 @@ impl TypeInferencer {
 
     fn analyze_invocation(
         &mut self,
+        name: &str,
         function_type: Rc<RefCell<Type>>,
         retty: &Rc<RefCell<Type>>,
         args: &mut [&mut parser::Node],
@@ -89,7 +90,11 @@ impl TypeInferencer {
             return_type: Rc::clone(retty),
         });
 
-        self.unify_and_log("type of invocation (f, call)", &function_type, &callsite);
+        self.unify_and_log(
+            format!("invocation `{}` (fun, caller)", name),
+            &function_type,
+            &callsite,
+        );
         Rc::clone(retty)
     }
 
@@ -183,6 +188,7 @@ impl TypeInferencer {
                 Some(function_type) => {
                     let mut m = arguments.iter_mut().collect::<Vec<_>>();
                     self.analyze_invocation(
+                        name,
                         Rc::clone(&function_type),
                         &node.r#type,
                         &mut m,
@@ -204,6 +210,7 @@ impl TypeInferencer {
             | Expr::NE(lhs, rhs, binding) => match self.lookup_function(binding, generic_vars) {
                 None => panic!("Prelude not installed"),
                 Some(function_type) => self.analyze_invocation(
+                    "(binop)",
                     Rc::clone(&function_type),
                     &node.r#type,
                     &mut [lhs.as_mut(), rhs.as_mut()],
@@ -288,7 +295,11 @@ impl TypeInferencer {
         };
 
         // To update node's type
-        self.unify_and_log("(ty, node)", &ty, &node.r#type);
+        self.unify_and_log(
+            format!("node: {}", node.expr.short_name()),
+            &node.r#type,
+            &ty,
+        );
         ty
     }
 
@@ -323,9 +334,9 @@ impl TypeInferencer {
                     };
                 };
 
-                let head_type = fixed_type(target_type);
+                let target_type = fixed_type(target_type);
 
-                match *head_type.borrow() {
+                match *target_type.borrow() {
                     Type::Array(ref element_type) => {
                         for pattern in patterns {
                             self.analyze_pattern(pattern, element_type);
@@ -656,6 +667,16 @@ impl TypeInferencer {
     }
 }
 
+fn fixed_type_and_log(message: &str, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+    let new_type = fixed_type(ty);
+
+    if DEBUG {
+        eprintln!("[fix] {} {} -> {}", message, ty.borrow(), new_type.borrow());
+    }
+
+    new_type
+}
+
 // Prune fixed type variables and remove indirection.
 pub fn fixed_type(ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
     match &*ty.borrow() {
@@ -699,7 +720,7 @@ impl TypeInferencer {
     }
 
     fn fix_expr(&self, node: &mut parser::Node) {
-        node.r#type = fixed_type(&node.r#type);
+        node.r#type = fixed_type_and_log("node", &node.r#type);
 
         match &mut node.expr {
             Expr::Stmt(expr) => {
