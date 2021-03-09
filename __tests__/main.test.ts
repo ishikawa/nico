@@ -235,7 +235,6 @@ const cases: TestCase[] = [
     expected: 6
   },
   {
-    focus: true,
     // prettier-ignore
     input: [
       "export fun foo(a)",
@@ -251,12 +250,12 @@ const cases: TestCase[] = [
       "    end",
       "end",
       "println_i32(foo([]))",
-      "#println_i32(foo([1]))",
-      "#println_i32(foo([2]))",
-      "#println_i32(foo([3, 4]))",
+      "println_i32(foo([1]))",
+      "println_i32(foo([2]))",
+      "println_i32(foo([3, 4]))",
     ].join("\n"),
     captureOutput: true,
-    expected: ""
+    expected: ["10", "20", "2", "4"].join("\n") + "\n"
   },
   {
     // prettier-ignore

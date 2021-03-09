@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 #[derive(Debug)]
 pub struct TypeInferencer {
@@ -126,25 +126,25 @@ impl TypeInferencer {
             Expr::Array {
                 ref mut elements, ..
             } => {
-                if elements.is_empty() {
-                    return wrap(Type::Array(wrap(self.new_type_var())));
-                }
-
                 let mut element_types = elements
                     .iter_mut()
                     .map(|element| self.analyze_expr(element, generic_vars))
                     .collect::<Vec<_>>();
 
-                let first_type = element_types.remove(0);
-                let element_type =
-                    element_types
-                        .iter_mut()
-                        .fold(&first_type, |previous_type, current_type| {
-                            self.unify(&previous_type, &current_type);
-                            current_type
-                        });
+                let element_type = if element_types.is_empty() {
+                    wrap(self.new_type_var())
+                } else {
+                    let first_element = element_types.remove(0);
 
-                wrap(Type::Array(Rc::clone(element_type)))
+                    element_types
+                        .iter()
+                        .fold(first_element, |previous_type, current_type| {
+                            self.unify(&previous_type, current_type);
+                            Rc::clone(current_type)
+                        })
+                };
+
+                wrap(Type::Array(element_type))
             }
             Expr::Subscript { operand, index } => {
                 let operand_type = {
