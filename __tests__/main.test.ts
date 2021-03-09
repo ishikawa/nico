@@ -257,6 +257,22 @@ const cases: TestCase[] = [
     captureOutput: true,
     expected: ["10", "20", "2", "4"].join("\n") + "\n"
   },
+  // Nested array pattern
+  {
+    focus: true,
+    // prettier-ignore
+    input: [
+      "case [[1, 2], [3, 4, 5]]",
+      "when [[a, b], [c, d, e]]",
+      "    a + b + c + d + e",
+      "when [a, b]",
+      "    10",
+      "else",
+      "    20",
+      "end"
+    ].join("\n"),
+    expected: 15
+  },
   {
     // prettier-ignore
     input: [
