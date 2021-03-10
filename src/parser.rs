@@ -23,7 +23,7 @@ pub struct Function {
     pub export: bool,
     // metadata
     pub params: Vec<Rc<RefCell<sem::Binding>>>,
-    pub locals: Vec<Rc<asm::LocalStorage>>,
+    pub locals: Vec<Rc<asm::Storage>>,
     pub r#type: Rc<RefCell<sem::Type>>,
     // The total size of stack frame required for executing this function.
     // It will be calculated by allocator.
@@ -96,7 +96,7 @@ pub enum Expr {
     },
     Case {
         head: Box<Node>, // head expression
-        head_storage: Option<Rc<asm::LocalStorage>>,
+        head_storage: Option<Rc<asm::Storage>>,
         arms: Vec<CaseArm>,
         else_body: Option<Vec<Node>>,
     },

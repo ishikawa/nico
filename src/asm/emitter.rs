@@ -233,15 +233,13 @@ impl AsmBuilder {
         // typeuse
         for binding in &fun_node.params {
             let binding = binding.borrow();
-            let storage = binding
+            let var = binding
                 .storage
                 .as_ref()
-                .unwrap_or_else(|| panic!("Invalid binding or allocation"));
+                .unwrap_or_else(|| panic!("Invalid binding or allocation"))
+                .unwrap_local_variable();
 
-            let name = &storage.name;
-            let r#type = &storage.r#type;
-
-            builder.named_param(name, wasm_type(r#type).unwrap());
+            builder.named_param(&var.name, var.r#type);
         }
 
         // params
@@ -256,7 +254,8 @@ impl AsmBuilder {
 
         // locals
         for storage in &fun_node.locals {
-            builder.named_local(&storage.name, wasm_type(&storage.r#type).unwrap());
+            let var = storage.unwrap_local_variable();
+            builder.named_local(&var.name, var.r#type);
         }
 
         for name in locals.i32_locals() {
@@ -296,12 +295,13 @@ impl AsmBuilder {
                     .unwrap_or_else(|| panic!("Undefined local variable `{}`", name))
                     .borrow();
 
-                let storage = binding
+                let var = binding
                     .storage
                     .as_ref()
-                    .unwrap_or_else(|| panic!("Unbound local variable `{}`", name));
+                    .unwrap_or_else(|| panic!("Unbound local variable `{}`", name))
+                    .unwrap_local_variable();
 
-                builder.local_get(&storage.name);
+                builder.local_get(&var.name);
             }
             Expr::Integer(n) => {
                 builder.i32_const(*n);
@@ -450,17 +450,18 @@ impl AsmBuilder {
                     .as_ref()
                     .unwrap_or_else(|| panic!("Undefined function `{}`", name))
                     .borrow();
-                let storage = binding
+                let function = binding
                     .storage
                     .as_ref()
-                    .unwrap_or_else(|| panic!("no storage for function `{}`", name));
+                    .unwrap_or_else(|| panic!("no storage for function `{}`", name))
+                    .unwrap_function();
 
                 for arg in arguments {
                     let t = self.build_expr(builder, arg, frame);
                     work.extend(&t);
                 }
 
-                builder.call(&storage.name);
+                builder.call(&function.name);
             }
             // binop
             Expr::Add(lhs, rhs, _) => {
@@ -582,11 +583,12 @@ impl AsmBuilder {
                 let t = self.build_expr(builder, head, frame);
                 work.extend(&t);
 
-                let head_storage = head_storage
+                let head_var = head_storage
                     .as_ref()
-                    .unwrap_or_else(|| panic!("No allocation for head expression."));
+                    .unwrap_or_else(|| panic!("No allocation for head expression."))
+                    .unwrap_local_variable();
 
-                builder.local_set(&head_storage.name);
+                builder.local_set(&head_var.name);
 
                 // Build all arms, including the `else` clause, in reverse order.
                 let mut else_builder = wasm::Builders::instructions();
@@ -610,7 +612,7 @@ impl AsmBuilder {
                         Some(wasm::Type::I32),
                         &mut |builder| {
                             // Pattern
-                            builder.local_get(&head_storage.name);
+                            builder.local_get(&head_var.name);
                             let t = self.build_pattern(builder, &arm.pattern, &head.r#type, frame);
                             work.extend(&t);
 
@@ -662,12 +664,13 @@ impl AsmBuilder {
                     // variable pattern
                     parser::Pattern::Variable(ref name, ref binding) => {
                         let binding = binding.borrow();
-                        let storage = binding
+                        let var = binding
                             .storage
                             .as_ref()
-                            .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name));
+                            .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name))
+                            .unwrap_local_variable();
 
-                        builder.local_set(&storage.name);
+                        builder.local_set(&var.name);
                     }
                     parser::Pattern::Integer(_) => {
                         panic!("invalid local binding");
@@ -702,13 +705,14 @@ impl AsmBuilder {
             // variable pattern
             parser::Pattern::Variable(name, binding) => {
                 let binding = binding.borrow();
-                let storage = binding
+                let var = binding
                     .storage
                     .as_ref()
-                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name));
+                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name))
+                    .unwrap_local_variable();
 
                 // set the result of head expression to the variable.
-                builder.local_set(&storage.name).i32_const(1);
+                builder.local_set(&var.name).i32_const(1);
             }
             parser::Pattern::Integer(i) => {
                 // Constant pattern is semantically identical to `_ if head == pattern`,

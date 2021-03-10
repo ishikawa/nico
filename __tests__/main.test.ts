@@ -259,7 +259,7 @@ const cases: TestCase[] = [
   },
   // Nested array pattern
   {
-    focus: true,
+    todo: true,
     // prettier-ignore
     input: [
       "case [[1, 2], [3, 4, 5]]",

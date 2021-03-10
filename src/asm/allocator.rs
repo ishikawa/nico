@@ -1,4 +1,4 @@
-use super::{wasm, wasm_type, ConstantString, LocalStorage, StackFrame};
+use super::{wasm, wasm_type, ConstantString, StackFrame, Storage};
 use crate::parser;
 use crate::sem::{Binding, Type};
 use crate::util::naming::SequenceNaming;
@@ -47,8 +47,8 @@ impl Allocator {
                     ref r#type,
                     ..
                 } => {
-                    let v = LocalStorage::shared(naming.next(name), r#type);
-                    storage.replace(v);
+                    let v = Storage::local_variable(naming.next(name), r#type);
+                    storage.replace(Rc::new(v));
                 }
             }
         }
@@ -65,7 +65,7 @@ impl Allocator {
         &self,
         node: &mut Node,
         naming: &mut SequenceNaming,
-        locals: &mut Vec<Rc<LocalStorage>>,
+        locals: &mut Vec<Rc<Storage>>,
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
         frame: &mut StackFrame,
     ) {
@@ -170,10 +170,13 @@ impl Allocator {
                 // head expression.
                 self.analyze_expr(head, naming, locals, strings, frame);
                 {
-                    let temp = LocalStorage::shared(naming.next("_case_head"), &head.r#type);
+                    let temp = Rc::new(Storage::local_variable(
+                        naming.next("_case_head"),
+                        &head.r#type,
+                    ));
 
                     locals.push(Rc::clone(&temp));
-                    head_storage.replace(Rc::clone(&temp));
+                    head_storage.replace(temp);
                 }
 
                 if let Some(else_body) = else_body {
@@ -214,7 +217,7 @@ impl Allocator {
         &self,
         pattern: &mut parser::Pattern,
         naming: &mut SequenceNaming,
-        locals: &mut Vec<Rc<LocalStorage>>,
+        locals: &mut Vec<Rc<Storage>>,
     ) {
         // Currntly, only "Variable pattern" is supported.
         match pattern {
@@ -224,10 +227,10 @@ impl Allocator {
                     ref r#type,
                     ref mut storage,
                 } => {
-                    let v = LocalStorage::shared(naming.next(name), r#type);
+                    let v = Rc::new(Storage::local_variable(naming.next(name), r#type));
 
                     locals.push(Rc::clone(&v));
-                    storage.replace(Rc::clone(&v));
+                    storage.replace(v);
                 }
             },
             parser::Pattern::Integer(_) => {}

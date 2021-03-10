@@ -114,20 +114,56 @@ impl StackFrame {
 
 /// The struct *LocalStorage* represents name and type for local variables and
 /// function parameters.
-/// This struct can be cloned because the name of storage will be unchagend
-/// after fixed.
-#[derive(Debug, PartialEq, Clone)]
-pub struct LocalStorage {
-    name: String,
-    r#type: Rc<RefCell<Type>>,
+/// This struct can be cloned because the name of storage will be unchagend.
+#[derive(Debug, PartialEq)]
+pub enum Storage {
+    LocalVariable(LocalVariable),
+    Function(Function),
 }
 
-impl LocalStorage {
-    pub fn shared<S: AsRef<str>>(name: S, r#type: &Rc<RefCell<Type>>) -> Rc<Self> {
-        Rc::new(Self {
+#[derive(Debug, PartialEq, Clone)]
+pub struct LocalVariable {
+    name: String,
+    r#type: wasm::Type,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Function {
+    name: String,
+    function_type: Rc<RefCell<Type>>,
+}
+
+impl Storage {
+    pub fn function<S: AsRef<str>>(name: S, r#type: &Rc<RefCell<Type>>) -> Self {
+        if let Type::Function { .. } = *r#type.borrow() {
+            Self::Function(Function {
+                name: name.as_ref().to_string(),
+                function_type: Rc::clone(r#type),
+            })
+        } else {
+            panic!("Can't create Storage::Function with {}", r#type.borrow());
+        }
+    }
+
+    pub fn local_variable<S: AsRef<str>>(name: S, r#type: &Rc<RefCell<Type>>) -> Self {
+        Self::LocalVariable(LocalVariable {
             name: name.as_ref().to_string(),
-            r#type: Rc::clone(&r#type),
+            r#type: wasm_type(r#type).unwrap(),
         })
+    }
+
+    pub fn unwrap_function(&self) -> &Function {
+        match self {
+            Storage::Function(fun) => fun,
+            _ => panic!("storage must be a function"),
+        }
+    }
+
+    pub fn unwrap_local_variable(&self) -> &LocalVariable {
+        match self {
+            Storage::LocalVariable(var) => var,
+            _ => panic!("storage must be a local variable"),
+        }
     }
 }
 
