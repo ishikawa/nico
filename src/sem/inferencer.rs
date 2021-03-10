@@ -146,7 +146,7 @@ impl TypeInferencer {
 
                 wrap(Type::Array(element_type))
             }
-            Expr::Subscript { operand, index } => {
+            Expr::Subscript { operand, index, .. } => {
                 let operand_type = {
                     let operand_type = self.analyze_expr(operand, generic_vars);
 
@@ -735,7 +735,7 @@ impl TypeInferencer {
                     self.fix_expr(element);
                 }
             }
-            Expr::Subscript { operand, index } => {
+            Expr::Subscript { operand, index, .. } => {
                 self.fix_expr(operand);
                 self.fix_expr(index);
             }

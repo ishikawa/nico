@@ -68,7 +68,7 @@ impl Binder {
                     self.analyze_expr(node, env);
                 }
             }
-            Expr::Subscript { operand, index } => {
+            Expr::Subscript { operand, index, .. } => {
                 self.analyze_expr(operand, env);
                 self.analyze_expr(index, env);
             }

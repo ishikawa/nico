@@ -1,8 +1,7 @@
-use super::{wasm, wasm_type, StackFrame};
+use super::{wasm, wasm_type, LocalVariables, StackFrame};
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem::Type;
-use crate::util::naming::PrefixNaming;
 use std::{cell::RefCell, rc::Rc};
 
 // The size of the virtual stack segment (bytes). Default: 32KB (half of page size)
@@ -11,51 +10,6 @@ const STACK_SIZE: wasm::Size = wasm::PAGE_SIZE / 2;
 const STACK_BASE: wasm::Size = STACK_SIZE;
 
 const CONSTANT_POOL_BASE: wasm::Size = STACK_SIZE;
-
-#[derive(Debug)]
-struct BuildWork {
-    i32_naming: PrefixNaming,
-}
-
-impl BuildWork {
-    pub fn new() -> Self {
-        Self {
-            // To avoid colision with user's local variables, use special prefix,
-            //     $.i32.0, $.i32.1, ...
-            i32_naming: PrefixNaming::new(".i32."),
-        }
-    }
-
-    // Local variable names for temporary scratch pad
-    pub fn reserve_i32(&mut self) -> String {
-        self.i32_naming.next()
-    }
-
-    pub fn i32_locals(&self) -> Vec<String> {
-        // Regenerate local variable names
-        (0..self.i32_naming.index())
-            .map(|i| self.i32_naming.name(i))
-            .collect()
-    }
-
-    /// Returns a new instance whose local variable naming is `A & B`.
-    pub fn union(&self, other: &Self) -> Self {
-        let i32_naming = if self.i32_naming.index() > other.i32_naming.index() {
-            self.i32_naming.clone()
-        } else {
-            other.i32_naming.clone()
-        };
-
-        Self { i32_naming }
-    }
-    pub fn extend(&mut self, other: &Self) -> &mut Self {
-        if other.i32_naming.index() > self.i32_naming.index() {
-            self.i32_naming = other.i32_naming.clone();
-        }
-
-        self
-    }
-}
 
 #[derive(Debug, Default)]
 pub struct AsmBuilder {}
@@ -173,11 +127,12 @@ impl AsmBuilder {
 
     fn build_function(&self, fun_node: &parser::Function) -> wasm::Function {
         let mut body = wasm::Builders::instructions();
+        let mut temp = LocalVariables::new(".tmp.");
 
         // -- function body
         // Before building function signature, builds the body of function. Because it may
         // add temporary variables which must be included in locals.
-        let locals = {
+        {
             let frame = fun_node.frame.as_ref().unwrap();
             let static_size = frame.static_size();
 
@@ -204,7 +159,7 @@ impl AsmBuilder {
             }
 
             // body
-            let locals = self.build_expr_nodes(&mut body, &fun_node.body, frame);
+            self.build_expr_nodes(&mut body, &fun_node.body, &mut temp, frame);
 
             // epilogue
             // --------
@@ -216,8 +171,6 @@ impl AsmBuilder {
                 .i32_add()
                 .global_set("sp");
             body.global_get("fp").i32_load(static_size).global_set("fp");
-
-            locals
         };
 
         // -- function signature
@@ -252,17 +205,23 @@ impl AsmBuilder {
             ref ty => panic!("Invalid type signature: {:?}", ty),
         }
 
-        // locals
-        for storage in &fun_node.locals {
+        {
+            temp.push_scope();
+            builder.body(body.build());
+            temp.pop_scope();
+        }
+
+        // locals/temporary variebles
+        for storage in fun_node.locals.as_ref().unwrap().variables() {
             let var = storage.unwrap_local_variable();
             builder.named_local(&var.name, var.r#type);
         }
 
-        for name in locals.i32_locals() {
-            builder.named_local(name, wasm::Type::I32);
+        for storage in temp.variables() {
+            let var = storage.unwrap_local_variable();
+            builder.named_local(&var.name, var.r#type);
         }
 
-        builder.body(body.build());
         builder.build()
     }
 
@@ -270,15 +229,13 @@ impl AsmBuilder {
         &self,
         builder: &mut wasm::InstructionsBuilder,
         node: &parser::Node,
+        temp: &mut LocalVariables,
         frame: &StackFrame,
-    ) -> BuildWork {
-        let mut work = BuildWork::new();
-
+    ) {
         match &node.expr {
             Expr::Stmt(expr) => {
                 // Drop a value if the type of expression is not Void.
-                let t = self.build_expr(builder, expr, frame);
-                work.extend(&t);
+                self.build_expr(builder, expr, temp, frame);
 
                 match *expr.r#type.borrow() {
                     Type::Void => {}
@@ -345,8 +302,7 @@ impl AsmBuilder {
 
                     let offset = object_offset + element_size * (i as wasm::Size);
 
-                    let t = self.build_expr(builder, element, frame);
-                    work.extend(&t);
+                    self.build_expr(builder, element, temp, frame);
                     builder.i32_store(offset);
                 }
 
@@ -378,6 +334,8 @@ impl AsmBuilder {
                 }
             }
             Expr::Subscript { operand, index } => {
+                temp.push_scope();
+
                 let element_type = match &*operand.r#type.borrow() {
                     Type::Array(element_type) => Rc::clone(element_type),
                     ty => panic!("Operand must be an array, but was {:?}", ty),
@@ -388,13 +346,12 @@ impl AsmBuilder {
                 // Load the reference of the operand to a local variable
                 builder.comment(format!("-- Subscript {}", operand.r#type.borrow()));
 
-                let tmp_operand = work.reserve_i32();
-                let tmp_index = work.reserve_i32();
-                let tmp_memidx = work.reserve_i32();
-                let tmp_length = work.reserve_i32();
+                let tmp_operand = temp.reserve_name_i32();
+                let tmp_index = temp.reserve_name_i32();
+                let tmp_memidx = temp.reserve_name_i32();
+                let tmp_length = temp.reserve_name_i32();
 
-                let t = self.build_expr(builder, operand, frame);
-                work.extend(&t);
+                self.build_expr(builder, operand, temp, frame);
 
                 builder
                     .comment("load the reference (index, length) of an array to local variables")
@@ -406,8 +363,7 @@ impl AsmBuilder {
                     .local_tee(&tmp_length);
 
                 // index
-                let t = self.build_expr(builder, index, frame);
-                work.extend(&t);
+                self.build_expr(builder, index, temp, frame);
                 builder.local_tee(&tmp_index);
 
                 // Check overflow
@@ -440,6 +396,8 @@ impl AsmBuilder {
                     .local_get(&tmp_memidx)
                     .i32_add()
                     .i32_load(0);
+
+                temp.pop_scope();
             }
             Expr::Invocation {
                 name,
@@ -457,78 +415,77 @@ impl AsmBuilder {
                     .unwrap_function();
 
                 for arg in arguments {
-                    let t = self.build_expr(builder, arg, frame);
-                    work.extend(&t);
+                    self.build_expr(builder, arg, temp, frame);
                 }
 
                 builder.call(&function.name);
             }
             // binop
             Expr::Add(lhs, rhs, _) => {
-                let t1 = self.build_expr(builder, lhs, frame);
-                let t2 = self.build_expr(builder, rhs, frame);
-                work.extend(&t1).extend(&t2);
+                self.build_expr(builder, lhs, temp, frame);
+                self.build_expr(builder, rhs, temp, frame);
+
                 builder.i32_add();
             }
             Expr::Sub(lhs, rhs, _) => {
-                let t1 = self.build_expr(builder, lhs, frame);
-                let t2 = self.build_expr(builder, rhs, frame);
-                work.extend(&t1).extend(&t2);
+                self.build_expr(builder, lhs, temp, frame);
+                self.build_expr(builder, rhs, temp, frame);
+
                 builder.i32_sub();
             }
             Expr::Rem(lhs, rhs, _) => {
-                let t1 = self.build_expr(builder, lhs, frame);
-                let t2 = self.build_expr(builder, rhs, frame);
-                work.extend(&t1).extend(&t2);
+                self.build_expr(builder, lhs, temp, frame);
+                self.build_expr(builder, rhs, temp, frame);
+
                 builder.i32_rem_s();
             }
             Expr::Mul(lhs, rhs, _) => {
-                let t1 = self.build_expr(builder, lhs, frame);
-                let t2 = self.build_expr(builder, rhs, frame);
-                work.extend(&t1).extend(&t2);
+                self.build_expr(builder, lhs, temp, frame);
+                self.build_expr(builder, rhs, temp, frame);
+
                 builder.i32_mul();
             }
             Expr::Div(lhs, rhs, _) => {
-                let t1 = self.build_expr(builder, lhs, frame);
-                let t2 = self.build_expr(builder, rhs, frame);
-                work.extend(&t1).extend(&t2);
+                self.build_expr(builder, lhs, temp, frame);
+                self.build_expr(builder, rhs, temp, frame);
+
                 builder.i32_div_s();
             }
             // relation
             Expr::LT(lhs, rhs, _) => {
-                let t1 = self.build_expr(builder, lhs, frame);
-                let t2 = self.build_expr(builder, rhs, frame);
-                work.extend(&t1).extend(&t2);
+                self.build_expr(builder, lhs, temp, frame);
+                self.build_expr(builder, rhs, temp, frame);
+
                 builder.i32_lt_s();
             }
             Expr::GT(lhs, rhs, _) => {
-                let t1 = self.build_expr(builder, lhs, frame);
-                let t2 = self.build_expr(builder, rhs, frame);
-                work.extend(&t1).extend(&t2);
+                self.build_expr(builder, lhs, temp, frame);
+                self.build_expr(builder, rhs, temp, frame);
+
                 builder.i32_gt_s();
             }
             Expr::LE(lhs, rhs, _) => {
-                let t1 = self.build_expr(builder, lhs, frame);
-                let t2 = self.build_expr(builder, rhs, frame);
-                work.extend(&t1).extend(&t2);
+                self.build_expr(builder, lhs, temp, frame);
+                self.build_expr(builder, rhs, temp, frame);
+
                 builder.i32_le_s();
             }
             Expr::GE(lhs, rhs, _) => {
-                let t1 = self.build_expr(builder, lhs, frame);
-                let t2 = self.build_expr(builder, rhs, frame);
-                work.extend(&t1).extend(&t2);
+                self.build_expr(builder, lhs, temp, frame);
+                self.build_expr(builder, rhs, temp, frame);
+
                 builder.i32_ge_s();
             }
             Expr::EQ(lhs, rhs, _) => {
-                let t1 = self.build_expr(builder, lhs, frame);
-                let t2 = self.build_expr(builder, rhs, frame);
-                work.extend(&t1).extend(&t2);
+                self.build_expr(builder, lhs, temp, frame);
+                self.build_expr(builder, rhs, temp, frame);
+
                 builder.i32_eq();
             }
             Expr::NE(lhs, rhs, _) => {
-                let t1 = self.build_expr(builder, lhs, frame);
-                let t2 = self.build_expr(builder, rhs, frame);
-                work.extend(&t1).extend(&t2);
+                self.build_expr(builder, lhs, temp, frame);
+                self.build_expr(builder, rhs, temp, frame);
+
                 builder.i32_neq();
             }
             Expr::If {
@@ -537,13 +494,12 @@ impl AsmBuilder {
                 else_body,
             } => {
                 let result_type = wasm_type(&node.r#type);
-                let t = self.build_expr(builder, condition, frame);
-                work.extend(&t);
+                self.build_expr(builder, condition, temp, frame);
 
                 let then_insts = {
                     let mut then_builder = wasm::Builders::instructions();
-                    let t = self.build_expr_nodes(&mut then_builder, then_body, frame);
-                    work.extend(&t);
+
+                    self.build_expr_nodes(&mut then_builder, then_body, temp, frame);
 
                     if result_type.is_none() {
                         self.drop_values(&mut then_builder, then_body);
@@ -556,8 +512,8 @@ impl AsmBuilder {
                 if let Some(else_body) = else_body {
                     if !else_body.is_empty() {
                         let mut else_builder = wasm::Builders::instructions();
-                        let t = self.build_expr_nodes(&mut else_builder, else_body, frame);
-                        work.extend(&t);
+
+                        self.build_expr_nodes(&mut else_builder, else_body, temp, frame);
 
                         if result_type.is_none() {
                             self.drop_values(&mut else_builder, else_body);
@@ -580,8 +536,7 @@ impl AsmBuilder {
             } => {
                 // 1. head - push the result of head expression and copy it to
                 // the temporary variable.
-                let t = self.build_expr(builder, head, frame);
-                work.extend(&t);
+                self.build_expr(builder, head, temp, frame);
 
                 let head_var = head_storage
                     .as_ref()
@@ -595,8 +550,7 @@ impl AsmBuilder {
 
                 if let Some(else_body) = else_body {
                     // `else` must not be empty.
-                    let t = self.build_expr_nodes(&mut else_builder, else_body, frame);
-                    work.extend(&t);
+                    self.build_expr_nodes(&mut else_builder, else_body, temp, frame);
                 } else {
                     // if omitted, all arms must be exhausted.
                     // TODO: remove redundant `if`
@@ -613,15 +567,13 @@ impl AsmBuilder {
                         &mut |builder| {
                             // Pattern
                             builder.local_get(&head_var.name);
-                            let t = self.build_pattern(builder, &arm.pattern, &head.r#type, frame);
-                            work.extend(&t);
+                            self.build_pattern(builder, &arm.pattern, &head.r#type, temp, frame);
 
                             // Build the guard expression if exists.
                             if let Some(ref condition) = arm.condition {
                                 builder.i32_const(0);
 
-                                let t = self.build_expr(builder, condition, frame);
-                                work.extend(&t);
+                                self.build_expr(builder, condition, temp, frame);
 
                                 builder
                                     .comment("if the guard condition fails, return with `0`")
@@ -635,9 +587,9 @@ impl AsmBuilder {
                     // 4. Build an `if` instruction for arm body and `else` to the next arm or `else` clause.
                     let then_insts = {
                         let mut then_builder = wasm::Builders::instructions();
-                        let t = self.build_expr_nodes(&mut then_builder, &arm.then_body, frame);
 
-                        work.extend(&t);
+                        self.build_expr_nodes(&mut then_builder, &arm.then_body, temp, frame);
+
                         then_builder.build()
                     };
 
@@ -657,8 +609,7 @@ impl AsmBuilder {
                 }
             }
             Expr::Var { pattern, init } => {
-                let t = self.build_expr(builder, init, frame);
-                work.extend(&t);
+                self.build_expr(builder, init, temp, frame);
 
                 match pattern {
                     // variable pattern
@@ -684,8 +635,6 @@ impl AsmBuilder {
                     .i32_const(1);
             }
         };
-
-        work
     }
 
     /// Build a pattern.
@@ -696,10 +645,9 @@ impl AsmBuilder {
         builder: &mut wasm::InstructionsBuilder,
         pattern: &parser::Pattern,
         target_type: &Rc<RefCell<Type>>,
+        temp: &mut LocalVariables,
         frame: &StackFrame,
-    ) -> BuildWork {
-        let mut work = BuildWork::new();
-
+    ) {
         // 2. Each pattern will push the value whether pattern matched or not.
         match pattern {
             // variable pattern
@@ -720,6 +668,8 @@ impl AsmBuilder {
                 builder.i32_const(*i).i32_eq();
             }
             parser::Pattern::Array(ref patterns) => {
+                temp.push_scope();
+
                 let element_type = match &*target_type.borrow() {
                     Type::Array(element_type) => Rc::clone(element_type),
                     ty => panic!("Operand must be an array, but was {}", ty),
@@ -728,9 +678,9 @@ impl AsmBuilder {
                 let element_size = wasm_type(&element_type).unwrap().num_bytes();
 
                 // Before entering the block, save the target value.
-                let tmp_target = work.reserve_i32();
-                let tmp_memidx = work.reserve_i32();
-                let tmp_length = work.reserve_i32();
+                let tmp_target = temp.reserve_name_i32();
+                let tmp_memidx = temp.reserve_name_i32();
+                let tmp_length = temp.reserve_name_i32();
 
                 builder
                     .comment("load the reference (index, length) of an array to local variables")
@@ -780,31 +730,29 @@ impl AsmBuilder {
                             .local_get(&tmp_memidx)
                             .i32_load(element_size * (i as wasm::Size));
 
-                        // TODO: Reserve new local variables in nest pattern.
-                        let t = self.build_pattern(block, pattern, &element_type, frame);
-                        work.extend(&t);
+                        self.build_pattern(block, pattern, &element_type, temp, frame);
 
                         block.i32_eqz().br_if(0).drop();
                     }
 
                     block.i32_const(1);
                 });
+
+                temp.pop_scope();
             }
         };
-
-        work
     }
 
     fn build_expr_nodes(
         &self,
         builder: &mut wasm::InstructionsBuilder,
         body: &[parser::Node],
+        locals: &mut LocalVariables,
         frame: &StackFrame,
-    ) -> BuildWork {
-        body.iter().fold(BuildWork::new(), |locals, node| {
-            let t = self.build_expr(builder, node, frame);
-            locals.union(&t)
-        })
+    ) {
+        for node in body {
+            self.build_expr(builder, node, locals, frame);
+        }
     }
 
     fn drop_values(&self, builder: &mut wasm::InstructionsBuilder, body: &[parser::Node]) {

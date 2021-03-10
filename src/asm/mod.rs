@@ -54,6 +54,7 @@ pub mod allocator;
 pub mod emitter;
 pub mod wasm;
 use crate::sem::Type;
+use crate::util::naming::PrefixNaming;
 pub use allocator::Allocator;
 pub use emitter::AsmBuilder;
 use std::cell::RefCell;
@@ -167,6 +168,89 @@ impl Storage {
     }
 }
 
+/// This structure allocates required local/temporary variables within a WASM function frame.
+/// It manages the scope and allocates the minimum number of local variables required in
+/// a function frame.
+#[derive(Debug)]
+pub struct LocalVariables {
+    i32_naming: PrefixNaming,
+
+    // Free - temporary variebles not used in active scopes, but reserved for a function.
+    free: Vec<Rc<Storage>>,
+
+    // Used - used temporary variables stack. The top of stack is the current scope. They will be
+    //        reclaimed when a scope terminated, and moved to free list.
+    used: Vec<Vec<Rc<Storage>>>,
+}
+
+impl LocalVariables {
+    // To avoid colision with other variables, specify special prefix (e.g. ".")
+    //     $.i32.0, $.i32.1, ...
+    pub fn new(prefix: &str) -> Self {
+        Self {
+            i32_naming: PrefixNaming::new(&format!("{}i32.", prefix)),
+            free: vec![],
+            used: vec![],
+        }
+    }
+
+    pub fn variables(&self) -> &Vec<Rc<Storage>> {
+        &self.free
+    }
+
+    pub fn push_scope(&mut self) {
+        self.used.push(vec![]);
+    }
+
+    pub fn pop_scope(&mut self) {
+        if let Some(used) = self.used.pop() {
+            for var in used {
+                self.free.push(var);
+            }
+        }
+    }
+
+    pub fn reserve(&mut self, ty: &Rc<RefCell<Type>>) -> Rc<Storage> {
+        let wasm_type = wasm_type(ty);
+
+        if let Some(wasm::Type::I32) = wasm_type {
+            self.reserve_i32()
+        } else {
+            panic!("unsupported type {}", ty.borrow());
+        }
+    }
+
+    pub fn reserve_i32(&mut self) -> Rc<Storage> {
+        let used_scope = self
+            .used
+            .last_mut()
+            .unwrap_or_else(|| panic!("empty scope stack"));
+        let index = self
+            .free
+            .iter()
+            .map(|x| x.unwrap_local_variable())
+            .position(|x| x.r#type == wasm::Type::I32);
+
+        let var = if let Some(index) = index {
+            self.free.swap_remove(index)
+        } else {
+            let name = self.i32_naming.next();
+            Rc::new(Storage::LocalVariable(LocalVariable {
+                name,
+                r#type: wasm::Type::I32,
+            }))
+        };
+
+        used_scope.push(Rc::clone(&var));
+        var
+    }
+
+    pub fn reserve_name_i32(&mut self) -> String {
+        let var = self.reserve_i32();
+        var.unwrap_local_variable().name.clone()
+    }
+}
+
 /// String literal allocation in constant pool that is allocated at compile time.
 ///
 /// ```ignore
@@ -236,6 +320,7 @@ impl ConstantString {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
     fn empty_string() {
@@ -253,5 +338,67 @@ mod tests {
             s.bytes(1),
             [0x9, 0, 0, 0, 0x3, 0, 0, 0, '1' as u8, '2' as u8, '3' as u8]
         );
+    }
+
+    #[test]
+    fn local_variables_empty() {
+        let mut locals = LocalVariables::new(".");
+
+        locals.push_scope();
+        locals.pop_scope();
+
+        assert!(locals.variables().is_empty());
+    }
+
+    #[test]
+    fn local_variables() {
+        let mut locals = LocalVariables::new(".");
+
+        {
+            locals.push_scope();
+
+            let var1 = locals.reserve_i32();
+            let var2 = locals.reserve_i32();
+
+            assert_ne!(
+                var1.unwrap_local_variable().name,
+                var2.unwrap_local_variable().name
+            );
+
+            locals.pop_scope();
+        }
+
+        {
+            locals.push_scope();
+
+            let var3 = locals.reserve_i32();
+            let var4 = locals.reserve_i32();
+
+            assert_ne!(
+                var3.unwrap_local_variable().name,
+                var4.unwrap_local_variable().name
+            );
+
+            {
+                locals.push_scope();
+                locals.reserve_i32();
+                locals.pop_scope();
+            }
+
+            locals.pop_scope();
+        }
+
+        let vars = locals.variables();
+        let mut names = HashSet::new();
+
+        for var in vars {
+            let name = var.unwrap_local_variable().name.clone();
+
+            assert!(!names.contains(&name));
+
+            names.insert(name);
+        }
+
+        assert_eq!(vars.len(), 3);
     }
 }

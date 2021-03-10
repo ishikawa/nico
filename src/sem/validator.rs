@@ -72,7 +72,7 @@ impl TypeValidator {
                     self.validate_expr(element);
                 }
             }
-            Expr::Subscript { operand, index } => {
+            Expr::Subscript { operand, index, .. } => {
                 self.validate_expr(operand);
                 self.validate_expr(index);
             }
