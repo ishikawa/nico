@@ -1,3 +1,4 @@
+/*
 use std::collections::HashMap;
 
 /// Generates a unique string while continuously incrementing the index internally.
@@ -21,6 +22,7 @@ impl SequenceNaming {
         next
     }
 }
+*/
 
 /// This struct produces a unique name while giving a sequential
 /// number to the name passed to the next() method.
@@ -47,10 +49,6 @@ impl PrefixNaming {
     pub fn name(&self, i: usize) -> String {
         format!("{}{}", self.prefix, i)
     }
-
-    pub fn index(&self) -> usize {
-        self.index
-    }
 }
 
 #[cfg(test)]
@@ -65,6 +63,7 @@ mod tests {
         assert_eq!(naming.next(), "my_1".to_string());
     }
 
+    /*
     #[test]
     fn sequence_naming() {
         let mut naming = SequenceNaming::new();
@@ -73,4 +72,5 @@ mod tests {
         assert_eq!(naming.next("x"), "x.1".to_string());
         assert_eq!(naming.next("y"), "y.0".to_string());
     }
+    */
 }

@@ -17,6 +17,7 @@ interface TestCase {
 
   // filter
   focus?: boolean;
+  todo?: boolean;
 }
 
 const temporaryCodePath = path.join(os.tmpdir(), "nico_test_main.nico");
@@ -199,6 +200,94 @@ const cases: TestCase[] = [
     ].join("\n"),
     compileError: /Missing match arm. non-exhaustive patterns/i
   },
+  {
+    // prettier-ignore
+    input: [
+      "case 10",
+      "when [a]",
+      "    a",
+      "else",
+      "    3",
+      "end",
+    ].join("\n"),
+    compileError: /mismatched type: expected T\[\], found i32/i
+  },
+  {
+    // prettier-ignore
+    input: [
+      "",
+      "let [x] = [100]",
+      "x",
+    ].join("\n"),
+    compileError: /refutable pattern in local binding/i
+  },
+  {
+    // prettier-ignore
+    input: [
+      "",
+      "case [1, 2, 3]",
+      "when [a, b, c]",
+      "    a + b + c",
+      "else",
+      "    123",
+      "end",
+    ].join("\n"),
+    expected: 6
+  },
+  {
+    // prettier-ignore
+    input: [
+      "export fun foo(a)",
+      "    case a",
+      "    when []",
+      "        10",
+      "    when [1]",
+      "        20",
+      "    when [x]",
+      "        x",
+      "    when x",
+      "        x[1]",
+      "    end",
+      "end",
+      "println_i32(foo([]))",
+      "println_i32(foo([1]))",
+      "println_i32(foo([2]))",
+      "println_i32(foo([3, 4]))",
+    ].join("\n"),
+    captureOutput: true,
+    expected: ["10", "20", "2", "4"].join("\n") + "\n"
+  },
+  // Nested array pattern
+  {
+    // prettier-ignore
+    input: [
+      "case [[1, 2], [3, 4, 5]]",
+      "when [[a, b], [c, d, e]]",
+      "    a + b + c + d + e",
+      "when [a, b]",
+      "    10",
+      "else",
+      "    20",
+      "end"
+    ].join("\n"),
+    expected: 15
+  },
+  {
+    // prettier-ignore
+    input: [
+      "export fun foo(a)",
+      "    case a",
+      "    when []",
+      "        10",
+      "    when [1]",
+      "        20",
+      "    when [x]",
+      "        x",
+      "    end",
+      "end"
+    ].join("\n"),
+    compileError: /Missing match arm. non-exhaustive patterns/i
+  },
   // Function
   {
     file: "input/fun_55.nico",
@@ -351,13 +440,25 @@ const cases: TestCase[] = [
       "x[(2 - 2)] + x[bar()] + x[2]"
     ].join("\n"),
     expected: 105
+  },
+  // array - the length of array a to be calculated as a[1].
+  {
+    // prettier-ignore
+    input: [
+      "let a = [1, 0, 3]",
+      "let b = [4, 0, 6]",
+      "a[2] + b[2]",
+    ].join("\n"),
+    expected: 9
   }
 ];
 
 // filter
-const focused = cases.filter(x => x.focus);
+let focused = cases.filter(x => x.focus);
+focused = focused.length === 0 ? cases : focused;
+focused = focused.filter(x => !x.todo);
 
-(focused.length === 0 ? cases : focused).forEach(({ input, file, expected, compileError, exec, captureOutput }) => {
+focused.forEach(({ input, file, expected, compileError, exec, captureOutput }) => {
   test(`given '${input || file}'`, async () => {
     let src = temporaryCodePath;
 

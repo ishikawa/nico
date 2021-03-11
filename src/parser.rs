@@ -5,6 +5,7 @@ use crate::tokenizer::{Token, Tokenizer};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use std::cell::RefCell;
+use std::fmt;
 use std::iter::Peekable;
 use std::rc::Rc;
 
@@ -22,8 +23,10 @@ pub struct Function {
     pub export: bool,
     // metadata
     pub params: Vec<Rc<RefCell<sem::Binding>>>,
-    pub locals: Vec<Rc<asm::LocalStorage>>,
     pub r#type: Rc<RefCell<sem::Type>>,
+
+    pub locals: Option<asm::LocalVariables>,
+
     // The total size of stack frame required for executing this function.
     // It will be calculated by allocator.
     pub frame: Option<asm::StackFrame>,
@@ -95,7 +98,7 @@ pub enum Expr {
     },
     Case {
         head: Box<Node>, // head expression
-        head_storage: Option<Rc<asm::LocalStorage>>,
+        head_storage: Option<Rc<asm::Storage>>,
         arms: Vec<CaseArm>,
         else_body: Option<Vec<Node>>,
     },
@@ -109,8 +112,9 @@ pub enum Expr {
 
 #[derive(Debug)]
 pub enum Pattern {
-    Variable(String, Option<Rc<RefCell<sem::Binding>>>),
+    Variable(String, Rc<RefCell<sem::Binding>>),
     Integer(i32),
+    Array(Vec<Pattern>),
 }
 
 #[derive(Debug)]
@@ -180,7 +184,7 @@ impl Parser {
                 body,
                 export: true,
                 params: vec![],
-                locals: vec![],
+                locals: None,
                 r#type: wrap(sem::Type::Function {
                     params: vec![],
                     return_type: context.type_var(),
@@ -284,7 +288,7 @@ impl Parser {
                 name,
                 params,
                 export,
-                locals: vec![],
+                locals: None,
                 body,
                 r#type: function_type,
                 frame: None,
@@ -764,11 +768,12 @@ impl Parser {
 
 fn parse_pattern(
     tokenizer: &mut Peekable<&mut Tokenizer>,
-    _context: &mut ParserContext,
+    context: &mut ParserContext,
 ) -> Option<Pattern> {
     match tokenizer.peek() {
         Some(Token::Identifier(ref name)) => {
-            let pat = Pattern::Variable(name.clone(), None);
+            let binding = wrap(sem::Binding::typed_name(name, &context.type_var()));
+            let pat = Pattern::Variable(name.clone(), binding);
             tokenizer.next();
             Some(pat)
         }
@@ -777,6 +782,17 @@ fn parse_pattern(
             tokenizer.next();
             Some(pat)
         }
+        Some(Token::Char('[')) => {
+            consume_char(tokenizer, '[');
+
+            let elements = parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
+                parse_pattern(tokenizer, context).expect("Expected pattern")
+            });
+
+            consume_char(tokenizer, ']');
+            Some(Pattern::Array(elements))
+        }
+
         _ => None,
     }
 }
@@ -832,6 +848,57 @@ fn consume_token(tokenizer: &mut Peekable<&mut Tokenizer>, expected: Token) {
 
 fn consume_char(tokenizer: &mut Peekable<&mut Tokenizer>, expected: char) {
     consume_token(tokenizer, Token::Char(expected));
+}
+
+impl fmt::Display for Pattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Pattern::Variable(name, _) => write!(f, "{}", name),
+            Pattern::Integer(i) => write!(f, "{}", i),
+            Pattern::Array(patterns) => {
+                let mut it = patterns.iter().peekable();
+
+                write!(f, "[")?;
+                while let Some(pattern) = it.next() {
+                    write!(f, "{}", pattern)?;
+                    if it.peek().is_some() {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, "]")
+            }
+        }
+    }
+}
+
+impl Expr {
+    pub fn short_name(&self) -> String {
+        match self {
+            Expr::Integer(i) => format!("Integer({})", i),
+            Expr::String { content, .. } => format!("String(\"{}\")", content),
+            Expr::Identifier { name, .. } => format!("Identifier(`{}`)", name),
+            Expr::Array { elements, .. } => format!("Array[{}]", elements.len()),
+            Expr::Subscript { .. } => "x[...]".to_string(),
+            Expr::Invocation {
+                name, arguments, ..
+            } => format!("{}({} args)", name, arguments.len()),
+            Expr::Add(_, _, _) => "a + b".to_string(),
+            Expr::Sub(_, _, _) => "a - b".to_string(),
+            Expr::Rem(_, _, _) => "a % b".to_string(),
+            Expr::Mul(_, _, _) => "a * b".to_string(),
+            Expr::Div(_, _, _) => "a / b".to_string(),
+            Expr::LT(_, _, _) => "a < b".to_string(),
+            Expr::GT(_, _, _) => "a > b".to_string(),
+            Expr::LE(_, _, _) => "a <= b".to_string(),
+            Expr::GE(_, _, _) => "a >= b".to_string(),
+            Expr::EQ(_, _, _) => "a == b".to_string(),
+            Expr::NE(_, _, _) => "a != b".to_string(),
+            Expr::Stmt(node) => format!("Stmt({})", node.expr.short_name()),
+            Expr::If { .. } => "if".to_string(),
+            Expr::Case { .. } => "case".to_string(),
+            Expr::Var { .. } => "let".to_string(),
+        }
+    }
 }
 
 #[cfg(test)]

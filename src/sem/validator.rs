@@ -72,7 +72,7 @@ impl TypeValidator {
                     self.validate_expr(element);
                 }
             }
-            Expr::Subscript { operand, index } => {
+            Expr::Subscript { operand, index, .. } => {
                 self.validate_expr(operand);
                 self.validate_expr(index);
             }
@@ -174,6 +174,7 @@ impl TypeValidator {
                     parser::Pattern::Integer(_) => {
                         panic!("Can't assign value to `int`.")
                     }
+                    parser::Pattern::Array(_) => {}
                 };
 
                 // exhaustivity check

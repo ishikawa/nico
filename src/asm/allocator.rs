@@ -1,7 +1,6 @@
-use super::{wasm, wasm_type, ConstantString, LocalStorage, StackFrame};
+use super::{wasm, wasm_type, ConstantString, LocalVariables, StackFrame, Storage};
 use crate::parser;
 use crate::sem::{Binding, Type};
-use crate::util::naming::SequenceNaming;
 use crate::util::wrap;
 use parser::{Expr, Node};
 use std::cell::RefCell;
@@ -34,8 +33,7 @@ impl Allocator {
         function: &mut parser::Function,
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
     ) {
-        let mut naming = SequenceNaming::new();
-        let mut locals = vec![];
+        let mut locals = LocalVariables::new(".");
         let mut frame = StackFrame::default();
 
         // Storage for parameters
@@ -47,30 +45,31 @@ impl Allocator {
                     ref r#type,
                     ..
                 } => {
-                    let v = LocalStorage::shared(naming.next(name), r#type);
-                    storage.replace(v);
+                    let v = Storage::local_variable(name, r#type);
+                    storage.replace(Rc::new(v));
                 }
             }
         }
 
+        locals.push_scope();
         for node in &mut function.body {
-            self.analyze_expr(node, &mut naming, &mut locals, strings, &mut frame);
+            self.analyze_expr(node, &mut locals, strings, &mut frame);
         }
+        locals.pop_scope();
 
-        function.locals = locals;
+        function.locals = Some(locals);
         function.frame = Some(frame);
     }
 
     fn analyze_expr(
         &self,
         node: &mut Node,
-        naming: &mut SequenceNaming,
-        locals: &mut Vec<Rc<LocalStorage>>,
+        locals: &mut LocalVariables,
         strings: &mut Vec<Rc<RefCell<ConstantString>>>,
         frame: &mut StackFrame,
     ) {
         match &mut node.expr {
-            Expr::Stmt(expr) => self.analyze_expr(expr, naming, locals, strings, frame),
+            Expr::Stmt(expr) => self.analyze_expr(expr, locals, strings, frame),
             Expr::Integer(_) => {}
             Expr::String {
                 ref content,
@@ -115,18 +114,18 @@ impl Allocator {
 
                 // Allocate every elements
                 for element in elements {
-                    self.analyze_expr(element, naming, locals, strings, frame);
+                    self.analyze_expr(element, locals, strings, frame);
                 }
             }
             Expr::Subscript { operand, index } => {
-                self.analyze_expr(operand, naming, locals, strings, frame);
-                self.analyze_expr(index, naming, locals, strings, frame);
+                self.analyze_expr(operand, locals, strings, frame);
+                self.analyze_expr(index, locals, strings, frame);
             }
             Expr::Invocation {
                 name: _, arguments, ..
             } => {
                 for a in arguments {
-                    self.analyze_expr(a, naming, locals, strings, frame);
+                    self.analyze_expr(a, locals, strings, frame);
                 }
             }
             // binary op
@@ -141,24 +140,35 @@ impl Allocator {
             | Expr::GE(lhs, rhs, _)
             | Expr::EQ(lhs, rhs, _)
             | Expr::NE(lhs, rhs, _) => {
-                self.analyze_expr(lhs, naming, locals, strings, frame);
-                self.analyze_expr(rhs, naming, locals, strings, frame);
+                self.analyze_expr(lhs, locals, strings, frame);
+                self.analyze_expr(rhs, locals, strings, frame);
             }
             Expr::If {
                 condition,
                 then_body,
                 else_body,
             } => {
-                self.analyze_expr(condition, naming, locals, strings, frame);
+                locals.push_scope();
 
-                for node in then_body {
-                    self.analyze_expr(node, naming, locals, strings, frame);
-                }
-                if let Some(else_body) = else_body {
-                    for node in else_body {
-                        self.analyze_expr(node, naming, locals, strings, frame);
+                self.analyze_expr(condition, locals, strings, frame);
+
+                {
+                    locals.push_scope();
+                    for node in then_body {
+                        self.analyze_expr(node, locals, strings, frame);
                     }
+                    locals.pop_scope();
                 }
+
+                if let Some(else_body) = else_body {
+                    locals.push_scope();
+                    for node in else_body {
+                        self.analyze_expr(node, locals, strings, frame);
+                    }
+                    locals.pop_scope();
+                }
+
+                locals.pop_scope();
             }
             Expr::Case {
                 head,
@@ -166,20 +176,22 @@ impl Allocator {
                 arms,
                 else_body,
             } => {
+                locals.push_scope();
+
                 // Allocate a temporary variable for storing the result of
                 // head expression.
-                self.analyze_expr(head, naming, locals, strings, frame);
+                self.analyze_expr(head, locals, strings, frame);
                 {
-                    let temp = LocalStorage::shared(naming.next("_case_head"), &head.r#type);
-
-                    locals.push(Rc::clone(&temp));
-                    head_storage.replace(Rc::clone(&temp));
+                    let temp = locals.reserve(&head.r#type);
+                    head_storage.replace(temp);
                 }
 
                 if let Some(else_body) = else_body {
+                    locals.push_scope();
                     for node in else_body {
-                        self.analyze_expr(node, naming, locals, strings, frame);
+                        self.analyze_expr(node, locals, strings, frame);
                     }
+                    locals.pop_scope();
                 }
 
                 for parser::CaseArm {
@@ -188,55 +200,51 @@ impl Allocator {
                     then_body,
                 } in arms
                 {
-                    self.analyze_pattern(pattern, naming, locals);
+                    locals.push_scope();
+                    self.analyze_pattern(pattern, locals);
 
                     // guard
                     if let Some(condition) = condition {
-                        self.analyze_expr(condition, naming, locals, strings, frame);
+                        self.analyze_expr(condition, locals, strings, frame);
                     }
 
                     for node in then_body {
-                        self.analyze_expr(node, naming, locals, strings, frame);
+                        self.analyze_expr(node, locals, strings, frame);
                     }
+                    locals.pop_scope();
                 }
+
+                locals.pop_scope();
             }
             Expr::Var {
                 pattern,
                 ref mut init,
             } => {
-                self.analyze_expr(init, naming, locals, strings, frame);
-                self.analyze_pattern(pattern, naming, locals);
+                self.analyze_expr(init, locals, strings, frame);
+                self.analyze_pattern(pattern, locals);
             }
         };
     }
 
-    fn analyze_pattern(
-        &self,
-        pattern: &mut parser::Pattern,
-        naming: &mut SequenceNaming,
-        locals: &mut Vec<Rc<LocalStorage>>,
-    ) {
+    fn analyze_pattern(&self, pattern: &mut parser::Pattern, locals: &mut LocalVariables) {
         // Currntly, only "Variable pattern" is supported.
         match pattern {
-            parser::Pattern::Variable(ref name, ref mut binding) => {
-                let binding = binding
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
-
-                match *(binding.borrow_mut()) {
-                    Binding {
-                        ref name,
-                        ref r#type,
-                        ref mut storage,
-                    } => {
-                        let v = LocalStorage::shared(naming.next(name), r#type);
-
-                        locals.push(Rc::clone(&v));
-                        storage.replace(Rc::clone(&v));
-                    }
+            parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
+                Binding {
+                    ref r#type,
+                    ref mut storage,
+                    ..
+                } => {
+                    let v = locals.reserve(r#type);
+                    storage.replace(v);
+                }
+            },
+            parser::Pattern::Integer(_) => {}
+            parser::Pattern::Array(patterns) => {
+                for pattern in patterns {
+                    self.analyze_pattern(pattern, locals);
                 }
             }
-            parser::Pattern::Integer(_) => {}
         };
     }
 }

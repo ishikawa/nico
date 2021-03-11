@@ -75,6 +75,7 @@ impl TypeInferencer {
 
     fn analyze_invocation(
         &mut self,
+        name: &str,
         function_type: Rc<RefCell<Type>>,
         retty: &Rc<RefCell<Type>>,
         args: &mut [&mut parser::Node],
@@ -89,7 +90,11 @@ impl TypeInferencer {
             return_type: Rc::clone(retty),
         });
 
-        self.unify_and_log("type of invocation (f, call)", &function_type, &callsite);
+        self.unify_and_log(
+            format!("invocation `{}` (fun, caller)", name),
+            &function_type,
+            &callsite,
+        );
         Rc::clone(retty)
     }
 
@@ -121,40 +126,37 @@ impl TypeInferencer {
             Expr::Array {
                 ref mut elements, ..
             } => {
-                if elements.is_empty() {
-                    return wrap(Type::Array(wrap(self.new_type_var())));
-                }
-
                 let mut element_types = elements
                     .iter_mut()
                     .map(|element| self.analyze_expr(element, generic_vars))
                     .collect::<Vec<_>>();
 
-                let first_type = element_types.remove(0);
-                let element_type =
+                let element_type = if element_types.is_empty() {
+                    wrap(self.new_type_var())
+                } else {
+                    let first_element = element_types.remove(0);
+
                     element_types
-                        .iter_mut()
-                        .fold(&first_type, |previous_type, current_type| {
-                            self.unify(&previous_type, &current_type);
-                            current_type
-                        });
+                        .iter()
+                        .fold(first_element, |previous_type, current_type| {
+                            self.unify(&previous_type, current_type);
+                            Rc::clone(current_type)
+                        })
+                };
 
-                wrap(Type::Array(Rc::clone(element_type)))
+                wrap(Type::Array(element_type))
             }
-            Expr::Subscript { operand, index } => {
+            Expr::Subscript { operand, index, .. } => {
                 let operand_type = {
-                    let generic_element_typename = self.generic_type_var_naming.next();
-
-                    //scoped_generic_vars.insert(generic_element_typename.clone());
-
                     let operand_type = self.analyze_expr(operand, generic_vars);
+
+                    // Operand must be Array<T>
+                    let array_type = self.new_array_type_var();
 
                     self.unify_and_log(
                         "subscript (operand, T[])",
                         &operand_type,
-                        &wrap(Type::Array(wrap(Type::new_type_var(
-                            &generic_element_typename,
-                        )))),
+                        &wrap(array_type),
                     );
 
                     fixed_type(&operand_type)
@@ -186,6 +188,7 @@ impl TypeInferencer {
                 Some(function_type) => {
                     let mut m = arguments.iter_mut().collect::<Vec<_>>();
                     self.analyze_invocation(
+                        name,
                         Rc::clone(&function_type),
                         &node.r#type,
                         &mut m,
@@ -207,6 +210,7 @@ impl TypeInferencer {
             | Expr::NE(lhs, rhs, binding) => match self.lookup_function(binding, generic_vars) {
                 None => panic!("Prelude not installed"),
                 Some(function_type) => self.analyze_invocation(
+                    "(binop)",
                     Rc::clone(&function_type),
                     &node.r#type,
                     &mut [lhs.as_mut(), rhs.as_mut()],
@@ -251,15 +255,7 @@ impl TypeInferencer {
                     pattern,
                 } in arms
                 {
-                    // Type check for pattern match
-                    match pattern {
-                        parser::Pattern::Variable(..) => {
-                            // The binder would assign the same type of `head` expression.
-                        }
-                        parser::Pattern::Integer(_) => {
-                            self.unify(&wrap(Type::Int32), &head.r#type);
-                        }
-                    };
+                    self.analyze_pattern(pattern, &head.r#type);
 
                     // Guard' type must be boolean.
                     if let Some(condition) = condition {
@@ -286,8 +282,12 @@ impl TypeInferencer {
 
                 Rc::clone(&case_type)
             }
-            Expr::Var { pattern: _, init } => {
+            Expr::Var {
+                ref mut pattern,
+                init,
+            } => {
                 self.analyze_expr(init, generic_vars);
+                self.analyze_pattern(pattern, &init.r#type);
 
                 // Variable binding pattern always succeeds and its type is boolean.
                 wrap(Type::Boolean)
@@ -295,8 +295,57 @@ impl TypeInferencer {
         };
 
         // To update node's type
-        self.unify_and_log("(ty, node)", &ty, &node.r#type);
+        self.unify_and_log(
+            format!("node: {}", node.expr.short_name()),
+            &node.r#type,
+            &ty,
+        );
         ty
+    }
+
+    fn analyze_pattern(&mut self, pattern: &mut parser::Pattern, target_type: &Rc<RefCell<Type>>) {
+        match pattern {
+            parser::Pattern::Variable(_name, ref mut binding) => {
+                // Variable patern's type must be identical to head expression.
+                let binding_type = &binding.borrow().r#type;
+                self.unify_and_log(
+                    "variable pattern (pattern, target)",
+                    binding_type,
+                    target_type,
+                );
+            }
+            parser::Pattern::Integer(_) => {
+                self.unify_and_log(
+                    "i32 pattern (pattern, target)",
+                    &wrap(Type::Int32),
+                    target_type,
+                );
+            }
+            parser::Pattern::Array(patterns) => {
+                // Head expression's type must be Array<T>
+                let array_type = self.new_array_type_var();
+
+                if let Some(err) = self._unify(&target_type, &wrap(array_type)) {
+                    match err {
+                        UnificationError::TypeMismatch(actual, _expected) => {
+                            panic!("mismatched type: expected T[], found {}", actual.borrow());
+                        }
+                        _ => self._panic_unification_error(&err),
+                    };
+                };
+
+                let target_type = fixed_type(target_type);
+
+                match *target_type.borrow() {
+                    Type::Array(ref element_type) => {
+                        for pattern in patterns {
+                            self.analyze_pattern(pattern, element_type);
+                        }
+                    }
+                    ref ty => panic!("mismatched type: expected T[], found {}", ty),
+                };
+            }
+        };
     }
 }
 
@@ -455,8 +504,15 @@ impl TypeInferencer {
         Rc::clone(ty)
     }
 
+    /// T
     fn new_type_var(&mut self) -> Type {
         Type::new_type_var(&self.generic_type_var_naming.next())
+    }
+
+    /// Array<T>
+    fn new_array_type_var(&mut self) -> Type {
+        let ty = self.new_type_var();
+        Type::Array(wrap(ty))
     }
 
     fn unify_and_log<S: AsRef<str>>(
@@ -488,21 +544,25 @@ impl TypeInferencer {
 
     fn unify(&mut self, ty1: &Rc<RefCell<Type>>, ty2: &Rc<RefCell<Type>>) {
         if let Some(error) = self._unify(ty1, ty2) {
-            match error {
-                UnificationError::RecursiveReference(_ty1, _ty2) => {
-                    panic!("Recursive type reference detected.");
-                }
-                UnificationError::NumberOfParamsMismatch(ty1, ty2, n1, n2) => {
-                    panic!(
-                        "Wrong number of parameters. Expected {} but was {} in `{:?}` and `{:?}`",
-                        n1, n2, ty1, ty2
-                    );
-                }
-                UnificationError::TypeMismatch(ty1, ty2) => {
-                    panic!("Type mismatch in `{:?}` and `{:?}`", ty1, ty2);
-                }
-            };
+            self._panic_unification_error(&error);
         }
+    }
+
+    fn _panic_unification_error(&self, error: &UnificationError) {
+        match error {
+            UnificationError::RecursiveReference(_ty1, _ty2) => {
+                panic!("Recursive type reference detected.");
+            }
+            UnificationError::NumberOfParamsMismatch(ty1, ty2, n1, n2) => {
+                panic!(
+                    "Wrong number of parameters. Expected {} but was {} in `{:?}` and `{:?}`",
+                    n1, n2, ty1, ty2
+                );
+            }
+            UnificationError::TypeMismatch(ty1, ty2) => {
+                panic!("Type mismatch in `{:?}` and `{:?}`", ty1, ty2);
+            }
+        };
     }
 
     fn _unify(
@@ -607,6 +667,16 @@ impl TypeInferencer {
     }
 }
 
+fn fixed_type_and_log(message: &str, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+    let new_type = fixed_type(ty);
+
+    if DEBUG {
+        eprintln!("[fix] {} {} -> {}", message, ty.borrow(), new_type.borrow());
+    }
+
+    new_type
+}
+
 // Prune fixed type variables and remove indirection.
 pub fn fixed_type(ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
     match &*ty.borrow() {
@@ -650,7 +720,7 @@ impl TypeInferencer {
     }
 
     fn fix_expr(&self, node: &mut parser::Node) {
-        node.r#type = fixed_type(&node.r#type);
+        node.r#type = fixed_type_and_log("node", &node.r#type);
 
         match &mut node.expr {
             Expr::Stmt(expr) => {
@@ -665,7 +735,7 @@ impl TypeInferencer {
                     self.fix_expr(element);
                 }
             }
-            Expr::Subscript { operand, index } => {
+            Expr::Subscript { operand, index, .. } => {
                 self.fix_expr(operand);
                 self.fix_expr(index);
             }
@@ -737,18 +807,17 @@ impl TypeInferencer {
 
     fn fix_pattern(&self, pattern: &mut parser::Pattern) {
         match pattern {
-            parser::Pattern::Variable(ref name, ref mut binding) => {
-                let binding = binding
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("Unbound pattern `{}`", name));
-
-                match *(binding.borrow_mut()) {
-                    Binding { ref mut r#type, .. } => {
-                        *r#type = fixed_type(r#type);
-                    }
+            parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
+                Binding { ref mut r#type, .. } => {
+                    *r#type = fixed_type(r#type);
+                }
+            },
+            parser::Pattern::Integer(_) => {}
+            parser::Pattern::Array(patterns) => {
+                for pattern in patterns {
+                    self.fix_pattern(pattern);
                 }
             }
-            parser::Pattern::Integer(_) => {}
         };
     }
 }
