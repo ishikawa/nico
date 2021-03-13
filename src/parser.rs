@@ -785,6 +785,20 @@ impl Parser {
 }
 
 fn parse_pattern(tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Option<Pattern> {
+    let pattern = parse_pattern_element(tokenizer, context);
+
+    // Assert: Rest pattern must be in `[...]`
+    if let Some(Pattern::Rest(..)) = pattern {
+        panic!("Syntax error: Rest pattern must be in `[...]`");
+    }
+
+    pattern
+}
+
+fn parse_pattern_element(
+    tokenizer: &mut Tokenizer,
+    context: &mut ParserContext,
+) -> Option<Pattern> {
     match tokenizer.peek()? {
         Token::Identifier(ref name) => {
             let binding = wrap(sem::Binding::typed_name(name, &context.type_var()));
@@ -799,12 +813,18 @@ fn parse_pattern(tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Opti
         }
         Token::Char('[') => {
             consume_char(tokenizer, '[');
-
             let elements = parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
-                parse_pattern(tokenizer, context).expect("Expected pattern")
+                parse_pattern_element(tokenizer, context).expect("Expected pattern")
             });
-
             consume_char(tokenizer, ']');
+
+            // Assert: Rest element must be last element
+            if let Some(i) = elements.iter().position(|x| matches!(x, Pattern::Rest(..))) {
+                if i != (elements.len() - 1) {
+                    panic!("Syntax error: Rest element (#{}) must be last element", i);
+                }
+            }
+
             Some(Pattern::Array(elements))
         }
         Token::Rest => {
@@ -817,10 +837,12 @@ fn parse_pattern(tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Opti
                     tokenizer.next();
                     Some(pat)
                 }
-                t => panic!("Rest pattern must follows identifier, but was {:?}", t),
+                t => panic!(
+                    "`...` must be followed by an identifier, but it was followed by {:?}",
+                    t
+                ),
             }
         }
-
         _ => None,
     }
 }

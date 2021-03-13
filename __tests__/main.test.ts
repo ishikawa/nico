@@ -473,6 +473,14 @@ const cases: TestCase[] = [
     expected: 111
   },
   {
+    input: "let ...x = []",
+    compileError: /Syntax error: Rest pattern must be in `\[\.\.\.\]`/
+  },
+  {
+    input: "let [...x, y] = []",
+    compileError: /Syntax error: Rest element \(#0\) must be last element/
+  },
+  {
     todo: true,
     input: "let [head, ...tail] = []",
     compileError: /refutable pattern/

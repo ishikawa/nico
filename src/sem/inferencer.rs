@@ -355,7 +355,7 @@ impl TypeInferencer {
                 }
             }
             parser::Pattern::Rest(_name, ref mut binding) => {
-                // For rest pattern, the target type must be an array type.
+                // For rest pattern, the target type must be an element type.
                 // And then, the rest pattern's type must be identical to the target type.
                 let target_type = fixed_type(target_type);
 
