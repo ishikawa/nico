@@ -592,6 +592,17 @@ const cases: TestCase[] = [
       "    10",
       "end"].join("\n"),
     expected: -10
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case 5",
+      "when x if x == 5",
+      "    -10",
+      "else",
+      "    10",
+      "end"].join("\n"),
+    expected: -10
   }
 ];
 
