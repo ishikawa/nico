@@ -465,13 +465,15 @@ const cases: TestCase[] = [
     compileError: /refutable pattern/
   },
   {
-    todo: true,
+    focus: true,
     // prettier-ignore
     input: [
       "let [...x] = []",
       "case x",
-      "when [] => 111",
-      "else => 222",
+      "when []",
+      "    111",
+      "else",
+      "    222",
       "end"].join("\n"),
     expected: 111
   },
@@ -480,8 +482,10 @@ const cases: TestCase[] = [
     // prettier-ignore
     input: [
       "case [45, 67, 56]",
-      "when [x, ...rest] => x + rest[0]",
-      "else => 222",
+      "when [x, ...rest]",
+      "    x + rest[0]",
+      "else",
+      "    222",
       "end"].join("\n"),
     expected: 112
   },
@@ -490,7 +494,8 @@ const cases: TestCase[] = [
     // prettier-ignore
     input: [
       "case [45, 66, 56]",
-      "when [...rest] => rest[0]",
+      "when [...rest]",
+      "    rest[0]",
       "end"].join("\n"),
     expected: 45
   },
@@ -499,8 +504,10 @@ const cases: TestCase[] = [
     // prettier-ignore
     input: [
       "case [45, 66, 56]",
-      "when [] => 10",
-      "when [x, ...rest] => x + rest[0]",
+      "when []",
+      "    10",
+      "when [x, ...rest]",
+      "    x + rest[0]",
       "end"].join("\n"),
     expected: 111
   },
@@ -509,9 +516,12 @@ const cases: TestCase[] = [
     // prettier-ignore
     input: [
       "case [45, 66, 56]",
-      "when [] => 10",
-      "when [x] => 20",
-      "when [x, y, ...rest] => x + y",
+      "when []",
+      "    10",
+      "when [x]",
+      "    20",
+      "when [x, y, ...rest]",
+      "    x + y",
       "end"].join("\n"),
     expected: 111
   }
