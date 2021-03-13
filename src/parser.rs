@@ -6,7 +6,6 @@ use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use std::cell::RefCell;
 use std::fmt;
-use std::iter::Peekable;
 use std::rc::Rc;
 
 // Program
@@ -87,6 +86,10 @@ pub enum Expr {
     EQ(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Equal
     NE(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Not Equal
 
+    // Unary operator
+    Minus(Box<Node>, Option<Rc<RefCell<sem::Binding>>>),
+    Plus(Box<Node>, Option<Rc<RefCell<sem::Binding>>>),
+
     // Statement
     Stmt(Box<Node>),
 
@@ -157,14 +160,13 @@ impl Parser {
     }
 
     pub fn parse(&self, tokenizer: &mut Tokenizer) -> Box<Module> {
-        let mut tokenizer = tokenizer.peekable();
         let mut context = ParserContext {
             naming: PrefixNaming::new("?"),
         };
 
         let mut functions = vec![];
 
-        while let Some(function) = self.parse_function(&mut tokenizer, &mut context) {
+        while let Some(function) = self.parse_function(tokenizer, &mut context) {
             functions.push(function);
         }
 
@@ -172,7 +174,7 @@ impl Parser {
         // `main` function which is the entry point of a program.
         let mut body = vec![];
 
-        while let Some(expr) = self.parse_stmt(&mut tokenizer, &mut context) {
+        while let Some(expr) = self.parse_stmt(tokenizer, &mut context) {
             body.push(Some(expr));
         }
 
@@ -206,7 +208,7 @@ impl Parser {
 
     fn parse_function(
         &self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
+        tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Function> {
         // modifiers
@@ -299,11 +301,7 @@ impl Parser {
     }
 
     /// Returns `Stmt` if the result of `parse_stmt_expr()` is a variable binding.
-    fn parse_stmt(
-        &self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
-        context: &mut ParserContext,
-    ) -> Option<Node> {
+    fn parse_stmt(&self, tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Option<Node> {
         let node = match self.parse_stmt_expr(tokenizer, context) {
             Some(node) => node,
             None => return None,
@@ -319,7 +317,7 @@ impl Parser {
     /// Variable binding or `Expr`
     fn parse_stmt_expr(
         &self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
+        tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
         match tokenizer.peek() {
@@ -345,21 +343,17 @@ impl Parser {
         }))
     }
 
-    fn parse_expr(
-        &self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
-        context: &mut ParserContext,
-    ) -> Option<Node> {
-        self.parse_relop1(tokenizer, context)
+    fn parse_expr(&self, tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Option<Node> {
+        self.parse_rel_op1(tokenizer, context)
     }
 
     // "==", "!="
-    fn parse_relop1(
+    fn parse_rel_op1(
         &self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
+        tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let lhs = match self.parse_relop2(tokenizer, context) {
+        let lhs = match self.parse_rel_op2(tokenizer, context) {
             Some(lhs) => lhs,
             None => return None,
         };
@@ -371,7 +365,7 @@ impl Parser {
         };
         tokenizer.next();
 
-        let rhs = match self.parse_relop2(tokenizer, context) {
+        let rhs = match self.parse_rel_op2(tokenizer, context) {
             None => panic!("Expected RHS"),
             Some(rhs) => rhs,
         };
@@ -380,12 +374,12 @@ impl Parser {
     }
 
     // ">", "<", ">=", "<="
-    fn parse_relop2(
+    fn parse_rel_op2(
         &self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
+        tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let lhs = match self.parse_binop1(tokenizer, context) {
+        let lhs = match self.parse_binary_op1(tokenizer, context) {
             Some(lhs) => lhs,
             None => return None,
         };
@@ -399,7 +393,7 @@ impl Parser {
         };
         tokenizer.next();
 
-        let rhs = match self.parse_binop1(tokenizer, context) {
+        let rhs = match self.parse_binary_op1(tokenizer, context) {
             None => panic!("Expected RHS"),
             Some(rhs) => rhs,
         };
@@ -407,12 +401,12 @@ impl Parser {
         Some(context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
 
-    fn parse_binop1(
+    fn parse_binary_op1(
         &self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
+        tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let mut lhs = match self.parse_binop2(tokenizer, context) {
+        let mut lhs = match self.parse_binary_op2(tokenizer, context) {
             None => return None,
             Some(lhs) => lhs,
         };
@@ -422,12 +416,17 @@ impl Parser {
                 Some(Token::Char('+')) => Expr::Add,
                 Some(Token::Char('-')) => Expr::Sub,
                 Some(Token::Char('%')) => Expr::Rem,
-                Some(_) => break,
-                None => return Some(lhs),
+                _ => break,
             };
+
+            // A newline character terminates node construction.
+            if tokenizer.is_newline_seen() {
+                break;
+            }
+
             tokenizer.next();
 
-            let rhs = match self.parse_binop2(tokenizer, context) {
+            let rhs = match self.parse_binary_op2(tokenizer, context) {
                 None => panic!("Expected RHS"),
                 Some(rhs) => rhs,
             };
@@ -438,12 +437,12 @@ impl Parser {
         Some(lhs)
     }
 
-    fn parse_binop2(
+    fn parse_binary_op2(
         &self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
+        tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let mut lhs = match self.parse_access(tokenizer, context) {
+        let mut lhs = match self.parse_unary_op(tokenizer, context) {
             None => return None,
             Some(lhs) => lhs,
         };
@@ -457,7 +456,7 @@ impl Parser {
             };
             tokenizer.next();
 
-            let rhs = match self.parse_access(tokenizer, context) {
+            let rhs = match self.parse_unary_op(tokenizer, context) {
                 None => panic!("Expected RHS"),
                 Some(rhs) => rhs,
             };
@@ -468,12 +467,30 @@ impl Parser {
         Some(lhs)
     }
 
-    // `... [...]`, `... (...)`
-    fn parse_access(
+    fn parse_unary_op(
         &self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
+        tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
+        let builder = match tokenizer.peek() {
+            None => return None,
+            Some(Token::Char('+')) => Expr::Plus,
+            Some(Token::Char('-')) => Expr::Minus,
+            Some(_) => return self.parse_access(tokenizer, context),
+        };
+        tokenizer.next();
+
+        // unary operators are right associative.
+        let expr = match self.parse_unary_op(tokenizer, context) {
+            None => panic!("Expected operand"),
+            Some(node) => builder(Box::new(node), None),
+        };
+
+        Some(context.typed_expr(expr))
+    }
+
+    // `... [...]`, `... (...)`
+    fn parse_access(&self, tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Option<Node> {
         let mut node = self.parse_primary(tokenizer, context)?;
 
         loop {
@@ -511,7 +528,7 @@ impl Parser {
 
     fn parse_primary(
         &self,
-        tokenizer: &mut Peekable<&mut Tokenizer>,
+        tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
         let token = match tokenizer.peek() {
@@ -766,10 +783,7 @@ impl Parser {
     }
 }
 
-fn parse_pattern(
-    tokenizer: &mut Peekable<&mut Tokenizer>,
-    context: &mut ParserContext,
-) -> Option<Pattern> {
+fn parse_pattern(tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Option<Pattern> {
     match tokenizer.peek() {
         Some(Token::Identifier(ref name)) => {
             let binding = wrap(sem::Binding::typed_name(name, &context.type_var()));
@@ -798,13 +812,13 @@ fn parse_pattern(
 }
 
 fn parse_elements<F, T>(
-    tokenizer: &mut Peekable<&mut Tokenizer>,
+    tokenizer: &mut Tokenizer,
     context: &mut ParserContext,
     stop_char: char,
     parser: &mut F,
 ) -> Vec<T>
 where
-    F: Fn(&mut Peekable<&mut Tokenizer>, &mut ParserContext) -> T,
+    F: Fn(&mut Tokenizer, &mut ParserContext) -> T,
 {
     let mut elements = vec![];
 
@@ -838,7 +852,7 @@ pub fn parse_string<S: AsRef<str>>(src: S) -> Box<Module> {
     parser.parse(&mut tokenizer)
 }
 
-fn consume_token(tokenizer: &mut Peekable<&mut Tokenizer>, expected: Token) {
+fn consume_token(tokenizer: &mut Tokenizer, expected: Token) {
     match tokenizer.next() {
         None => panic!("Premature EOF"),
         Some(token) if token == expected => {}
@@ -846,7 +860,7 @@ fn consume_token(tokenizer: &mut Peekable<&mut Tokenizer>, expected: Token) {
     }
 }
 
-fn consume_char(tokenizer: &mut Peekable<&mut Tokenizer>, expected: char) {
+fn consume_char(tokenizer: &mut Tokenizer, expected: char) {
     consume_token(tokenizer, Token::Char(expected));
 }
 
@@ -893,6 +907,8 @@ impl Expr {
             Expr::GE(_, _, _) => "a >= b".to_string(),
             Expr::EQ(_, _, _) => "a == b".to_string(),
             Expr::NE(_, _, _) => "a != b".to_string(),
+            Expr::Plus(_, _) => "+a".to_string(),
+            Expr::Minus(_, _) => "-a".to_string(),
             Expr::Stmt(node) => format!("Stmt({})", node.expr.short_name()),
             Expr::If { .. } => "if".to_string(),
             Expr::Case { .. } => "case".to_string(),
@@ -985,6 +1001,30 @@ mod tests {
             assert_matches!(elements[0].expr, Expr::Integer(1));
             assert_matches!(elements[1].expr, Expr::Integer(2));
             assert_matches!(elements[2].expr, Expr::Integer(3));
+        });
+    }
+
+    #[test]
+    fn parse_newline0() {
+        let program = parse_string("1+\n2");
+        let body = program.main.unwrap().body;
+
+        assert_matches!(&body[0].expr, Expr::Add(lhs, rhs, None) => {
+            assert_matches!(&lhs.expr, Expr::Integer(1));
+            assert_matches!(&rhs.expr, Expr::Integer(2));
+        });
+    }
+
+    #[test]
+    fn parse_newline1() {
+        let program = parse_string("1\n+2");
+        let body = program.main.unwrap().body;
+
+        assert_matches!(&body[0].expr, Expr::Stmt(node) => {
+            assert_matches!(&node.expr, Expr::Integer(1));
+        });
+        assert_matches!(&body[1].expr, Expr::Plus(operand, None) => {
+            assert_matches!(&operand.expr, Expr::Integer(2));
         });
     }
 }

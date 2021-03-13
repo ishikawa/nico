@@ -210,13 +210,25 @@ impl TypeInferencer {
             | Expr::NE(lhs, rhs, binding) => match self.lookup_function(binding, generic_vars) {
                 None => panic!("Prelude not installed"),
                 Some(function_type) => self.analyze_invocation(
-                    "(binop)",
+                    &binding.as_ref().unwrap().borrow().name,
                     Rc::clone(&function_type),
                     &node.r#type,
                     &mut [lhs.as_mut(), rhs.as_mut()],
                     generic_vars,
                 ),
             },
+            Expr::Plus(operand, binding) | Expr::Minus(operand, binding) => {
+                match self.lookup_function(binding, generic_vars) {
+                    None => panic!("Prelude not installed"),
+                    Some(function_type) => self.analyze_invocation(
+                        &binding.as_ref().unwrap().borrow().name,
+                        Rc::clone(&function_type),
+                        &node.r#type,
+                        &mut [operand.as_mut()],
+                        generic_vars,
+                    ),
+                }
+            }
             Expr::If {
                 condition,
                 then_body,
@@ -760,6 +772,7 @@ impl TypeInferencer {
                 self.fix_expr(lhs);
                 self.fix_expr(rhs);
             }
+            Expr::Plus(operand, _) | Expr::Minus(operand, _) => self.fix_expr(operand),
             Expr::If {
                 condition,
                 then_body,

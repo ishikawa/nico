@@ -99,6 +99,16 @@ impl Environment {
                 },
             )));
         }
+        // Unary operators
+        for op in &["@+", "@-"] {
+            env.insert(wrap(Binding::builtin_function(
+                *op,
+                Type::Function {
+                    params: vec![wrap(Type::Int32)],
+                    return_type: wrap(Type::Int32),
+                },
+            )));
+        }
         // print
         env.insert(wrap(Binding::builtin_function(
             "println_str",
