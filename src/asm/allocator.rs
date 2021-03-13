@@ -205,7 +205,7 @@ impl Allocator {
                 } in arms
                 {
                     locals.push_scope();
-                    self.analyze_pattern(pattern, locals);
+                    self.analyze_pattern(pattern, locals, frame);
 
                     // guard
                     if let Some(condition) = condition {
@@ -225,15 +225,19 @@ impl Allocator {
                 ref mut init,
             } => {
                 self.analyze_expr(init, locals, strings, frame);
-                self.analyze_pattern(pattern, locals);
+                self.analyze_pattern(pattern, locals, frame);
             }
         };
     }
 
-    fn analyze_pattern(&self, pattern: &mut parser::Pattern, locals: &mut LocalVariables) {
+    fn analyze_pattern(
+        &self,
+        pattern: &mut parser::Pattern,
+        locals: &mut LocalVariables,
+        frame: &mut StackFrame,
+    ) {
         match pattern {
-            parser::Pattern::Variable(_name, ref mut binding)
-            | parser::Pattern::Rest(_name, ref mut binding) => match *binding.borrow_mut() {
+            parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
                 Binding {
                     ref r#type,
                     ref mut storage,
@@ -246,9 +250,31 @@ impl Allocator {
             parser::Pattern::Integer(_) => {}
             parser::Pattern::Array(patterns) => {
                 for pattern in patterns {
-                    self.analyze_pattern(pattern, locals);
+                    self.analyze_pattern(pattern, locals, frame);
                 }
             }
+            parser::Pattern::Rest {
+                ref mut binding,
+                ref mut reference_offset,
+                ..
+            } => match *binding.borrow_mut() {
+                Binding {
+                    ref r#type,
+                    ref mut storage,
+                    ..
+                } => {
+                    let v = locals.reserve(r#type);
+                    storage.replace(v);
+
+                    // Reserve a reference in "Static" frame area.
+                    // - length
+                    frame.reserve(wasm::SIZE_BYTES);
+                    // - index
+                    frame.reserve(wasm::SIZE_BYTES);
+
+                    reference_offset.replace(frame.static_size());
+                }
+            },
         };
     }
 }

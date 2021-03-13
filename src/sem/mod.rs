@@ -321,7 +321,7 @@ impl Space {
                 let elements = elements.iter().map(|p| Self::from_pattern(p)).collect();
                 Self::Array(elements)
             }
-            parser::Pattern::Rest(_, ref binding) => {
+            parser::Pattern::Rest { ref binding, .. } => {
                 Self::Rest(Rc::clone(&binding.borrow().r#type))
             }
         }

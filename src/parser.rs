@@ -118,7 +118,11 @@ pub enum Pattern {
     Variable(String, Rc<RefCell<sem::Binding>>),
     Integer(i32),
     Array(Vec<Pattern>),
-    Rest(String, Rc<RefCell<sem::Binding>>),
+    Rest {
+        name: String,
+        binding: Rc<RefCell<sem::Binding>>,
+        reference_offset: Option<wasm::Size>,
+    },
 }
 
 #[derive(Debug)]
@@ -788,7 +792,7 @@ fn parse_pattern(tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Opti
     let pattern = parse_pattern_element(tokenizer, context);
 
     // Assert: Rest pattern must be in `[...]`
-    if let Some(Pattern::Rest(..)) = pattern {
+    if let Some(Pattern::Rest { .. }) = pattern {
         panic!("Syntax error: Rest pattern must be in `[...]`");
     }
 
@@ -819,7 +823,10 @@ fn parse_pattern_element(
             consume_char(tokenizer, ']');
 
             // Assert: Rest element must be last element
-            if let Some(i) = elements.iter().position(|x| matches!(x, Pattern::Rest(..))) {
+            if let Some(i) = elements
+                .iter()
+                .position(|x| matches!(x, Pattern::Rest {..}))
+            {
                 if i != (elements.len() - 1) {
                     panic!("Syntax error: Rest element (#{}) must be last element", i);
                 }
@@ -833,7 +840,11 @@ fn parse_pattern_element(
             match tokenizer.peek() {
                 Some(Token::Identifier(name)) => {
                     let binding = wrap(sem::Binding::typed_name(name, &context.type_var()));
-                    let pat = Pattern::Rest(name.clone(), binding);
+                    let pat = Pattern::Rest {
+                        name: name.clone(),
+                        binding,
+                        reference_offset: None,
+                    };
                     tokenizer.next();
                     Some(pat)
                 }
@@ -917,7 +928,7 @@ impl fmt::Display for Pattern {
                 }
                 write!(f, "]")
             }
-            Pattern::Rest(name, _) => write!(f, "...{}", name),
+            Pattern::Rest { name, .. } => write!(f, "...{}", name),
         }
     }
 }

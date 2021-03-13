@@ -656,7 +656,12 @@ impl AsmBuilder {
             parser::Pattern::Array(patterns) => {
                 // Currently, only the pattern `let [...x] = a` is allowed.
                 if patterns.len() == 1 {
-                    if let parser::Pattern::Rest(ref name, ref binding) = patterns[0] {
+                    if let parser::Pattern::Rest {
+                        ref name,
+                        ref binding,
+                        ..
+                    } = patterns[0]
+                    {
                         let binding = binding.borrow();
                         let var = binding
                             .storage
@@ -671,7 +676,7 @@ impl AsmBuilder {
 
                 todo!("Local binding with array pattern is not yet implemented. ")
             }
-            parser::Pattern::Rest(_, _) => todo!(),
+            parser::Pattern::Rest { .. } => panic!("Rest pattern should not be here."),
         };
     }
 
@@ -737,19 +742,38 @@ impl AsmBuilder {
                 // - ... and so on
                 // - Drop the result `0`
                 // - Push the result `1`
+                let ends_with_rest = patterns
+                    .last()
+                    .map_or(false, |x| matches!(x, parser::Pattern::Rest {..}));
+
                 builder.block(Some(wasm::Type::I32), &mut |block| {
-                    block
-                        .comment(format!(
-                            "Assert: target must be {}[{}]",
-                            element_type.borrow(),
-                            patterns.len()
-                        ))
-                        .i32_const(0)
-                        .local_get(&tmp_length)
-                        .u32_const(patterns.len() as u32)
-                        .i32_neq()
-                        .br_if(0)
-                        .drop();
+                    if ends_with_rest {
+                        block
+                            .comment(format!(
+                                "Assert: target must have at least {} elements of {}",
+                                patterns.len() - 1,
+                                element_type.borrow(),
+                            ))
+                            .i32_const(0)
+                            .local_get(&tmp_length)
+                            .u32_const((patterns.len() - 1) as u32)
+                            .i32_lt_u()
+                            .br_if(0)
+                            .drop();
+                    } else {
+                        block
+                            .comment(format!(
+                                "Assert: target must be {}[{}]",
+                                element_type.borrow(),
+                                patterns.len()
+                            ))
+                            .i32_const(0)
+                            .local_get(&tmp_length)
+                            .u32_const(patterns.len() as u32)
+                            .i32_neq()
+                            .br_if(0)
+                            .drop();
+                    }
 
                     // If an empty array is given and the pattern is also empty array,
                     // the type of element is undetermined at this point.
@@ -758,20 +782,53 @@ impl AsmBuilder {
 
                         // Push the value of the element
                         for (i, pattern) in patterns.iter().enumerate() {
-                            // Access
-                            block
-                                .i32_const(0)
-                                .comment(format!(
-                                    "access {}[{}] at memory index + element size({}) * index",
-                                    element_type.borrow(),
-                                    i,
-                                    element_size
-                                ))
-                                .local_get(&tmp_memidx)
-                                .i32_load(element_size * (i as wasm::Size));
+                            if ends_with_rest && i == (patterns.len() - 1) {
+                                // Create a temporary reference to a sub array.
+                                match pattern {
+                                    parser::Pattern::Rest {
+                                        reference_offset: Some(reference_offset),
+                                        ..
+                                    } => {
+                                        block
+                                            .i32_const(0)
+                                            .comment(format!(
+                                                "rest {}[{}...] with element size({})",
+                                                element_type.borrow(),
+                                                i,
+                                                element_size
+                                            ))
+                                            .comment(format!("-- index + {}", i))
+                                            .u32_const(0)
+                                            .local_get(&tmp_memidx)
+                                            .u32_const(element_size * (i as wasm::Size))
+                                            .i32_add()
+                                            .i32_store(*reference_offset)
+                                            .comment(format!("-- length - {}", i))
+                                            .u32_const(wasm::SIZE_BYTES)
+                                            .local_get(&tmp_length)
+                                            .u32_const(i as wasm::Size)
+                                            .i32_sub()
+                                            .i32_store(*reference_offset)
+                                            .comment("-- store reference")
+                                            .u32_const(*reference_offset);
+                                    }
+                                    _ => unreachable!(),
+                                }
+                            } else {
+                                // Access
+                                block
+                                    .i32_const(0)
+                                    .comment(format!(
+                                        "access {}[{}] at memory index + element size({}) * index",
+                                        element_type.borrow(),
+                                        i,
+                                        element_size
+                                    ))
+                                    .local_get(&tmp_memidx)
+                                    .i32_load(element_size * (i as wasm::Size));
+                            }
 
                             self.build_case_pattern(block, pattern, &element_type, temp, frame);
-
                             block.i32_eqz().br_if(0).drop();
                         }
                     }
@@ -781,7 +838,21 @@ impl AsmBuilder {
 
                 temp.pop_scope();
             }
-            parser::Pattern::Rest(_, _) => todo!(),
+            parser::Pattern::Rest {
+                ref binding,
+                ref name,
+                ..
+            } => {
+                let binding = binding.borrow();
+                let var = binding
+                    .storage
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name))
+                    .unwrap_local_variable();
+
+                // set the result of head expression to the variable.
+                builder.local_set(&var.name).i32_const(1);
+            }
         };
     }
 

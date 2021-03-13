@@ -354,7 +354,9 @@ impl TypeInferencer {
                     self.analyze_pattern(pattern, &element_type);
                 }
             }
-            parser::Pattern::Rest(_name, ref mut binding) => {
+            parser::Pattern::Rest {
+                ref mut binding, ..
+            } => {
                 // For rest pattern, the target type `T` must be an element type.
                 // And then, the rest pattern's type must be `T[]`.
                 let element_type = fixed_type(target_type);
@@ -825,8 +827,14 @@ impl TypeInferencer {
 
     fn fix_pattern(&self, pattern: &mut parser::Pattern) {
         match pattern {
-            parser::Pattern::Variable(_name, ref mut binding)
-            | parser::Pattern::Rest(_name, ref mut binding) => match *binding.borrow_mut() {
+            parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
+                Binding { ref mut r#type, .. } => {
+                    *r#type = fixed_type(r#type);
+                }
+            },
+            parser::Pattern::Rest {
+                ref mut binding, ..
+            } => match *binding.borrow_mut() {
                 Binding { ref mut r#type, .. } => {
                     *r#type = fixed_type(r#type);
                 }

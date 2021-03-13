@@ -30,7 +30,8 @@ export async function compileFileToWATFile(filepath: string, outputFilepath: str
 
       fs.writeFileSync(outputFilepath, stdout);
 
-      resolve();
+      // In DEBUG mode, wait some time for console flush.
+      setTimeout(() => resolve(), DEBUG ? 100 : 0);
     });
   });
 }
