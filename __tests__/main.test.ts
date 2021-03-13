@@ -611,6 +611,14 @@ const cases: TestCase[] = [
       "not_a_function",
       "(-945)"].join("\n"),
     expected: -945
+  },
+  {
+    // prettier-ignore
+    input: [
+      "let not_an_array = 476",
+      "not_an_array",
+      "[854][0]"].join("\n"),
+    expected: 854
   }
 ];
 

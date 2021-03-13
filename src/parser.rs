@@ -499,8 +499,14 @@ impl Parser {
         let mut node = self.parse_primary(tokenizer, context)?;
 
         loop {
+            tokenizer.peek();
+
+            if tokenizer.is_newline_seen() {
+                break;
+            }
+
             let token = match tokenizer.peek() {
-                None => return Some(node),
+                None => break,
                 Some(token) => token,
             };
 
@@ -526,9 +532,10 @@ impl Parser {
                         index: Box::new(arguments.remove(0)),
                     });
                 }
-                _ => return Some(node),
+                _ => break,
             }
         }
+        Some(node)
     }
 
     fn parse_primary(
