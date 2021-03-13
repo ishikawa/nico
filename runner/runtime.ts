@@ -3,6 +3,7 @@ import { StringDecoder } from "string_decoder";
 export interface Printer {
   printlnNumber(n: number): number;
   printlnString(offset: number): number;
+  debugNumber(offset: number, n: number): number;
 }
 
 /**
@@ -13,6 +14,7 @@ export interface WasmImportObject extends Record<string, Record<string, WebAssem
   printer: {
     println_i32: Printer["printlnNumber"];
     println_str: Printer["printlnString"];
+    debug_i32: Printer["debugNumber"];
   };
 }
 
@@ -23,7 +25,8 @@ export function buildImportObject(props: { memory: WebAssembly.Memory; printer: 
     "nico.runtime": { mem: memory },
     printer: {
       println_i32: printer.printlnNumber.bind(printer),
-      println_str: printer.printlnString.bind(printer)
+      println_str: printer.printlnString.bind(printer),
+      debug_i32: printer.debugNumber.bind(printer)
     }
   };
 }
@@ -46,9 +49,17 @@ export class ConsolePrinter implements Printer {
     console.log(string);
     return string.length;
   }
+
+  debugNumber(offset: number, n: number): number {
+    const message = this.stringView.getString(offset);
+    const string = n.toString();
+
+    console.log(message, string);
+    return message.length + string.length;
+  }
 }
 
-export class BufferedPrinter {
+export class BufferedPrinter implements Printer {
   stringView: StringView;
   buffer: string;
 
@@ -73,6 +84,17 @@ export class BufferedPrinter {
     this.buffer += "\n";
 
     return string.length;
+  }
+
+  debugNumber(offset: number, n: number): number {
+    const message = this.stringView.getString(offset);
+    const string = n.toString();
+
+    this.buffer += message;
+    this.buffer += string;
+    this.buffer += "\n";
+
+    return message.length + string.length;
   }
 }
 

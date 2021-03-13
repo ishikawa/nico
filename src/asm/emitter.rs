@@ -59,6 +59,21 @@ impl AsmBuilder {
             .build();
         module.imports.push(import_println_str);
 
+        // debug_i32
+        let import_debug_i32 = wasm::Builders::import()
+            .module("printer")
+            .name("debug_i32")
+            .desc(
+                wasm::Builders::func_desc()
+                    .id("debug_i32")
+                    .param(wasm::Type::I32)
+                    .param(wasm::Type::I32)
+                    .result_type(wasm::Type::I32)
+                    .build(),
+            )
+            .build();
+        module.imports.push(import_debug_i32);
+
         // Writes constants to constant pool and increments hp (heap pointer).
         let hp = self.build_data_segments(&mut module, module_node);
 
