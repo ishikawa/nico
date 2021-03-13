@@ -460,10 +460,12 @@ const cases: TestCase[] = [
     expected: 9
   },
   {
+    todo: true,
     input: "let [head, ...tail] = []",
     compileError: /refutable pattern/
   },
   {
+    todo: true,
     // prettier-ignore
     input: [
       "let [...x] = []",
@@ -474,6 +476,7 @@ const cases: TestCase[] = [
     expected: 111
   },
   {
+    todo: true,
     // prettier-ignore
     input: [
       "case [45, 67, 56]",
@@ -481,6 +484,36 @@ const cases: TestCase[] = [
       "else => 222",
       "end"].join("\n"),
     expected: 112
+  },
+  {
+    todo: true,
+    // prettier-ignore
+    input: [
+      "case [45, 66, 56]",
+      "when [...rest] => rest[0]",
+      "end"].join("\n"),
+    expected: 45
+  },
+  {
+    todo: true,
+    // prettier-ignore
+    input: [
+      "case [45, 66, 56]",
+      "when [] => 10",
+      "when [x, ...rest] => x + rest[0]",
+      "end"].join("\n"),
+    expected: 111
+  },
+  {
+    todo: true,
+    // prettier-ignore
+    input: [
+      "case [45, 66, 56]",
+      "when [] => 10",
+      "when [x] => 20",
+      "when [x, y, ...rest] => x + y",
+      "end"].join("\n"),
+    expected: 111
   }
 ];
 

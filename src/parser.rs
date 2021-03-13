@@ -118,6 +118,7 @@ pub enum Pattern {
     Variable(String, Rc<RefCell<sem::Binding>>),
     Integer(i32),
     Array(Vec<Pattern>),
+    Rest(String, Rc<RefCell<sem::Binding>>),
 }
 
 #[derive(Debug)]
@@ -784,19 +785,19 @@ impl Parser {
 }
 
 fn parse_pattern(tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Option<Pattern> {
-    match tokenizer.peek() {
-        Some(Token::Identifier(ref name)) => {
+    match tokenizer.peek()? {
+        Token::Identifier(ref name) => {
             let binding = wrap(sem::Binding::typed_name(name, &context.type_var()));
             let pat = Pattern::Variable(name.clone(), binding);
             tokenizer.next();
             Some(pat)
         }
-        Some(Token::Integer(i)) => {
+        Token::Integer(i) => {
             let pat = Pattern::Integer(*i);
             tokenizer.next();
             Some(pat)
         }
-        Some(Token::Char('[')) => {
+        Token::Char('[') => {
             consume_char(tokenizer, '[');
 
             let elements = parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
@@ -805,6 +806,19 @@ fn parse_pattern(tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Opti
 
             consume_char(tokenizer, ']');
             Some(Pattern::Array(elements))
+        }
+        Token::Rest => {
+            consume_token(tokenizer, Token::Rest);
+
+            match tokenizer.peek() {
+                Some(Token::Identifier(name)) => {
+                    let binding = wrap(sem::Binding::typed_name(name, &context.type_var()));
+                    let pat = Pattern::Rest(name.clone(), binding);
+                    tokenizer.next();
+                    Some(pat)
+                }
+                t => panic!("Rest pattern must follows identifier, but was {:?}", t),
+            }
         }
 
         _ => None,
@@ -881,6 +895,7 @@ impl fmt::Display for Pattern {
                 }
                 write!(f, "]")
             }
+            Pattern::Rest(name, _) => write!(f, "...{}", name),
         }
     }
 }

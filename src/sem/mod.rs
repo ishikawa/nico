@@ -299,6 +299,7 @@ impl Space {
                 let elements = elements.iter().map(|p| Self::from_pattern(p)).collect();
                 Self::Array(elements)
             }
+            parser::Pattern::Rest(_, _) => todo!(),
         }
     }
 

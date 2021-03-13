@@ -158,7 +158,7 @@ impl TypeValidator {
                     if head_space.is_subspace_of(&arms_space) {
                         panic!("Unreachable `else` clause");
                     }
-                    arms_space = arms_space.union(&sem::Space::from_type(&head.r#type));
+                    arms_space = arms_space.union(&head_space);
                     self.validate_body(else_body);
                 }
 
@@ -172,13 +172,9 @@ impl TypeValidator {
                 self.validate_pattern(pattern);
 
                 // assignable?
-                match pattern {
-                    parser::Pattern::Variable(_, _) => {}
-                    parser::Pattern::Integer(_) => {
-                        panic!("Can't assign value to `int`.")
-                    }
-                    parser::Pattern::Array(_) => {}
-                };
+                if let parser::Pattern::Integer(_) = pattern {
+                    panic!("Can't assign value to `int`.");
+                }
 
                 // exhaustivity check
                 let right_space = sem::Space::from_type(&init.r#type);

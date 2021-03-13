@@ -230,9 +230,9 @@ impl Allocator {
     }
 
     fn analyze_pattern(&self, pattern: &mut parser::Pattern, locals: &mut LocalVariables) {
-        // Currntly, only "Variable pattern" is supported.
         match pattern {
-            parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
+            parser::Pattern::Variable(_name, ref mut binding)
+            | parser::Pattern::Rest(_name, ref mut binding) => match *binding.borrow_mut() {
                 Binding {
                     ref r#type,
                     ref mut storage,

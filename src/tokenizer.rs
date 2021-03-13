@@ -16,6 +16,7 @@ pub enum Token {
     When,
     Export,
     Let,
+    Rest, // "..."
 
     // Operators
     EQ, // "=="
@@ -93,6 +94,7 @@ impl<'a> Tokenizer<'a> {
             'a'..='z' | '_' => self.read_name(nextc),
             '!' | '=' | '<' | '>' => self.read_operator(nextc),
             '"' => self.read_string(),
+            '.' => self.read_dot(),
             x => {
                 self.iter.next();
                 Token::Char(x)
@@ -100,6 +102,24 @@ impl<'a> Tokenizer<'a> {
         };
 
         Some(token)
+    }
+
+    fn read_dot(&mut self) -> Token {
+        self.iter.next();
+
+        match self.peek_char() {
+            Some('.') => {
+                self.iter.next();
+                match self.peek_char() {
+                    Some('.') => {
+                        self.iter.next();
+                        Token::Rest
+                    }
+                    _ => panic!("Unrecognized token `..`"),
+                }
+            }
+            _ => Token::Char('.'),
+        }
     }
 
     fn read_string(&mut self) -> Token {

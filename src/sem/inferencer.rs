@@ -318,7 +318,7 @@ impl TypeInferencer {
     fn analyze_pattern(&mut self, pattern: &mut parser::Pattern, target_type: &Rc<RefCell<Type>>) {
         match pattern {
             parser::Pattern::Variable(_name, ref mut binding) => {
-                // Variable patern's type must be identical to head expression.
+                // Variable pattern's type must be identical to head expression.
                 let binding_type = &binding.borrow().r#type;
                 self.unify_and_log(
                     "variable pattern (pattern, target)",
@@ -356,6 +356,18 @@ impl TypeInferencer {
                     }
                     ref ty => panic!("mismatched type: expected T[], found {}", ty),
                 };
+            }
+            parser::Pattern::Rest(_name, ref mut binding) => {
+                // For rest pattern, the target type must be an array type.
+                // And then, the rest pattern's type must be identical to the target type.
+                let target_type = fixed_type(target_type);
+                match *target_type.borrow() {
+                    Type::Array(_) => {}
+                    ref ty => panic!("mismatched type: expected T[], found {}", ty),
+                };
+
+                let binding_type = &binding.borrow().r#type;
+                self.unify_and_log("rest pattern (pattern, target)", binding_type, &target_type);
             }
         };
     }
@@ -820,7 +832,8 @@ impl TypeInferencer {
 
     fn fix_pattern(&self, pattern: &mut parser::Pattern) {
         match pattern {
-            parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
+            parser::Pattern::Variable(_name, ref mut binding)
+            | parser::Pattern::Rest(_name, ref mut binding) => match *binding.borrow_mut() {
                 Binding { ref mut r#type, .. } => {
                     *r#type = fixed_type(r#type);
                 }

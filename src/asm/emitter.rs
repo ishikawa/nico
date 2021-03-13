@@ -638,6 +638,7 @@ impl AsmBuilder {
                     parser::Pattern::Array(_) => {
                         todo!("Local binding with array pattern is not yet implemented. ")
                     }
+                    parser::Pattern::Rest(_, _) => todo!(),
                 };
                 builder
                     .comment("Pattern without guard always push `true` value.")
@@ -749,6 +750,7 @@ impl AsmBuilder {
 
                 temp.pop_scope();
             }
+            parser::Pattern::Rest(_, _) => todo!(),
         };
     }
 
