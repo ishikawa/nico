@@ -52,7 +52,7 @@ impl TypeInferencer {
 
     fn analyze_function(&mut self, function: &mut parser::Function) -> Rc<RefCell<Type>> {
         // Generic type var names. Nico doesn't support generic type vars though.
-        // See `freshrec()` funciton.
+        // See `freshrec()` function.
         let mut generic_vars = HashSet::new();
 
         // Iterates expressions. Type::Void for empty expression.
@@ -85,7 +85,7 @@ impl TypeInferencer {
             .iter_mut()
             .map(|nd| self.analyze_expr(nd, generic_vars))
             .collect::<Vec<_>>();
-        let callsite = wrap(Type::Function {
+        let call_site = wrap(Type::Function {
             params: arg_types,
             return_type: Rc::clone(retty),
         });
@@ -93,7 +93,7 @@ impl TypeInferencer {
         self.unify_and_log(
             format!("invocation `{}` (fun, caller)", name),
             &function_type,
-            &callsite,
+            &call_site,
         );
         Rc::clone(retty)
     }
@@ -162,10 +162,9 @@ impl TypeInferencer {
                     fixed_type(&operand_type)
                 };
 
-                let element_type = match &*operand_type.borrow() {
-                    Type::Array(element_type) => Rc::clone(element_type),
-                    ty => panic!("Operand must be an array, but was {:?}", ty),
-                };
+                let element_type = Type::unwrap_element_type_or_else(&operand_type, |ty| {
+                    panic!("Operand must be an array, but was {:?}", ty);
+                });
 
                 // `index` must be an integer
                 let index_type = self.analyze_expr(index, generic_vars);
@@ -196,7 +195,6 @@ impl TypeInferencer {
                     )
                 }
             },
-            // binop
             Expr::Add(lhs, rhs, binding)
             | Expr::Sub(lhs, rhs, binding)
             | Expr::Rem(lhs, rhs, binding)
@@ -318,7 +316,7 @@ impl TypeInferencer {
     fn analyze_pattern(&mut self, pattern: &mut parser::Pattern, target_type: &Rc<RefCell<Type>>) {
         match pattern {
             parser::Pattern::Variable(_name, ref mut binding) => {
-                // Variable patern's type must be identical to head expression.
+                // Variable pattern's type must be identical to head expression.
                 let binding_type = &binding.borrow().r#type;
                 self.unify_and_log(
                     "variable pattern (pattern, target)",
@@ -348,14 +346,24 @@ impl TypeInferencer {
 
                 let target_type = fixed_type(target_type);
 
-                match *target_type.borrow() {
-                    Type::Array(ref element_type) => {
-                        for pattern in patterns {
-                            self.analyze_pattern(pattern, element_type);
-                        }
-                    }
-                    ref ty => panic!("mismatched type: expected T[], found {}", ty),
-                };
+                let element_type = Type::unwrap_element_type_or_else(&target_type, |ty| {
+                    panic!("mismatched type: expected T[], found {}", ty);
+                });
+
+                for pattern in patterns {
+                    self.analyze_pattern(pattern, &element_type);
+                }
+            }
+            parser::Pattern::Rest {
+                ref mut binding, ..
+            } => {
+                // For rest pattern, the target type `T` must be an element type.
+                // And then, the rest pattern's type must be `T[]`.
+                let element_type = fixed_type(target_type);
+                let target_type = wrap(Type::Array(element_type));
+
+                let binding_type = &binding.borrow().r#type;
+                self.unify_and_log("rest pattern (pattern, target)", binding_type, &target_type);
             }
         };
     }
@@ -757,7 +765,6 @@ impl TypeInferencer {
                     self.fix_expr(argument);
                 }
             }
-            // binop
             Expr::Add(lhs, rhs, ..)
             | Expr::Sub(lhs, rhs, ..)
             | Expr::Rem(lhs, rhs, ..)
@@ -825,6 +832,13 @@ impl TypeInferencer {
                     *r#type = fixed_type(r#type);
                 }
             },
+            parser::Pattern::Rest {
+                ref mut binding, ..
+            } => match *binding.borrow_mut() {
+                Binding { ref mut r#type, .. } => {
+                    *r#type = fixed_type(r#type);
+                }
+            },
             parser::Pattern::Integer(_) => {}
             parser::Pattern::Array(patterns) => {
                 for pattern in patterns {
@@ -843,7 +857,7 @@ mod tests {
     //use parser;
 
     #[test]
-    fn prune_typevar_unresolved() {
+    fn prune_type_var_unresolved() {
         let mut inferencer = TypeInferencer::new();
 
         let ty0 = Type::TypeVariable {
@@ -864,7 +878,7 @@ mod tests {
     }
 
     #[test]
-    fn prune_typevar_resolved() {
+    fn prune_type_var_resolved() {
         let mut inferencer = TypeInferencer::new();
         let ty0 = Type::TypeVariable {
             name: "$1".to_string(),
@@ -878,7 +892,7 @@ mod tests {
     }
 
     #[test]
-    fn prune_typevar_resolved_alias() {
+    fn prune_type_var_resolved_alias() {
         let mut inferencer = TypeInferencer::new();
         let ty0 = Type::TypeVariable {
             name: "$1".to_string(),
@@ -900,7 +914,7 @@ mod tests {
     }
 
     #[test]
-    fn prune_typevar_resolved_alias2() {
+    fn prune_type_var_resolved_alias2() {
         let mut inferencer = TypeInferencer::new();
         let ty0 = Type::TypeVariable {
             name: "$1".to_string(),
@@ -930,7 +944,7 @@ mod tests {
     }
 
     #[test]
-    fn prune_typevar_unresolved_alias2() {
+    fn prune_type_var_unresolved_alias2() {
         let mut inferencer = TypeInferencer::new();
         let ty0 = Type::TypeVariable {
             name: "$1".to_string(),
@@ -960,7 +974,7 @@ mod tests {
     }
 
     #[test]
-    fn prune_typevar_function() {
+    fn prune_type_var_function() {
         let mut inferencer = TypeInferencer::new();
 
         let ty0 = wrap(Type::TypeVariable {
@@ -1120,7 +1134,7 @@ mod tests {
     }
 
     #[test]
-    fn fresh_typevar() {
+    fn fresh_type_var() {
         let mut inferencer = TypeInferencer::new();
         let mut generic_vars = HashSet::new();
         let mut mappings = HashMap::new();

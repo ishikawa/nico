@@ -458,6 +458,128 @@ const cases: TestCase[] = [
       "a[2] + b[2]",
     ].join("\n"),
     expected: 9
+  },
+  // empty array pattern
+  {
+    // prettier-ignore
+    input: [
+      "let x = []",
+      "case x",
+      "when []",
+      "    111",
+      "else",
+      "    222",
+      "end"].join("\n"),
+    expected: 111
+  },
+  {
+    input: "let ...x = []",
+    compileError: /Syntax error: Rest pattern must be in `\[\.\.\.\]`/
+  },
+  {
+    input: "let [...x, y] = []",
+    compileError: /Syntax error: Rest element \(#0\) must be last element/
+  },
+  {
+    input: "let [...x] = 1",
+    compileError: /mismatched type: expected T\[\], found i32/
+  },
+  {
+    // prettier-ignore
+    input: [
+      "let [...x] = []",
+      "case x",
+      "when [x, 1]",
+      "    222",
+      "when []",
+      "    111",
+      "else",
+      "    333",
+      "end"].join("\n"),
+    expected: 111
+  },
+  {
+    input: "let [head, ...tail] = []",
+    compileError: /refutable pattern/
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case [45, 66, 56]",
+      "when [x, ...y]",
+      "    x + y[0]",
+      "end"].join("\n"),
+    compileError: /non-exhaustive patterns/
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case [45, 66, 56]",
+      "when []",
+      "    10",
+      "when [x, y, ...z]",
+      "    x + y",
+      "end"].join("\n"),
+    compileError: /non-exhaustive patterns/
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case [45, 67, 56]",
+      "when [x, ...rest]",
+      "    x + rest[0]",
+      "else",
+      "    222",
+      "end"].join("\n"),
+    expected: 112
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case [45, 66, 56]",
+      "when [...rest]",
+      "    rest[0]",
+      "end"].join("\n"),
+    expected: 45
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case [45, 66, 56]",
+      "when []",
+      "    10",
+      "when [x, ...rest]",
+      "    x + rest[0]",
+      "end"].join("\n"),
+    expected: 111
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case [45, 66, 56]",
+      "when []",
+      "    10",
+      "when [x]",
+      "    20",
+      "when [x, y, ...rest]",
+      "    x + y",
+      "end"].join("\n"),
+    expected: 111
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case [[45, 66, 56], [34, 21, 10]]",
+      "when []",
+      "    10",
+      "when [x]",
+      "    20",
+      "when [[a, ...b], [c, ...d]]",
+      "    a + b[0] + c + d[1]",
+      "else",
+      "    30",
+      "end"].join("\n"),
+    expected: 155
   }
 ];
 

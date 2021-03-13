@@ -6,11 +6,11 @@ use crate::parser;
 use crate::util::wrap;
 pub use binder::Binder;
 pub use inferencer::TypeInferencer;
-use std::cell::RefCell;
 use std::collections::hash_map;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+use std::{cell::RefCell, collections::HashSet};
 pub use validator::TypeValidator;
 
 pub trait SemanticAnalyzer {
@@ -202,6 +202,23 @@ impl Type {
         }
     }
 
+    pub fn element_type(ty: &Self) -> Option<Rc<RefCell<Self>>> {
+        match ty {
+            Type::Array(ref element_type) => Some(Rc::clone(element_type)),
+            _ => None,
+        }
+    }
+
+    pub fn unwrap_element_type_or_else<F>(ty: &Rc<RefCell<Self>>, fun: F) -> Rc<RefCell<Self>>
+    where
+        F: FnOnce(&Self) -> Rc<RefCell<Self>>,
+    {
+        match *ty.borrow() {
+            Type::Array(ref element_type) => Rc::clone(element_type),
+            ref ty => fun(ty),
+        }
+    }
+
     /// Returns `true` if the type given by the 2nd argument appears in this type.
     pub fn contains(&self, other: &Self) -> bool {
         match self {
@@ -232,10 +249,13 @@ impl PartialEq for Type {
             Type::Int32 => matches!(other, Type::Int32),
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),
-            Type::Array(element_type1) => match other {
-                Type::Array(element_type2) => element_type1 == element_type2,
-                _ => false,
-            },
+            Type::Array(element_type1) => {
+                if let Some(element_type2) = Type::element_type(other) {
+                    *element_type1 == element_type2
+                } else {
+                    false
+                }
+            }
             Type::Void => matches!(other, Type::Void),
             Type::Function {
                 params: params1,
@@ -274,12 +294,21 @@ enum Space {
     Union(Box<Space>, Box<Space>),
     // array
     Array(Vec<Space>),
+    // rest
+    Rest(Rc<RefCell<Type>>),
 }
 
 // Concrete value of a type.
 #[derive(Debug, PartialEq, Clone)]
 enum Value {
     Int(i32),
+}
+#[derive(Debug, PartialEq, Clone)]
+enum Subtraction {
+    Everything,
+    Value(Value),
+    ExactLength(usize),
+    MinimalLength(usize),
 }
 
 impl Space {
@@ -299,43 +328,93 @@ impl Space {
                 let elements = elements.iter().map(|p| Self::from_pattern(p)).collect();
                 Self::Array(elements)
             }
+            parser::Pattern::Rest { ref binding, .. } => {
+                Self::Rest(Rc::clone(&binding.borrow().r#type))
+            }
         }
     }
 
     // -- Operations
 
+    /// `self` - `other`
+    fn _subtract(other: &Space) -> Vec<Subtraction> {
+        match other {
+            Space::Everything(_) => vec![Subtraction::Everything],
+            Space::Something(_, value) => vec![Subtraction::Value(value.clone())],
+            Space::Union(a, b) => {
+                let mut a = Self::_subtract(a);
+                let mut b = Self::_subtract(b);
+
+                a.append(&mut b);
+                a
+            }
+            Space::Array(spaces) => {
+                // A patten `[x, y, z]` consumes an array whose length is 3.
+                if spaces.iter().all(|x| matches!(x, Space::Everything(_))) {
+                    vec![Subtraction::ExactLength(spaces.len())]
+                } else if spaces.iter().any(|x| matches!(x, Space::Rest(_))) {
+                    vec![Subtraction::MinimalLength(spaces.len() - 1)]
+                } else {
+                    vec![]
+                }
+            }
+            _ => vec![],
+        }
+    }
+
     /// `self` <: `other`: whether `self` is a subtype of `other`
     pub fn is_subspace_of(&self, other: &Space) -> bool {
         match self {
             Space::Empty => true,
-            Space::Everything(ty1) => match other {
-                Space::Empty => false,
-                Space::Everything(ty2) => ty1 == ty2,
-                Space::Something(_, _) => false,
-                Space::Union(a, b) => self.is_subspace_of(a) || self.is_subspace_of(b),
-                Space::Array(..) => false,
-            },
-            Space::Something(ty1, value1) => match other {
-                Space::Empty => false,
-                Space::Everything(ty2) => ty1 == ty2,
-                Space::Something(ty2, value2) => ty1 == ty2 && value1 == value2,
-                Space::Union(a, b) => self.is_subspace_of(a) || self.is_subspace_of(b),
-                Space::Array(..) => false,
-            },
             Space::Union(a, b) => a.is_subspace_of(other) && b.is_subspace_of(other),
-            Space::Array(spaces1) => match other {
-                Space::Empty => false,
-                Space::Everything(..) => true,
-                Space::Something(..) => false,
-                Space::Union(a, b) => self.is_subspace_of(a) || self.is_subspace_of(b),
-                Space::Array(spaces2) => {
-                    spaces1.len() == spaces2.len()
-                        && spaces1
-                            .iter()
-                            .zip(spaces2)
-                            .all(|(a, b)| a.is_subspace_of(b))
+            Space::Something(_, value) => {
+                let subtractions = Self::_subtract(other);
+
+                // Everything
+                if subtractions.iter().any(|x| match x {
+                    Subtraction::Everything => true,
+                    Subtraction::Value(v) => v == value,
+                    _ => false,
+                }) {
+                    return true;
                 }
-            },
+
+                false
+            }
+            Space::Everything(_) => {
+                let subtractions = Self::_subtract(other);
+
+                // Everything
+                if subtractions
+                    .iter()
+                    .any(|x| matches!(x, Subtraction::Everything))
+                {
+                    return true;
+                }
+
+                // Array exhaustivity
+                let mut cover = HashSet::<usize>::new();
+
+                // -- collect covered length
+                for subtraction in &subtractions {
+                    if let Subtraction::ExactLength(n) = subtraction {
+                        cover.insert(*n);
+                    }
+                }
+                // -- If patterns have a rest pattern, returns `true` if other
+                // patterns cover possible array lengths < minimal length.
+                for subtraction in &subtractions {
+                    if let Subtraction::MinimalLength(n) = subtraction {
+                        if (0..*n).all(|i| cover.contains(&i)) {
+                            return true;
+                        }
+                    }
+                }
+
+                false
+            }
+            Space::Array(_) => false,
+            Space::Rest(_) => false,
         }
     }
 
@@ -385,7 +464,7 @@ mod type_tests {
         assert!(!Type::Int32.contains(&Type::Boolean));
     }
     #[test]
-    fn contains_polytype() {
+    fn contains_poly_type() {
         let ty1 = Type::Function {
             params: vec![Rc::new(RefCell::new(Type::Int32))],
             return_type: Rc::new(RefCell::new(Type::TypeVariable {
@@ -441,5 +520,25 @@ mod space_tests {
         assert!(!true_space.is_subspace_of(&false_space));
         assert!(!boolean_space.is_subspace_of(&true_space));
         assert!(!boolean_space.is_subspace_of(&false_space));
+    }
+
+    #[test]
+    fn array_exhaustivity() {
+        let array_type = wrap(Type::Array(wrap(Type::Int32)));
+        let array_space = Space::Everything(Rc::clone(&array_type));
+
+        assert!(array_space.is_subspace_of(&array_space));
+
+        let empty_array_space = Space::Array(vec![]);
+        let rest_array_space = Space::Array(vec![
+            Space::Everything(wrap(Type::Int32)),
+            Space::Rest(Rc::clone(&array_type)),
+        ]);
+
+        assert!(!array_space.is_subspace_of(&empty_array_space));
+        assert!(!array_space.is_subspace_of(&rest_array_space));
+
+        let union_space = empty_array_space.union(&rest_array_space);
+        assert!(array_space.is_subspace_of(&union_space));
     }
 }

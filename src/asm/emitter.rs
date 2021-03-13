@@ -183,7 +183,7 @@ impl AsmBuilder {
             builder.export(name);
         }
 
-        // typeuse
+        // params
         for binding in &fun_node.params {
             let binding = binding.borrow();
             let var = binding
@@ -195,14 +195,13 @@ impl AsmBuilder {
             builder.named_param(&var.name, var.r#type);
         }
 
-        // params
         match &*fun_node.r#type.borrow() {
             Type::Function { return_type, .. } => {
                 if let Some(return_type) = wasm_type(return_type) {
                     builder.result_type(return_type);
                 }
             }
-            ref ty => panic!("Invalid type signature: {:?}", ty),
+            ref ty => panic!("Invalid type signature: {}", ty),
         }
 
         {
@@ -211,7 +210,7 @@ impl AsmBuilder {
             temp.pop_scope();
         }
 
-        // locals/temporary variebles
+        // locals/temporary variables
         for storage in fun_node.locals.as_ref().unwrap().variables() {
             let var = storage.unwrap_local_variable();
             builder.named_local(&var.name, var.r#type);
@@ -274,11 +273,10 @@ impl AsmBuilder {
                 elements,
                 object_offset,
             } => {
-                let element_type = match &*node.r#type.borrow() {
-                    Type::Array(element_type) => Rc::clone(element_type),
-                    ty => panic!("Operand must be an array, but was {:?}", ty),
-                };
-                let element_size = wasm_type(&element_type).unwrap().num_bytes();
+                let element_type = Type::unwrap_element_type_or_else(&node.r#type, |ty| {
+                    panic!("Operand must be an array, but was {}", ty);
+                });
+
                 let num_elements = elements.len();
                 let object_offset = frame.static_size() - object_offset.unwrap();
 
@@ -288,22 +286,27 @@ impl AsmBuilder {
                     num_elements
                 ));
 
-                for (i, element) in elements.iter().enumerate() {
-                    builder
-                        .comment(format!(
-                            "store the result of {}[{}] at `FP + {} + element size({}) * index({})`",
-                            element_type.borrow(),
-                            i,
-                            object_offset,
-                            element_size,
-                            i
-                        ))
-                        .global_get("fp");
+                // This guard is needed because the type of an empty array is undetermined.
+                if !elements.is_empty() {
+                    let element_size = wasm_type(&element_type).unwrap().num_bytes();
 
-                    let offset = object_offset + element_size * (i as wasm::Size);
+                    for (i, element) in elements.iter().enumerate() {
+                        builder
+                            .comment(format!(
+                                "store the result of {}[{}] at `FP + {} + element size({}) * index({})`",
+                                element_type.borrow(),
+                                i,
+                                object_offset,
+                                element_size,
+                                i
+                            ))
+                            .global_get("fp");
 
-                    self.build_expr(builder, element, temp, frame);
-                    builder.i32_store(offset);
+                        let offset = object_offset + element_size * (i as wasm::Size);
+
+                        self.build_expr(builder, element, temp, frame);
+                        builder.i32_store(offset);
+                    }
                 }
 
                 // Store a reference on "Static" frame area.
@@ -336,11 +339,9 @@ impl AsmBuilder {
             Expr::Subscript { operand, index } => {
                 temp.push_scope();
 
-                let element_type = match &*operand.r#type.borrow() {
-                    Type::Array(element_type) => Rc::clone(element_type),
-                    ty => panic!("Operand must be an array, but was {:?}", ty),
-                };
-
+                let element_type = Type::unwrap_element_type_or_else(&operand.r#type, |ty| {
+                    panic!("Operand must be an array, but was {}", ty);
+                });
                 let element_size = wasm_type(&element_type).unwrap().num_bytes();
 
                 // Load the reference of the operand to a local variable
@@ -420,7 +421,6 @@ impl AsmBuilder {
 
                 builder.call(&function.name);
             }
-            // binop
             Expr::Add(lhs, rhs, _) => {
                 self.build_expr(builder, lhs, temp, frame);
                 self.build_expr(builder, rhs, temp, frame);
@@ -576,7 +576,13 @@ impl AsmBuilder {
                         &mut |builder| {
                             // Pattern
                             builder.local_get(&head_var.name);
-                            self.build_pattern(builder, &arm.pattern, &head.r#type, temp, frame);
+                            self.build_case_pattern(
+                                builder,
+                                &arm.pattern,
+                                &head.r#type,
+                                temp,
+                                frame,
+                            );
 
                             // Build the guard expression if exists.
                             if let Some(ref condition) = arm.condition {
@@ -619,10 +625,43 @@ impl AsmBuilder {
             }
             Expr::Var { pattern, init } => {
                 self.build_expr(builder, init, temp, frame);
+                self.build_let_pattern(builder, pattern);
+                builder
+                    .comment("Pattern without guard always push `true` value.")
+                    .i32_const(1);
+            }
+        };
+    }
 
-                match pattern {
-                    // variable pattern
-                    parser::Pattern::Variable(ref name, ref binding) => {
+    fn build_let_pattern(
+        &self,
+        builder: &mut wasm::InstructionsBuilder,
+        pattern: &parser::Pattern,
+    ) {
+        match pattern {
+            // variable pattern
+            parser::Pattern::Variable(ref name, ref binding) => {
+                let binding = binding.borrow();
+                let var = binding
+                    .storage
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name))
+                    .unwrap_local_variable();
+
+                builder.local_set(&var.name);
+            }
+            parser::Pattern::Integer(_) => {
+                panic!("invalid local binding");
+            }
+            parser::Pattern::Array(patterns) => {
+                // Currently, only the pattern `let [...x] = a` is allowed.
+                if patterns.len() == 1 {
+                    if let parser::Pattern::Rest {
+                        ref name,
+                        ref binding,
+                        ..
+                    } = patterns[0]
+                    {
                         let binding = binding.borrow();
                         let var = binding
                             .storage
@@ -631,25 +670,20 @@ impl AsmBuilder {
                             .unwrap_local_variable();
 
                         builder.local_set(&var.name);
+                        return;
                     }
-                    parser::Pattern::Integer(_) => {
-                        panic!("invalid local binding");
-                    }
-                    parser::Pattern::Array(_) => {
-                        todo!("Local binding with array pattern is not yet implemented. ")
-                    }
-                };
-                builder
-                    .comment("Pattern without guard always push `true` value.")
-                    .i32_const(1);
+                }
+
+                todo!("Local binding with array pattern is not yet implemented. ")
             }
+            parser::Pattern::Rest { .. } => panic!("Rest pattern should not be here."),
         };
     }
 
     /// Build a pattern.
     /// - Assert: a value of target is on the top of the stack.
     /// - Push the value whether the pattern succeeded or not to the stack.
-    fn build_pattern(
+    fn build_case_pattern(
         &self,
         builder: &mut wasm::InstructionsBuilder,
         pattern: &parser::Pattern,
@@ -679,12 +713,9 @@ impl AsmBuilder {
             parser::Pattern::Array(ref patterns) => {
                 temp.push_scope();
 
-                let element_type = match &*target_type.borrow() {
-                    Type::Array(element_type) => Rc::clone(element_type),
-                    ty => panic!("Operand must be an array, but was {}", ty),
-                };
-
-                let element_size = wasm_type(&element_type).unwrap().num_bytes();
+                let element_type = Type::unwrap_element_type_or_else(&target_type, |ty| {
+                    panic!("Operand must be an array, but was {}", ty);
+                });
 
                 // Before entering the block, save the target value.
                 let tmp_target = temp.reserve_name_i32();
@@ -707,47 +738,120 @@ impl AsmBuilder {
                 // - Break if `L1` != `l2`
                 // - Push the element at index `0` of head on the stack
                 // - Evaluate a child pattern at index `0`
-                // - Break if pottern match failed
+                // - Break if the pattern match failed
                 // - ... and so on
                 // - Drop the result `0`
                 // - Push the result `1`
+                let ends_with_rest = patterns
+                    .last()
+                    .map_or(false, |x| matches!(x, parser::Pattern::Rest {..}));
+
                 builder.block(Some(wasm::Type::I32), &mut |block| {
-                    block
-                        .comment(format!(
-                            "Assert: target must be {}[{}]",
-                            element_type.borrow(),
-                            patterns.len()
-                        ))
-                        .i32_const(0)
-                        .local_get(&tmp_length)
-                        .u32_const(patterns.len() as u32)
-                        .i32_neq()
-                        .br_if(0)
-                        .drop();
-
-                    // Push the value of the element
-                    for (i, pattern) in patterns.iter().enumerate() {
-                        // Access
+                    if ends_with_rest {
                         block
-                            .i32_const(0)
                             .comment(format!(
-                                "access {}[{}] at memory index + element size({}) * index",
+                                "Assert: target must have at least {} elements of {}",
+                                patterns.len() - 1,
                                 element_type.borrow(),
-                                i,
-                                element_size
                             ))
-                            .local_get(&tmp_memidx)
-                            .i32_load(element_size * (i as wasm::Size));
+                            .i32_const(0)
+                            .local_get(&tmp_length)
+                            .u32_const((patterns.len() - 1) as u32)
+                            .i32_lt_u()
+                            .br_if(0)
+                            .drop();
+                    } else {
+                        block
+                            .comment(format!(
+                                "Assert: target must be {}[{}]",
+                                element_type.borrow(),
+                                patterns.len()
+                            ))
+                            .i32_const(0)
+                            .local_get(&tmp_length)
+                            .u32_const(patterns.len() as u32)
+                            .i32_neq()
+                            .br_if(0)
+                            .drop();
+                    }
 
-                        self.build_pattern(block, pattern, &element_type, temp, frame);
+                    // If an empty array is given and the pattern is also empty array,
+                    // the type of element is undetermined at this point.
+                    if !patterns.is_empty() {
+                        let element_size = wasm_type(&element_type).unwrap().num_bytes();
 
-                        block.i32_eqz().br_if(0).drop();
+                        // Push the value of the element
+                        for (i, pattern) in patterns.iter().enumerate() {
+                            if ends_with_rest && i == (patterns.len() - 1) {
+                                // Create a temporary reference to a sub array.
+                                match pattern {
+                                    parser::Pattern::Rest {
+                                        reference_offset: Some(reference_offset),
+                                        ..
+                                    } => {
+                                        block
+                                            .i32_const(0)
+                                            .comment(format!(
+                                                "rest {}[{}...] with element size({})",
+                                                element_type.borrow(),
+                                                i,
+                                                element_size
+                                            ))
+                                            .comment(format!("-- index + {}", i))
+                                            .u32_const(0)
+                                            .local_get(&tmp_memidx)
+                                            .u32_const(element_size * (i as wasm::Size))
+                                            .i32_add()
+                                            .i32_store(*reference_offset)
+                                            .comment(format!("-- length - {}", i))
+                                            .u32_const(wasm::SIZE_BYTES)
+                                            .local_get(&tmp_length)
+                                            .u32_const(i as wasm::Size)
+                                            .i32_sub()
+                                            .i32_store(*reference_offset)
+                                            .comment("-- store reference")
+                                            .u32_const(*reference_offset);
+                                    }
+                                    _ => unreachable!(),
+                                }
+                            } else {
+                                // Access
+                                block
+                                    .i32_const(0)
+                                    .comment(format!(
+                                        "access {}[{}] at memory index + element size({}) * index",
+                                        element_type.borrow(),
+                                        i,
+                                        element_size
+                                    ))
+                                    .local_get(&tmp_memidx)
+                                    .i32_load(element_size * (i as wasm::Size));
+                            }
+
+                            self.build_case_pattern(block, pattern, &element_type, temp, frame);
+                            block.i32_eqz().br_if(0).drop();
+                        }
                     }
 
                     block.i32_const(1);
                 });
 
                 temp.pop_scope();
+            }
+            parser::Pattern::Rest {
+                ref binding,
+                ref name,
+                ..
+            } => {
+                let binding = binding.borrow();
+                let var = binding
+                    .storage
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name))
+                    .unwrap_local_variable();
+
+                // set the result of head expression to the variable.
+                builder.local_set(&var.name).i32_const(1);
             }
         };
     }
@@ -771,7 +875,7 @@ impl AsmBuilder {
         };
 
         if wasm_type(&node.r#type).is_some() {
-            // Currently, only one value will be remian on the stack.
+            // Currently, only one value will be left on the stack.
             builder.drop();
         }
     }

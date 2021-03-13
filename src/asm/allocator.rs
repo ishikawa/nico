@@ -77,7 +77,7 @@ impl Allocator {
             } => {
                 let len = strings
                     .iter()
-                    .fold(0, |accum, x| accum + x.borrow().memory_size());
+                    .fold(0, |len, x| len + x.borrow().memory_size());
                 let constant = wrap(ConstantString::from_str(&content, len));
 
                 storage.replace(Rc::clone(&constant));
@@ -90,19 +90,20 @@ impl Allocator {
             } => {
                 // Reserve stack frame for elements and a reference to array.
                 {
-                    let length = elements.len();
-
-                    let element_type = match &*node.r#type.borrow() {
-                        Type::Array(element_type) => Rc::clone(element_type),
-                        ty => {
-                            panic!("Expected Array<T> but was `{:?}` for node `{:?}`", ty, node)
-                        }
-                    };
-
-                    let element_size = wasm_type(&element_type).unwrap().num_bytes();
+                    let element_type = Type::unwrap_element_type_or_else(&node.r#type, |ty| {
+                        panic!("Expected Array<T> but was `{}`", ty);
+                    });
 
                     // - Reserve elements in "Static" frame area and store it in the node.
-                    frame.reserve(element_size * (length as wasm::Size));
+                    let occupation = if elements.is_empty() {
+                        // The type of an empty array is undetermined.
+                        0
+                    } else {
+                        let length = elements.len();
+                        wasm_type(&element_type).unwrap().num_bytes() * (length as wasm::Size)
+                    };
+
+                    frame.reserve(occupation);
                     object_offset.replace(frame.static_size());
 
                     // Reserve a reference in "Static" frame area.
@@ -204,7 +205,7 @@ impl Allocator {
                 } in arms
                 {
                     locals.push_scope();
-                    self.analyze_pattern(pattern, locals);
+                    self.analyze_pattern(pattern, locals, frame);
 
                     // guard
                     if let Some(condition) = condition {
@@ -224,13 +225,17 @@ impl Allocator {
                 ref mut init,
             } => {
                 self.analyze_expr(init, locals, strings, frame);
-                self.analyze_pattern(pattern, locals);
+                self.analyze_pattern(pattern, locals, frame);
             }
         };
     }
 
-    fn analyze_pattern(&self, pattern: &mut parser::Pattern, locals: &mut LocalVariables) {
-        // Currntly, only "Variable pattern" is supported.
+    fn analyze_pattern(
+        &self,
+        pattern: &mut parser::Pattern,
+        locals: &mut LocalVariables,
+        frame: &mut StackFrame,
+    ) {
         match pattern {
             parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
                 Binding {
@@ -245,9 +250,31 @@ impl Allocator {
             parser::Pattern::Integer(_) => {}
             parser::Pattern::Array(patterns) => {
                 for pattern in patterns {
-                    self.analyze_pattern(pattern, locals);
+                    self.analyze_pattern(pattern, locals, frame);
                 }
             }
+            parser::Pattern::Rest {
+                ref mut binding,
+                ref mut reference_offset,
+                ..
+            } => match *binding.borrow_mut() {
+                Binding {
+                    ref r#type,
+                    ref mut storage,
+                    ..
+                } => {
+                    let v = locals.reserve(r#type);
+                    storage.replace(v);
+
+                    // Reserve a reference in "Static" frame area.
+                    // - length
+                    frame.reserve(wasm::SIZE_BYTES);
+                    // - index
+                    frame.reserve(wasm::SIZE_BYTES);
+
+                    reference_offset.replace(frame.static_size());
+                }
+            },
         };
     }
 }

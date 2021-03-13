@@ -71,7 +71,7 @@ pub enum Expr {
         binding: Option<Rc<RefCell<sem::Binding>>>,
     },
 
-    // binop :: LHS, RHS, Binding
+    // Binary operator :: LHS, RHS, Binding
     Add(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>),
     Sub(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>),
     Rem(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>),
@@ -118,6 +118,11 @@ pub enum Pattern {
     Variable(String, Rc<RefCell<sem::Binding>>),
     Integer(i32),
     Array(Vec<Pattern>),
+    Rest {
+        name: String,
+        binding: Rc<RefCell<sem::Binding>>,
+        reference_offset: Option<wasm::Size>,
+    },
 }
 
 #[derive(Debug)]
@@ -784,29 +789,71 @@ impl Parser {
 }
 
 fn parse_pattern(tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Option<Pattern> {
-    match tokenizer.peek() {
-        Some(Token::Identifier(ref name)) => {
+    let pattern = parse_pattern_element(tokenizer, context);
+
+    // Assert: Rest pattern must be in `[...]`
+    if let Some(Pattern::Rest { .. }) = pattern {
+        panic!("Syntax error: Rest pattern must be in `[...]`");
+    }
+
+    pattern
+}
+
+fn parse_pattern_element(
+    tokenizer: &mut Tokenizer,
+    context: &mut ParserContext,
+) -> Option<Pattern> {
+    match tokenizer.peek()? {
+        Token::Identifier(ref name) => {
             let binding = wrap(sem::Binding::typed_name(name, &context.type_var()));
             let pat = Pattern::Variable(name.clone(), binding);
             tokenizer.next();
             Some(pat)
         }
-        Some(Token::Integer(i)) => {
+        Token::Integer(i) => {
             let pat = Pattern::Integer(*i);
             tokenizer.next();
             Some(pat)
         }
-        Some(Token::Char('[')) => {
+        Token::Char('[') => {
             consume_char(tokenizer, '[');
-
             let elements = parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
-                parse_pattern(tokenizer, context).expect("Expected pattern")
+                parse_pattern_element(tokenizer, context).expect("Expected pattern")
             });
-
             consume_char(tokenizer, ']');
+
+            // Assert: Rest element must be last element
+            if let Some(i) = elements
+                .iter()
+                .position(|x| matches!(x, Pattern::Rest {..}))
+            {
+                if i != (elements.len() - 1) {
+                    panic!("Syntax error: Rest element (#{}) must be last element", i);
+                }
+            }
+
             Some(Pattern::Array(elements))
         }
+        Token::Rest => {
+            consume_token(tokenizer, Token::Rest);
 
+            match tokenizer.peek() {
+                Some(Token::Identifier(name)) => {
+                    let binding = wrap(sem::Binding::typed_name(name, &context.type_var()));
+                    let pat = Pattern::Rest {
+                        name: name.clone(),
+                        binding,
+                        reference_offset: None,
+                    };
+                    tokenizer.next();
+                    Some(pat)
+                }
+                t => panic!(
+                    "`...` must be followed by an identifier, but it was followed by {:?}",
+                    t
+                ),
+            }
+        }
         _ => None,
     }
 }
@@ -881,6 +928,7 @@ impl fmt::Display for Pattern {
                 }
                 write!(f, "]")
             }
+            Pattern::Rest { name, .. } => write!(f, "...{}", name),
         }
     }
 }

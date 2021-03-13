@@ -195,9 +195,8 @@ impl Binder {
         match pattern {
             // - A variable pattern introduces a new environment into arm body.
             // - The type of a this kind of pattern is always equal to the type of head.
-            parser::Pattern::Variable(_name, ref binding) => {
-                env.insert(Rc::clone(binding));
-            }
+            parser::Pattern::Variable(_name, ref binding) => env.insert(Rc::clone(binding)),
+            parser::Pattern::Rest { ref binding, .. } => env.insert(Rc::clone(binding)),
             parser::Pattern::Integer(_) => {}
             parser::Pattern::Array(patterns) => {
                 for pattern in patterns {
