@@ -458,6 +458,29 @@ const cases: TestCase[] = [
       "a[2] + b[2]",
     ].join("\n"),
     expected: 9
+  },
+  {
+    input: "let [head, ...tail] = []",
+    compileError: /refutable pattern/
+  },
+  {
+    // prettier-ignore
+    input: [
+      "let [...x] = []",
+      "case x",
+      "when [] => 111",
+      "else => 222",
+      "end"].join("\n"),
+    expected: 111
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case [45, 67, 56]",
+      "when [x, ...rest] => x + rest[0]",
+      "else => 222",
+      "end"].join("\n"),
+    expected: 112
   }
 ];
 
