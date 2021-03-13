@@ -603,6 +603,14 @@ const cases: TestCase[] = [
       "    10",
       "end"].join("\n"),
     expected: -10
+  },
+  {
+    // prettier-ignore
+    input: [
+      "let not_a_function = 476",
+      "not_a_function",
+      "(-945)"].join("\n"),
+    expected: -945
   }
 ];
 
