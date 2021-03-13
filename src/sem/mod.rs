@@ -202,6 +202,13 @@ impl Type {
         }
     }
 
+    pub fn element_type(ty: &Self) -> Option<Rc<RefCell<Self>>> {
+        match ty {
+            Type::Array(ref element_type) => Some(Rc::clone(element_type)),
+            _ => None,
+        }
+    }
+
     pub fn unwrap_element_type_or_else<F>(ty: &Rc<RefCell<Self>>, fun: F) -> Rc<RefCell<Self>>
     where
         F: FnOnce(&Self) -> Rc<RefCell<Self>>,
@@ -242,10 +249,13 @@ impl PartialEq for Type {
             Type::Int32 => matches!(other, Type::Int32),
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),
-            Type::Array(element_type1) => match other {
-                Type::Array(element_type2) => element_type1 == element_type2,
-                _ => false,
-            },
+            Type::Array(element_type1) => {
+                if let Some(element_type2) = Type::element_type(other) {
+                    *element_type1 == element_type2
+                } else {
+                    false
+                }
+            }
             Type::Void => matches!(other, Type::Void),
             Type::Function {
                 params: params1,
@@ -284,6 +294,8 @@ enum Space {
     Union(Box<Space>, Box<Space>),
     // array
     Array(Vec<Space>),
+    // rest
+    Rest(Rc<RefCell<Type>>),
 }
 
 // Concrete value of a type.
@@ -309,7 +321,9 @@ impl Space {
                 let elements = elements.iter().map(|p| Self::from_pattern(p)).collect();
                 Self::Array(elements)
             }
-            parser::Pattern::Rest(_, _) => todo!(),
+            parser::Pattern::Rest(_, ref binding) => {
+                Self::Rest(Rc::clone(&binding.borrow().r#type))
+            }
         }
     }
 
@@ -324,7 +338,16 @@ impl Space {
                 Space::Everything(ty2) => ty1 == ty2,
                 Space::Something(_, _) => false,
                 Space::Union(a, b) => self.is_subspace_of(a) || self.is_subspace_of(b),
-                Space::Array(..) => false,
+                Space::Array(spaces) => {
+                    // `[...x]` can consume all elements of an array.
+                    if Type::element_type(&*ty1.borrow()).is_some() && spaces.len() == 1 {
+                        if let Space::Rest(ty2) = &spaces[0] {
+                            return ty1 == ty2;
+                        }
+                    }
+                    false
+                }
+                Space::Rest(_) => false,
             },
             Space::Something(ty1, value1) => match other {
                 Space::Empty => false,
@@ -332,6 +355,7 @@ impl Space {
                 Space::Something(ty2, value2) => ty1 == ty2 && value1 == value2,
                 Space::Union(a, b) => self.is_subspace_of(a) || self.is_subspace_of(b),
                 Space::Array(..) => false,
+                Space::Rest(_) => false,
             },
             Space::Union(a, b) => a.is_subspace_of(other) && b.is_subspace_of(other),
             Space::Array(spaces1) => match other {
@@ -346,7 +370,15 @@ impl Space {
                             .zip(spaces2)
                             .all(|(a, b)| a.is_subspace_of(b))
                 }
+                Space::Rest(_) => false,
             },
+            Space::Rest(ty1) => {
+                if let Space::Rest(ty2) = other {
+                    ty1 == ty2
+                } else {
+                    false
+                }
+            }
         }
     }
 

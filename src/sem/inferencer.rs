@@ -355,13 +355,10 @@ impl TypeInferencer {
                 }
             }
             parser::Pattern::Rest(_name, ref mut binding) => {
-                // For rest pattern, the target type must be an element type.
-                // And then, the rest pattern's type must be identical to the target type.
-                let target_type = fixed_type(target_type);
-
-                Type::unwrap_element_type_or_else(&target_type, |ty| {
-                    panic!("mismatched type: expected T[], found {}", ty);
-                });
+                // For rest pattern, the target type `T` must be an element type.
+                // And then, the rest pattern's type must be `T[]`.
+                let element_type = fixed_type(target_type);
+                let target_type = wrap(Type::Array(element_type));
 
                 let binding_type = &binding.borrow().r#type;
                 self.unify_and_log("rest pattern (pattern, target)", binding_type, &target_type);

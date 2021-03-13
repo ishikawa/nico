@@ -481,22 +481,27 @@ const cases: TestCase[] = [
     compileError: /Syntax error: Rest element \(#0\) must be last element/
   },
   {
-    todo: true,
-    input: "let [head, ...tail] = []",
-    compileError: /refutable pattern/
+    input: "let [...x] = 1",
+    compileError: /mismatched type: expected T\[\], found i32/
   },
   {
-    todo: true,
     // prettier-ignore
     input: [
       "let [...x] = []",
       "case x",
+      "when [x, 1]",
+      "    222",
       "when []",
       "    111",
       "else",
-      "    222",
+      "    333",
       "end"].join("\n"),
     expected: 111
+  },
+  {
+    todo: true,
+    input: "let [head, ...tail] = []",
+    compileError: /refutable pattern/
   },
   {
     todo: true,

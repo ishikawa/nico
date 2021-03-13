@@ -576,7 +576,13 @@ impl AsmBuilder {
                         &mut |builder| {
                             // Pattern
                             builder.local_get(&head_var.name);
-                            self.build_pattern(builder, &arm.pattern, &head.r#type, temp, frame);
+                            self.build_case_pattern(
+                                builder,
+                                &arm.pattern,
+                                &head.r#type,
+                                temp,
+                                frame,
+                            );
 
                             // Build the guard expression if exists.
                             if let Some(ref condition) = arm.condition {
@@ -619,10 +625,38 @@ impl AsmBuilder {
             }
             Expr::Var { pattern, init } => {
                 self.build_expr(builder, init, temp, frame);
+                self.build_let_pattern(builder, pattern);
+                builder
+                    .comment("Pattern without guard always push `true` value.")
+                    .i32_const(1);
+            }
+        };
+    }
 
-                match pattern {
-                    // variable pattern
-                    parser::Pattern::Variable(ref name, ref binding) => {
+    fn build_let_pattern(
+        &self,
+        builder: &mut wasm::InstructionsBuilder,
+        pattern: &parser::Pattern,
+    ) {
+        match pattern {
+            // variable pattern
+            parser::Pattern::Variable(ref name, ref binding) => {
+                let binding = binding.borrow();
+                let var = binding
+                    .storage
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name))
+                    .unwrap_local_variable();
+
+                builder.local_set(&var.name);
+            }
+            parser::Pattern::Integer(_) => {
+                panic!("invalid local binding");
+            }
+            parser::Pattern::Array(patterns) => {
+                // Currently, only the pattern `let [...x] = a` is allowed.
+                if patterns.len() == 1 {
+                    if let parser::Pattern::Rest(ref name, ref binding) = patterns[0] {
                         let binding = binding.borrow();
                         let var = binding
                             .storage
@@ -631,26 +665,20 @@ impl AsmBuilder {
                             .unwrap_local_variable();
 
                         builder.local_set(&var.name);
+                        return;
                     }
-                    parser::Pattern::Integer(_) => {
-                        panic!("invalid local binding");
-                    }
-                    parser::Pattern::Array(_) => {
-                        todo!("Local binding with array pattern is not yet implemented. ")
-                    }
-                    parser::Pattern::Rest(_, _) => todo!(),
-                };
-                builder
-                    .comment("Pattern without guard always push `true` value.")
-                    .i32_const(1);
+                }
+
+                todo!("Local binding with array pattern is not yet implemented. ")
             }
+            parser::Pattern::Rest(_, _) => todo!(),
         };
     }
 
     /// Build a pattern.
     /// - Assert: a value of target is on the top of the stack.
     /// - Push the value whether the pattern succeeded or not to the stack.
-    fn build_pattern(
+    fn build_case_pattern(
         &self,
         builder: &mut wasm::InstructionsBuilder,
         pattern: &parser::Pattern,
@@ -742,7 +770,7 @@ impl AsmBuilder {
                                 .local_get(&tmp_memidx)
                                 .i32_load(element_size * (i as wasm::Size));
 
-                            self.build_pattern(block, pattern, &element_type, temp, frame);
+                            self.build_case_pattern(block, pattern, &element_type, temp, frame);
 
                             block.i32_eqz().br_if(0).drop();
                         }
