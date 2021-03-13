@@ -580,6 +580,45 @@ const cases: TestCase[] = [
       "    30",
       "end"].join("\n"),
     expected: 155
+  },
+  // newline seen
+  {
+    // prettier-ignore
+    input: [
+      "case 5",
+      "when 5",
+      "    -10",
+      "else",
+      "    10",
+      "end"].join("\n"),
+    expected: -10
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case 5",
+      "when x if x == 5",
+      "    -10",
+      "else",
+      "    10",
+      "end"].join("\n"),
+    expected: -10
+  },
+  {
+    // prettier-ignore
+    input: [
+      "let not_a_function = 476",
+      "not_a_function",
+      "(-945)"].join("\n"),
+    expected: -945
+  },
+  {
+    // prettier-ignore
+    input: [
+      "let not_an_array = 476",
+      "not_an_array",
+      "[854][0]"].join("\n"),
+    expected: 854
   }
 ];
 

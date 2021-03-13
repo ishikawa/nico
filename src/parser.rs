@@ -499,8 +499,14 @@ impl Parser {
         let mut node = self.parse_primary(tokenizer, context)?;
 
         loop {
+            tokenizer.peek();
+
+            if tokenizer.is_newline_seen() {
+                break;
+            }
+
             let token = match tokenizer.peek() {
-                None => return Some(node),
+                None => break,
                 Some(token) => token,
             };
 
@@ -526,9 +532,10 @@ impl Parser {
                         index: Box::new(arguments.remove(0)),
                     });
                 }
-                _ => return Some(node),
+                _ => break,
             }
         }
+        Some(node)
     }
 
     fn parse_primary(
@@ -569,25 +576,27 @@ impl Parser {
                 // function invocation?
                 // TODO: Move to parse_access()
                 if let Some(Token::Char('(')) = tokenizer.peek() {
-                    consume_char(tokenizer, '(');
-                    let arguments =
-                        parse_elements(tokenizer, context, ')', &mut |tokenizer, context| {
-                            self.parse_expr(tokenizer, context)
-                                .expect("Expected argument")
-                        });
-                    consume_char(tokenizer, ')');
+                    if !tokenizer.is_newline_seen() {
+                        consume_char(tokenizer, '(');
+                        let arguments =
+                            parse_elements(tokenizer, context, ')', &mut |tokenizer, context| {
+                                self.parse_expr(tokenizer, context)
+                                    .expect("Expected argument")
+                            });
+                        consume_char(tokenizer, ')');
 
-                    Some(context.typed_expr(Expr::Invocation {
-                        name,
-                        arguments,
-                        binding: None,
-                    }))
-                } else {
-                    Some(context.typed_expr(Expr::Identifier {
-                        name,
-                        binding: None,
-                    }))
+                        return Some(context.typed_expr(Expr::Invocation {
+                            name,
+                            arguments,
+                            binding: None,
+                        }));
+                    }
                 }
+
+                Some(context.typed_expr(Expr::Identifier {
+                    name,
+                    binding: None,
+                }))
             }
             Token::Integer(i) => {
                 let expr = Expr::Integer(*i);
@@ -618,12 +627,7 @@ impl Parser {
                         None => panic!("Premature EOF"),
                         Some(Token::Else) => break,
                         Some(Token::End) => break,
-                        _ => {
-                            let stmt = self
-                                .parse_stmt(tokenizer, context)
-                                .unwrap_or_else(|| panic!("Premature EOF"));
-                            then_body.push(Some(stmt));
-                        }
+                        _ => self.parse_stmts(&mut then_body, tokenizer, context),
                     };
                 }
 
@@ -631,10 +635,8 @@ impl Parser {
 
                 if let Some(Token::Else) = tokenizer.peek() {
                     let mut body = vec![];
-
                     consume_token(tokenizer, Token::Else);
 
-                    // TODO: check line separator before reading body
                     loop {
                         match tokenizer.peek() {
                             None => panic!("Premature EOF"),
@@ -642,12 +644,7 @@ impl Parser {
                                 else_body.replace(self.wrap_stmts(&mut body, context));
                                 break;
                             }
-                            _ => {
-                                let stmt = self
-                                    .parse_stmt(tokenizer, context)
-                                    .unwrap_or_else(|| panic!("Premature EOF"));
-                                body.push(Some(stmt));
-                            }
+                            _ => self.parse_stmts(&mut body, tokenizer, context),
                         };
                     }
                 }
@@ -690,7 +687,6 @@ impl Parser {
                         _ => None,
                     };
 
-                    // TODO: check line separator before reading body
                     let mut then_body = vec![];
 
                     loop {
@@ -699,12 +695,7 @@ impl Parser {
                             Some(Token::When) => break,
                             Some(Token::Else) => break,
                             Some(Token::End) => break,
-                            _ => {
-                                let stmt = self
-                                    .parse_stmt(tokenizer, context)
-                                    .unwrap_or_else(|| panic!("Premature EOF"));
-                                then_body.push(Some(stmt));
-                            }
+                            _ => self.parse_stmts(&mut then_body, tokenizer, context),
                         };
                     }
 
@@ -732,12 +723,7 @@ impl Parser {
                                 else_body.replace(body);
                                 break;
                             }
-                            _ => {
-                                let stmt = self
-                                    .parse_stmt(tokenizer, context)
-                                    .unwrap_or_else(|| panic!("Premature EOF"));
-                                body.push(Some(stmt));
-                            }
+                            _ => self.parse_stmts(&mut body, tokenizer, context),
                         };
                     }
                 }
@@ -785,6 +771,22 @@ impl Parser {
         }
 
         stmts
+    }
+
+    fn parse_stmts(
+        &self,
+        stmts: &mut Vec<Option<Node>>,
+        tokenizer: &mut Tokenizer,
+        context: &mut ParserContext,
+    ) {
+        if !tokenizer.is_newline_seen() {
+            panic!("Syntax error: missing line terminator")
+        }
+
+        let stmt = self
+            .parse_stmt(tokenizer, context)
+            .unwrap_or_else(|| panic!("Premature EOF"));
+        stmts.push(Some(stmt));
     }
 }
 
