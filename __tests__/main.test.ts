@@ -505,6 +505,26 @@ const cases: TestCase[] = [
   {
     // prettier-ignore
     input: [
+      "case [45, 66, 56]",
+      "when [x, ...y]",
+      "    x + y[0]",
+      "end"].join("\n"),
+    compileError: /non-exhaustive patterns/
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case [45, 66, 56]",
+      "when []",
+      "    10",
+      "when [x, y, ...z]",
+      "    x + y",
+      "end"].join("\n"),
+    compileError: /non-exhaustive patterns/
+  },
+  {
+    // prettier-ignore
+    input: [
       "case [45, 67, 56]",
       "when [x, ...rest]",
       "    x + rest[0]",
@@ -545,6 +565,21 @@ const cases: TestCase[] = [
       "    x + y",
       "end"].join("\n"),
     expected: 111
+  },
+  {
+    // prettier-ignore
+    input: [
+      "case [[45, 66, 56], [34, 21, 10]]",
+      "when []",
+      "    10",
+      "when [x]",
+      "    20",
+      "when [[a, ...b], [c, ...d]]",
+      "    a + b[0] + c + d[1]",
+      "else",
+      "    30",
+      "end"].join("\n"),
+    expected: 155
   }
 ];
 

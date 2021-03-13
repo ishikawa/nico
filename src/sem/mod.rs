@@ -401,8 +401,8 @@ impl Space {
                         cover.insert(*n);
                     }
                 }
-                // -- If patterns have rest pattern, returns `true` if other
-                // patterns cover other array length.
+                // -- If patterns have a rest pattern, returns `true` if other
+                // patterns cover possible array lengths < minimal length.
                 for subtraction in &subtractions {
                     if let Subtraction::MinimalLength(n) = subtraction {
                         if (0..*n).all(|i| cover.contains(&i)) {
