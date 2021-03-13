@@ -29,6 +29,14 @@ const cases: TestCase[] = [
     expected: 42
   },
   {
+    input: "-34",
+    expected: -34
+  },
+  {
+    input: "let x = 100\n-+-(20+-5)+x",
+    expected: 115
+  },
+  {
     input: "102030",
     expected: 102030
   },

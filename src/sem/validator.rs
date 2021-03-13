@@ -97,6 +97,9 @@ impl TypeValidator {
                 self.validate_expr(lhs);
                 self.validate_expr(rhs);
             }
+            Expr::Plus(operand, _) | Expr::Minus(operand, _) => {
+                self.validate_expr(operand);
+            }
             Expr::If {
                 condition,
                 then_body,

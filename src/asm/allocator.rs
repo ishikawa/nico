@@ -143,6 +143,9 @@ impl Allocator {
                 self.analyze_expr(lhs, locals, strings, frame);
                 self.analyze_expr(rhs, locals, strings, frame);
             }
+            Expr::Plus(operand, _) | Expr::Minus(operand, _) => {
+                self.analyze_expr(operand, locals, strings, frame)
+            }
             Expr::If {
                 condition,
                 then_body,

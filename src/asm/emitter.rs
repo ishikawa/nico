@@ -488,6 +488,15 @@ impl AsmBuilder {
 
                 builder.i32_neq();
             }
+            Expr::Plus(operand, _) => {
+                self.build_expr(builder, operand, temp, frame);
+            }
+            Expr::Minus(operand, _) => {
+                // There is no `ineg` instruction.
+                builder.i32_const(0);
+                self.build_expr(builder, operand, temp, frame);
+                builder.i32_sub();
+            }
             Expr::If {
                 condition,
                 then_body,

@@ -30,13 +30,19 @@ pub enum Token {
 pub struct Tokenizer<'a> {
     iter: Peekable<Chars<'a>>,
     at_end: bool,
+    newline_seen: bool,
+    /// Remember a peeked value, even if it was None.
+    peeked: Option<Option<Token>>,
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next_token()
+        match self.peeked.take() {
+            Some(v) => v,
+            None => self.next_token(),
+        }
     }
 }
 
@@ -45,15 +51,37 @@ impl<'a> Tokenizer<'a> {
         let mut iter = src.as_ref().chars().peekable();
         let at_end = iter.peek().is_none();
 
-        Tokenizer { iter, at_end }
+        Tokenizer {
+            iter,
+            at_end,
+            newline_seen: false,
+            peeked: None,
+        }
     }
 
     pub fn is_at_end(&self) -> bool {
         self.at_end
     }
 
+    pub fn is_newline_seen(&self) -> bool {
+        self.newline_seen
+    }
+
+    /// Returns a reference to the `next()` value without advance the tokenizer.
+    ///
+    /// Like [`next`], if there is a token, it is wrapped in a `Some(T)`.
+    // But if the iteration is over, `None` is returned.
+    pub fn peek(&mut self) -> Option<&Token> {
+        if self.peeked.is_none() {
+            let token = self.next_token();
+            self.peeked.get_or_insert(token).as_ref()
+        } else {
+            self.peeked.as_ref().unwrap().as_ref()
+        }
+    }
+
     fn next_token(&mut self) -> Option<Token> {
-        self.skip_whitespaces();
+        self.skip_white_spaces();
 
         let nextc = match self.peek_char() {
             None => return None,
@@ -191,8 +219,10 @@ impl<'a> Tokenizer<'a> {
         c
     }
 
-    fn skip_whitespaces(&mut self) {
+    fn skip_white_spaces(&mut self) {
         let mut line_comment = false;
+
+        self.newline_seen = false;
 
         loop {
             match self.peek_char() {
@@ -206,6 +236,7 @@ impl<'a> Tokenizer<'a> {
                     // newline
                     '\n' | '\r' => {
                         line_comment = false;
+                        self.newline_seen = true;
                     }
                     _ => {
                         if !line_comment {
@@ -307,5 +338,24 @@ mod tests {
         assert_matches!(tokenizer.next().unwrap(), Token::Identifier(str) => {
             assert_eq!(str, "c");
         });
+    }
+
+    #[test]
+    fn peek0() {
+        let mut tokenizer = Tokenizer::from_string("1 2 3");
+
+        // peek() lets us see into the future
+        assert_eq!(tokenizer.peek(), Some(&Token::Integer(1)));
+        assert_eq!(tokenizer.next(), Some(Token::Integer(1)));
+        assert_eq!(tokenizer.next(), Some(Token::Integer(2)));
+
+        // The tokenizer does not advance even if we `peek` multiple times
+        assert_eq!(tokenizer.peek(), Some(&Token::Integer(3)));
+        assert_eq!(tokenizer.peek(), Some(&Token::Integer(3)));
+        assert_eq!(tokenizer.next(), Some(Token::Integer(3)));
+
+        // After the iterator is finished, so is `peek()`
+        assert_eq!(tokenizer.peek(), None);
+        assert_eq!(tokenizer.next(), None);
     }
 }

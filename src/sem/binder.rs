@@ -123,6 +123,8 @@ impl Binder {
             Expr::GE(lhs, rhs, binding) => self.bind_binary_op(">=", lhs, rhs, binding, env),
             Expr::EQ(lhs, rhs, binding) => self.bind_binary_op("==", lhs, rhs, binding, env),
             Expr::NE(lhs, rhs, binding) => self.bind_binary_op("!=", lhs, rhs, binding, env),
+            Expr::Plus(operand, binding) => self.bind_unary_op("@+", operand, binding, env),
+            Expr::Minus(operand, binding) => self.bind_unary_op("@-", operand, binding, env),
             Expr::If {
                 condition,
                 then_body,
@@ -222,7 +224,7 @@ impl Binder {
                 Binding { ref r#type, .. } => match *r#type.borrow() {
                     Type::Function { .. } => binding.replace(Rc::clone(&b)),
                     ref ty => panic!(
-                        "Binary operator `{}` must be function, but was `{:?}`",
+                        "Binary operator `{}` must be function, but was `{}`",
                         operator, ty
                     ),
                 },
@@ -230,6 +232,31 @@ impl Binder {
         };
         self.analyze_expr(lhs, env);
         self.analyze_expr(rhs, env);
+    }
+
+    fn bind_unary_op(
+        &self,
+        operator: &str,
+        operand: &mut Node,
+        binding: &mut Option<Rc<RefCell<Binding>>>,
+        env: &Rc<RefCell<Environment>>,
+    ) {
+        match env.borrow().get(operator) {
+            None => panic!(
+                "Prelude not installed. Missing binary operator `{}`",
+                operator
+            ),
+            Some(ref b) => match *b.borrow() {
+                Binding { ref r#type, .. } => match *r#type.borrow() {
+                    Type::Function { .. } => binding.replace(Rc::clone(&b)),
+                    ref ty => panic!(
+                        "Binary operator `{}` must be function, but was `{}`",
+                        operator, ty
+                    ),
+                },
+            },
+        };
+        self.analyze_expr(operand, env);
     }
 }
 
