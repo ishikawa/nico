@@ -459,13 +459,26 @@ const cases: TestCase[] = [
     ].join("\n"),
     expected: 9
   },
+  // empty array pattern
+  {
+    // prettier-ignore
+    input: [
+      "let x = []",
+      "case x",
+      "when []",
+      "    111",
+      "else",
+      "    222",
+      "end"].join("\n"),
+    expected: 111
+  },
   {
     todo: true,
     input: "let [head, ...tail] = []",
     compileError: /refutable pattern/
   },
   {
-    focus: true,
+    todo: true,
     // prettier-ignore
     input: [
       "let [...x] = []",

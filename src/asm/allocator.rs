@@ -90,16 +90,20 @@ impl Allocator {
             } => {
                 // Reserve stack frame for elements and a reference to array.
                 {
-                    let length = elements.len();
-
                     let element_type = Type::unwrap_element_type_or_else(&node.r#type, |ty| {
                         panic!("Expected Array<T> but was `{}`", ty);
                     });
 
-                    let element_size = wasm_type(&element_type).unwrap().num_bytes();
-
                     // - Reserve elements in "Static" frame area and store it in the node.
-                    frame.reserve(element_size * (length as wasm::Size));
+                    let occupation = if elements.is_empty() {
+                        // The type of an empty array is undetermined.
+                        0
+                    } else {
+                        let length = elements.len();
+                        wasm_type(&element_type).unwrap().num_bytes() * (length as wasm::Size)
+                    };
+
+                    frame.reserve(occupation);
                     object_offset.replace(frame.static_size());
 
                     // Reserve a reference in "Static" frame area.

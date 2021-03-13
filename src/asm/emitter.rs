@@ -277,7 +277,6 @@ impl AsmBuilder {
                     panic!("Operand must be an array, but was {}", ty);
                 });
 
-                let element_size = wasm_type(&element_type).unwrap().num_bytes();
                 let num_elements = elements.len();
                 let object_offset = frame.static_size() - object_offset.unwrap();
 
@@ -287,22 +286,27 @@ impl AsmBuilder {
                     num_elements
                 ));
 
-                for (i, element) in elements.iter().enumerate() {
-                    builder
-                        .comment(format!(
-                            "store the result of {}[{}] at `FP + {} + element size({}) * index({})`",
-                            element_type.borrow(),
-                            i,
-                            object_offset,
-                            element_size,
-                            i
-                        ))
-                        .global_get("fp");
+                // This guard is needed because the type of an empty array is undetermined.
+                if !elements.is_empty() {
+                    let element_size = wasm_type(&element_type).unwrap().num_bytes();
 
-                    let offset = object_offset + element_size * (i as wasm::Size);
+                    for (i, element) in elements.iter().enumerate() {
+                        builder
+                            .comment(format!(
+                                "store the result of {}[{}] at `FP + {} + element size({}) * index({})`",
+                                element_type.borrow(),
+                                i,
+                                object_offset,
+                                element_size,
+                                i
+                            ))
+                            .global_get("fp");
 
-                    self.build_expr(builder, element, temp, frame);
-                    builder.i32_store(offset);
+                        let offset = object_offset + element_size * (i as wasm::Size);
+
+                        self.build_expr(builder, element, temp, frame);
+                        builder.i32_store(offset);
+                    }
                 }
 
                 // Store a reference on "Static" frame area.
@@ -680,8 +684,6 @@ impl AsmBuilder {
                     panic!("Operand must be an array, but was {}", ty);
                 });
 
-                let element_size = wasm_type(&element_type).unwrap().num_bytes();
-
                 // Before entering the block, save the target value.
                 let tmp_target = temp.reserve_name_i32();
                 let tmp_memidx = temp.reserve_name_i32();
@@ -721,23 +723,29 @@ impl AsmBuilder {
                         .br_if(0)
                         .drop();
 
-                    // Push the value of the element
-                    for (i, pattern) in patterns.iter().enumerate() {
-                        // Access
-                        block
-                            .i32_const(0)
-                            .comment(format!(
-                                "access {}[{}] at memory index + element size({}) * index",
-                                element_type.borrow(),
-                                i,
-                                element_size
-                            ))
-                            .local_get(&tmp_memidx)
-                            .i32_load(element_size * (i as wasm::Size));
+                    // If an empty array is given and the pattern is also empty array,
+                    // the type of element is undetermined at this point.
+                    if !patterns.is_empty() {
+                        let element_size = wasm_type(&element_type).unwrap().num_bytes();
 
-                        self.build_pattern(block, pattern, &element_type, temp, frame);
+                        // Push the value of the element
+                        for (i, pattern) in patterns.iter().enumerate() {
+                            // Access
+                            block
+                                .i32_const(0)
+                                .comment(format!(
+                                    "access {}[{}] at memory index + element size({}) * index",
+                                    element_type.borrow(),
+                                    i,
+                                    element_size
+                                ))
+                                .local_get(&tmp_memidx)
+                                .i32_load(element_size * (i as wasm::Size));
 
-                        block.i32_eqz().br_if(0).drop();
+                            self.build_pattern(block, pattern, &element_type, temp, frame);
+
+                            block.i32_eqz().br_if(0).drop();
+                        }
                     }
 
                     block.i32_const(1);
