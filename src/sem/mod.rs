@@ -396,7 +396,7 @@ mod type_tests {
         assert!(!Type::Int32.contains(&Type::Boolean));
     }
     #[test]
-    fn contains_polytype() {
+    fn contains_poly_type() {
         let ty1 = Type::Function {
             params: vec![Rc::new(RefCell::new(Type::Int32))],
             return_type: Rc::new(RefCell::new(Type::TypeVariable {

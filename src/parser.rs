@@ -71,7 +71,7 @@ pub enum Expr {
         binding: Option<Rc<RefCell<sem::Binding>>>,
     },
 
-    // binop :: LHS, RHS, Binding
+    // Binary operator :: LHS, RHS, Binding
     Add(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>),
     Sub(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>),
     Rem(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>),

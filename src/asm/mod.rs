@@ -7,7 +7,7 @@
 //!    |       |             |                           |               |          
 //! index 0   SP            FP                      Stack Base       Heap Base
 //! ```
-//! Since WebAssemby's Memory Instruction cannot take negative values for offsets, the address
+//! Since WebAssembly's Memory Instruction cannot take negative values for offsets, the address
 //! calculation should be designed so that it can be calculated by adding positive values.
 //!
 //! - (1) Dynamically allocated memory on the stack.
@@ -115,7 +115,7 @@ impl StackFrame {
 
 /// The struct *LocalStorage* represents name and type for local variables and
 /// function parameters.
-/// This struct can be cloned because the name of storage will be unchagend.
+/// This struct can be cloned because the name of storage will be unchanged.
 #[derive(Debug, PartialEq)]
 pub enum Storage {
     LocalVariable(LocalVariable),
@@ -175,7 +175,7 @@ impl Storage {
 pub struct LocalVariables {
     i32_naming: PrefixNaming,
 
-    // Free - temporary variebles not used in active scopes, but reserved for a function.
+    // Free - temporary variables not used in active scopes, but reserved for a function.
     free: Vec<Rc<Storage>>,
 
     // Used - used temporary variables stack. The top of stack is the current scope. They will be
@@ -184,7 +184,7 @@ pub struct LocalVariables {
 }
 
 impl LocalVariables {
-    // To avoid colision with other variables, specify special prefix (e.g. ".")
+    // To avoid collision with other variables, specify special prefix (e.g. ".")
     //     $.i32.0, $.i32.1, ...
     pub fn new(prefix: &str) -> Self {
         Self {

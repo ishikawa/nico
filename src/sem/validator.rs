@@ -82,7 +82,6 @@ impl TypeValidator {
                     self.validate_expr(argument);
                 }
             }
-            // binop
             Expr::Add(lhs, rhs, ..)
             | Expr::Sub(lhs, rhs, ..)
             | Expr::Rem(lhs, rhs, ..)

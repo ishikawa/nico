@@ -1044,7 +1044,7 @@ impl Printer {
             self.buffer.push(')');
         }
 
-        // typeuse
+        // params
         for param in &function.params {
             self.buffer.push(' ');
             self.write_param(param);

@@ -52,7 +52,7 @@ impl TypeInferencer {
 
     fn analyze_function(&mut self, function: &mut parser::Function) -> Rc<RefCell<Type>> {
         // Generic type var names. Nico doesn't support generic type vars though.
-        // See `freshrec()` funciton.
+        // See `freshrec()` function.
         let mut generic_vars = HashSet::new();
 
         // Iterates expressions. Type::Void for empty expression.
@@ -85,7 +85,7 @@ impl TypeInferencer {
             .iter_mut()
             .map(|nd| self.analyze_expr(nd, generic_vars))
             .collect::<Vec<_>>();
-        let callsite = wrap(Type::Function {
+        let call_site = wrap(Type::Function {
             params: arg_types,
             return_type: Rc::clone(retty),
         });
@@ -93,7 +93,7 @@ impl TypeInferencer {
         self.unify_and_log(
             format!("invocation `{}` (fun, caller)", name),
             &function_type,
-            &callsite,
+            &call_site,
         );
         Rc::clone(retty)
     }
@@ -195,7 +195,6 @@ impl TypeInferencer {
                     )
                 }
             },
-            // binop
             Expr::Add(lhs, rhs, binding)
             | Expr::Sub(lhs, rhs, binding)
             | Expr::Rem(lhs, rhs, binding)
@@ -767,7 +766,6 @@ impl TypeInferencer {
                     self.fix_expr(argument);
                 }
             }
-            // binop
             Expr::Add(lhs, rhs, ..)
             | Expr::Sub(lhs, rhs, ..)
             | Expr::Rem(lhs, rhs, ..)
@@ -854,7 +852,7 @@ mod tests {
     //use parser;
 
     #[test]
-    fn prune_typevar_unresolved() {
+    fn prune_type_var_unresolved() {
         let mut inferencer = TypeInferencer::new();
 
         let ty0 = Type::TypeVariable {
@@ -875,7 +873,7 @@ mod tests {
     }
 
     #[test]
-    fn prune_typevar_resolved() {
+    fn prune_type_var_resolved() {
         let mut inferencer = TypeInferencer::new();
         let ty0 = Type::TypeVariable {
             name: "$1".to_string(),
@@ -889,7 +887,7 @@ mod tests {
     }
 
     #[test]
-    fn prune_typevar_resolved_alias() {
+    fn prune_type_var_resolved_alias() {
         let mut inferencer = TypeInferencer::new();
         let ty0 = Type::TypeVariable {
             name: "$1".to_string(),
@@ -911,7 +909,7 @@ mod tests {
     }
 
     #[test]
-    fn prune_typevar_resolved_alias2() {
+    fn prune_type_var_resolved_alias2() {
         let mut inferencer = TypeInferencer::new();
         let ty0 = Type::TypeVariable {
             name: "$1".to_string(),
@@ -941,7 +939,7 @@ mod tests {
     }
 
     #[test]
-    fn prune_typevar_unresolved_alias2() {
+    fn prune_type_var_unresolved_alias2() {
         let mut inferencer = TypeInferencer::new();
         let ty0 = Type::TypeVariable {
             name: "$1".to_string(),
@@ -971,7 +969,7 @@ mod tests {
     }
 
     #[test]
-    fn prune_typevar_function() {
+    fn prune_type_var_function() {
         let mut inferencer = TypeInferencer::new();
 
         let ty0 = wrap(Type::TypeVariable {
@@ -1131,7 +1129,7 @@ mod tests {
     }
 
     #[test]
-    fn fresh_typevar() {
+    fn fresh_type_var() {
         let mut inferencer = TypeInferencer::new();
         let mut generic_vars = HashSet::new();
         let mut mappings = HashMap::new();

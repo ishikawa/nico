@@ -183,7 +183,7 @@ impl AsmBuilder {
             builder.export(name);
         }
 
-        // typeuse
+        // params
         for binding in &fun_node.params {
             let binding = binding.borrow();
             let var = binding
@@ -195,14 +195,13 @@ impl AsmBuilder {
             builder.named_param(&var.name, var.r#type);
         }
 
-        // params
         match &*fun_node.r#type.borrow() {
             Type::Function { return_type, .. } => {
                 if let Some(return_type) = wasm_type(return_type) {
                     builder.result_type(return_type);
                 }
             }
-            ref ty => panic!("Invalid type signature: {:?}", ty),
+            ref ty => panic!("Invalid type signature: {}", ty),
         }
 
         {
@@ -211,7 +210,7 @@ impl AsmBuilder {
             temp.pop_scope();
         }
 
-        // locals/temporary variebles
+        // locals/temporary variables
         for storage in fun_node.locals.as_ref().unwrap().variables() {
             let var = storage.unwrap_local_variable();
             builder.named_local(&var.name, var.r#type);
@@ -418,7 +417,6 @@ impl AsmBuilder {
 
                 builder.call(&function.name);
             }
-            // binop
             Expr::Add(lhs, rhs, _) => {
                 self.build_expr(builder, lhs, temp, frame);
                 self.build_expr(builder, rhs, temp, frame);
@@ -705,7 +703,7 @@ impl AsmBuilder {
                 // - Break if `L1` != `l2`
                 // - Push the element at index `0` of head on the stack
                 // - Evaluate a child pattern at index `0`
-                // - Break if pottern match failed
+                // - Break if the pattern match failed
                 // - ... and so on
                 // - Drop the result `0`
                 // - Push the result `1`
@@ -770,7 +768,7 @@ impl AsmBuilder {
         };
 
         if wasm_type(&node.r#type).is_some() {
-            // Currently, only one value will be remian on the stack.
+            // Currently, only one value will be left on the stack.
             builder.drop();
         }
     }
