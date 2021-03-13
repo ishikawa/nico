@@ -503,7 +503,6 @@ const cases: TestCase[] = [
     compileError: /refutable pattern/
   },
   {
-    todo: true,
     // prettier-ignore
     input: [
       "case [45, 67, 56]",
@@ -524,7 +523,6 @@ const cases: TestCase[] = [
     expected: 45
   },
   {
-    todo: true,
     // prettier-ignore
     input: [
       "case [45, 66, 56]",
@@ -536,7 +534,6 @@ const cases: TestCase[] = [
     expected: 111
   },
   {
-    todo: true,
     // prettier-ignore
     input: [
       "case [45, 66, 56]",
