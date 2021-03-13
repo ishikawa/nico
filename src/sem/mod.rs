@@ -202,6 +202,16 @@ impl Type {
         }
     }
 
+    pub fn unwrap_element_type_or_else<F>(ty: &Rc<RefCell<Self>>, fun: F) -> Rc<RefCell<Self>>
+    where
+        F: FnOnce(&Self) -> Rc<RefCell<Self>>,
+    {
+        match *ty.borrow() {
+            Type::Array(ref element_type) => Rc::clone(element_type),
+            ref ty => fun(ty),
+        }
+    }
+
     /// Returns `true` if the type given by the 2nd argument appears in this type.
     pub fn contains(&self, other: &Self) -> bool {
         match self {

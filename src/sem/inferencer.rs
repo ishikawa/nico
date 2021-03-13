@@ -162,10 +162,9 @@ impl TypeInferencer {
                     fixed_type(&operand_type)
                 };
 
-                let element_type = match &*operand_type.borrow() {
-                    Type::Array(element_type) => Rc::clone(element_type),
-                    ty => panic!("Operand must be an array, but was {:?}", ty),
-                };
+                let element_type = Type::unwrap_element_type_or_else(&operand_type, |ty| {
+                    panic!("Operand must be an array, but was {:?}", ty);
+                });
 
                 // `index` must be an integer
                 let index_type = self.analyze_expr(index, generic_vars);
@@ -348,23 +347,22 @@ impl TypeInferencer {
 
                 let target_type = fixed_type(target_type);
 
-                match *target_type.borrow() {
-                    Type::Array(ref element_type) => {
-                        for pattern in patterns {
-                            self.analyze_pattern(pattern, element_type);
-                        }
-                    }
-                    ref ty => panic!("mismatched type: expected T[], found {}", ty),
-                };
+                let element_type = Type::unwrap_element_type_or_else(&target_type, |ty| {
+                    panic!("mismatched type: expected T[], found {}", ty);
+                });
+
+                for pattern in patterns {
+                    self.analyze_pattern(pattern, &element_type);
+                }
             }
             parser::Pattern::Rest(_name, ref mut binding) => {
                 // For rest pattern, the target type must be an array type.
                 // And then, the rest pattern's type must be identical to the target type.
                 let target_type = fixed_type(target_type);
-                match *target_type.borrow() {
-                    Type::Array(_) => {}
-                    ref ty => panic!("mismatched type: expected T[], found {}", ty),
-                };
+
+                Type::unwrap_element_type_or_else(&target_type, |ty| {
+                    panic!("mismatched type: expected T[], found {}", ty);
+                });
 
                 let binding_type = &binding.borrow().r#type;
                 self.unify_and_log("rest pattern (pattern, target)", binding_type, &target_type);

@@ -274,10 +274,10 @@ impl AsmBuilder {
                 elements,
                 object_offset,
             } => {
-                let element_type = match &*node.r#type.borrow() {
-                    Type::Array(element_type) => Rc::clone(element_type),
-                    ty => panic!("Operand must be an array, but was {:?}", ty),
-                };
+                let element_type = Type::unwrap_element_type_or_else(&node.r#type, |ty| {
+                    panic!("Operand must be an array, but was {}", ty);
+                });
+
                 let element_size = wasm_type(&element_type).unwrap().num_bytes();
                 let num_elements = elements.len();
                 let object_offset = frame.static_size() - object_offset.unwrap();
@@ -336,11 +336,9 @@ impl AsmBuilder {
             Expr::Subscript { operand, index } => {
                 temp.push_scope();
 
-                let element_type = match &*operand.r#type.borrow() {
-                    Type::Array(element_type) => Rc::clone(element_type),
-                    ty => panic!("Operand must be an array, but was {:?}", ty),
-                };
-
+                let element_type = Type::unwrap_element_type_or_else(&operand.r#type, |ty| {
+                    panic!("Operand must be an array, but was {}", ty);
+                });
                 let element_size = wasm_type(&element_type).unwrap().num_bytes();
 
                 // Load the reference of the operand to a local variable
@@ -680,10 +678,9 @@ impl AsmBuilder {
             parser::Pattern::Array(ref patterns) => {
                 temp.push_scope();
 
-                let element_type = match &*target_type.borrow() {
-                    Type::Array(element_type) => Rc::clone(element_type),
-                    ty => panic!("Operand must be an array, but was {}", ty),
-                };
+                let element_type = Type::unwrap_element_type_or_else(&target_type, |ty| {
+                    panic!("Operand must be an array, but was {}", ty);
+                });
 
                 let element_size = wasm_type(&element_type).unwrap().num_bytes();
 
