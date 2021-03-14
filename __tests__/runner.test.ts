@@ -66,6 +66,10 @@ const cases: TestCase[] = [
       ["14"],
       ["Fizz Buzz"]
     ]
+  },
+  {
+    file: "./samples/max.nico",
+    consoleResult: [["-1"], ["48"], ["76"], ["76"], ["99"], ["98"]]
   }
 ];
 

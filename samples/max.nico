@@ -1,0 +1,23 @@
+# i32[] -> i32
+fun max(numbers)
+    case numbers
+    when []
+        # Because we don't have `Optional` type yet, returns `-1` for empty array :-(
+        -1
+    when [x]
+        x
+    when [n, m] if n > m
+        n
+    when [n, m]
+        m
+    when [n, ...rest]
+        max([n, max(rest)])
+    end
+end
+
+println_i32(max([]))
+println_i32(max([48]))
+println_i32(max([76, 34]))
+println_i32(max([34, 76]))
+println_i32(max([34, 76, 99]))
+println_i32(max([11, 53, 74, 41, 24, 10, 59, 63, 98, 1]))

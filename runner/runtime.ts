@@ -55,7 +55,7 @@ export class ConsolePrinter implements Printer {
     const string = n.toString();
 
     console.log(message, string);
-    return message.length + string.length;
+    return message.length + 1 + string.length;
   }
 }
 
@@ -91,10 +91,11 @@ export class BufferedPrinter implements Printer {
     const string = n.toString();
 
     this.buffer += message;
+    this.buffer += " ";
     this.buffer += string;
     this.buffer += "\n";
 
-    return message.length + string.length;
+    return message.length + 1 + string.length;
   }
 }
 

@@ -155,7 +155,8 @@ impl AsmBuilder {
             // --------
             // 1. Push caller's FP on stack
             // 3. Set FP to current SP
-            // 4. Forward SP to reserve space for stack frame
+            // 4. Forward FP to reserve space ("Static") for stack frame
+            // 5. Forward SP to reserve space ("Static" and "Dynamic") for stack frame
             body.comment("-- function prologue")
                 .global_get("sp")
                 .u32_const(wasm::SIZE_BYTES)
@@ -164,7 +165,15 @@ impl AsmBuilder {
                 .global_get("sp")
                 .global_get("fp")
                 .i32_store(0);
+
             body.global_get("sp").global_set("fp");
+
+            if static_size > 0 {
+                body.global_get("fp")
+                    .u32_const(static_size)
+                    .i32_sub()
+                    .global_set("fp");
+            }
 
             if static_size > 0 {
                 body.global_get("sp")
@@ -277,12 +286,15 @@ impl AsmBuilder {
             Expr::Integer(n) => {
                 builder.i32_const(*n);
             }
-            Expr::String { storage, .. } => {
+            Expr::String { storage, content } => {
                 let storage = storage
                     .as_ref()
                     .unwrap_or_else(|| panic!("The constant string was not allocated."));
 
-                builder.u32_const(CONSTANT_POOL_BASE + storage.borrow().offset());
+                builder.u32_const_(
+                    CONSTANT_POOL_BASE + storage.borrow().offset(),
+                    format!("string {:?}", content),
+                );
             }
             Expr::Array {
                 elements,
@@ -360,7 +372,7 @@ impl AsmBuilder {
                 let element_size = wasm_type(&element_type).unwrap().num_bytes();
 
                 // Load the reference of the operand to a local variable
-                builder.comment(format!("-- Subscript {}", operand.r#type.borrow()));
+                builder.comment(&format!("-- Subscript {}", operand.r#type.borrow()));
 
                 let tmp_operand = temp.reserve_name_i32();
                 let tmp_index = temp.reserve_name_i32();
@@ -371,12 +383,12 @@ impl AsmBuilder {
 
                 builder
                     .comment("load the reference (index, length) of an array to local variables")
-                    .local_tee(&tmp_operand)
+                    .local_tee_(&tmp_operand, "operand")
                     .i32_load(0)
-                    .local_set(&tmp_memidx)
-                    .local_get(&tmp_operand)
+                    .local_set_(&tmp_memidx, "memory index")
+                    .local_get_(&tmp_operand, "operand")
                     .i32_load(wasm::SIZE_BYTES)
-                    .local_tee(&tmp_length);
+                    .local_tee_(&tmp_length, "length");
 
                 // index
                 self.build_expr(builder, index, temp, frame);
@@ -401,15 +413,15 @@ impl AsmBuilder {
 
                 // Access
                 builder
-                    .comment(format!(
+                    .comment(&format!(
                         "access {}[i] at memory index + element size({}) * index",
                         element_type.borrow(),
                         element_size
                     ))
                     .u32_const(element_size)
-                    .local_get(&tmp_index)
+                    .local_get_(&tmp_index, "index")
                     .i32_mul()
-                    .local_get(&tmp_memidx)
+                    .local_get_(&tmp_memidx, "memory index")
                     .i32_add()
                     .i32_load(0);
 
@@ -586,11 +598,11 @@ impl AsmBuilder {
                 let arm_insts = arms.iter().rev().fold(else_insts, |acc, arm| {
                     let mut arm_builder = wasm::Builders::instructions();
 
-                    arm_builder.comment(format!("when {}", arm.pattern)).block(
+                    arm_builder.comment(&format!("when {}", arm.pattern)).block(
                         Some(wasm::Type::I32),
                         &mut |builder| {
                             // Pattern
-                            builder.local_get(&head_var.name);
+                            builder.local_get(&head_var.name).note("head value");
                             self.build_case_pattern(
                                 builder,
                                 &arm.pattern,
@@ -718,12 +730,14 @@ impl AsmBuilder {
                     .unwrap_local_variable();
 
                 // set the result of head expression to the variable.
-                builder.local_set(&var.name).i32_const(1);
+                builder
+                    .local_set_(&var.name, "capture variable")
+                    .i32_const_(1, "success value");
             }
             parser::Pattern::Integer(i) => {
                 // Constant pattern is semantically identical to `_ if head == pattern`,
                 // but it can be more preciously handled in exhaustivity check.
-                builder.i32_const(*i).i32_eq();
+                builder.i32_const_(*i, "constant pattern").i32_eq();
             }
             parser::Pattern::Array(ref patterns) => {
                 temp.push_scope();
@@ -739,12 +753,12 @@ impl AsmBuilder {
 
                 builder
                     .comment("load the reference (index, length) of an array to local variables")
-                    .local_tee(&tmp_target)
+                    .local_tee_(&tmp_target, "store target value to tmp")
                     .i32_load(0)
-                    .local_set(&tmp_memidx)
-                    .local_get(&tmp_target)
+                    .local_set_(&tmp_memidx, "memory index")
+                    .local_get_(&tmp_target, "target")
                     .i32_load(wasm::SIZE_BYTES)
-                    .local_set(&tmp_length);
+                    .local_set_(&tmp_length, "length");
 
                 // `block` [i32] ->
                 // - Push the result `0`
@@ -769,9 +783,9 @@ impl AsmBuilder {
                                 patterns.len() - 1,
                                 element_type.borrow(),
                             ))
-                            .i32_const(0)
-                            .local_get(&tmp_length)
-                            .u32_const((patterns.len() - 1) as u32)
+                            .i32_const_(0, "failure value")
+                            .local_get_(&tmp_length, "length")
+                            .u32_const_((patterns.len() - 1) as u32, "minimum required length")
                             .i32_lt_u()
                             .br_if(0)
                             .drop();
@@ -782,9 +796,9 @@ impl AsmBuilder {
                                 element_type.borrow(),
                                 patterns.len()
                             ))
-                            .i32_const(0)
-                            .local_get(&tmp_length)
-                            .u32_const(patterns.len() as u32)
+                            .i32_const_(0, "failure value")
+                            .local_get_(&tmp_length, "length")
+                            .u32_const_(patterns.len() as u32, "expected length")
                             .i32_neq()
                             .br_if(0)
                             .drop();
@@ -804,8 +818,11 @@ impl AsmBuilder {
                                         reference_offset: Some(reference_offset),
                                         ..
                                     } => {
+                                        let reference_offset =
+                                            frame.static_size() - *reference_offset;
+
                                         block
-                                            .i32_const(0)
+                                            .i32_const_(0, "failure value")
                                             .comment(format!(
                                                 "rest {}[{}...] with element size({})",
                                                 element_type.borrow(),
@@ -813,34 +830,46 @@ impl AsmBuilder {
                                                 element_size
                                             ))
                                             .comment(format!("-- index + {}", i))
-                                            .u32_const(0)
-                                            .local_get(&tmp_memidx)
-                                            .u32_const(element_size * (i as wasm::Size))
+                                            .global_get("fp")
+                                            .local_get_(&tmp_memidx, "memory index")
+                                            .u32_const_(
+                                                element_size * (i as wasm::Size),
+                                                format!("element size ({}) * {}", element_size, i),
+                                            )
                                             .i32_add()
-                                            .i32_store(*reference_offset)
-                                            .comment(format!("-- length - {}", i))
-                                            .u32_const(wasm::SIZE_BYTES)
-                                            .local_get(&tmp_length)
-                                            .u32_const(i as wasm::Size)
+                                            .i32_store_(
+                                                reference_offset,
+                                                "write memory index to reference",
+                                            )
+                                            .global_get("fp")
+                                            .local_get_(&tmp_length, "length")
+                                            .u32_const_(i as wasm::Size, "i")
                                             .i32_sub()
-                                            .i32_store(*reference_offset)
-                                            .comment("-- store reference")
-                                            .u32_const(*reference_offset);
+                                            .i32_store_(
+                                                reference_offset + wasm::SIZE_BYTES,
+                                                "write length to reference",
+                                            )
+                                            .global_get("fp")
+                                            .u32_const_(reference_offset, "reference")
+                                            .i32_add();
                                     }
                                     _ => unreachable!(),
                                 }
                             } else {
                                 // Access
                                 block
-                                    .i32_const(0)
+                                    .i32_const_(0, "failure value")
                                     .comment(format!(
                                         "access {}[{}] at memory index + element size({}) * index",
                                         element_type.borrow(),
                                         i,
                                         element_size
                                     ))
-                                    .local_get(&tmp_memidx)
-                                    .i32_load(element_size * (i as wasm::Size));
+                                    .local_get_(&tmp_memidx, "memory index")
+                                    .i32_load_(
+                                        element_size * (i as wasm::Size),
+                                        format!("element size ({}) * {}", element_size, i),
+                                    );
                             }
 
                             self.build_case_pattern(block, pattern, &element_type, temp, frame);
@@ -848,7 +877,7 @@ impl AsmBuilder {
                         }
                     }
 
-                    block.i32_const(1);
+                    block.i32_const_(1, "success value");
                 });
 
                 temp.pop_scope();

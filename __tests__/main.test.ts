@@ -354,7 +354,7 @@ const cases: TestCase[] = [
     file: "input/more_than_one_fun.nico",
     expected: 16
   },
-  // FizzBuzz
+  // Sample - FizzBuzz
   {
     file: "../samples/fizzbuzz.nico",
     exec: exports => exports.fizzbuzz(15),
@@ -378,7 +378,12 @@ const cases: TestCase[] = [
       ""
     ].join("\n")
   },
-
+  // Sample - Max
+  {
+    file: "../samples/max.nico",
+    captureOutput: true,
+    expected: ["-1", "48", "76", "76", "99", "98", ""].join("\n")
+  },
   // Variable declaration
   {
     file: "input/let_0.nico",
