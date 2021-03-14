@@ -135,10 +135,10 @@ pub struct Function {
 }
 
 impl Storage {
-    pub fn function<S: AsRef<str>>(name: S, r#type: &Rc<RefCell<Type>>) -> Self {
+    pub fn function<S: Into<String>>(name: S, r#type: &Rc<RefCell<Type>>) -> Self {
         if let Type::Function { .. } = *r#type.borrow() {
             Self::Function(Function {
-                name: name.as_ref().to_string(),
+                name: name.into(),
                 function_type: Rc::clone(r#type),
             })
         } else {
@@ -146,9 +146,9 @@ impl Storage {
         }
     }
 
-    pub fn local_variable<S: AsRef<str>>(name: S, r#type: &Rc<RefCell<Type>>) -> Self {
+    pub fn local_variable<S: Into<String>>(name: S, r#type: &Rc<RefCell<Type>>) -> Self {
         Self::LocalVariable(LocalVariable {
-            name: name.as_ref().to_string(),
+            name: name.into(),
             r#type: wasm_type(r#type).unwrap(),
         })
     }

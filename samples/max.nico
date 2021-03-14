@@ -8,7 +8,7 @@ fun max(numbers)
         x
     when [n, m] if n > m
         n
-    when [n, m]
+    when [_, m]
         m
     when [n, ...rest]
         max([n, max(rest)])

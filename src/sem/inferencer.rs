@@ -75,7 +75,7 @@ impl TypeInferencer {
 
     fn analyze_invocation(
         &mut self,
-        name: &str,
+        binding: &Option<Rc<RefCell<Binding>>>,
         function_type: Rc<RefCell<Type>>,
         retty: &Rc<RefCell<Type>>,
         args: &mut [&mut parser::Node],
@@ -89,6 +89,10 @@ impl TypeInferencer {
             params: arg_types,
             return_type: Rc::clone(retty),
         });
+
+        // invocation must have a binding
+        let binding = binding.as_ref().unwrap().borrow();
+        let name = binding.name.as_ref().unwrap();
 
         self.unify_and_log(
             format!("invocation `{}` (fun, caller)", name),
@@ -180,14 +184,14 @@ impl TypeInferencer {
                 .unwrap_or_else(|| panic!("Unbound variable `{}`", name)),
             Expr::Invocation {
                 ref name,
-                ref binding,
+                binding,
                 arguments,
             } => match self.lookup_function(binding, generic_vars) {
                 None => panic!("Unbound function `{}`", name),
                 Some(function_type) => {
                     let mut m = arguments.iter_mut().collect::<Vec<_>>();
                     self.analyze_invocation(
-                        name,
+                        binding,
                         Rc::clone(&function_type),
                         &node.r#type,
                         &mut m,
@@ -208,7 +212,7 @@ impl TypeInferencer {
             | Expr::NE(lhs, rhs, binding) => match self.lookup_function(binding, generic_vars) {
                 None => panic!("Prelude not installed"),
                 Some(function_type) => self.analyze_invocation(
-                    &binding.as_ref().unwrap().borrow().name,
+                    binding,
                     Rc::clone(&function_type),
                     &node.r#type,
                     &mut [lhs.as_mut(), rhs.as_mut()],
@@ -219,7 +223,7 @@ impl TypeInferencer {
                 match self.lookup_function(binding, generic_vars) {
                     None => panic!("Prelude not installed"),
                     Some(function_type) => self.analyze_invocation(
-                        &binding.as_ref().unwrap().borrow().name,
+                        binding,
                         Rc::clone(&function_type),
                         &node.r#type,
                         &mut [operand.as_mut()],
@@ -404,13 +408,13 @@ impl TypeInferencer {
     ) -> Option<Rc<RefCell<Type>>> {
         if let Some(binding) = binding {
             let binding = binding.borrow();
+            let name = binding.name.as_ref().map_or("(unknown)", |s| &s);
 
             match *binding.r#type.borrow() {
                 Type::Function { .. } => {}
-                ref ty => panic!(
-                    "Missing function named `{}` found type `{}`",
-                    binding.name, ty
-                ),
+                ref ty => {
+                    panic!("Missing function named `{}` found type `{}`", name, ty)
+                }
             }
             return Some(self.fresh(&binding.r#type, generic_vars));
         };

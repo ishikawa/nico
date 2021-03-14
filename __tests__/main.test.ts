@@ -494,7 +494,7 @@ const cases: TestCase[] = [
     input: [
       "let [...x] = []",
       "case x",
-      "when [x, 1]",
+      "when [_, 1]",
       "    222",
       "when []",
       "    111",
