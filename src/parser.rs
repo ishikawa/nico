@@ -10,9 +10,27 @@ use std::rc::Rc;
 
 // Program
 pub struct Module {
+    pub types: Vec<TypeDeclaration>,
     pub functions: Vec<Function>,
     pub main: Option<Function>,
     pub strings: Option<Vec<Rc<RefCell<asm::ConstantString>>>>,
+}
+
+#[derive(Debug)]
+pub enum TypeDeclaration {
+    Struct(Struct),
+}
+
+#[derive(Debug)]
+pub struct Struct {
+    pub name: Option<String>,
+    pub fields: Vec<Field>,
+}
+
+#[derive(Debug)]
+pub struct Field {
+    pub name: String,
+    pub r#type: Rc<RefCell<sem::Type>>,
 }
 
 #[derive(Debug)]
@@ -169,14 +187,19 @@ impl Parser {
             naming: PrefixNaming::new("?"),
         };
 
+        let mut types = vec![];
         let mut functions = vec![];
         // Parser collects top expressions and automatically build
         // `main` function which is the entry point of a program.
         let mut body = vec![];
 
         loop {
+            // Type declaration
+            if let Some(ty) = self.parse_type_declation(tokenizer, &mut context) {
+                types.push(ty);
+            }
             // Function
-            if let Some(function) = self.parse_function(tokenizer, &mut context) {
+            else if let Some(function) = self.parse_function(tokenizer, &mut context) {
                 functions.push(function);
             }
             // Body for main function
@@ -217,10 +240,19 @@ impl Parser {
         };
 
         Box::new(Module {
+            types,
             functions,
             main,
             strings: None,
         })
+    }
+
+    fn parse_type_declation(
+        &self,
+        _tokenizer: &mut Tokenizer,
+        _context: &mut ParserContext,
+    ) -> Option<TypeDeclaration> {
+        None
     }
 
     fn parse_function(
