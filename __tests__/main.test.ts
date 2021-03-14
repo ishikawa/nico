@@ -522,7 +522,7 @@ const cases: TestCase[] = [
       "case [45, 66, 56]",
       "when []",
       "    10",
-      "when [x, y, ...z]",
+      "when [x, y, ..._]",
       "    x + y",
       "end"].join("\n"),
     compileError: /non-exhaustive patterns/
@@ -566,7 +566,7 @@ const cases: TestCase[] = [
       "    10",
       "when [x]",
       "    20",
-      "when [x, y, ...rest]",
+      "when [x, y, ...]",
       "    x + y",
       "end"].join("\n"),
     expected: 111
