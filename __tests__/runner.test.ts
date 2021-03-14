@@ -70,6 +70,10 @@ const cases: TestCase[] = [
   {
     file: "./samples/max.nico",
     consoleResult: [["-1"], ["48"], ["76"], ["76"], ["99"], ["98"]]
+  },
+  {
+    file: "./samples/sum.nico",
+    consoleResult: [["0"], ["1666"], ["-1215"], ["2369"]]
   }
 ];
 
