@@ -807,7 +807,12 @@ fn parse_pattern_element(
 ) -> Option<Pattern> {
     match tokenizer.peek()? {
         Token::Identifier(ref name) => {
-            let binding = wrap(sem::Binding::typed_name(name, &context.type_var()));
+            let binding = if name == "_" {
+                wrap(sem::Binding::ignored(&context.type_var()))
+            } else {
+                wrap(sem::Binding::typed_name(name, &context.type_var()))
+            };
+
             let pat = Pattern::Variable(name.clone(), binding);
             tokenizer.next();
             Some(pat)
@@ -839,9 +844,14 @@ fn parse_pattern_element(
         Token::Rest => {
             consume_token(tokenizer, Token::Rest);
 
+            // Rest pattern can be ignored by expressing `..._` or `...`.
             match tokenizer.peek() {
                 Some(Token::Identifier(name)) => {
-                    let binding = wrap(sem::Binding::typed_name(name, &context.type_var()));
+                    let binding = if name == "_" {
+                        wrap(sem::Binding::ignored(&context.type_var()))
+                    } else {
+                        wrap(sem::Binding::typed_name(name, &context.type_var()))
+                    };
                     let pat = Pattern::Rest {
                         name: name.clone(),
                         binding,
@@ -850,10 +860,16 @@ fn parse_pattern_element(
                     tokenizer.next();
                     Some(pat)
                 }
-                t => panic!(
-                    "`...` must be followed by an identifier, but it was followed by {:?}",
-                    t
-                ),
+                _ => {
+                    // ignored
+                    let binding = wrap(sem::Binding::ignored(&context.type_var()));
+                    let pat = Pattern::Rest {
+                        name: "".to_string(),
+                        binding,
+                        reference_offset: None,
+                    };
+                    Some(pat)
+                }
             }
         }
         _ => None,

@@ -38,16 +38,16 @@ impl Allocator {
 
         // Storage for parameters
         for ref mut binding in &function.params {
-            match *binding.borrow_mut() {
-                Binding {
-                    ref name,
-                    ref mut storage,
-                    ref r#type,
-                    ..
-                } => {
-                    let v = Storage::local_variable(name, r#type);
-                    storage.replace(Rc::new(v));
-                }
+            // Don't allocate local variable for ignored parameters.
+            if let Binding {
+                name: Some(ref name),
+                ref mut storage,
+                ref r#type,
+                ..
+            } = *binding.borrow_mut()
+            {
+                let v = Storage::local_variable(name, r#type);
+                storage.replace(Rc::new(v));
             }
         }
 
@@ -239,12 +239,16 @@ impl Allocator {
         match pattern {
             parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
                 Binding {
+                    ref name,
                     ref r#type,
                     ref mut storage,
                     ..
                 } => {
-                    let v = locals.reserve(r#type);
-                    storage.replace(v);
+                    // Don't allocate local variable for ignored pattern.
+                    if name.is_some() {
+                        let v = locals.reserve(r#type);
+                        storage.replace(v);
+                    }
                 }
             },
             parser::Pattern::Integer(_) => {}
@@ -259,20 +263,24 @@ impl Allocator {
                 ..
             } => match *binding.borrow_mut() {
                 Binding {
+                    ref name,
                     ref r#type,
                     ref mut storage,
                     ..
                 } => {
-                    let v = locals.reserve(r#type);
-                    storage.replace(v);
+                    // Don't allocate local variable for ignored pattern.
+                    if name.is_some() {
+                        let v = locals.reserve(r#type);
+                        storage.replace(v);
 
-                    // Reserve a reference in "Static" frame area.
-                    // - length
-                    frame.reserve(wasm::SIZE_BYTES);
-                    // - index
-                    frame.reserve(wasm::SIZE_BYTES);
+                        // Reserve a reference in "Static" frame area.
+                        // - length
+                        frame.reserve(wasm::SIZE_BYTES);
+                        // - index
+                        frame.reserve(wasm::SIZE_BYTES);
 
-                    reference_offset.replace(frame.static_size());
+                        reference_offset.replace(frame.static_size());
+                    }
                 }
             },
         };

@@ -40,30 +40,42 @@ pub enum Type {
 #[derive(Debug, PartialEq)]
 pub struct Binding {
     // The variable name in the source code.
-    pub name: String,
+    // `None` if the variable is ignored (e.g `_`, `...`)
+    pub name: Option<String>,
+    // The reference to a runtime storage
+    // `None` if the variable is ignored (e.g `_`, `...`)
+    pub storage: Option<Rc<asm::Storage>>,
     // The type of a target being referenced.
     pub r#type: Rc<RefCell<Type>>,
-    // The reference to a runtime storage
-    pub storage: Option<Rc<asm::Storage>>,
 }
 
 impl Binding {
     // -- initializers
-    pub fn builtin_function<S: AsRef<str>>(name: S, function_type: Type) -> Self {
+    pub fn builtin_function<S: Into<String>>(name: S, function_type: Type) -> Self {
         Self::defined_function(name, &wrap(function_type))
     }
 
-    pub fn defined_function<S: AsRef<str>>(name: S, function_type: &Rc<RefCell<Type>>) -> Self {
+    pub fn defined_function<S: Into<String>>(name: S, function_type: &Rc<RefCell<Type>>) -> Self {
+        let name = name.into();
+
         Self {
-            name: name.as_ref().to_string(),
+            name: Some(name.clone()),
             r#type: Rc::clone(&function_type),
             storage: Some(Rc::new(asm::Storage::function(name, &function_type))),
         }
     }
 
-    pub fn typed_name<S: AsRef<str>>(name: S, r#type: &Rc<RefCell<Type>>) -> Self {
+    pub fn typed_name<S: Into<String>>(name: S, r#type: &Rc<RefCell<Type>>) -> Self {
         Self {
-            name: name.as_ref().to_string(),
+            name: Some(name.into()),
+            r#type: Rc::clone(r#type),
+            storage: None,
+        }
+    }
+
+    pub fn ignored(r#type: &Rc<RefCell<Type>>) -> Self {
+        Self {
+            name: None,
             r#type: Rc::clone(r#type),
             storage: None,
         }
@@ -146,9 +158,12 @@ impl Environment {
         }
     }
 
+    /// Inserts a new binding into this environment.
+    /// Does nothing if a binding is an ignored pattern.
     pub fn insert(&mut self, binding: Rc<RefCell<Binding>>) {
-        let name = &binding.borrow().name;
-        self.bindings.insert(name.clone(), Rc::clone(&binding));
+        if let Some(name) = &binding.borrow().name {
+            self.bindings.insert(name.clone(), Rc::clone(&binding));
+        }
     }
 
     pub fn get(&self, name: &str) -> Option<Rc<RefCell<Binding>>> {

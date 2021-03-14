@@ -723,16 +723,21 @@ impl AsmBuilder {
             // variable pattern
             parser::Pattern::Variable(name, binding) => {
                 let binding = binding.borrow();
-                let var = binding
-                    .storage
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name))
-                    .unwrap_local_variable();
 
-                // set the result of head expression to the variable.
-                builder
-                    .local_set_(&var.name, "capture variable")
-                    .i32_const_(1, "success value");
+                match &binding.storage {
+                    None => {
+                        // Ignored
+                        builder.drop_("ignored").i32_const_(1, "success value");
+                    }
+                    Some(storage) => {
+                        let var = storage.unwrap_local_variable();
+
+                        // set the result of head expression to the variable.
+                        builder
+                            .local_set_(&var.name, format!("capture variable `{}`", name))
+                            .i32_const_(1, "success value");
+                    }
+                };
             }
             parser::Pattern::Integer(i) => {
                 // Constant pattern is semantically identical to `_ if head == pattern`,
@@ -811,54 +816,53 @@ impl AsmBuilder {
 
                         // Push the value of the element
                         for (i, pattern) in patterns.iter().enumerate() {
-                            if ends_with_rest && i == (patterns.len() - 1) {
-                                // Create a temporary reference to a sub array.
-                                match pattern {
-                                    parser::Pattern::Rest {
-                                        reference_offset: Some(reference_offset),
-                                        ..
-                                    } => {
-                                        let reference_offset =
-                                            frame.static_size() - *reference_offset;
+                            block.i32_const_(0, "failure value");
 
-                                        block
-                                            .i32_const_(0, "failure value")
-                                            .comment(format!(
-                                                "rest {}[{}...] with element size({})",
-                                                element_type.borrow(),
-                                                i,
-                                                element_size
-                                            ))
-                                            .comment(format!("-- index + {}", i))
-                                            .global_get("fp")
-                                            .local_get_(&tmp_memidx, "memory index")
-                                            .u32_const_(
-                                                element_size * (i as wasm::Size),
-                                                format!("element size ({}) * {}", element_size, i),
-                                            )
-                                            .i32_add()
-                                            .i32_store_(
-                                                reference_offset,
-                                                "write memory index to reference",
-                                            )
-                                            .global_get("fp")
-                                            .local_get_(&tmp_length, "length")
-                                            .u32_const_(i as wasm::Size, "i")
-                                            .i32_sub()
-                                            .i32_store_(
-                                                reference_offset + wasm::SIZE_BYTES,
-                                                "write length to reference",
-                                            )
-                                            .global_get("fp")
-                                            .u32_const_(reference_offset, "reference")
-                                            .i32_add();
-                                    }
-                                    _ => unreachable!(),
+                            if let parser::Pattern::Rest {
+                                reference_offset, ..
+                            } = pattern
+                            {
+                                // If the target rest pattern is ignored, we can simply skip
+                                // emitting code.
+                                if let Some(reference_offset) = reference_offset {
+                                    // Create a temporary reference to a sub array.
+                                    let reference_offset = frame.static_size() - *reference_offset;
+
+                                    block
+                                        .comment(format!(
+                                            "rest {}[{}...] with element size({})",
+                                            element_type.borrow(),
+                                            i,
+                                            element_size
+                                        ))
+                                        .comment(format!("-- index + {}", i))
+                                        .global_get("fp")
+                                        .local_get_(&tmp_memidx, "memory index")
+                                        .u32_const_(
+                                            element_size * (i as wasm::Size),
+                                            format!("element size ({}) * {}", element_size, i),
+                                        )
+                                        .i32_add()
+                                        .i32_store_(
+                                            reference_offset,
+                                            "write memory index to reference",
+                                        )
+                                        .global_get("fp")
+                                        .local_get_(&tmp_length, "length")
+                                        .u32_const_(i as wasm::Size, "i")
+                                        .i32_sub()
+                                        .i32_store_(
+                                            reference_offset + wasm::SIZE_BYTES,
+                                            "write length to reference",
+                                        )
+                                        .global_get("fp")
+                                        .u32_const_(reference_offset, "reference")
+                                        .i32_add();
                                 }
                             } else {
                                 // Access
+                                // TODO: Don't emit anything for ignored pattern.
                                 block
-                                    .i32_const_(0, "failure value")
                                     .comment(format!(
                                         "access {}[{}] at memory index + element size({}) * index",
                                         element_type.borrow(),
@@ -888,14 +892,21 @@ impl AsmBuilder {
                 ..
             } => {
                 let binding = binding.borrow();
-                let var = binding
-                    .storage
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name))
-                    .unwrap_local_variable();
 
-                // set the result of head expression to the variable.
-                builder.local_set(&var.name).i32_const(1);
+                match &binding.storage {
+                    None => {
+                        // Ignored
+                        builder.i32_const_(1, "ignored. success value");
+                    }
+                    Some(storage) => {
+                        let var = storage.unwrap_local_variable();
+
+                        // set the result of head expression to the variable.
+                        builder
+                            .local_set_(&var.name, format!("capture variable `{}`", name))
+                            .i32_const_(1, "success value");
+                    }
+                };
             }
         };
     }
