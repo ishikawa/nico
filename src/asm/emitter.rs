@@ -723,16 +723,21 @@ impl AsmBuilder {
             // variable pattern
             parser::Pattern::Variable(name, binding) => {
                 let binding = binding.borrow();
-                let var = binding
-                    .storage
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name))
-                    .unwrap_local_variable();
 
-                // set the result of head expression to the variable.
-                builder
-                    .local_set_(&var.name, "capture variable")
-                    .i32_const_(1, "success value");
+                match &binding.storage {
+                    None => {
+                        // Ignored
+                        builder.drop_("ignored").i32_const_(1, "success value");
+                    }
+                    Some(storage) => {
+                        let var = storage.unwrap_local_variable();
+
+                        // set the result of head expression to the variable.
+                        builder
+                            .local_set_(&var.name, format!("capture variable `{}`", name))
+                            .i32_const_(1, "success value");
+                    }
+                };
             }
             parser::Pattern::Integer(i) => {
                 // Constant pattern is semantically identical to `_ if head == pattern`,

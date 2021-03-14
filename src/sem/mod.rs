@@ -72,6 +72,14 @@ impl Binding {
             storage: None,
         }
     }
+
+    pub fn ignored(r#type: &Rc<RefCell<Type>>) -> Self {
+        Self {
+            name: None,
+            r#type: Rc::clone(r#type),
+            storage: None,
+        }
+    }
 }
 
 #[derive(Debug, Default)]

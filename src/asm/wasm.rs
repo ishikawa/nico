@@ -764,6 +764,10 @@ impl InstructionsBuilder {
     pub fn i32_store_<N: Into<String>>(&mut self, offset: Size, note: N) -> &mut Self {
         self.i32_store(offset).note(note)
     }
+
+    pub fn drop_<N: Into<String>>(&mut self, note: N) -> &mut Self {
+        self.drop().note(note)
+    }
 }
 
 #[derive(Debug)]
