@@ -170,17 +170,29 @@ impl Parser {
         };
 
         let mut functions = vec![];
-
-        while let Some(function) = self.parse_function(tokenizer, &mut context) {
-            functions.push(function);
-        }
-
         // Parser collects top expressions and automatically build
         // `main` function which is the entry point of a program.
         let mut body = vec![];
 
-        while let Some(expr) = self.parse_stmt(tokenizer, &mut context) {
-            body.push(Some(expr));
+        loop {
+            // Function
+            if let Some(function) = self.parse_function(tokenizer, &mut context) {
+                functions.push(function);
+            }
+            // Body for main function
+            else if let Some(expr) = self.parse_stmt(tokenizer, &mut context) {
+                body.push(Some(expr));
+            }
+            // No top level constrcts can be consumed. It may be at the end of input or
+            // parse error.
+            else {
+                match tokenizer.peek() {
+                    None => break,
+                    Some(token) => {
+                        panic!("Unrecognized token: {:?}", token)
+                    }
+                }
+            }
         }
 
         let body = self.wrap_stmts(&mut body, &mut context);
