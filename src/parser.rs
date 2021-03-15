@@ -30,11 +30,11 @@ pub struct Module {
 #[derive(Debug)]
 pub struct StructDefinition {
     pub name: String,
-    pub fields: Vec<NamedField>,
+    pub fields: Vec<TypeField>,
 }
 
 #[derive(Debug)]
-pub struct NamedField {
+pub struct TypeField {
     pub name: String,
     pub type_annotation: TypeAnnotation,
 }
@@ -100,6 +100,10 @@ pub enum Expr {
         // A function that the invocation refers.
         binding: Option<Rc<RefCell<sem::Binding>>>,
     },
+    Struct {
+        name: String,
+        fields: Vec<ValueField>,
+    },
 
     // Binary operator :: LHS, RHS, Binding
     Add(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>),
@@ -153,6 +157,12 @@ pub enum Pattern {
         binding: Rc<RefCell<sem::Binding>>,
         reference_offset: Option<wasm::Size>,
     },
+}
+
+#[derive(Debug)]
+pub struct ValueField {
+    name: String,
+    value: Option<Node>,
 }
 
 #[derive(Debug)]
@@ -289,7 +299,7 @@ impl Parser {
         &self,
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
-    ) -> Option<NamedField> {
+    ) -> Option<TypeField> {
         let name = expect_identifier(tokenizer, "field name");
 
         expect_char(tokenizer, ':');
@@ -298,7 +308,7 @@ impl Parser {
             .parse_type_annotation(tokenizer, context)
             .expect("Expected type annotation");
 
-        Some(NamedField {
+        Some(TypeField {
             name,
             type_annotation,
         })
@@ -1078,6 +1088,7 @@ impl Expr {
             Expr::Invocation {
                 name, arguments, ..
             } => format!("{}({} args)", name, arguments.len()),
+            Expr::Struct { name, fields } => format!("struct {} {{{} fields}}", name, fields.len()),
             Expr::Add(_, _, _) => "a + b".to_string(),
             Expr::Sub(_, _, _) => "a - b".to_string(),
             Expr::Rem(_, _, _) => "a % b".to_string(),

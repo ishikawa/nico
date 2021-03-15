@@ -632,7 +632,12 @@ const cases: TestCase[] = [
       "struct Rectangle {",
       "    width: i32,",
       "    height: i32",
-      "}"].join("\n")
+      "}",
+      "let rect = Rectangle {",
+      "    width: 50,",
+      "    height: 40,",
+      "}"
+    ].join("\n")
   }
 ];
 

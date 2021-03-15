@@ -76,6 +76,7 @@ impl TypeValidator {
                 self.validate_expr(operand);
                 self.validate_expr(index);
             }
+            Expr::Struct { .. } => todo!(),
             Expr::Identifier { .. } => {}
             Expr::Invocation { arguments, .. } => {
                 for argument in arguments {
