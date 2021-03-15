@@ -1,3 +1,4 @@
+use std::fmt;
 use std::{iter::Peekable, str::Chars};
 
 #[derive(Debug, PartialEq)]
@@ -17,6 +18,7 @@ pub enum Token {
     Export,
     Let,
     Rest, // "..."
+    Struct,
 
     // Operators
     EQ, // "=="
@@ -91,7 +93,7 @@ impl<'a> Tokenizer<'a> {
 
         let token = match nextc {
             '0'..='9' => self.read_integer(nextc),
-            'a'..='z' | '_' => self.read_name(nextc),
+            'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
             '!' | '=' | '<' | '>' => self.read_operator(nextc),
             '"' => self.read_string(),
             '.' => self.read_dot(),
@@ -187,7 +189,7 @@ impl<'a> Tokenizer<'a> {
 
         while let Some(nextc) = self.peek_char() {
             match nextc {
-                'a'..='z' | '0'..='9' | '_' => {
+                'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => {
                     value.push(*nextc);
                 }
                 _ => break,
@@ -210,6 +212,7 @@ impl<'a> Tokenizer<'a> {
             "when" => Token::When,
             "export" => Token::Export,
             "let" => Token::Let,
+            "struct" => Token::Struct,
             _ => Token::Identifier(value),
         }
     }
@@ -266,6 +269,31 @@ impl<'a> Tokenizer<'a> {
                 },
             }
             self.iter.next();
+        }
+    }
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Token::Identifier(name) => write!(f, "id<{}>", name),
+            Token::Integer(i) => write!(f, "int<{}>", i),
+            Token::String(s) => write!(f, "str<{}>", s),
+            Token::If => write!(f, "if"),
+            Token::Else => write!(f, "else"),
+            Token::End => write!(f, "end"),
+            Token::Fun => write!(f, "fun"),
+            Token::Case => write!(f, "case"),
+            Token::When => write!(f, "when"),
+            Token::Export => write!(f, "export"),
+            Token::Let => write!(f, "let"),
+            Token::Rest => write!(f, "..."),
+            Token::Struct => write!(f, "struct"),
+            Token::EQ => write!(f, "=="),
+            Token::NE => write!(f, "!="),
+            Token::LE => write!(f, "<="),
+            Token::GE => write!(f, ">="),
+            Token::Char(c) => write!(f, "{}", c),
         }
     }
 }
