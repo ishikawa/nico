@@ -670,9 +670,8 @@ impl Parser {
                     object_offset: None,
                 }))
             }
-            Token::Identifier(name) => {
-                let name = name.clone();
-                tokenizer.next();
+            Token::Identifier(_) => {
+                let name = expect_identifier(tokenizer, "id");
 
                 // function invocation?
                 // TODO: Move to parse_access()
@@ -907,16 +906,15 @@ fn parse_pattern_element(
     context: &mut ParserContext,
 ) -> Option<Pattern> {
     match tokenizer.peek()? {
-        Token::Identifier(ref name) => {
+        Token::Identifier(_) => {
+            let name = expect_identifier(tokenizer, "variable");
             let binding = if name == "_" {
                 wrap(sem::Binding::ignored(&context.type_var()))
             } else {
-                wrap(sem::Binding::typed_name(name, &context.type_var()))
+                wrap(sem::Binding::typed_name(&name, &context.type_var()))
             };
 
-            let pat = Pattern::Variable(name.clone(), binding);
-            tokenizer.next();
-            Some(pat)
+            Some(Pattern::Variable(name, binding))
         }
         Token::Integer(i) => {
             let pat = Pattern::Integer(*i);
