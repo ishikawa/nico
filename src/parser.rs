@@ -292,6 +292,8 @@ impl Parser {
     ) -> Option<NamedField> {
         let name = expect_identifier(tokenizer, "field name");
 
+        expect_char(tokenizer, ':');
+
         let type_annotation = self
             .parse_type_annotation(tokenizer, context)
             .expect("Expected type annotation");

@@ -629,7 +629,7 @@ const cases: TestCase[] = [
   {
     // prettier-ignore
     input: [
-      "type Rectangle {",
+      "struct Rectangle {",
       "    width: i32,",
       "    height: i32",
       "}"].join("\n")
@@ -674,6 +674,12 @@ focused.forEach(({ input, file, expected, compileError, exec, captureOutput }) =
     const module = await WebAssembly.compile(buffer);
 
     const instance = await WebAssembly.instantiate(module, imports);
+
+    if (!exec && !instance.exports.main) {
+      // no executable. mark succeeded.
+      expect(instance).toBeDefined();
+      return;
+    }
 
     // @ts-ignore
     let values = exec ? exec(instance.exports) : instance.exports.main();

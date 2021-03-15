@@ -93,7 +93,7 @@ impl<'a> Tokenizer<'a> {
 
         let token = match nextc {
             '0'..='9' => self.read_integer(nextc),
-            'a'..='z' | '_' => self.read_name(nextc),
+            'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
             '!' | '=' | '<' | '>' => self.read_operator(nextc),
             '"' => self.read_string(),
             '.' => self.read_dot(),
@@ -189,7 +189,7 @@ impl<'a> Tokenizer<'a> {
 
         while let Some(nextc) = self.peek_char() {
             match nextc {
-                'a'..='z' | '0'..='9' | '_' => {
+                'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => {
                     value.push(*nextc);
                 }
                 _ => break,
