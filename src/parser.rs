@@ -705,12 +705,12 @@ impl Parser {
                 tokenizer.next();
                 Some(context.typed_expr(expr))
             }
-            Token::String(s) => {
+            Token::String(_) => {
+                let content = expect_string(tokenizer, "constant");
                 let expr = Expr::String {
-                    content: s.clone(),
+                    content,
                     storage: None,
                 };
-                tokenizer.next();
                 Some(context.typed_expr(expr))
             }
             Token::If => {
@@ -947,19 +947,19 @@ fn parse_pattern_element(
 
             // Rest pattern can be ignored by expressing `..._` or `...`.
             match tokenizer.peek() {
-                Some(Token::Identifier(name)) => {
+                Some(Token::Identifier(_)) => {
+                    let name = expect_identifier(tokenizer, "rest variable");
                     let binding = if name == "_" {
                         wrap(sem::Binding::ignored(&context.type_var()))
                     } else {
-                        wrap(sem::Binding::typed_name(name, &context.type_var()))
+                        wrap(sem::Binding::typed_name(&name, &context.type_var()))
                     };
-                    let pat = Pattern::Rest {
-                        name: name.clone(),
+
+                    Some(Pattern::Rest {
+                        name,
                         binding,
                         reference_offset: None,
-                    };
-                    tokenizer.next();
-                    Some(pat)
+                    })
                 }
                 _ => {
                     // ignored
@@ -1034,6 +1034,14 @@ fn expect_char(tokenizer: &mut Tokenizer, expected: char) {
 fn expect_identifier(tokenizer: &mut Tokenizer, node_kind: &str) -> String {
     match tokenizer.next() {
         Some(Token::Identifier(name)) => name,
+        Some(token) => panic!("Expected {}, but found {}", node_kind, token),
+        None => panic!("Premature EOF, no {}", node_kind),
+    }
+}
+
+fn expect_string(tokenizer: &mut Tokenizer, node_kind: &str) -> String {
+    match tokenizer.next() {
+        Some(Token::String(s)) => s,
         Some(token) => panic!("Expected {}, but found {}", node_kind, token),
         None => panic!("Premature EOF, no {}", node_kind),
     }
