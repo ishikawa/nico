@@ -719,8 +719,6 @@ impl Parser {
                 let condition = self
                     .parse_expr(tokenizer, context)
                     .expect("missing condition");
-                // TODO: check line separator before reading body
-
                 let mut then_body = vec![];
                 let mut else_body = None;
 
