@@ -624,6 +624,15 @@ const cases: TestCase[] = [
       "not_an_array",
       "[854][0]"].join("\n"),
     expected: 854
+  },
+  // Structs
+  {
+    // prettier-ignore
+    input: [
+      "type Rectangle {",
+      "    width: i32,",
+      "    height: i32",
+      "}"].join("\n")
   }
 ];
 

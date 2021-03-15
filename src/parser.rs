@@ -10,29 +10,41 @@ use std::rc::Rc;
 
 // Program
 pub struct Module {
-    pub types: Vec<TypeDeclaration>,
+    pub structs: Vec<StructDefinition>,
     pub functions: Vec<Function>,
     pub main: Option<Function>,
     pub strings: Option<Vec<Rc<RefCell<asm::ConstantString>>>>,
 }
 
-#[derive(Debug)]
-pub enum TypeDeclaration {
-    Struct(Struct),
-}
+/// Types
+/// -----
+/// ```ignore
+/// definition  := struct
+/// struct      := "struct" name "{" fields "}"
+/// fields      := field | fields ","
+/// field       := name ":" type
+/// type        := name
+/// name        := IDENT
+/// ```
 
 #[derive(Debug)]
-pub struct Struct {
-    pub name: Option<String>,
-    pub fields: Vec<Field>,
-}
-
-#[derive(Debug)]
-pub struct Field {
+pub struct StructDefinition {
     pub name: String,
-    pub r#type: Rc<RefCell<sem::Type>>,
+    pub fields: Vec<NamedField>,
 }
 
+#[derive(Debug)]
+pub struct NamedField {
+    pub name: String,
+    pub type_annotation: TypeAnnotation,
+}
+
+#[derive(Debug)]
+pub enum TypeAnnotation {
+    Name(String),
+}
+
+/// Function
 #[derive(Debug)]
 pub struct Function {
     pub name: String,
@@ -177,6 +189,12 @@ impl ParserContext {
     }
 }
 
+pub fn parse_string<S: AsRef<str>>(src: S) -> Box<Module> {
+    let mut tokenizer = Tokenizer::from_string(&src);
+    let parser = Parser::new();
+    parser.parse(&mut tokenizer)
+}
+
 impl Parser {
     pub fn new() -> Self {
         Self::default()
@@ -187,7 +205,7 @@ impl Parser {
             naming: PrefixNaming::new("?"),
         };
 
-        let mut types = vec![];
+        let mut structs = vec![];
         let mut functions = vec![];
         // Parser collects top expressions and automatically build
         // `main` function which is the entry point of a program.
@@ -195,8 +213,8 @@ impl Parser {
 
         loop {
             // Type declaration
-            if let Some(ty) = self.parse_type_declation(tokenizer, &mut context) {
-                types.push(ty);
+            if let Some(struct_def) = self.parse_struct_definition(tokenizer, &mut context) {
+                structs.push(struct_def);
             }
             // Function
             else if let Some(function) = self.parse_function(tokenizer, &mut context) {
@@ -206,7 +224,7 @@ impl Parser {
             else if let Some(expr) = self.parse_stmt(tokenizer, &mut context) {
                 body.push(Some(expr));
             }
-            // No top level constrcts can be consumed. It may be at the end of input or
+            // No top level constructs can be consumed. It may be at the end of input or
             // parse error.
             else {
                 match tokenizer.peek() {
@@ -240,18 +258,62 @@ impl Parser {
         };
 
         Box::new(Module {
-            types,
+            structs,
             functions,
             main,
             strings: None,
         })
     }
 
-    fn parse_type_declation(
+    fn parse_struct_definition(
+        &self,
+        tokenizer: &mut Tokenizer,
+        context: &mut ParserContext,
+    ) -> Option<StructDefinition> {
+        match_token(tokenizer, Token::Struct)?;
+
+        let name = expect_identifier(tokenizer, "struct name");
+
+        // {...}
+        match tokenizer.peek() {
+            Some(Token::Char('{')) => {
+                tokenizer.next();
+            }
+            _ => return None,
+        };
+
+        let mut fields = vec![];
+
+        loop {
+            let name = expect_identifier(tokenizer, "field name");
+
+            if let Some(type_annotation) = self.parse_type_annotation(tokenizer, context) {
+                fields.push(NamedField {
+                    name,
+                    type_annotation,
+                });
+            } else {
+                panic!("Expected type annotation for field `{}`", name);
+            }
+
+            match tokenizer.peek() {
+                Some(Token::Char(',')) => {
+                    tokenizer.next();
+                }
+                Some(Token::Char('}')) => break,
+                _ => {}
+            };
+        }
+        expect_char(tokenizer, '}');
+
+        Some(StructDefinition { name, fields })
+    }
+
+    fn parse_type_annotation(
         &self,
         _tokenizer: &mut Tokenizer,
         _context: &mut ParserContext,
-    ) -> Option<TypeDeclaration> {
+    ) -> Option<TypeAnnotation> {
         None
     }
 
@@ -277,18 +339,14 @@ impl Parser {
             _ => return None,
         };
 
-        let name = match tokenizer.next() {
-            Some(Token::Identifier(name)) => name,
-            Some(token) => panic!("Expected function name, but was {:?}", token),
-            None => panic!("Premature EOF, no function name"),
-        };
+        let name = expect_identifier(tokenizer, "function name");
 
         let mut param_names = vec![];
 
-        consume_char(tokenizer, '(');
-        while let Some(Token::Identifier(name)) = tokenizer.peek() {
-            param_names.push(name.clone());
-            tokenizer.next();
+        expect_char(tokenizer, '(');
+        while let Some(Token::Identifier(_)) = tokenizer.peek() {
+            let name = expect_identifier(tokenizer, "param");
+            param_names.push(name);
 
             match tokenizer.peek() {
                 Some(Token::Char(',')) => {
@@ -297,7 +355,7 @@ impl Parser {
                 _ => break,
             };
         }
-        consume_char(tokenizer, ')');
+        expect_char(tokenizer, ')');
         // TODO: check line separator before reading body
 
         let mut body = vec![];
@@ -314,7 +372,7 @@ impl Parser {
                 Some(node) => body.push(Some(node)),
             };
         }
-        consume_token(tokenizer, Token::End);
+        expect_token(tokenizer, Token::End);
 
         let body = self.wrap_stmts(&mut body, context);
 
@@ -380,7 +438,7 @@ impl Parser {
         let pattern =
             parse_pattern(tokenizer, context).unwrap_or_else(|| panic!("Missing pattern in `let`"));
 
-        consume_char(tokenizer, '=');
+        expect_char(tokenizer, '=');
 
         let init = self
             .parse_expr(tokenizer, context)
@@ -556,13 +614,13 @@ impl Parser {
 
             match token {
                 Token::Char('[') => {
-                    consume_char(tokenizer, '[');
+                    expect_char(tokenizer, '[');
                     let mut arguments =
                         parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
                             self.parse_expr(tokenizer, context)
                                 .expect("Expected subscript argument")
                         });
-                    consume_char(tokenizer, ']');
+                    expect_char(tokenizer, ']');
 
                     if arguments.len() != 1 {
                         panic!(
@@ -594,19 +652,19 @@ impl Parser {
 
         match token {
             Token::Char('(') => {
-                consume_char(tokenizer, '(');
+                expect_char(tokenizer, '(');
                 let node = self.parse_expr(tokenizer, context);
-                consume_char(tokenizer, ')');
+                expect_char(tokenizer, ')');
                 node
             }
             Token::Char('[') => {
-                consume_char(tokenizer, '[');
+                expect_char(tokenizer, '[');
                 let elements =
                     parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
                         self.parse_expr(tokenizer, context)
                             .expect("Expected element")
                     });
-                consume_char(tokenizer, ']');
+                expect_char(tokenizer, ']');
 
                 Some(context.typed_expr(Expr::Array {
                     elements,
@@ -621,13 +679,13 @@ impl Parser {
                 // TODO: Move to parse_access()
                 if let Some(Token::Char('(')) = tokenizer.peek() {
                     if !tokenizer.is_newline_seen() {
-                        consume_char(tokenizer, '(');
+                        expect_char(tokenizer, '(');
                         let arguments =
                             parse_elements(tokenizer, context, ')', &mut |tokenizer, context| {
                                 self.parse_expr(tokenizer, context)
                                     .expect("Expected argument")
                             });
-                        consume_char(tokenizer, ')');
+                        expect_char(tokenizer, ')');
 
                         return Some(context.typed_expr(Expr::Invocation {
                             name,
@@ -679,7 +737,7 @@ impl Parser {
 
                 if let Some(Token::Else) = tokenizer.peek() {
                     let mut body = vec![];
-                    consume_token(tokenizer, Token::Else);
+                    expect_token(tokenizer, Token::Else);
 
                     loop {
                         match tokenizer.peek() {
@@ -692,7 +750,7 @@ impl Parser {
                         };
                     }
                 }
-                consume_token(tokenizer, Token::End);
+                expect_token(tokenizer, Token::End);
 
                 let expr = Expr::If {
                     condition: Box::new(condition),
@@ -771,7 +829,7 @@ impl Parser {
                         };
                     }
                 }
-                consume_token(tokenizer, Token::End);
+                expect_token(tokenizer, Token::End);
 
                 if arms.is_empty() {
                     panic!("At least one arm required for `case`")
@@ -867,11 +925,11 @@ fn parse_pattern_element(
             Some(pat)
         }
         Token::Char('[') => {
-            consume_char(tokenizer, '[');
+            expect_char(tokenizer, '[');
             let elements = parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
                 parse_pattern_element(tokenizer, context).expect("Expected pattern")
             });
-            consume_char(tokenizer, ']');
+            expect_char(tokenizer, ']');
 
             // Assert: Rest element must be last element
             if let Some(i) = elements
@@ -886,7 +944,7 @@ fn parse_pattern_element(
             Some(Pattern::Array(elements))
         }
         Token::Rest => {
-            consume_token(tokenizer, Token::Rest);
+            expect_token(tokenizer, Token::Rest);
 
             // Rest pattern can be ignored by expressing `..._` or `...`.
             match tokenizer.peek() {
@@ -955,22 +1013,31 @@ where
     elements
 }
 
-pub fn parse_string<S: AsRef<str>>(src: S) -> Box<Module> {
-    let mut tokenizer = Tokenizer::from_string(&src);
-    let parser = Parser::new();
-    parser.parse(&mut tokenizer)
-}
-
-fn consume_token(tokenizer: &mut Tokenizer, expected: Token) {
+fn expect_token(tokenizer: &mut Tokenizer, expected: Token) {
     match tokenizer.next() {
         None => panic!("Premature EOF"),
         Some(token) if token == expected => {}
-        Some(token) => panic!("Expected token \"{:?}\", but was {:?}", expected, token),
+        Some(token) => panic!("Expected token `{}`, but was `{}`", expected, token),
     }
 }
 
-fn consume_char(tokenizer: &mut Tokenizer, expected: char) {
-    consume_token(tokenizer, Token::Char(expected));
+fn match_token(tokenizer: &mut Tokenizer, expected: Token) -> Option<Token> {
+    match tokenizer.peek() {
+        Some(token) if token == &expected => tokenizer.next(),
+        _ => None,
+    }
+}
+
+fn expect_char(tokenizer: &mut Tokenizer, expected: char) {
+    expect_token(tokenizer, Token::Char(expected));
+}
+
+fn expect_identifier(tokenizer: &mut Tokenizer, node_kind: &str) -> String {
+    match tokenizer.next() {
+        Some(Token::Identifier(name)) => name,
+        Some(token) => panic!("Expected {}, but found {}", node_kind, token),
+        None => panic!("Premature EOF, no {}", node_kind),
+    }
 }
 
 impl fmt::Display for Pattern {
