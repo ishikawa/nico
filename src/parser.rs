@@ -275,46 +275,45 @@ impl Parser {
         let name = expect_identifier(tokenizer, "struct name");
 
         // {...}
-        match tokenizer.peek() {
-            Some(Token::Char('{')) => {
-                tokenizer.next();
-            }
-            _ => return None,
-        };
-
-        let mut fields = vec![];
-
-        loop {
-            let name = expect_identifier(tokenizer, "field name");
-
-            if let Some(type_annotation) = self.parse_type_annotation(tokenizer, context) {
-                fields.push(NamedField {
-                    name,
-                    type_annotation,
-                });
-            } else {
-                panic!("Expected type annotation for field `{}`", name);
-            }
-
-            match tokenizer.peek() {
-                Some(Token::Char(',')) => {
-                    tokenizer.next();
-                }
-                Some(Token::Char('}')) => break,
-                _ => {}
-            };
-        }
+        expect_char(tokenizer, '{');
+        let fields = parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
+            self.parse_named_field(tokenizer, context)
+                .expect("Expected struct field")
+        });
         expect_char(tokenizer, '}');
 
         Some(StructDefinition { name, fields })
     }
 
+    fn parse_named_field(
+        &self,
+        tokenizer: &mut Tokenizer,
+        context: &mut ParserContext,
+    ) -> Option<NamedField> {
+        let name = expect_identifier(tokenizer, "field name");
+
+        let type_annotation = self
+            .parse_type_annotation(tokenizer, context)
+            .expect("Expected type annotation");
+
+        Some(NamedField {
+            name,
+            type_annotation,
+        })
+    }
+
     fn parse_type_annotation(
         &self,
-        _tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer,
         _context: &mut ParserContext,
     ) -> Option<TypeAnnotation> {
-        None
+        match tokenizer.peek() {
+            Some(Token::Identifier(_)) => {
+                let name = expect_identifier(tokenizer, "type name");
+                Some(TypeAnnotation::Name(name))
+            }
+            _ => None,
+        }
     }
 
     fn parse_function(
