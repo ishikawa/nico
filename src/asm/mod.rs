@@ -58,6 +58,7 @@ use crate::util::naming::PrefixNaming;
 pub use allocator::Allocator;
 pub use emitter::AsmBuilder;
 use std::cell::RefCell;
+use std::convert::TryFrom;
 use std::rc::Rc;
 
 /// Memory alignment
@@ -296,17 +297,18 @@ impl ConstantString {
     /// Returns the number of bytes of reference and UTF-8 bytes
     /// including memory alignment.
     pub fn memory_size(&self) -> wasm::Size {
+        let len = self.content.as_bytes().len();
         align(
-            wasm::SIZE_BYTES +                           // offset
-            wasm::SIZE_BYTES +                           // length
-            self.content.as_bytes().len() as wasm::Size, // UTF-8 bytes
+            wasm::SIZE_BYTES +                  // offset
+            wasm::SIZE_BYTES +                  // length
+            wasm::Size::try_from(len).unwrap(), // UTF-8 bytes
         )
     }
 
     pub fn bytes(&self, base: wasm::Size) -> Vec<u8> {
         let bytes = self.content.as_bytes();
         let offset = (base + self.offset + wasm::SIZE_BYTES + wasm::SIZE_BYTES).to_le_bytes();
-        let length = (bytes.len() as wasm::Size).to_le_bytes();
+        let length = (wasm::Size::try_from(bytes.len()).unwrap()).to_le_bytes();
 
         offset
             .iter()
