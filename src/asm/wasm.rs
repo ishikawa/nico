@@ -15,6 +15,7 @@ pub const PAGE_SIZE: u32 = 65536;
 pub type Size = u32;
 
 /// The size of `Size` type in bytes.
+#[allow(clippy::cast_possible_truncation)]
 pub const SIZE_BYTES: Size = mem::size_of::<Size>() as Size;
 
 #[derive(Debug, PartialEq, Clone, Copy)]

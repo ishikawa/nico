@@ -2,6 +2,7 @@ use super::{wasm, wasm_type, LocalVariables, StackFrame};
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem::Type;
+use std::convert::TryFrom;
 use std::{cell::RefCell, rc::Rc};
 
 // The size of the virtual stack segment (bytes). Default: 32KB (half of page size)
@@ -329,7 +330,8 @@ impl AsmBuilder {
                             ))
                             .global_get("fp");
 
-                        let offset = object_offset + element_size * (i as wasm::Size);
+                        let offset =
+                            object_offset + element_size * wasm::Size::try_from(i).unwrap();
 
                         self.build_expr(builder, element, temp, frame);
                         builder.i32_store(offset);
@@ -352,7 +354,7 @@ impl AsmBuilder {
                     .i32_add()
                     .i32_store(reference_offset)
                     .global_get("fp")
-                    .u32_const(num_elements as wasm::Size)
+                    .u32_const(wasm::Size::try_from(num_elements).unwrap())
                     .i32_store(reference_offset + wasm::SIZE_BYTES);
 
                 // Returns a reference
@@ -779,7 +781,8 @@ impl AsmBuilder {
                 // - Push the result `1`
                 let ends_with_rest = patterns
                     .last()
-                    .map_or(false, |x| matches!(x, parser::Pattern::Rest {..}));
+                    .map_or(false, |x| matches!(x, parser::Pattern::Rest { .. }));
+                let n_patterns = wasm::Size::try_from(patterns.len()).unwrap();
 
                 builder.block(Some(wasm::Type::I32), &mut |block| {
                     if ends_with_rest {
@@ -791,7 +794,7 @@ impl AsmBuilder {
                             ))
                             .i32_const_(0, "failure value")
                             .local_get_(&tmp_length, "length")
-                            .u32_const_((patterns.len() - 1) as u32, "minimum required length")
+                            .u32_const_(n_patterns - 1, "minimum required length")
                             .i32_lt_u()
                             .br_if(0)
                             .drop();
@@ -804,7 +807,7 @@ impl AsmBuilder {
                             ))
                             .i32_const_(0, "failure value")
                             .local_get_(&tmp_length, "length")
-                            .u32_const_(patterns.len() as u32, "expected length")
+                            .u32_const_(n_patterns, "expected length")
                             .i32_neq()
                             .br_if(0)
                             .drop();
@@ -817,6 +820,8 @@ impl AsmBuilder {
 
                         // Push the value of the element
                         for (i, pattern) in patterns.iter().enumerate() {
+                            let i = wasm::Size::try_from(i).unwrap();
+
                             block.i32_const_(0, "failure value");
 
                             if let parser::Pattern::Rest {
@@ -840,7 +845,7 @@ impl AsmBuilder {
                                         .global_get("fp")
                                         .local_get_(&tmp_memidx, "memory index")
                                         .u32_const_(
-                                            element_size * (i as wasm::Size),
+                                            element_size * i,
                                             format!("element size ({}) * {}", element_size, i),
                                         )
                                         .i32_add()
@@ -850,7 +855,7 @@ impl AsmBuilder {
                                         )
                                         .global_get("fp")
                                         .local_get_(&tmp_length, "length")
-                                        .u32_const_(i as wasm::Size, "i")
+                                        .u32_const_(i, "i")
                                         .i32_sub()
                                         .i32_store_(
                                             reference_offset + wasm::SIZE_BYTES,
@@ -872,7 +877,7 @@ impl AsmBuilder {
                                     ))
                                     .local_get_(&tmp_memidx, "memory index")
                                     .i32_load_(
-                                        element_size * (i as wasm::Size),
+                                        element_size * i,
                                         format!("element size ({}) * {}", element_size, i),
                                     );
                             }

@@ -4,6 +4,7 @@ use crate::sem::{Binding, Type};
 use crate::util::wrap;
 use parser::{Expr, Node};
 use std::cell::RefCell;
+use std::convert::TryFrom;
 use std::rc::Rc;
 
 // Allocate storages
@@ -99,8 +100,8 @@ impl Allocator {
                         // The type of an empty array is undetermined.
                         0
                     } else {
-                        let length = elements.len();
-                        wasm_type(&element_type).unwrap().num_bytes() * (length as wasm::Size)
+                        let length = wasm::Size::try_from(elements.len()).unwrap();
+                        wasm_type(&element_type).unwrap().num_bytes() * length
                     };
 
                     frame.reserve(occupation);
