@@ -176,6 +176,7 @@ impl TypeInferencer {
 
                 element_type
             }
+            Expr::Struct { .. } => todo!(),
             Expr::Identifier {
                 ref name,
                 ref binding,
@@ -763,6 +764,7 @@ impl TypeInferencer {
                 self.fix_expr(operand);
                 self.fix_expr(index);
             }
+            Expr::Struct { .. } => todo!(),
             Expr::Identifier { .. } => {}
             Expr::Invocation { arguments, .. } => {
                 for argument in arguments {

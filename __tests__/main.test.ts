@@ -627,12 +627,19 @@ const cases: TestCase[] = [
   },
   // Structs
   {
+    todo: true,
     // prettier-ignore
     input: [
       "struct Rectangle {",
       "    width: i32,",
       "    height: i32",
-      "}"].join("\n")
+      "}",
+      "let height = 40",
+      "let rect = Rectangle {",
+      "    width: 50,",
+      "    height,",
+      "}"
+    ].join("\n")
   }
 ];
 

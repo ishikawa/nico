@@ -30,11 +30,11 @@ pub struct Module {
 #[derive(Debug)]
 pub struct StructDefinition {
     pub name: String,
-    pub fields: Vec<NamedField>,
+    pub fields: Vec<TypeField>,
 }
 
 #[derive(Debug)]
-pub struct NamedField {
+pub struct TypeField {
     pub name: String,
     pub type_annotation: TypeAnnotation,
 }
@@ -100,6 +100,10 @@ pub enum Expr {
         // A function that the invocation refers.
         binding: Option<Rc<RefCell<sem::Binding>>>,
     },
+    Struct {
+        name: String,
+        fields: Vec<ValueField>,
+    },
 
     // Binary operator :: LHS, RHS, Binding
     Add(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>),
@@ -153,6 +157,12 @@ pub enum Pattern {
         binding: Rc<RefCell<sem::Binding>>,
         reference_offset: Option<wasm::Size>,
     },
+}
+
+#[derive(Debug)]
+pub struct ValueField {
+    name: String,
+    value: Option<Node>,
 }
 
 #[derive(Debug)]
@@ -276,8 +286,8 @@ impl Parser {
 
         // {...}
         expect_char(tokenizer, '{');
-        let fields = parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
-            self.parse_named_field(tokenizer, context)
+        let fields = parse_elements(tokenizer, context, '}', &mut |tokenizer, context| {
+            self.parse_type_field(tokenizer, context)
                 .expect("Expected struct field")
         });
         expect_char(tokenizer, '}');
@@ -285,12 +295,12 @@ impl Parser {
         Some(StructDefinition { name, fields })
     }
 
-    fn parse_named_field(
+    fn parse_type_field(
         &self,
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
-    ) -> Option<NamedField> {
-        let name = expect_identifier(tokenizer, "field name");
+    ) -> Option<TypeField> {
+        let name = match_identifier(tokenizer, "field name")?;
 
         expect_char(tokenizer, ':');
 
@@ -298,10 +308,30 @@ impl Parser {
             .parse_type_annotation(tokenizer, context)
             .expect("Expected type annotation");
 
-        Some(NamedField {
+        Some(TypeField {
             name,
             type_annotation,
         })
+    }
+
+    fn parse_value_field(
+        &self,
+        tokenizer: &mut Tokenizer,
+        context: &mut ParserContext,
+    ) -> Option<ValueField> {
+        let name = match_identifier(tokenizer, "field name")?;
+
+        // Desugar: field init shorthand syntax
+        let value = if match_char(tokenizer, ':').is_some() {
+            self.parse_expr(tokenizer, context)
+        } else {
+            Some(context.typed_expr(Expr::Identifier {
+                name: name.clone(),
+                binding: None,
+            }))
+        };
+
+        Some(ValueField { name, value })
     }
 
     fn parse_type_annotation(
@@ -694,6 +724,20 @@ impl Parser {
                         }));
                     }
                 }
+                // struct literal?
+                else if let Some(Token::Char('{')) = tokenizer.peek() {
+                    if !tokenizer.is_newline_seen() {
+                        expect_char(tokenizer, '{');
+                        let fields =
+                            parse_elements(tokenizer, context, '}', &mut |tokenizer, context| {
+                                self.parse_value_field(tokenizer, context)
+                                    .expect("Expected struct field")
+                            });
+                        expect_char(tokenizer, '}');
+
+                        return Some(context.typed_expr(Expr::Struct { name, fields }));
+                    }
+                }
 
                 Some(context.typed_expr(Expr::Identifier {
                     name,
@@ -719,8 +763,6 @@ impl Parser {
                 let condition = self
                     .parse_expr(tokenizer, context)
                     .expect("missing condition");
-                // TODO: check line separator before reading body
-
                 let mut then_body = vec![];
                 let mut else_body = None;
 
@@ -933,7 +975,7 @@ fn parse_pattern_element(
             // Assert: Rest element must be last element
             if let Some(i) = elements
                 .iter()
-                .position(|x| matches!(x, Pattern::Rest {..}))
+                .position(|x| matches!(x, Pattern::Rest { .. }))
             {
                 if i != (elements.len() - 1) {
                     panic!("Syntax error: Rest element (#{}) must be last element", i);
@@ -1027,6 +1069,17 @@ fn match_token(tokenizer: &mut Tokenizer, expected: Token) -> Option<Token> {
     }
 }
 
+fn match_identifier(tokenizer: &mut Tokenizer, node_kind: &str) -> Option<String> {
+    match tokenizer.peek() {
+        Some(Token::Identifier(_)) => Some(expect_identifier(tokenizer, node_kind)),
+        _ => None,
+    }
+}
+
+fn match_char(tokenizer: &mut Tokenizer, expected: char) -> Option<Token> {
+    match_token(tokenizer, Token::Char(expected))
+}
+
 fn expect_char(tokenizer: &mut Tokenizer, expected: char) {
     expect_token(tokenizer, Token::Char(expected));
 }
@@ -1080,6 +1133,7 @@ impl Expr {
             Expr::Invocation {
                 name, arguments, ..
             } => format!("{}({} args)", name, arguments.len()),
+            Expr::Struct { name, fields } => format!("struct {} {{{} fields}}", name, fields.len()),
             Expr::Add(_, _, _) => "a + b".to_string(),
             Expr::Sub(_, _, _) => "a - b".to_string(),
             Expr::Rem(_, _, _) => "a % b".to_string(),

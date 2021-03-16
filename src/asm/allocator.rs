@@ -122,6 +122,7 @@ impl Allocator {
                 self.analyze_expr(operand, locals, strings, frame);
                 self.analyze_expr(index, locals, strings, frame);
             }
+            Expr::Struct { .. } => todo!(),
             Expr::Invocation {
                 name: _, arguments, ..
             } => {
