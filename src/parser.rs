@@ -353,13 +353,7 @@ impl Parser {
         context: &mut ParserContext,
     ) -> Option<Function> {
         // modifiers
-        let export = match tokenizer.peek() {
-            Some(Token::Export) => {
-                tokenizer.next();
-                true
-            }
-            _ => false,
-        };
+        let export = match_token(tokenizer, Token::Export).is_some();
 
         // fun
         match tokenizer.peek() {
