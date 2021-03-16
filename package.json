@@ -19,7 +19,7 @@
   },
   "scripts": {
     "nico": "ts-node ./runner/index.ts",
-    "build": "cargo check && cargo clean && cargo clippy -- -D warnings -A dead-code -A clippy::match-single-binding && cargo build && cargo test",
+    "build": "cargo check && cargo clean && cargo clippy -- -D clippy::clone_on_ref_ptr -D clippy::cast_lossless -D clippy::cast_possible_truncation -D warnings -A clippy::match-single-binding && cargo build && cargo test",
     "pretest": "npm run build",
     "test": "jest"
   },
