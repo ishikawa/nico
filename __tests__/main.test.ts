@@ -633,9 +633,10 @@ const cases: TestCase[] = [
       "    width: i32,",
       "    height: i32",
       "}",
+      "let height = 40",
       "let rect = Rectangle {",
       "    width: 50,",
-      "    height: 40,",
+      "    height,",
       "}"
     ].join("\n")
   }
