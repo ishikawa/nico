@@ -15,8 +15,12 @@ interface TestCase {
   captureOutput?: boolean;
   compileError?: RegExp;
 
-  // filter
+  // filters
+  // - **focus** - Include these tests only.
+  // - **skip** - Exclude these tests.
+  // - **todo** - Under development. It's ok if the compiler halted with "not yet implemented"
   focus?: boolean;
+  skip?: boolean;
   todo?: boolean;
 }
 
@@ -638,17 +642,19 @@ const cases: TestCase[] = [
       "let rect = Rectangle {",
       "    width: 50,",
       "    height,",
-      "}"
-    ].join("\n")
+      "}",
+      "rect.width + react.height"
+    ].join("\n"),
+    expected: 90
   }
 ];
 
 // filter
 let focused = cases.filter(x => x.focus);
 focused = focused.length === 0 ? cases : focused;
-focused = focused.filter(x => !x.todo);
+focused = focused.filter(x => !x.skip);
 
-focused.forEach(({ input, file, expected, compileError, exec, captureOutput }) => {
+focused.forEach(({ input, file, expected, compileError, exec, captureOutput, todo }) => {
   test(`given '${input || file}'`, async () => {
     let src = temporaryCodePath;
 
@@ -669,6 +675,11 @@ focused.forEach(({ input, file, expected, compileError, exec, captureOutput }) =
     } catch (e) {
       if (compileError) {
         expect(e.toString()).toMatch(compileError);
+        return;
+      }
+      // Allow "not yet implemented"?
+      else if (todo) {
+        expect(e.toString()).toMatch(/panicked at 'not yet implemented'/);
         return;
       } else {
         throw e;

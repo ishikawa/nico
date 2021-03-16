@@ -94,6 +94,10 @@ pub enum Expr {
         operand: Box<Node>,
         index: Box<Node>,
     },
+    Access {
+        operand: Box<Node>,
+        field: String,
+    },
     Invocation {
         name: String,
         arguments: Vec<Node>,
@@ -339,13 +343,8 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         _context: &mut ParserContext,
     ) -> Option<TypeAnnotation> {
-        match tokenizer.peek() {
-            Some(Token::Identifier(_)) => {
-                let name = expect_identifier(tokenizer, "type name");
-                Some(TypeAnnotation::Name(name))
-            }
-            _ => None,
-        }
+        let name = match_identifier(tokenizer, "type name")?;
+        Some(TypeAnnotation::Name(name))
     }
 
     fn parse_function(
@@ -354,21 +353,10 @@ impl Parser {
         context: &mut ParserContext,
     ) -> Option<Function> {
         // modifiers
-        let export = match tokenizer.peek() {
-            Some(Token::Export) => {
-                tokenizer.next();
-                true
-            }
-            _ => false,
-        };
+        let export = match_token(tokenizer, Token::Export).is_some();
 
         // fun
-        match tokenizer.peek() {
-            Some(Token::Fun) => {
-                tokenizer.next();
-            }
-            _ => return None,
-        };
+        match_token(tokenizer, Token::Fun)?;
 
         let name = expect_identifier(tokenizer, "function name");
 
@@ -440,10 +428,7 @@ impl Parser {
 
     /// Returns `Stmt` if the result of `parse_stmt_expr()` is a variable binding.
     fn parse_stmt(&self, tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Option<Node> {
-        let node = match self.parse_stmt_expr(tokenizer, context) {
-            Some(node) => node,
-            None => return None,
-        };
+        let node = self.parse_stmt_expr(tokenizer, context)?;
 
         if let Expr::Var { .. } = node.expr {
             return Some(self.wrap_stmt(node, context));
@@ -491,10 +476,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let lhs = match self.parse_rel_op2(tokenizer, context) {
-            Some(lhs) => lhs,
-            None => return None,
-        };
+        let lhs = self.parse_rel_op2(tokenizer, context)?;
 
         let builder = match tokenizer.peek() {
             Some(Token::EQ) => Expr::EQ,
@@ -503,10 +485,9 @@ impl Parser {
         };
         tokenizer.next();
 
-        let rhs = match self.parse_rel_op2(tokenizer, context) {
-            None => panic!("Expected RHS"),
-            Some(rhs) => rhs,
-        };
+        let rhs = self
+            .parse_rel_op2(tokenizer, context)
+            .expect("Expected RHS");
 
         Some(context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
@@ -517,10 +498,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let lhs = match self.parse_binary_op1(tokenizer, context) {
-            Some(lhs) => lhs,
-            None => return None,
-        };
+        let lhs = self.parse_binary_op1(tokenizer, context)?;
 
         let builder = match tokenizer.peek() {
             Some(Token::LE) => Expr::LE,
@@ -531,10 +509,9 @@ impl Parser {
         };
         tokenizer.next();
 
-        let rhs = match self.parse_binary_op1(tokenizer, context) {
-            None => panic!("Expected RHS"),
-            Some(rhs) => rhs,
-        };
+        let rhs = self
+            .parse_binary_op1(tokenizer, context)
+            .expect("Expected RHS");
 
         Some(context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
@@ -544,10 +521,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let mut lhs = match self.parse_binary_op2(tokenizer, context) {
-            None => return None,
-            Some(lhs) => lhs,
-        };
+        let mut lhs = self.parse_binary_op2(tokenizer, context)?;
 
         loop {
             let builder = match tokenizer.peek() {
@@ -564,10 +538,9 @@ impl Parser {
 
             tokenizer.next();
 
-            let rhs = match self.parse_binary_op2(tokenizer, context) {
-                None => panic!("Expected RHS"),
-                Some(rhs) => rhs,
-            };
+            let rhs = self
+                .parse_binary_op2(tokenizer, context)
+                .expect("Expected RHS");
 
             lhs = context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
         }
@@ -580,10 +553,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let mut lhs = match self.parse_unary_op(tokenizer, context) {
-            None => return None,
-            Some(lhs) => lhs,
-        };
+        let mut lhs = self.parse_unary_op(tokenizer, context)?;
 
         loop {
             let builder = match tokenizer.peek() {
@@ -594,10 +564,9 @@ impl Parser {
             };
             tokenizer.next();
 
-            let rhs = match self.parse_unary_op(tokenizer, context) {
-                None => panic!("Expected RHS"),
-                Some(rhs) => rhs,
-            };
+            let rhs = self
+                .parse_unary_op(tokenizer, context)
+                .expect("Expected RHS");
 
             lhs = context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
         }
@@ -627,11 +596,12 @@ impl Parser {
         Some(context.typed_expr(expr))
     }
 
-    // `... [...]`, `... (...)`
+    // `x[...]`, `x(...)`, `x.y`
     fn parse_access(&self, tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Option<Node> {
         let mut node = self.parse_primary(tokenizer, context)?;
 
         loop {
+            // x\n[...] should not be interpreted.
             tokenizer.peek();
 
             if tokenizer.is_newline_seen() {
@@ -665,6 +635,16 @@ impl Parser {
                         index: Box::new(arguments.remove(0)),
                     });
                 }
+                Token::Char('.') => {
+                    expect_char(tokenizer, '.');
+
+                    let field = expect_identifier(tokenizer, "field name");
+
+                    node = context.typed_expr(Expr::Access {
+                        operand: Box::new(node),
+                        field,
+                    });
+                }
                 _ => break,
             }
         }
@@ -676,10 +656,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let token = match tokenizer.peek() {
-            None => return None,
-            Some(token) => token,
-        };
+        let token = tokenizer.peek()?;
 
         match token {
             Token::Char('(') => {
@@ -1130,6 +1107,7 @@ impl Expr {
             Expr::Identifier { name, .. } => format!("Identifier(`{}`)", name),
             Expr::Array { elements, .. } => format!("Array[{}]", elements.len()),
             Expr::Subscript { .. } => "x[...]".to_string(),
+            Expr::Access { field, .. } => format!("x.{}", field),
             Expr::Invocation {
                 name, arguments, ..
             } => format!("{}({} args)", name, arguments.len()),
