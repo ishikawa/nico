@@ -596,11 +596,12 @@ impl Parser {
         Some(context.typed_expr(expr))
     }
 
-    // `... [...]`, `... (...)`
+    // `x[...]`, `x(...)`, `x.y`
     fn parse_access(&self, tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Option<Node> {
         let mut node = self.parse_primary(tokenizer, context)?;
 
         loop {
+            // x\n[...] should not be interpreted.
             tokenizer.peek();
 
             if tokenizer.is_newline_seen() {
@@ -634,6 +635,16 @@ impl Parser {
                         index: Box::new(arguments.remove(0)),
                     });
                 }
+                Token::Char('.') => {
+                    expect_char(tokenizer, '.');
+
+                    let field = expect_identifier(tokenizer, "field name");
+
+                    node = context.typed_expr(Expr::Access {
+                        operand: Box::new(node),
+                        field,
+                    });
+                }
                 _ => break,
             }
         }
@@ -645,10 +656,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let token = match tokenizer.peek() {
-            None => return None,
-            Some(token) => token,
-        };
+        let token = tokenizer.peek()?;
 
         match token {
             Token::Char('(') => {
