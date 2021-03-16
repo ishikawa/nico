@@ -300,7 +300,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<TypeField> {
-        let name = expect_identifier(tokenizer, "field name");
+        let name = match_identifier(tokenizer, "field name")?;
 
         expect_char(tokenizer, ':');
 
@@ -319,7 +319,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<ValueField> {
-        let name = expect_identifier(tokenizer, "field name");
+        let name = match_identifier(tokenizer, "field name")?;
 
         // Desugar: field init shorthand syntax
         let value = if match_char(tokenizer, ':').is_some() {
@@ -975,7 +975,7 @@ fn parse_pattern_element(
             // Assert: Rest element must be last element
             if let Some(i) = elements
                 .iter()
-                .position(|x| matches!(x, Pattern::Rest {..}))
+                .position(|x| matches!(x, Pattern::Rest { .. }))
             {
                 if i != (elements.len() - 1) {
                     panic!("Syntax error: Rest element (#{}) must be last element", i);
@@ -1065,6 +1065,13 @@ fn expect_token(tokenizer: &mut Tokenizer, expected: Token) {
 fn match_token(tokenizer: &mut Tokenizer, expected: Token) -> Option<Token> {
     match tokenizer.peek() {
         Some(token) if token == &expected => tokenizer.next(),
+        _ => None,
+    }
+}
+
+fn match_identifier(tokenizer: &mut Tokenizer, node_kind: &str) -> Option<String> {
+    match tokenizer.peek() {
+        Some(Token::Identifier(_)) => Some(expect_identifier(tokenizer, node_kind)),
         _ => None,
     }
 }
