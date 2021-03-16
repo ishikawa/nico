@@ -176,6 +176,7 @@ impl TypeInferencer {
 
                 element_type
             }
+            Expr::Access { .. } => todo!(),
             Expr::Struct { .. } => todo!(),
             Expr::Identifier {
                 ref name,
@@ -764,6 +765,7 @@ impl TypeInferencer {
                 self.fix_expr(operand);
                 self.fix_expr(index);
             }
+            Expr::Access { .. } => todo!(),
             Expr::Struct { .. } => todo!(),
             Expr::Identifier { .. } => {}
             Expr::Invocation { arguments, .. } => {
@@ -974,9 +976,9 @@ mod tests {
         inferencer.prune(&pty1);
         inferencer.prune(&pty2);
 
-        assert_matches!(*pty0.borrow(), Type::TypeVariable {..});
-        assert_matches!(*pty1.borrow(), Type::TypeVariable {..});
-        assert_matches!(*pty2.borrow(), Type::TypeVariable {..});
+        assert_matches!(*pty0.borrow(), Type::TypeVariable { .. });
+        assert_matches!(*pty1.borrow(), Type::TypeVariable { .. });
+        assert_matches!(*pty2.borrow(), Type::TypeVariable { .. });
     }
 
     #[test]

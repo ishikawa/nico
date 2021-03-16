@@ -94,6 +94,10 @@ pub enum Expr {
         operand: Box<Node>,
         index: Box<Node>,
     },
+    Access {
+        operand: Box<Node>,
+        field: String,
+    },
     Invocation {
         name: String,
         arguments: Vec<Node>,
@@ -339,13 +343,8 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         _context: &mut ParserContext,
     ) -> Option<TypeAnnotation> {
-        match tokenizer.peek() {
-            Some(Token::Identifier(_)) => {
-                let name = expect_identifier(tokenizer, "type name");
-                Some(TypeAnnotation::Name(name))
-            }
-            _ => None,
-        }
+        let name = match_identifier(tokenizer, "type name")?;
+        Some(TypeAnnotation::Name(name))
     }
 
     fn parse_function(
@@ -1130,6 +1129,7 @@ impl Expr {
             Expr::Identifier { name, .. } => format!("Identifier(`{}`)", name),
             Expr::Array { elements, .. } => format!("Array[{}]", elements.len()),
             Expr::Subscript { .. } => "x[...]".to_string(),
+            Expr::Access { field, .. } => format!("x.{}", field),
             Expr::Invocation {
                 name, arguments, ..
             } => format!("{}({} args)", name, arguments.len()),

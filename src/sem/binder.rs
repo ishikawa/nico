@@ -72,6 +72,7 @@ impl Binder {
                 self.analyze_expr(operand, env);
                 self.analyze_expr(index, env);
             }
+            Expr::Access { .. } => todo!(),
             Expr::Struct { .. } => todo!(),
             Expr::Identifier { ref name, binding } => {
                 match env.borrow().get(&name) {

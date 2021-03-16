@@ -430,6 +430,7 @@ impl AsmBuilder {
                 temp.pop_scope();
             }
             Expr::Struct { .. } => todo!(),
+            Expr::Access { .. } => todo!(),
             Expr::Invocation {
                 name,
                 arguments,

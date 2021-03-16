@@ -627,7 +627,6 @@ const cases: TestCase[] = [
   },
   // Structs
   {
-    todo: true,
     // prettier-ignore
     input: [
       "struct Rectangle {",
@@ -638,8 +637,10 @@ const cases: TestCase[] = [
       "let rect = Rectangle {",
       "    width: 50,",
       "    height,",
-      "}"
-    ].join("\n")
+      "}",
+      "rect.width + react.height"
+    ].join("\n"),
+    expected: 90
   }
 ];
 
