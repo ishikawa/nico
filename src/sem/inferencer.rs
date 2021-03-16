@@ -4,7 +4,8 @@
 //! https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Algorithm_W
 use crate::parser;
 use crate::parser::Expr;
-use crate::sem::{Binding, SemanticAnalyzer, Type};
+use crate::sem;
+use crate::sem::{Binding, Type};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use std::cell::RefCell;
@@ -24,7 +25,7 @@ impl Default for TypeInferencer {
     }
 }
 
-impl SemanticAnalyzer for TypeInferencer {
+impl sem::SemanticAnalyzer for TypeInferencer {
     fn analyze(&mut self, module: &mut parser::Module) {
         for function in &mut module.functions {
             self.analyze_function(function);
@@ -470,6 +471,22 @@ impl TypeInferencer {
                 let element_type = self.freshrec(element_type, generic_vars, type_var_cache);
                 Type::Array(element_type)
             }
+            Type::Struct {
+                ref name,
+                ref fields,
+            } => {
+                let fields = fields
+                    .iter()
+                    .map(|x| sem::TypeField {
+                        name: x.name.clone(),
+                        value: self.freshrec(&x.value, generic_vars, type_var_cache),
+                    })
+                    .collect();
+                Type::Struct {
+                    name: name.clone(),
+                    fields,
+                }
+            }
             Type::Function {
                 ref params,
                 ref return_type,
@@ -765,8 +782,12 @@ impl TypeInferencer {
                 self.fix_expr(operand);
                 self.fix_expr(index);
             }
-            Expr::Access { .. } => todo!(),
-            Expr::Struct { .. } => todo!(),
+            Expr::Access { operand, .. } => self.fix_expr(operand),
+            Expr::Struct { fields, .. } => {
+                for parser::ValueField { value, .. } in fields {
+                    self.fix_expr(value);
+                }
+            }
             Expr::Identifier { .. } => {}
             Expr::Invocation { arguments, .. } => {
                 for argument in arguments {

@@ -83,6 +83,7 @@ fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
         Type::String => Some(wasm::Type::I32),
         Type::Void => None,
         Type::Array(_) => Some(wasm::Type::I32),
+        Type::Struct { .. } => Some(wasm::Type::I32),
         Type::TypeVariable { .. } => {
             panic!(
                 "Type variable `{}` can't be resolved to WASM type.",
