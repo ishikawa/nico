@@ -286,8 +286,8 @@ impl Parser {
 
         // {...}
         expect_char(tokenizer, '{');
-        let fields = parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
-            self.parse_named_field(tokenizer, context)
+        let fields = parse_elements(tokenizer, context, '}', &mut |tokenizer, context| {
+            self.parse_type_field(tokenizer, context)
                 .expect("Expected struct field")
         });
         expect_char(tokenizer, '}');
@@ -295,7 +295,7 @@ impl Parser {
         Some(StructDefinition { name, fields })
     }
 
-    fn parse_named_field(
+    fn parse_type_field(
         &self,
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
@@ -312,6 +312,26 @@ impl Parser {
             name,
             type_annotation,
         })
+    }
+
+    fn parse_value_field(
+        &self,
+        tokenizer: &mut Tokenizer,
+        context: &mut ParserContext,
+    ) -> Option<ValueField> {
+        let name = expect_identifier(tokenizer, "field name");
+
+        // Desugar: field init shorthand syntax
+        let value = if match_char(tokenizer, ':').is_some() {
+            self.parse_expr(tokenizer, context)
+        } else {
+            Some(context.typed_expr(Expr::Identifier {
+                name: name.clone(),
+                binding: None,
+            }))
+        };
+
+        Some(ValueField { name, value })
     }
 
     fn parse_type_annotation(
@@ -704,6 +724,20 @@ impl Parser {
                         }));
                     }
                 }
+                // struct literal?
+                else if let Some(Token::Char('{')) = tokenizer.peek() {
+                    if !tokenizer.is_newline_seen() {
+                        expect_char(tokenizer, '{');
+                        let fields =
+                            parse_elements(tokenizer, context, '}', &mut |tokenizer, context| {
+                                self.parse_value_field(tokenizer, context)
+                                    .expect("Expected struct field")
+                            });
+                        expect_char(tokenizer, '}');
+
+                        return Some(context.typed_expr(Expr::Struct { name, fields }));
+                    }
+                }
 
                 Some(context.typed_expr(Expr::Identifier {
                     name,
@@ -1033,6 +1067,10 @@ fn match_token(tokenizer: &mut Tokenizer, expected: Token) -> Option<Token> {
         Some(token) if token == &expected => tokenizer.next(),
         _ => None,
     }
+}
+
+fn match_char(tokenizer: &mut Tokenizer, expected: char) -> Option<Token> {
+    match_token(tokenizer, Token::Char(expected))
 }
 
 fn expect_char(tokenizer: &mut Tokenizer, expected: char) {
