@@ -356,12 +356,7 @@ impl Parser {
         let export = match_token(tokenizer, Token::Export).is_some();
 
         // fun
-        match tokenizer.peek() {
-            Some(Token::Fun) => {
-                tokenizer.next();
-            }
-            _ => return None,
-        };
+        match_token(tokenizer, Token::Fun)?;
 
         let name = expect_identifier(tokenizer, "function name");
 
@@ -433,10 +428,7 @@ impl Parser {
 
     /// Returns `Stmt` if the result of `parse_stmt_expr()` is a variable binding.
     fn parse_stmt(&self, tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Option<Node> {
-        let node = match self.parse_stmt_expr(tokenizer, context) {
-            Some(node) => node,
-            None => return None,
-        };
+        let node = self.parse_stmt_expr(tokenizer, context)?;
 
         if let Expr::Var { .. } = node.expr {
             return Some(self.wrap_stmt(node, context));
