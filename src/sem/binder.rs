@@ -72,8 +72,12 @@ impl Binder {
                 self.analyze_expr(operand, env);
                 self.analyze_expr(index, env);
             }
-            Expr::Access { .. } => todo!(),
-            Expr::Struct { .. } => todo!(),
+            Expr::Access { operand, .. } => self.analyze_expr(operand, env),
+            Expr::Struct { fields, .. } => {
+                for parser::ValueField { value, .. } in fields {
+                    self.analyze_expr(value, env);
+                }
+            }
             Expr::Identifier { ref name, binding } => {
                 match env.borrow().get(&name) {
                     None => panic!("Undefined variable `{}`", name),

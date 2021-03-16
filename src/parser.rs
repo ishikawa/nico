@@ -165,8 +165,8 @@ pub enum Pattern {
 
 #[derive(Debug)]
 pub struct ValueField {
-    name: String,
-    value: Option<Node>,
+    pub name: String,
+    pub value: Node,
 }
 
 #[derive(Debug)]
@@ -328,11 +328,12 @@ impl Parser {
         // Desugar: field init shorthand syntax
         let value = if match_char(tokenizer, ':').is_some() {
             self.parse_expr(tokenizer, context)
+                .expect("Expected field value")
         } else {
-            Some(context.typed_expr(Expr::Identifier {
+            context.typed_expr(Expr::Identifier {
                 name: name.clone(),
                 binding: None,
-            }))
+            })
         };
 
         Some(ValueField { name, value })
