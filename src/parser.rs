@@ -476,10 +476,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let lhs = match self.parse_rel_op2(tokenizer, context) {
-            Some(lhs) => lhs,
-            None => return None,
-        };
+        let lhs = self.parse_rel_op2(tokenizer, context)?;
 
         let builder = match tokenizer.peek() {
             Some(Token::EQ) => Expr::EQ,
@@ -488,10 +485,9 @@ impl Parser {
         };
         tokenizer.next();
 
-        let rhs = match self.parse_rel_op2(tokenizer, context) {
-            None => panic!("Expected RHS"),
-            Some(rhs) => rhs,
-        };
+        let rhs = self
+            .parse_rel_op2(tokenizer, context)
+            .expect("Expected RHS");
 
         Some(context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
@@ -502,10 +498,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let lhs = match self.parse_binary_op1(tokenizer, context) {
-            Some(lhs) => lhs,
-            None => return None,
-        };
+        let lhs = self.parse_binary_op1(tokenizer, context)?;
 
         let builder = match tokenizer.peek() {
             Some(Token::LE) => Expr::LE,
@@ -516,10 +509,9 @@ impl Parser {
         };
         tokenizer.next();
 
-        let rhs = match self.parse_binary_op1(tokenizer, context) {
-            None => panic!("Expected RHS"),
-            Some(rhs) => rhs,
-        };
+        let rhs = self
+            .parse_binary_op1(tokenizer, context)
+            .expect("Expected RHS");
 
         Some(context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
@@ -529,10 +521,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let mut lhs = match self.parse_binary_op2(tokenizer, context) {
-            None => return None,
-            Some(lhs) => lhs,
-        };
+        let mut lhs = self.parse_binary_op2(tokenizer, context)?;
 
         loop {
             let builder = match tokenizer.peek() {
@@ -549,10 +538,9 @@ impl Parser {
 
             tokenizer.next();
 
-            let rhs = match self.parse_binary_op2(tokenizer, context) {
-                None => panic!("Expected RHS"),
-                Some(rhs) => rhs,
-            };
+            let rhs = self
+                .parse_binary_op2(tokenizer, context)
+                .expect("Expected RHS");
 
             lhs = context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
         }
@@ -565,10 +553,7 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Option<Node> {
-        let mut lhs = match self.parse_unary_op(tokenizer, context) {
-            None => return None,
-            Some(lhs) => lhs,
-        };
+        let mut lhs = self.parse_unary_op(tokenizer, context)?;
 
         loop {
             let builder = match tokenizer.peek() {
@@ -579,10 +564,9 @@ impl Parser {
             };
             tokenizer.next();
 
-            let rhs = match self.parse_unary_op(tokenizer, context) {
-                None => panic!("Expected RHS"),
-                Some(rhs) => rhs,
-            };
+            let rhs = self
+                .parse_unary_op(tokenizer, context)
+                .expect("Expected RHS");
 
             lhs = context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
         }
