@@ -76,8 +76,14 @@ impl TypeValidator {
                 self.validate_expr(operand);
                 self.validate_expr(index);
             }
-            Expr::Access { .. } => todo!(),
-            Expr::Struct { .. } => todo!(),
+            Expr::Access { operand, .. } => {
+                self.validate_expr(operand);
+            }
+            Expr::Struct { ref mut fields, .. } => {
+                for field in fields {
+                    self.validate_expr(&mut field.value);
+                }
+            }
             Expr::Identifier { .. } => {}
             Expr::Invocation { arguments, .. } => {
                 for argument in arguments {
