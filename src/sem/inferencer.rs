@@ -151,6 +151,23 @@ impl TypeInferencer {
 
                 wrap(Type::Array(element_type))
             }
+            Expr::Struct {
+                fields: value_fields,
+                ..
+            } => {
+                let struct_type = node.r#type.borrow();
+                let type_fields = match *struct_type {
+                    Type::Struct { ref fields, .. } => fields,
+                    ref ty => panic!("Expected struct type, but was {}", ty),
+                };
+
+                for (type_field, value_field) in type_fields.iter().zip(value_fields.iter_mut()) {
+                    let value_type = self.analyze_expr(&mut value_field.value, generic_vars);
+                    self.unify_and_log("field (type, value)", &type_field.r#type, &value_type);
+                }
+
+                Rc::clone(&node.r#type)
+            }
             Expr::Subscript { operand, index, .. } => {
                 let operand_type = {
                     let operand_type = self.analyze_expr(operand, generic_vars);
@@ -192,23 +209,6 @@ impl TypeInferencer {
                     .find(|x| &x.name == field)
                     .map(|x| Rc::clone(&x.r#type))
                     .unwrap_or_else(|| panic!("No filed `{}` found in {}", field, struct_type))
-            }
-            Expr::Struct {
-                fields: value_fields,
-                ..
-            } => {
-                let struct_type = node.r#type.borrow();
-                let type_fields = match *struct_type {
-                    Type::Struct { ref fields, .. } => fields,
-                    ref ty => panic!("Expected struct type, but was {}", ty),
-                };
-
-                for (type_field, value_field) in type_fields.iter().zip(value_fields.iter_mut()) {
-                    let value_type = self.analyze_expr(&mut value_field.value, generic_vars);
-                    self.unify_and_log("field (type, value)", &type_field.r#type, &value_type);
-                }
-
-                Rc::clone(&node.r#type)
             }
             Expr::Identifier {
                 ref name,

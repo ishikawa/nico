@@ -647,7 +647,7 @@ const cases: TestCase[] = [
     expected: 90
   },
   {
-    skip: true,
+    focus: true,
     // prettier-ignore
     input: [
       "struct Rectangle {",
