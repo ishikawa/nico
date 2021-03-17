@@ -74,6 +74,10 @@ const cases: TestCase[] = [
   {
     file: "./samples/sum.nico",
     consoleResult: [["0"], ["1666"], ["-1215"], ["2369"]]
+  },
+  {
+    file: "./samples/struct.nico",
+    consoleResult: [["1500"]]
   }
 ];
 
