@@ -41,7 +41,7 @@ pub enum Type {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct TypeField {
     pub name: String,
     pub r#type: Rc<RefCell<Type>>,
