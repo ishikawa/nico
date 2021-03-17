@@ -101,7 +101,9 @@ impl Binder {
                 self.analyze_expr(index, env, type_env);
             }
             Expr::Access { operand, .. } => self.analyze_expr(operand, env, type_env),
-            Expr::Struct { ref name, fields } => {
+            Expr::Struct {
+                ref name, fields, ..
+            } => {
                 let binding = type_env
                     .borrow()
                     .get(name)

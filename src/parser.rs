@@ -83,12 +83,27 @@ pub enum Expr {
     },
     Array {
         elements: Vec<Node>,
-        // Stack: the offset from the end of Static in stack frame.
-        //
-        // ----+-----------+-----------+-----+-------------+
-        //     | element 0 | element 1 | ... | Caller's FP |
-        // ----o-----------+-----------+-----o-------------+
-        //     |<----------------------------|
+        /// The offset from the end of "static" in a stack frame.
+        ///
+        /// ```ignore
+        /// ----+-----------+-----------+-----+-------------+
+        ///     | element 0 | element 1 | ... | Caller's FP |
+        /// ----o-----------+-----------+-----o-------------+
+        ///     |<----------------------------|
+        /// ```
+        object_offset: Option<wasm::Size>,
+    },
+    Struct {
+        name: String,
+        fields: Vec<ValueField>,
+        /// The offset from the end of "static" in a stack frame.
+        ///
+        /// ```ignore
+        /// ----+-----------+-----------+-----+-------------+
+        ///     | field 0   | field 1   | ... | Caller's FP |
+        /// ----o-----------+-----------+-----o-------------+
+        ///     |<----------------------------|
+        /// ```
         object_offset: Option<wasm::Size>,
     },
     Subscript {
@@ -104,10 +119,6 @@ pub enum Expr {
         arguments: Vec<Node>,
         // A function that the invocation refers.
         binding: Option<Rc<RefCell<sem::Binding>>>,
-    },
-    Struct {
-        name: String,
-        fields: Vec<ValueField>,
     },
 
     // Binary operator :: LHS, RHS, Binding
@@ -718,7 +729,11 @@ impl Parser {
                             });
                         expect_char(tokenizer, '}');
 
-                        return Some(context.typed_expr(Expr::Struct { name, fields }));
+                        return Some(context.typed_expr(Expr::Struct {
+                            name,
+                            fields,
+                            object_offset: None,
+                        }));
                     }
                 }
 
@@ -1115,7 +1130,9 @@ impl Expr {
             Expr::Invocation {
                 name, arguments, ..
             } => format!("{}({} args)", name, arguments.len()),
-            Expr::Struct { name, fields } => format!("struct {} {{{} fields}}", name, fields.len()),
+            Expr::Struct { name, fields, .. } => {
+                format!("struct {} {{{} fields}}", name, fields.len())
+            }
             Expr::Add(_, _, _) => "a + b".to_string(),
             Expr::Sub(_, _, _) => "a - b".to_string(),
             Expr::Rem(_, _, _) => "a % b".to_string(),

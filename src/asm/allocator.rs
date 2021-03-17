@@ -89,7 +89,7 @@ impl Allocator {
                 elements,
                 ref mut object_offset,
             } => {
-                // Reserve stack frame for elements and a reference to array.
+                // Reserve space in "static" area for elements and a reference to array.
 
                 let element_type = Type::unwrap_element_type_or_else(&node.r#type, |ty| {
                     panic!("Expected Array<T> but was `{}`", ty);
@@ -118,8 +118,21 @@ impl Allocator {
                     self.analyze_expr(element, locals, strings, frame);
                 }
             }
-            Expr::Struct { fields, .. } => {
-                // Allocate every elements
+            Expr::Struct {
+                fields,
+                ref mut object_offset,
+                ..
+            } => {
+                // Reserve space in "static" area for each field.
+                let occupation: wasm::Size = fields
+                    .iter()
+                    .map(|x| wasm_type(&x.value.r#type).unwrap().num_bytes())
+                    .sum();
+
+                frame.reserve(occupation);
+                object_offset.replace(frame.static_size());
+
+                // Allocate every fields
                 for field in fields {
                     self.analyze_expr(&mut field.value, locals, strings, frame);
                 }
