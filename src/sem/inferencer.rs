@@ -479,7 +479,7 @@ impl TypeInferencer {
                     .iter()
                     .map(|x| sem::TypeField {
                         name: x.name.clone(),
-                        value: self.freshrec(&x.value, generic_vars, type_var_cache),
+                        r#type: self.freshrec(&x.r#type, generic_vars, type_var_cache),
                     })
                     .collect();
                 Type::Struct {

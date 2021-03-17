@@ -44,7 +44,7 @@ pub enum Type {
 #[derive(Debug, PartialEq)]
 pub struct TypeField {
     pub name: String,
-    pub value: Rc<RefCell<Type>>,
+    pub r#type: Rc<RefCell<Type>>,
 }
 
 /// A variable and function representation.
@@ -209,7 +209,7 @@ impl fmt::Display for Type {
 
                 write!(f, "{{")?;
                 while let Some(field) = it.next() {
-                    write!(f, "{}: {}", field.name, field.value.borrow())?;
+                    write!(f, "{}: {}", field.name, field.r#type.borrow())?;
                     if it.peek().is_some() {
                         write!(f, ", ")?;
                     }
@@ -275,7 +275,7 @@ impl Type {
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),
             Type::Array(element_type) => element_type.borrow().contains(other),
-            Type::Struct { fields, .. } => fields.iter().any(|x| x.value.borrow().contains(other)),
+            Type::Struct { fields, .. } => fields.iter().any(|x| x.r#type.borrow().contains(other)),
             Type::Void => matches!(other, Type::Void),
             Type::Function {
                 params,

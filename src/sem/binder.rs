@@ -1,5 +1,5 @@
 use super::wrap;
-use super::{Binding, Environment, SemanticAnalyzer, Type};
+use super::{Binding, Environment, SemanticAnalyzer, Type, TypeField};
 use crate::parser;
 use parser::{Expr, Node};
 use std::cell::RefCell;
@@ -11,9 +11,25 @@ pub struct Binder {}
 
 impl SemanticAnalyzer for Binder {
     fn analyze(&mut self, module: &mut parser::Module) {
+        // User defined type namespace
+        let mut type_env = Environment::new();
+
         // Variable namespace
         let env = wrap(Environment::prelude());
         let mut env = Environment::with_parent(env);
+
+        // Register user defined types in this module.
+        for struct_def in &module.structs {
+            // TODO: forward declaration
+            let ty = build_struct_type(struct_def, &type_env);
+            let binding = Binding {
+                name: Some(struct_def.name.clone()),
+                storage: None,
+                r#type: wrap(ty),
+            };
+
+            type_env.insert(wrap(binding));
+        }
 
         // Register functions defined in this module (except for `main`).
         for function in &module.functions {
@@ -263,6 +279,35 @@ impl Binder {
             },
         };
         self.analyze_expr(operand, env);
+    }
+}
+
+fn build_struct_type(definition: &parser::StructDefinition, env: &Environment) -> Type {
+    let name = definition.name.clone();
+    let mut fields = vec![];
+
+    for field in definition.fields.as_slice() {
+        let r#type = match field.type_annotation {
+            parser::TypeAnnotation::Name(ref name) => {
+                let binding = env
+                    .get(name)
+                    .unwrap_or_else(|| panic!("Unrecognized type: {}", name));
+                let binding = binding.borrow();
+
+                Rc::clone(&binding.r#type)
+            }
+            parser::TypeAnnotation::Builtin(ref ty) => Rc::clone(ty),
+        };
+
+        fields.push(TypeField {
+            name: field.name.clone(),
+            r#type,
+        });
+    }
+
+    Type::Struct {
+        name: Some(name),
+        fields,
     }
 }
 
