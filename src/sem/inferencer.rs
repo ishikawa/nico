@@ -4,7 +4,8 @@
 //! https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system#Algorithm_W
 use crate::parser;
 use crate::parser::Expr;
-use crate::sem::{Binding, SemanticAnalyzer, Type};
+use crate::sem;
+use crate::sem::{Binding, Type};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use std::cell::RefCell;
@@ -24,7 +25,7 @@ impl Default for TypeInferencer {
     }
 }
 
-impl SemanticAnalyzer for TypeInferencer {
+impl sem::SemanticAnalyzer for TypeInferencer {
     fn analyze(&mut self, module: &mut parser::Module) {
         for function in &mut module.functions {
             self.analyze_function(function);
@@ -176,8 +177,39 @@ impl TypeInferencer {
 
                 element_type
             }
-            Expr::Access { .. } => todo!(),
-            Expr::Struct { .. } => todo!(),
+            Expr::Access { operand, ref field } => {
+                let operand_type = self.analyze_expr(operand, generic_vars);
+                let operand_type = fixed_type(&operand_type);
+
+                let struct_type = operand_type.borrow();
+                let type_fields = match *struct_type {
+                    Type::Struct { ref fields, .. } => fields,
+                    ref ty => panic!("Expected struct type, but was {}", ty),
+                };
+
+                type_fields
+                    .iter()
+                    .find(|x| &x.name == field)
+                    .map(|x| Rc::clone(&x.r#type))
+                    .unwrap_or_else(|| panic!("No filed `{}` found in {}", field, struct_type))
+            }
+            Expr::Struct {
+                fields: value_fields,
+                ..
+            } => {
+                let struct_type = node.r#type.borrow();
+                let type_fields = match *struct_type {
+                    Type::Struct { ref fields, .. } => fields,
+                    ref ty => panic!("Expected struct type, but was {}", ty),
+                };
+
+                for (type_field, value_field) in type_fields.iter().zip(value_fields.iter_mut()) {
+                    let value_type = self.analyze_expr(&mut value_field.value, generic_vars);
+                    self.unify_and_log("field (type, value)", &type_field.r#type, &value_type);
+                }
+
+                Rc::clone(&node.r#type)
+            }
             Expr::Identifier {
                 ref name,
                 ref binding,
@@ -469,6 +501,22 @@ impl TypeInferencer {
             Type::Array(ref element_type) => {
                 let element_type = self.freshrec(element_type, generic_vars, type_var_cache);
                 Type::Array(element_type)
+            }
+            Type::Struct {
+                ref name,
+                ref fields,
+            } => {
+                let fields = fields
+                    .iter()
+                    .map(|x| sem::TypeField {
+                        name: x.name.clone(),
+                        r#type: self.freshrec(&x.r#type, generic_vars, type_var_cache),
+                    })
+                    .collect();
+                Type::Struct {
+                    name: name.clone(),
+                    fields,
+                }
             }
             Type::Function {
                 ref params,
@@ -765,8 +813,12 @@ impl TypeInferencer {
                 self.fix_expr(operand);
                 self.fix_expr(index);
             }
-            Expr::Access { .. } => todo!(),
-            Expr::Struct { .. } => todo!(),
+            Expr::Access { operand, .. } => self.fix_expr(operand),
+            Expr::Struct { fields, .. } => {
+                for parser::ValueField { value, .. } in fields {
+                    self.fix_expr(value);
+                }
+            }
             Expr::Identifier { .. } => {}
             Expr::Invocation { arguments, .. } => {
                 for argument in arguments {

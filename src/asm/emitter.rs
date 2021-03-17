@@ -112,7 +112,7 @@ impl AsmBuilder {
         let strings = module_node
             .strings
             .as_ref()
-            .unwrap_or_else(|| panic!("string constant pool was not initialized."));
+            .expect("string constant pool was not initialized.");
         for s in strings {
             let s = s.borrow();
             let segment = wasm::Builders::data_segment()
@@ -214,7 +214,7 @@ impl AsmBuilder {
             let var = binding
                 .storage
                 .as_ref()
-                .unwrap_or_else(|| panic!("Invalid binding or allocation"))
+                .expect("Invalid binding or allocation")
                 .unwrap_local_variable();
 
             builder.named_param(&var.name, var.r#type);
@@ -290,7 +290,7 @@ impl AsmBuilder {
             Expr::String { storage, content } => {
                 let storage = storage
                     .as_ref()
-                    .unwrap_or_else(|| panic!("The constant string was not allocated."));
+                    .expect("The constant string was not allocated.");
 
                 builder.u32_const_(
                     CONSTANT_POOL_BASE + storage.borrow().offset(),
@@ -365,6 +365,53 @@ impl AsmBuilder {
                     builder.u32_const(reference_offset).i32_add();
                 }
             }
+            Expr::Struct {
+                name,
+                fields,
+                object_offset,
+            } => {
+                // Emit each field of a struct.
+                // We have to align the order with that of the struct type fields.
+                let struct_type = node.r#type.borrow();
+                let type_fields = match *struct_type {
+                    Type::Struct { ref fields, .. } => fields,
+                    ref ty => panic!("Expected struct {} type, but was {}", name, ty),
+                };
+
+                builder.comment(format!("-- struct {}{{...}}", name));
+
+                let object_offset = frame.static_size() - object_offset.unwrap();
+
+                type_fields
+                    .iter()
+                    .enumerate()
+                    .fold(0, |current_offset, (i, type_field)| {
+                        // Pick the value field.
+                        let value_field =
+                            fields.iter().find(|x| x.name == type_field.name).unwrap();
+                        let field_size = wasm_type(&type_field.r#type).unwrap().num_bytes();
+
+                        builder
+                            .comment(format!(
+                                "store the field #{} `{}.{}` at `FP + {}`",
+                                i, name, type_field.name, current_offset
+                            ))
+                            .global_get("fp");
+
+                        self.build_expr(builder, &value_field.value, temp, frame);
+                        builder.i32_store(current_offset);
+
+                        current_offset + field_size
+                    });
+
+                // Returns a reference (the index of the beginning of a struct)
+                builder
+                    .comment(format!("push a reference `FP + {}`", object_offset))
+                    .global_get("fp");
+                if object_offset > 0 {
+                    builder.u32_const(object_offset).i32_add();
+                }
+            }
             Expr::Subscript { operand, index } => {
                 temp.push_scope();
 
@@ -429,8 +476,48 @@ impl AsmBuilder {
 
                 temp.pop_scope();
             }
-            Expr::Struct { .. } => todo!(),
-            Expr::Access { .. } => todo!(),
+            Expr::Access {
+                operand,
+                field: field_name,
+            } => {
+                temp.push_scope();
+
+                let struct_type = operand.r#type.borrow();
+                let type_fields = match *struct_type {
+                    Type::Struct { ref fields, .. } => fields,
+                    ref ty => panic!("Expected struct type, but was {}", ty),
+                };
+
+                // Load the memory index of the operand to a local variable
+                builder
+                    .comment(&format!(
+                        "-- Access the field `{}` of {}",
+                        field_name,
+                        operand.r#type.borrow()
+                    ))
+                    .comment("operand");
+
+                self.build_expr(builder, operand, temp, frame);
+
+                // Calculate the offset
+                let mut offset = 0;
+
+                for type_field in type_fields {
+                    if &type_field.name == field_name {
+                        break;
+                    }
+
+                    let field_size = wasm_type(&type_field.r#type).unwrap().num_bytes();
+                    offset += field_size;
+                }
+
+                builder.i32_load_(
+                    offset,
+                    format!("access .{} at base + {}", field_name, offset),
+                );
+
+                temp.pop_scope();
+            }
             Expr::Invocation {
                 name,
                 arguments,
@@ -580,7 +667,7 @@ impl AsmBuilder {
 
                 let head_var = head_storage
                     .as_ref()
-                    .unwrap_or_else(|| panic!("No allocation for head expression."))
+                    .expect("No allocation for head expression.")
                     .unwrap_local_variable();
 
                 builder.local_set(&head_var.name);
@@ -655,11 +742,10 @@ impl AsmBuilder {
                 }
             }
             Expr::Var { pattern, init } => {
+                builder.comment(format!("let {} = ...", pattern));
                 self.build_expr(builder, init, temp, frame);
                 self.build_let_pattern(builder, pattern);
-                builder
-                    .comment("Pattern without guard always push `true` value.")
-                    .i32_const(1);
+                builder.i32_const_(1, "let binding always push `true` value.");
             }
         };
     }

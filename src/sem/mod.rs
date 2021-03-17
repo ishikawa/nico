@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use std::{cell::RefCell, collections::HashSet};
+
 pub use validator::TypeValidator;
 
 pub trait SemanticAnalyzer {
@@ -26,6 +27,10 @@ pub enum Type {
     // written as `()`, but I am more familiar with `Void`.
     Void,
     Array(Rc<RefCell<Type>>),
+    Struct {
+        name: Option<String>,
+        fields: Vec<TypeField>,
+    },
     Function {
         params: Vec<Rc<RefCell<Type>>>,
         return_type: Rc<RefCell<Type>>,
@@ -34,6 +39,12 @@ pub enum Type {
         name: String,
         instance: Option<Rc<RefCell<Type>>>,
     },
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TypeField {
+    pub name: String,
+    pub r#type: Rc<RefCell<Type>>,
 }
 
 /// A variable and function representation.
@@ -189,6 +200,22 @@ impl fmt::Display for Type {
             Type::String => write!(f, "str"),
             Type::Void => write!(f, "void"),
             Type::Array(element_type) => write!(f, "{}[]", element_type.borrow()),
+            Type::Struct { name, fields } => {
+                let mut it = fields.iter().peekable();
+
+                if let Some(name) = name {
+                    write!(f, "{} ", name)?;
+                }
+
+                write!(f, "{{")?;
+                while let Some(field) = it.next() {
+                    write!(f, "{}: {}", field.name, field.r#type.borrow())?;
+                    if it.peek().is_some() {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, "}}")
+            }
             Type::Function {
                 params,
                 return_type,
@@ -248,6 +275,7 @@ impl Type {
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),
             Type::Array(element_type) => element_type.borrow().contains(other),
+            Type::Struct { fields, .. } => fields.iter().any(|x| x.r#type.borrow().contains(other)),
             Type::Void => matches!(other, Type::Void),
             Type::Function {
                 params,
@@ -274,6 +302,32 @@ impl PartialEq for Type {
             Type::Array(element_type1) => {
                 if let Some(element_type2) = Type::element_type(other) {
                     *element_type1 == element_type2
+                } else {
+                    false
+                }
+            }
+            // Named struct
+            Type::Struct {
+                name: Some(name1), ..
+            } => {
+                if let Type::Struct {
+                    name: Some(name2), ..
+                } = other
+                {
+                    name1 == name2
+                } else {
+                    false
+                }
+            }
+            // Anonymous struct
+            Type::Struct {
+                fields: fields1, ..
+            } => {
+                if let Type::Struct {
+                    fields: fields2, ..
+                } = other
+                {
+                    fields1 == fields2
                 } else {
                     false
                 }

@@ -89,42 +89,61 @@ impl Allocator {
                 elements,
                 ref mut object_offset,
             } => {
-                // Reserve stack frame for elements and a reference to array.
-                {
-                    let element_type = Type::unwrap_element_type_or_else(&node.r#type, |ty| {
-                        panic!("Expected Array<T> but was `{}`", ty);
-                    });
+                // Reserve space in "static" area for elements and a reference to array.
 
-                    // - Reserve elements in "Static" frame area and store it in the node.
-                    let occupation = if elements.is_empty() {
-                        // The type of an empty array is undetermined.
-                        0
-                    } else {
-                        let length = wasm::Size::try_from(elements.len()).unwrap();
-                        wasm_type(&element_type).unwrap().num_bytes() * length
-                    };
+                let element_type = Type::unwrap_element_type_or_else(&node.r#type, |ty| {
+                    panic!("Expected Array<T> but was `{}`", ty);
+                });
 
-                    frame.reserve(occupation);
-                    object_offset.replace(frame.static_size());
+                // - Reserve elements in "Static" frame area and store it in the node.
+                let occupation = if elements.is_empty() {
+                    // The type of an empty array is undetermined.
+                    0
+                } else {
+                    let length = wasm::Size::try_from(elements.len()).unwrap();
+                    wasm_type(&element_type).unwrap().num_bytes() * length
+                };
 
-                    // Reserve a reference in "Static" frame area.
-                    // - length
-                    frame.reserve(wasm::SIZE_BYTES);
-                    // - index
-                    frame.reserve(wasm::SIZE_BYTES);
-                }
+                frame.reserve(occupation);
+                object_offset.replace(frame.static_size());
+
+                // Reserve a reference in "Static" frame area.
+                // - length
+                frame.reserve(wasm::SIZE_BYTES);
+                // - index
+                frame.reserve(wasm::SIZE_BYTES);
 
                 // Allocate every elements
                 for element in elements {
                     self.analyze_expr(element, locals, strings, frame);
                 }
             }
+            Expr::Struct {
+                fields,
+                ref mut object_offset,
+                ..
+            } => {
+                // Reserve space in "static" area for each field.
+                let occupation: wasm::Size = fields
+                    .iter()
+                    .map(|x| wasm_type(&x.value.r#type).unwrap().num_bytes())
+                    .sum();
+
+                frame.reserve(occupation);
+                object_offset.replace(frame.static_size());
+
+                // Allocate every fields
+                for field in fields {
+                    self.analyze_expr(&mut field.value, locals, strings, frame);
+                }
+            }
             Expr::Subscript { operand, index } => {
                 self.analyze_expr(operand, locals, strings, frame);
                 self.analyze_expr(index, locals, strings, frame);
             }
-            Expr::Access { .. } => todo!(),
-            Expr::Struct { .. } => todo!(),
+            Expr::Access { operand, .. } => {
+                self.analyze_expr(operand, locals, strings, frame);
+            }
             Expr::Invocation {
                 name: _, arguments, ..
             } => {

@@ -42,6 +42,7 @@ pub struct TypeField {
 #[derive(Debug)]
 pub enum TypeAnnotation {
     Name(String),
+    Builtin(Rc<RefCell<sem::Type>>),
 }
 
 /// Function
@@ -82,12 +83,27 @@ pub enum Expr {
     },
     Array {
         elements: Vec<Node>,
-        // Stack: the offset from the end of Static in stack frame.
-        //
-        // ----+-----------+-----------+-----+-------------+
-        //     | element 0 | element 1 | ... | Caller's FP |
-        // ----o-----------+-----------+-----o-------------+
-        //     |<----------------------------|
+        /// The offset from the end of "static" in a stack frame.
+        ///
+        /// ```ignore
+        /// ----+-----------+-----------+-----+-------------+
+        ///     | element 0 | element 1 | ... | Caller's FP |
+        /// ----o-----------+-----------+-----o-------------+
+        ///     |<----------------------------|
+        /// ```
+        object_offset: Option<wasm::Size>,
+    },
+    Struct {
+        name: String,
+        fields: Vec<ValueField>,
+        /// The offset from the end of "static" in a stack frame.
+        ///
+        /// ```ignore
+        /// ----+-----------+-----------+-----+-------------+
+        ///     | field 0   | field 1   | ... | Caller's FP |
+        /// ----o-----------+-----------+-----o-------------+
+        ///     |<----------------------------|
+        /// ```
         object_offset: Option<wasm::Size>,
     },
     Subscript {
@@ -103,10 +119,6 @@ pub enum Expr {
         arguments: Vec<Node>,
         // A function that the invocation refers.
         binding: Option<Rc<RefCell<sem::Binding>>>,
-    },
-    Struct {
-        name: String,
-        fields: Vec<ValueField>,
     },
 
     // Binary operator :: LHS, RHS, Binding
@@ -165,8 +177,8 @@ pub enum Pattern {
 
 #[derive(Debug)]
 pub struct ValueField {
-    name: String,
-    value: Option<Node>,
+    pub name: String,
+    pub value: Node,
 }
 
 #[derive(Debug)]
@@ -328,11 +340,12 @@ impl Parser {
         // Desugar: field init shorthand syntax
         let value = if match_char(tokenizer, ':').is_some() {
             self.parse_expr(tokenizer, context)
+                .expect("Expected field value")
         } else {
-            Some(context.typed_expr(Expr::Identifier {
+            context.typed_expr(Expr::Identifier {
                 name: name.clone(),
                 binding: None,
-            }))
+            })
         };
 
         Some(ValueField { name, value })
@@ -343,8 +356,15 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         _context: &mut ParserContext,
     ) -> Option<TypeAnnotation> {
-        let name = match_identifier(tokenizer, "type name")?;
-        Some(TypeAnnotation::Name(name))
+        let type_annotation = if let Some(name) = match_identifier(tokenizer, "type name") {
+            TypeAnnotation::Name(name)
+        } else if match_token(tokenizer, Token::I32).is_some() {
+            TypeAnnotation::Builtin(wrap(sem::Type::Int32))
+        } else {
+            return None;
+        };
+
+        Some(type_annotation)
     }
 
     fn parse_function(
@@ -451,14 +471,11 @@ impl Parser {
         };
 
         // Variable binding - Pattern
-        let pattern =
-            parse_pattern(tokenizer, context).unwrap_or_else(|| panic!("Missing pattern in `let`"));
+        let pattern = parse_pattern(tokenizer, context).expect("Missing pattern in `let`");
 
         expect_char(tokenizer, '=');
 
-        let init = self
-            .parse_expr(tokenizer, context)
-            .unwrap_or_else(|| panic!("No initializer"));
+        let init = self.parse_expr(tokenizer, context).expect("No initializer");
 
         Some(context.typed_expr(Expr::Var {
             pattern,
@@ -712,7 +729,11 @@ impl Parser {
                             });
                         expect_char(tokenizer, '}');
 
-                        return Some(context.typed_expr(Expr::Struct { name, fields }));
+                        return Some(context.typed_expr(Expr::Struct {
+                            name,
+                            fields,
+                            object_offset: None,
+                        }));
                     }
                 }
 
@@ -793,8 +814,8 @@ impl Parser {
                     tokenizer.next();
 
                     // pattern
-                    let pattern = parse_pattern(tokenizer, context)
-                        .unwrap_or_else(|| panic!("Missing pattern in `when`"));
+                    let pattern =
+                        parse_pattern(tokenizer, context).expect("Missing pattern in `when`");
 
                     // guard
                     let condition = match tokenizer.peek() {
@@ -904,9 +925,7 @@ impl Parser {
             panic!("Syntax error: missing line terminator")
         }
 
-        let stmt = self
-            .parse_stmt(tokenizer, context)
-            .unwrap_or_else(|| panic!("Premature EOF"));
+        let stmt = self.parse_stmt(tokenizer, context).expect("Premature EOF");
         stmts.push(Some(stmt));
     }
 }
@@ -1111,7 +1130,9 @@ impl Expr {
             Expr::Invocation {
                 name, arguments, ..
             } => format!("{}({} args)", name, arguments.len()),
-            Expr::Struct { name, fields } => format!("struct {} {{{} fields}}", name, fields.len()),
+            Expr::Struct { name, fields, .. } => {
+                format!("struct {} {{{} fields}}", name, fields.len())
+            }
             Expr::Add(_, _, _) => "a + b".to_string(),
             Expr::Sub(_, _, _) => "a - b".to_string(),
             Expr::Rem(_, _, _) => "a % b".to_string(),

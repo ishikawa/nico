@@ -83,6 +83,7 @@ fn wasm_type(ty: &Rc<RefCell<Type>>) -> Option<wasm::Type> {
         Type::String => Some(wasm::Type::I32),
         Type::Void => None,
         Type::Array(_) => Some(wasm::Type::I32),
+        Type::Struct { .. } => Some(wasm::Type::I32),
         Type::TypeVariable { .. } => {
             panic!(
                 "Type variable `{}` can't be resolved to WASM type.",
@@ -222,10 +223,7 @@ impl LocalVariables {
     }
 
     pub fn reserve_i32(&mut self) -> Rc<Storage> {
-        let used_scope = self
-            .used
-            .last_mut()
-            .unwrap_or_else(|| panic!("empty scope stack"));
+        let used_scope = self.used.last_mut().expect("empty scope stack");
         let index = self
             .free
             .iter()
