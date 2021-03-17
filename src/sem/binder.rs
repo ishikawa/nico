@@ -40,13 +40,14 @@ impl SemanticAnalyzer for Binder {
         }
 
         let env = wrap(env);
+        let type_env = wrap(type_env);
 
         for function in &mut module.functions {
-            self.analyze_function(function, &env);
+            self.analyze_function(function, &env, &type_env);
         }
 
         if let Some(ref mut main) = module.main {
-            self.analyze_function(main, &env);
+            self.analyze_function(main, &env, &type_env);
         }
     }
 }
@@ -56,7 +57,12 @@ impl Binder {
         Binder::default()
     }
 
-    fn analyze_function(&self, function: &mut parser::Function, env: &Rc<RefCell<Environment>>) {
+    fn analyze_function(
+        &self,
+        function: &mut parser::Function,
+        env: &Rc<RefCell<Environment>>,
+        type_env: &Rc<RefCell<Environment>>,
+    ) {
         // Construct a scope that is valid when this function is called.
         // This contains a reference to the parent scope and the arguments.
         let mut env = Environment::with_parent(Rc::clone(env));
@@ -69,30 +75,35 @@ impl Binder {
         let env = wrap(env);
 
         for node in &mut function.body {
-            self.analyze_expr(node, &env);
+            self.analyze_expr(node, &env, &type_env);
         }
     }
 
-    fn analyze_expr(&self, node: &mut Node, env: &Rc<RefCell<Environment>>) {
+    fn analyze_expr(
+        &self,
+        node: &mut Node,
+        env: &Rc<RefCell<Environment>>,
+        type_env: &Rc<RefCell<Environment>>,
+    ) {
         match &mut node.expr {
             Expr::Stmt(node) => {
-                self.analyze_expr(node, env);
+                self.analyze_expr(node, env, type_env);
             }
             Expr::Integer(_) => {}
             Expr::String { .. } => {}
             Expr::Array { elements, .. } => {
                 for node in elements {
-                    self.analyze_expr(node, env);
+                    self.analyze_expr(node, env, type_env);
                 }
             }
             Expr::Subscript { operand, index, .. } => {
-                self.analyze_expr(operand, env);
-                self.analyze_expr(index, env);
+                self.analyze_expr(operand, env, type_env);
+                self.analyze_expr(index, env, type_env);
             }
-            Expr::Access { operand, .. } => self.analyze_expr(operand, env),
+            Expr::Access { operand, .. } => self.analyze_expr(operand, env, type_env),
             Expr::Struct { fields, .. } => {
                 for parser::ValueField { value, .. } in fields {
-                    self.analyze_expr(value, env);
+                    self.analyze_expr(value, env, type_env);
                 }
             }
             Expr::Identifier { ref name, binding } => {
@@ -131,23 +142,49 @@ impl Binder {
                 };
 
                 for a in arguments {
-                    self.analyze_expr(a, env);
+                    self.analyze_expr(a, env, type_env);
                 }
             }
             // binary op
-            Expr::Add(lhs, rhs, binding) => self.bind_binary_op("+", lhs, rhs, binding, env),
-            Expr::Sub(lhs, rhs, binding) => self.bind_binary_op("-", lhs, rhs, binding, env),
-            Expr::Rem(lhs, rhs, binding) => self.bind_binary_op("%", lhs, rhs, binding, env),
-            Expr::Mul(lhs, rhs, binding) => self.bind_binary_op("*", lhs, rhs, binding, env),
-            Expr::Div(lhs, rhs, binding) => self.bind_binary_op("/", lhs, rhs, binding, env),
-            Expr::LT(lhs, rhs, binding) => self.bind_binary_op("<", lhs, rhs, binding, env),
-            Expr::GT(lhs, rhs, binding) => self.bind_binary_op(">", lhs, rhs, binding, env),
-            Expr::LE(lhs, rhs, binding) => self.bind_binary_op("<=", lhs, rhs, binding, env),
-            Expr::GE(lhs, rhs, binding) => self.bind_binary_op(">=", lhs, rhs, binding, env),
-            Expr::EQ(lhs, rhs, binding) => self.bind_binary_op("==", lhs, rhs, binding, env),
-            Expr::NE(lhs, rhs, binding) => self.bind_binary_op("!=", lhs, rhs, binding, env),
-            Expr::Plus(operand, binding) => self.bind_unary_op("@+", operand, binding, env),
-            Expr::Minus(operand, binding) => self.bind_unary_op("@-", operand, binding, env),
+            Expr::Add(lhs, rhs, binding) => {
+                self.bind_binary_op("+", lhs, rhs, binding, env, type_env)
+            }
+            Expr::Sub(lhs, rhs, binding) => {
+                self.bind_binary_op("-", lhs, rhs, binding, env, type_env)
+            }
+            Expr::Rem(lhs, rhs, binding) => {
+                self.bind_binary_op("%", lhs, rhs, binding, env, type_env)
+            }
+            Expr::Mul(lhs, rhs, binding) => {
+                self.bind_binary_op("*", lhs, rhs, binding, env, type_env)
+            }
+            Expr::Div(lhs, rhs, binding) => {
+                self.bind_binary_op("/", lhs, rhs, binding, env, type_env)
+            }
+            Expr::LT(lhs, rhs, binding) => {
+                self.bind_binary_op("<", lhs, rhs, binding, env, type_env)
+            }
+            Expr::GT(lhs, rhs, binding) => {
+                self.bind_binary_op(">", lhs, rhs, binding, env, type_env)
+            }
+            Expr::LE(lhs, rhs, binding) => {
+                self.bind_binary_op("<=", lhs, rhs, binding, env, type_env)
+            }
+            Expr::GE(lhs, rhs, binding) => {
+                self.bind_binary_op(">=", lhs, rhs, binding, env, type_env)
+            }
+            Expr::EQ(lhs, rhs, binding) => {
+                self.bind_binary_op("==", lhs, rhs, binding, env, type_env)
+            }
+            Expr::NE(lhs, rhs, binding) => {
+                self.bind_binary_op("!=", lhs, rhs, binding, env, type_env)
+            }
+            Expr::Plus(operand, binding) => {
+                self.bind_unary_op("@+", operand, binding, env, type_env)
+            }
+            Expr::Minus(operand, binding) => {
+                self.bind_unary_op("@-", operand, binding, env, type_env)
+            }
             Expr::If {
                 condition,
                 then_body,
@@ -156,15 +193,15 @@ impl Binder {
                 let node_env = wrap(Environment::with_parent(Rc::clone(env)));
                 let then_env = wrap(Environment::with_parent(Rc::clone(&node_env)));
 
-                self.analyze_expr(condition, &node_env);
+                self.analyze_expr(condition, &node_env, type_env);
                 for node in then_body {
-                    self.analyze_expr(node, &then_env);
+                    self.analyze_expr(node, &then_env, type_env);
                 }
                 if let Some(else_body) = else_body {
                     let else_env = wrap(Environment::with_parent(Rc::clone(&node_env)));
 
                     for node in else_body {
-                        self.analyze_expr(node, &else_env);
+                        self.analyze_expr(node, &else_env, type_env);
                     }
                 }
             }
@@ -176,13 +213,13 @@ impl Binder {
             } => {
                 let node_env = wrap(Environment::with_parent(Rc::clone(env)));
 
-                self.analyze_expr(head, &node_env);
+                self.analyze_expr(head, &node_env, type_env);
 
                 // else
                 if let Some(else_body) = else_body {
                     for node in else_body {
                         let else_env = wrap(Environment::with_parent(Rc::clone(&node_env)));
-                        self.analyze_expr(node, &else_env);
+                        self.analyze_expr(node, &else_env, type_env);
                     }
                 }
 
@@ -199,16 +236,16 @@ impl Binder {
 
                     // guard
                     if let Some(condition) = condition {
-                        self.analyze_expr(condition, &arm_env);
+                        self.analyze_expr(condition, &arm_env, type_env);
                     }
 
                     for node in then_body {
-                        self.analyze_expr(node, &arm_env);
+                        self.analyze_expr(node, &arm_env, type_env);
                     }
                 }
             }
             Expr::Var { pattern, init } => {
-                self.analyze_expr(init, env);
+                self.analyze_expr(init, env, type_env);
                 self.bind_pattern(pattern, init, &mut *env.borrow_mut());
             }
         };
@@ -236,6 +273,7 @@ impl Binder {
         rhs: &mut Node,
         binding: &mut Option<Rc<RefCell<Binding>>>,
         env: &Rc<RefCell<Environment>>,
+        type_env: &Rc<RefCell<Environment>>,
     ) {
         match env.borrow().get(operator) {
             None => panic!(
@@ -252,8 +290,8 @@ impl Binder {
                 },
             },
         };
-        self.analyze_expr(lhs, env);
-        self.analyze_expr(rhs, env);
+        self.analyze_expr(lhs, env, type_env);
+        self.analyze_expr(rhs, env, type_env);
     }
 
     fn bind_unary_op(
@@ -262,6 +300,7 @@ impl Binder {
         operand: &mut Node,
         binding: &mut Option<Rc<RefCell<Binding>>>,
         env: &Rc<RefCell<Environment>>,
+        type_env: &Rc<RefCell<Environment>>,
     ) {
         match env.borrow().get(operator) {
             None => panic!(
@@ -278,7 +317,7 @@ impl Binder {
                 },
             },
         };
-        self.analyze_expr(operand, env);
+        self.analyze_expr(operand, env, type_env);
     }
 }
 
