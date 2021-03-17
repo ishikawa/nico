@@ -645,6 +645,25 @@ const cases: TestCase[] = [
       "rect.width + rect.height"
     ].join("\n"),
     expected: 90
+  },
+  {
+    focus: true,
+    // prettier-ignore
+    input: [
+      "struct Rectangle {",
+      "    width: i32,",
+      "    height: i32",
+      "}",
+      "fun foo(rect)",
+      "    rect.width + rect.height",
+      "end",
+      "let rect = Rectangle {",
+      "    width: 50,",
+      "    height: 60",
+      "}",
+      "foo(rect)"
+    ].join("\n"),
+    expected: 110
   }
 ];
 
