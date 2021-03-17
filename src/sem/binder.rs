@@ -101,19 +101,32 @@ impl Binder {
                 self.analyze_expr(index, env, type_env);
             }
             Expr::Access { operand, .. } => self.analyze_expr(operand, env, type_env),
-            Expr::Struct { fields, .. } => {
+            Expr::Struct { ref name, fields } => {
+                let binding = type_env
+                    .borrow()
+                    .get(name)
+                    .unwrap_or_else(|| panic!("Unrecognized type `{}`", name));
+                let binding = binding.borrow();
+
+                match *binding.r#type.borrow() {
+                    Type::Struct { .. } => {
+                        node.r#type = Rc::clone(&binding.r#type);
+                    }
+                    ref ty => panic!("Expected type struct `{}`, but was {}", name, ty),
+                }
+
                 for parser::ValueField { value, .. } in fields {
                     self.analyze_expr(value, env, type_env);
                 }
             }
             Expr::Identifier { ref name, binding } => {
-                match env.borrow().get(&name) {
-                    None => panic!("Undefined variable `{}`", name),
-                    Some(ref b) => {
-                        binding.replace(Rc::clone(&b));
-                        node.r#type = Rc::clone(&b.borrow().r#type);
-                    }
-                };
+                let b = env
+                    .borrow()
+                    .get(name)
+                    .unwrap_or_else(|| panic!("Undefined variable `{}`", name));
+
+                binding.replace(Rc::clone(&b));
+                node.r#type = Rc::clone(&b.borrow().r#type);
             }
             Expr::Invocation {
                 ref name,
