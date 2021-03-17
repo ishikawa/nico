@@ -11,10 +11,11 @@ pub struct Binder {}
 
 impl SemanticAnalyzer for Binder {
     fn analyze(&mut self, module: &mut parser::Module) {
+        // Variable namespace
         let env = wrap(Environment::prelude());
         let mut env = Environment::with_parent(env);
 
-        // First, register functions defined in this module (except for `main`).
+        // Register functions defined in this module (except for `main`).
         for function in &module.functions {
             env.insert(wrap(Binding::defined_function(
                 &function.name,

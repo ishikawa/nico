@@ -452,14 +452,11 @@ impl Parser {
         };
 
         // Variable binding - Pattern
-        let pattern =
-            parse_pattern(tokenizer, context).unwrap_or_else(|| panic!("Missing pattern in `let`"));
+        let pattern = parse_pattern(tokenizer, context).expect("Missing pattern in `let`");
 
         expect_char(tokenizer, '=');
 
-        let init = self
-            .parse_expr(tokenizer, context)
-            .unwrap_or_else(|| panic!("No initializer"));
+        let init = self.parse_expr(tokenizer, context).expect("No initializer");
 
         Some(context.typed_expr(Expr::Var {
             pattern,
@@ -794,8 +791,8 @@ impl Parser {
                     tokenizer.next();
 
                     // pattern
-                    let pattern = parse_pattern(tokenizer, context)
-                        .unwrap_or_else(|| panic!("Missing pattern in `when`"));
+                    let pattern =
+                        parse_pattern(tokenizer, context).expect("Missing pattern in `when`");
 
                     // guard
                     let condition = match tokenizer.peek() {
@@ -905,9 +902,7 @@ impl Parser {
             panic!("Syntax error: missing line terminator")
         }
 
-        let stmt = self
-            .parse_stmt(tokenizer, context)
-            .unwrap_or_else(|| panic!("Premature EOF"));
+        let stmt = self.parse_stmt(tokenizer, context).expect("Premature EOF");
         stmts.push(Some(stmt));
     }
 }

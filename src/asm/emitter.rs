@@ -112,7 +112,7 @@ impl AsmBuilder {
         let strings = module_node
             .strings
             .as_ref()
-            .unwrap_or_else(|| panic!("string constant pool was not initialized."));
+            .expect("string constant pool was not initialized.");
         for s in strings {
             let s = s.borrow();
             let segment = wasm::Builders::data_segment()
@@ -214,7 +214,7 @@ impl AsmBuilder {
             let var = binding
                 .storage
                 .as_ref()
-                .unwrap_or_else(|| panic!("Invalid binding or allocation"))
+                .expect("Invalid binding or allocation")
                 .unwrap_local_variable();
 
             builder.named_param(&var.name, var.r#type);
@@ -290,7 +290,7 @@ impl AsmBuilder {
             Expr::String { storage, content } => {
                 let storage = storage
                     .as_ref()
-                    .unwrap_or_else(|| panic!("The constant string was not allocated."));
+                    .expect("The constant string was not allocated.");
 
                 builder.u32_const_(
                     CONSTANT_POOL_BASE + storage.borrow().offset(),
@@ -580,7 +580,7 @@ impl AsmBuilder {
 
                 let head_var = head_storage
                     .as_ref()
-                    .unwrap_or_else(|| panic!("No allocation for head expression."))
+                    .expect("No allocation for head expression.")
                     .unwrap_local_variable();
 
                 builder.local_set(&head_var.name);

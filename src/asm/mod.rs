@@ -223,10 +223,7 @@ impl LocalVariables {
     }
 
     pub fn reserve_i32(&mut self) -> Rc<Storage> {
-        let used_scope = self
-            .used
-            .last_mut()
-            .unwrap_or_else(|| panic!("empty scope stack"));
+        let used_scope = self.used.last_mut().expect("empty scope stack");
         let index = self
             .free
             .iter()

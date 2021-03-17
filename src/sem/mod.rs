@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use std::{cell::RefCell, collections::HashSet};
+
 pub use validator::TypeValidator;
 
 pub trait SemanticAnalyzer {
