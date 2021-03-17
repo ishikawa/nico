@@ -42,6 +42,7 @@ pub struct TypeField {
 #[derive(Debug)]
 pub enum TypeAnnotation {
     Name(String),
+    Builtin(Rc<RefCell<sem::Type>>),
 }
 
 /// Function
@@ -344,8 +345,15 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         _context: &mut ParserContext,
     ) -> Option<TypeAnnotation> {
-        let name = match_identifier(tokenizer, "type name")?;
-        Some(TypeAnnotation::Name(name))
+        let type_annotation = if let Some(name) = match_identifier(tokenizer, "type name") {
+            TypeAnnotation::Name(name)
+        } else if match_token(tokenizer, Token::I32).is_some() {
+            TypeAnnotation::Builtin(wrap(sem::Type::Int32))
+        } else {
+            return None;
+        };
+
+        Some(type_annotation)
     }
 
     fn parse_function(

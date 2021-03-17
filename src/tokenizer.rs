@@ -19,6 +19,8 @@ pub enum Token {
     Let,
     Rest, // "..."
     Struct,
+    // Keywords (types)
+    I32,
 
     // Operators
     EQ, // "=="
@@ -213,6 +215,7 @@ impl<'a> Tokenizer<'a> {
             "export" => Token::Export,
             "let" => Token::Let,
             "struct" => Token::Struct,
+            "i32" => Token::I32,
             _ => Token::Identifier(value),
         }
     }
@@ -289,6 +292,7 @@ impl fmt::Display for Token {
             Token::Let => write!(f, "let"),
             Token::Rest => write!(f, "..."),
             Token::Struct => write!(f, "struct"),
+            Token::I32 => write!(f, "i32"),
             Token::EQ => write!(f, "=="),
             Token::NE => write!(f, "!="),
             Token::LE => write!(f, "<="),
