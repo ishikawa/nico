@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 #[derive(Debug)]
 pub struct TypeInferencer {
@@ -538,44 +538,31 @@ impl TypeInferencer {
         wrap(freshed)
     }
 
-    /// Prune the instance chain of type variables as much as possible.
-    /// However this function can't replace top TypeVariable with
-    /// a composite type (like Function, Array).
+    /// Prune a chain of type variables as much as possible.
     ///
-    /// This function returns the instance type of top TypeVariable instead.
+    /// ```ignore
+    /// T1 -> T2 -> T3
+    /// ```
+    ///
+    /// to:
+    ///
+    /// ```ignore
+    /// T1 -> T3
+    /// T2 -> T3
+    /// ```
     fn prune(&mut self, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
-        // Prune descendants and retrieve the type at the deepest level.
-        let terminal = match *ty.borrow_mut() {
+        match *ty.borrow_mut() {
+            Type::TypeVariable { instance: None, .. } => Rc::clone(ty),
             Type::TypeVariable {
                 ref mut instance, ..
-            } => match instance {
-                None => return Rc::clone(ty),
-                Some(ref i) => {
-                    let n = self.prune(i);
+            } => {
+                let pruned = self.prune(instance.as_ref().unwrap());
 
-                    instance.replace(Rc::clone(&n));
-                    Rc::clone(&n)
-                }
-            },
-            _ => {
-                // We don't need to prune anymore.
-                return Rc::clone(ty);
+                instance.replace(Rc::clone(&pruned));
+                pruned
             }
-        };
-
-        // Replace instance with terminal type if it is
-        // a primitive type.
-        match *terminal.borrow() {
-            Type::Int32 => ty.replace(Type::Int32),
-            Type::Boolean => ty.replace(Type::Boolean),
-            Type::String => ty.replace(Type::String),
-            Type::Void => ty.replace(Type::Void),
-            _ => {
-                return Rc::clone(&terminal);
-            }
-        };
-
-        Rc::clone(ty)
+            _ => Rc::clone(ty),
+        }
     }
 
     /// T
@@ -941,20 +928,6 @@ mod tests {
     }
 
     #[test]
-    fn prune_type_var_resolved() {
-        let mut inferencer = TypeInferencer::new();
-        let ty0 = Type::TypeVariable {
-            name: "$1".to_string(),
-            instance: Some(wrap(Type::Int32)),
-        };
-
-        let pty0 = wrap(ty0);
-        inferencer.prune(&pty0);
-
-        assert_matches!(*pty0.borrow(), Type::Int32);
-    }
-
-    #[test]
     fn prune_type_var_resolved_alias() {
         let mut inferencer = TypeInferencer::new();
         let ty0 = Type::TypeVariable {
@@ -972,8 +945,10 @@ mod tests {
         inferencer.prune(&pty0);
         inferencer.prune(&pty1);
 
-        assert_matches!(*pty0.borrow(), Type::Int32);
-        assert_matches!(*pty1.borrow(), Type::Int32);
+        assert_matches!(&*pty1.borrow(), Type::TypeVariable { name, instance: Some(instance) } => {
+            assert_eq!(name, "$2");
+            assert_matches!(*instance.borrow(), Type::Int32);
+        });
     }
 
     #[test]
@@ -1001,9 +976,14 @@ mod tests {
         inferencer.prune(&pty1);
         inferencer.prune(&pty2);
 
-        assert_matches!(*pty0.borrow(), Type::Int32);
-        assert_matches!(*pty1.borrow(), Type::Int32);
-        assert_matches!(*pty2.borrow(), Type::Int32);
+        assert_matches!(&*pty1.borrow(), Type::TypeVariable { name, instance: Some(instance) } => {
+            assert_eq!(name, "$2");
+            assert_matches!(*instance.borrow(), Type::Int32);
+        });
+        assert_matches!(&*pty2.borrow(), Type::TypeVariable { name, instance: Some(instance) } => {
+            assert_eq!(name, "$3");
+            assert_matches!(*instance.borrow(), Type::Int32);
+        });
     }
 
     #[test]
@@ -1057,11 +1037,26 @@ mod tests {
         inferencer.prune(&ty1);
         inferencer.prune(&fun_ty);
 
-        assert_matches!(*ty0.borrow(), Type::String);
-        assert_matches!(*ty1.borrow(), Type::Boolean);
-        assert_matches!(*fun_ty.borrow(), Type::Function {ref params, ref return_type} => {
-            assert_matches!(*params[0].borrow(), Type::String);
-            assert_matches!(*return_type.borrow(), Type::Boolean);
+        assert_matches!(&*ty0.borrow(), Type::TypeVariable { name, instance: Some(instance) } => {
+            assert_eq!(name, "$1");
+            assert_matches!(*instance.borrow(), Type::String);
+        });
+
+        assert_matches!(&*ty1.borrow(), Type::TypeVariable { name, instance: Some(instance) } => {
+            assert_eq!(name, "$2");
+            assert_matches!(*instance.borrow(), Type::Boolean);
+        });
+
+        assert_matches!(&*fun_ty.borrow(), Type::Function {params, return_type} => {
+            assert_matches!(&*params[0].borrow(), Type::TypeVariable { name, instance: Some(instance) } => {
+                assert_eq!(name, "$1");
+                assert_matches!(*instance.borrow(), Type::String);
+            });
+
+            assert_matches!(&*return_type.borrow(), Type::TypeVariable { name, instance: Some(instance) } => {
+                assert_eq!(name, "$2");
+                assert_matches!(*instance.borrow(), Type::Boolean);
+            });
         });
     }
 
