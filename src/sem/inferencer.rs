@@ -1011,9 +1011,22 @@ mod tests {
         inferencer.prune(&pty1);
         inferencer.prune(&pty2);
 
-        assert_matches!(*pty0.borrow(), Type::TypeVariable { .. });
-        assert_matches!(*pty1.borrow(), Type::TypeVariable { .. });
-        assert_matches!(*pty2.borrow(), Type::TypeVariable { .. });
+        assert_matches!(&*pty0.borrow(), Type::TypeVariable { name, instance } => {
+            assert_eq!(name, "$1");
+            assert_eq!(*instance, None);
+        });
+        assert_matches!(&*pty1.borrow(), Type::TypeVariable { name, instance: Some(instance) } => {
+            assert_eq!(name, "$2");
+            assert_matches!(&*instance.borrow(), Type::TypeVariable { name, .. } => {
+                assert_eq!(name, "$1");
+            });
+        });
+        assert_matches!(&*pty2.borrow(), Type::TypeVariable { name, instance: Some(instance) } => {
+            assert_eq!(name, "$3");
+            assert_matches!(&*instance.borrow(), Type::TypeVariable { name, .. } => {
+                assert_eq!(name, "$1");
+            });
+        });
     }
 
     #[test]
