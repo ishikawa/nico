@@ -1,7 +1,7 @@
 use super::{wasm, wasm_type, LocalVariables, StackFrame};
 use crate::parser;
 use crate::parser::Expr;
-use crate::sem::Type;
+use crate::sem::{Type, TypeField};
 use std::convert::TryFrom;
 use std::{cell::RefCell, rc::Rc};
 
@@ -372,11 +372,7 @@ impl AsmBuilder {
             } => {
                 // Emit each field of a struct.
                 // We have to align the order with that of the struct type fields.
-                let struct_type = node.r#type.borrow();
-                let type_fields = match *struct_type {
-                    Type::Struct { ref fields, .. } => fields,
-                    ref ty => panic!("Expected struct {} type, but was {}", name, ty),
-                };
+                let type_fields = self.unwrap_struct_type_fields(&node.r#type);
 
                 builder.comment(format!("-- struct {}{{...}}", name));
 
@@ -482,11 +478,7 @@ impl AsmBuilder {
             } => {
                 temp.push_scope();
 
-                let struct_type = operand.r#type.borrow();
-                let type_fields = match *struct_type {
-                    Type::Struct { ref fields, .. } => fields,
-                    ref ty => panic!("Expected struct type, but was {}", ty),
-                };
+                let type_fields = self.unwrap_struct_type_fields(&operand.r#type);
 
                 // Load the memory index of the operand to a local variable
                 builder
@@ -1014,6 +1006,20 @@ impl AsmBuilder {
         for node in body {
             self.build_expr(builder, node, locals, frame);
         }
+    }
+
+    fn unwrap_struct_type_fields(&self, ty: &Rc<RefCell<Type>>) -> Vec<TypeField> {
+        // Emit each field of a struct.
+        // We have to align the order with that of the struct type fields.
+        let struct_type = ty.borrow();
+        let mut type_fields = match &*struct_type {
+            Type::Struct { fields, .. } => fields.clone(),
+            ref ty => panic!("Expected struct type, but was {}", ty),
+        };
+
+        // To keep memory layout consistency, sort fields by name.
+        type_fields.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
+        type_fields
     }
 
     fn drop_values(&self, builder: &mut wasm::InstructionsBuilder, body: &[parser::Node]) {

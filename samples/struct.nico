@@ -1,0 +1,15 @@
+struct Rectangle {
+    width: i32,
+    height: i32
+}
+
+fun area(rect)
+    rect.width * rect.height
+end
+
+let rect = Rectangle {
+    width: 30,
+    height: 50
+}
+
+println_i32(area(rect))  # => 1500

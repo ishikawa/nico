@@ -41,7 +41,7 @@ pub enum Type {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct TypeField {
     pub name: String,
     pub r#type: Rc<RefCell<Type>>,
@@ -207,14 +207,14 @@ impl fmt::Display for Type {
                     write!(f, "{} ", name)?;
                 }
 
-                write!(f, "{{")?;
+                write!(f, "{{ ")?;
                 while let Some(field) = it.next() {
                     write!(f, "{}: {}", field.name, field.r#type.borrow())?;
                     if it.peek().is_some() {
                         write!(f, ", ")?;
                     }
                 }
-                write!(f, "}}")
+                write!(f, " }}")
             }
             Type::Function {
                 params,
