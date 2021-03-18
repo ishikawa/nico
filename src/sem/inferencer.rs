@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 #[derive(Debug)]
 pub struct TypeInferencer {
@@ -27,18 +27,18 @@ impl Default for TypeInferencer {
 
 impl sem::SemanticAnalyzer for TypeInferencer {
     fn analyze(&mut self, module: &mut parser::Module) {
-        for function in &mut module.functions {
+        if let Some(ref mut function) = module.main {
             self.analyze_function(function);
         }
-        if let Some(ref mut function) = module.main {
+        for function in &mut module.functions {
             self.analyze_function(function);
         }
 
         // Replace type variables whose actual type is fixed with the actual type.
-        for function in &mut module.functions {
+        if let Some(ref mut function) = module.main {
             self.fix_function(function);
         }
-        if let Some(ref mut function) = module.main {
+        for function in &mut module.functions {
             self.fix_function(function);
         }
     }
@@ -47,7 +47,9 @@ impl sem::SemanticAnalyzer for TypeInferencer {
 impl TypeInferencer {
     pub fn new() -> TypeInferencer {
         TypeInferencer {
-            generic_type_var_naming: PrefixNaming::new("$GENERIC"),
+            // Assign a different prefix from parser.
+            // TODO: Create a compiler context and passing it to parser, inferencer and others.
+            generic_type_var_naming: PrefixNaming::new("$."),
         }
     }
 
@@ -196,8 +198,6 @@ impl TypeInferencer {
             }
             Expr::Access { operand, ref field } => {
                 let operand_type = self.analyze_expr(operand, generic_vars);
-                let operand_type = fixed_type(&operand_type);
-
                 let struct_type = operand_type.borrow();
                 let type_fields = match *struct_type {
                     Type::Struct { ref fields, .. } => fields,
@@ -629,12 +629,15 @@ impl TypeInferencer {
             }
             UnificationError::NumberOfParamsMismatch(ty1, ty2, n1, n2) => {
                 panic!(
-                    "Wrong number of parameters. Expected {} but was {} in `{:?}` and `{:?}`",
-                    n1, n2, ty1, ty2
+                    "Wrong number of parameters. Expected {} but was {} in `{}` and `{}`",
+                    n1,
+                    n2,
+                    ty1.borrow(),
+                    ty2.borrow()
                 );
             }
             UnificationError::TypeMismatch(ty1, ty2) => {
-                panic!("Type mismatch in `{:?}` and `{:?}`", ty1, ty2);
+                panic!("Type mismatch in `{}` and `{}`", ty1.borrow(), ty2.borrow());
             }
         };
     }
