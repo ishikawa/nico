@@ -538,7 +538,9 @@ impl TypeInferencer {
         wrap(freshed)
     }
 
-    /// Prune a chain of type variables as much as possible.
+    /// Prunes a chain of type variables as much as possible, returning
+    /// the "leaf" instance type or the type variable if an instance is
+    /// not present.
     ///
     /// ```ignore
     /// T1 -> T2 -> T3
