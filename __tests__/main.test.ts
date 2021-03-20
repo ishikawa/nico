@@ -647,7 +647,6 @@ const cases: TestCase[] = [
     expected: 90
   },
   {
-    focus: true,
     // prettier-ignore
     input: [
       "struct Rectangle {",
@@ -662,6 +661,26 @@ const cases: TestCase[] = [
       "    height: 60",
       "}",
       "foo(rect)"
+    ].join("\n"),
+    expected: 110
+  },
+  {
+    // prettier-ignore
+    input: [
+      "struct Rectangle {",
+      "    width: i32,",
+      "    height: i32",
+      "}",
+      "fun bar(rect)",
+      "    rect.width + rect.height",
+      "end",
+      "fun foo()",
+      "    bar(Rectangle {",
+      "        width: 50,",
+      "        height: 60",
+      "    })",
+      "end",
+      "foo()"
     ].join("\n"),
     expected: 110
   }

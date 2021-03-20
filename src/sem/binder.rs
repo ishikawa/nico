@@ -359,10 +359,7 @@ fn build_struct_type(definition: &parser::StructDefinition, env: &Environment) -
         });
     }
 
-    Type::Struct {
-        name: Some(name),
-        fields,
-    }
+    Type::Struct { name, fields }
 }
 
 #[cfg(test)]
