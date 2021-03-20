@@ -187,7 +187,7 @@ impl TypeInferencer {
                     let operand_type = self.analyze_expr(operand);
 
                     // Operand must be compatible with `struct { field: T }`
-                    let struct_type = self.struct_field_constraint(field);
+                    let struct_type = self.struct_fields_constraint(&[field]);
 
                     self.unify_and_log(
                         "access (operand, struct)",
@@ -494,15 +494,19 @@ impl TypeInferencer {
     }
 
     // { field: T }
-    fn struct_field_constraint(&mut self, field: &str) -> Type {
-        let ty = self.new_type_var();
+    fn struct_fields_constraint(&mut self, fields: &[&str]) -> Type {
+        let fields = fields
+            .iter()
+            .map(|x| {
+                let ty = self.new_type_var();
+                TypeField {
+                    name: x.to_string(),
+                    r#type: wrap(ty),
+                }
+            })
+            .collect();
 
-        Type::IncompleteStruct {
-            fields: vec![TypeField {
-                name: field.to_string(),
-                r#type: wrap(ty),
-            }],
-        }
+        Type::IncompleteStruct { fields }
     }
 
     fn unify_and_log<S: AsRef<str>>(
