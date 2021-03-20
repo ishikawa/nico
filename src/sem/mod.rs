@@ -29,11 +29,11 @@ pub enum Type {
     Array(Rc<RefCell<Type>>),
     Struct {
         name: String,
-        fields: Vec<TypeField>,
+        fields: HashMap<String, Rc<RefCell<Type>>>,
     },
     // Access `x.field` and Pattern `{ field, ...}` generates this constraint.
     IncompleteStruct {
-        fields: Vec<TypeField>,
+        fields: HashMap<String, Rc<RefCell<Type>>>,
     },
     Function {
         params: Vec<Rc<RefCell<Type>>>,
@@ -43,12 +43,6 @@ pub enum Type {
         name: String,
         instance: Option<Rc<RefCell<Type>>>,
     },
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct TypeField {
-    pub name: String,
-    pub r#type: Rc<RefCell<Type>>,
 }
 
 /// A variable and function representation.
@@ -209,8 +203,8 @@ impl fmt::Display for Type {
 
                 write!(f, "{} ", name)?;
                 write!(f, "{{ ")?;
-                while let Some(field) = it.next() {
-                    write!(f, "{}: {}", field.name, field.r#type.borrow())?;
+                while let Some((name, ty)) = it.next() {
+                    write!(f, "{}: {}", name, ty.borrow())?;
                     if it.peek().is_some() {
                         write!(f, ", ")?;
                     }
@@ -221,8 +215,8 @@ impl fmt::Display for Type {
                 let mut it = fields.iter().peekable();
 
                 write!(f, "{{ ")?;
-                while let Some(field) = it.next() {
-                    write!(f, "{}: {}", field.name, field.r#type.borrow())?;
+                while let Some((name, ty)) = it.next() {
+                    write!(f, "{}: {}", name, ty.borrow())?;
                     if it.peek().is_some() {
                         write!(f, ", ")?;
                     }
@@ -289,7 +283,7 @@ impl Type {
             Type::String => matches!(other, Type::String),
             Type::Array(element_type) => element_type.borrow().contains(other),
             Type::Struct { fields, .. } | Type::IncompleteStruct { fields, .. } => {
-                fields.iter().any(|x| x.r#type.borrow().contains(other))
+                fields.iter().any(|(_name, ty)| ty.borrow().contains(other))
             }
             Type::Void => matches!(other, Type::Void),
             Type::Function {

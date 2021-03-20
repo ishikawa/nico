@@ -1,9 +1,9 @@
 use super::wrap;
-use super::{Binding, Environment, SemanticAnalyzer, Type, TypeField};
+use super::{Binding, Environment, SemanticAnalyzer, Type};
 use crate::parser;
 use parser::{Expr, Node};
-use std::cell::RefCell;
 use std::rc::Rc;
+use std::{cell::RefCell, collections::HashMap};
 
 // Analyze the AST and assign variable and function bindings.
 #[derive(Debug, Default)]
@@ -369,7 +369,7 @@ impl Binder {
 
 fn build_struct_type(definition: &parser::StructDefinition, env: &Environment) -> Type {
     let name = definition.name.clone();
-    let mut fields = vec![];
+    let mut fields = HashMap::new();
 
     for field in definition.fields.as_slice() {
         let r#type = match field.type_annotation {
@@ -384,10 +384,7 @@ fn build_struct_type(definition: &parser::StructDefinition, env: &Environment) -
             parser::TypeAnnotation::Builtin(ref ty) => Rc::clone(ty),
         };
 
-        fields.push(TypeField {
-            name: field.name.clone(),
-            r#type,
-        });
+        fields.insert(field.name.clone(), Rc::clone(&r#type));
     }
 
     Type::Struct { name, fields }

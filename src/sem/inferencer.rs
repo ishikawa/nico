@@ -5,11 +5,10 @@
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem;
-use crate::sem::{Binding, Type, TypeField};
+use crate::sem::{Binding, Type};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 const DEBUG: bool = false;
@@ -146,14 +145,24 @@ impl TypeInferencer {
                 ..
             } => {
                 let struct_type = node.r#type.borrow();
-                let type_fields = match *struct_type {
-                    Type::Struct { ref fields, .. } => fields,
+                let (struct_name, type_fields) = match *struct_type {
+                    Type::Struct {
+                        ref name,
+                        ref fields,
+                    } => (name, fields),
                     ref ty => panic!("Expected struct type, but was {}", ty),
                 };
 
-                for (type_field, value_field) in type_fields.iter().zip(value_fields.iter_mut()) {
+                for value_field in value_fields {
+                    let field_type = type_fields.get(&value_field.name).unwrap_or_else(|| {
+                        panic!(
+                            "Unknown filed `{}` for struct {}",
+                            value_field.name, struct_name
+                        )
+                    });
+
                     let value_type = self.analyze_expr(&mut value_field.value);
-                    self.unify_and_log("field (type, value)", &type_field.r#type, &value_type);
+                    self.unify_and_log("field (type, value)", field_type, &value_type);
                 }
 
                 Rc::clone(&node.r#type)
@@ -205,11 +214,11 @@ impl TypeInferencer {
                     ref ty => panic!("Expected struct type, but was {}", ty),
                 };
 
-                type_fields
-                    .iter()
-                    .find(|x| &x.name == field)
-                    .map(|x| Rc::clone(&x.r#type))
-                    .unwrap_or_else(|| panic!("No filed `{}` found in {}", field, struct_type))
+                let field_type = type_fields
+                    .get(field)
+                    .unwrap_or_else(|| panic!("No filed `{}` found in {}", field, struct_type));
+
+                Rc::clone(field_type)
             }
             Expr::Identifier {
                 ref name,
@@ -390,7 +399,20 @@ impl TypeInferencer {
                     self.analyze_pattern(pattern, &element_type);
                 }
             }
-            parser::Pattern::Struct { .. } => todo!(),
+            parser::Pattern::Struct {
+                ref r#type, fields, ..
+            } => {
+                let struct_type = if let Some(struct_type) = r#type {
+                    Rc::clone(struct_type)
+                } else {
+                    let fields = fields.iter().map(|x| x.name.as_ref()).collect::<Vec<_>>();
+                    wrap(self.struct_fields_constraint(&fields))
+                };
+
+                self.unify_and_log("struct pattern", &target_type, &struct_type);
+
+                todo!()
+            }
             parser::Pattern::Rest {
                 ref mut binding, ..
             } => {
@@ -501,10 +523,7 @@ impl TypeInferencer {
             .iter()
             .map(|x| {
                 let ty = self.new_type_var();
-                TypeField {
-                    name: x.to_string(),
-                    r#type: wrap(ty),
-                }
+                (x.to_string(), wrap(ty))
             })
             .collect();
 
@@ -600,17 +619,11 @@ impl TypeInferencer {
                 fields: fields1, ..
             } => match &*ty2.borrow() {
                 Type::IncompleteStruct { fields: fields2 } => {
-                    let mut fields_map = HashMap::new();
-
                     // Unify types in Fields2 with Fields1.
-                    for f in fields1 {
-                        fields_map.insert(&f.name, Rc::clone(&f.r#type));
-                    }
-
-                    for f in fields2 {
-                        if let Some(ty) = fields_map.get(&f.name) {
+                    for (name2, ty2) in fields2 {
+                        if let Some(ty1) = fields1.get(name2) {
                             // Both fields1 and fields2 contain same named field.
-                            if let Some(error) = self._unify(ty, &f.r#type) {
+                            if let Some(error) = self._unify(ty1, ty2) {
                                 return Some(error);
                             }
                         } else {
@@ -628,25 +641,19 @@ impl TypeInferencer {
             },
             Type::IncompleteStruct { fields: fields1 } => match &*ty2.borrow() {
                 Type::IncompleteStruct { fields: fields2 } => {
-                    let mut fields_map = HashMap::new();
-                    let mut new_fields = vec![];
+                    let mut new_fields = fields1.clone();
 
                     // Unify types in (Fields1 & Fields2).
-                    for f in fields1 {
-                        fields_map.insert(&f.name, Rc::clone(&f.r#type));
-                        new_fields.push(f.clone());
-                    }
-
-                    for f in fields2 {
-                        if let Some(ty) = fields_map.get(&f.name) {
+                    for (name2, ty2) in fields2 {
+                        if let Some(ty1) = fields1.get(name2) {
                             // Both fields1 and fields2 contain same named field.
                             // Unifies types and it should be already added to new_fields.
-                            if let Some(error) = self._unify(ty, &f.r#type) {
+                            if let Some(error) = self._unify(ty1, ty2) {
                                 return Some(error);
                             }
                         } else {
                             // Fields2 contains a field which is not included in the Fields2.
-                            new_fields.push(f.clone());
+                            new_fields.insert(name2.clone(), Rc::clone(ty2));
                         }
                     }
 
@@ -750,10 +757,7 @@ impl TypeFixer {
             Type::Struct { name, fields } => {
                 let fields = fields
                     .iter()
-                    .map(|x| TypeField {
-                        name: x.name.clone(),
-                        r#type: self.fixed_type(&x.r#type),
-                    })
+                    .map(|(name, ty)| (name.clone(), Rc::clone(ty)))
                     .collect();
 
                 wrap(Type::Struct {
