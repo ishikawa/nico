@@ -169,7 +169,7 @@ impl TypeInferencer {
                         &wrap(array_type),
                     );
 
-                    fixed_type(&operand_type)
+                    self.prune(&operand_type)
                 };
 
                 let element_type = Type::unwrap_element_type_or_else(&operand_type, |ty| {
@@ -195,7 +195,7 @@ impl TypeInferencer {
                         &wrap(struct_type),
                     );
 
-                    fixed_type(&operand_type)
+                    self.prune(&operand_type)
                 };
                 let struct_type = operand_type.borrow();
                 let type_fields = match &*struct_type {
@@ -378,7 +378,7 @@ impl TypeInferencer {
                     };
                 };
 
-                let target_type = fixed_type(target_type);
+                let target_type = self.prune(target_type);
 
                 let element_type = Type::unwrap_element_type_or_else(&target_type, |ty| {
                     panic!("mismatched type: expected T[], found {}", ty);
@@ -394,7 +394,7 @@ impl TypeInferencer {
             } => {
                 // For rest pattern, the target type `T` must be an element type.
                 // And then, the rest pattern's type must be `T[]`.
-                let element_type = fixed_type(target_type);
+                let element_type = self.prune(target_type);
                 let target_type = wrap(Type::Array(element_type));
 
                 let binding_type = &binding.borrow().r#type;
