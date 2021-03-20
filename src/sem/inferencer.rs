@@ -5,14 +5,14 @@
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem;
-use crate::sem::{Binding, Type};
+use crate::sem::{Binding, Type, TypeField};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 #[derive(Debug)]
 pub struct TypeInferencer {
@@ -175,7 +175,7 @@ impl TypeInferencer {
                     let operand_type = self.analyze_expr(operand, generic_vars);
 
                     // Operand must be Array<T>
-                    let array_type = self.new_array_type_var();
+                    let array_type = self.typed_array_constraint();
 
                     self.unify_and_log(
                         "subscript (operand, T[])",
@@ -197,10 +197,23 @@ impl TypeInferencer {
                 element_type
             }
             Expr::Access { operand, ref field } => {
-                let operand_type = self.analyze_expr(operand, generic_vars);
+                let operand_type = {
+                    let operand_type = self.analyze_expr(operand, generic_vars);
+
+                    // Operand must be compatible with `struct { field: T }`
+                    let struct_type = self.struct_field_constraint(field);
+
+                    self.unify_and_log(
+                        "access (operand, struct)",
+                        &operand_type,
+                        &wrap(struct_type),
+                    );
+
+                    fixed_type(&operand_type)
+                };
                 let struct_type = operand_type.borrow();
-                let type_fields = match *struct_type {
-                    Type::Struct { ref fields, .. } => fields,
+                let type_fields = match &*struct_type {
+                    Type::Struct { fields, .. } | Type::IncompleteStruct { fields, .. } => fields,
                     ref ty => panic!("Expected struct type, but was {}", ty),
                 };
 
@@ -348,7 +361,7 @@ impl TypeInferencer {
             &node.r#type,
             &ty,
         );
-        ty
+        Rc::clone(&node.r#type)
     }
 
     fn analyze_pattern(&mut self, pattern: &mut parser::Pattern, target_type: &Rc<RefCell<Type>>) {
@@ -371,7 +384,7 @@ impl TypeInferencer {
             }
             parser::Pattern::Array(patterns) => {
                 // Head expression's type must be Array<T>
-                let array_type = self.new_array_type_var();
+                let array_type = self.typed_array_constraint();
 
                 if let Some(err) = self._unify(&target_type, &wrap(array_type)) {
                     match err {
@@ -410,6 +423,7 @@ impl TypeInferencer {
 #[derive(Debug)]
 enum Unification {
     ReplaceInstance(Rc<RefCell<Type>>),
+    ReplaceIncompleteStruct(Vec<TypeField>),
     Unify(Rc<RefCell<Type>>, Rc<RefCell<Type>>),
     Done,
 }
@@ -518,6 +532,16 @@ impl TypeInferencer {
                     fields,
                 }
             }
+            Type::IncompleteStruct { ref fields } => {
+                let fields = fields
+                    .iter()
+                    .map(|x| sem::TypeField {
+                        name: x.name.clone(),
+                        r#type: self.freshrec(&x.r#type, generic_vars, type_var_cache),
+                    })
+                    .collect();
+                Type::IncompleteStruct { fields }
+            }
             Type::Function {
                 ref params,
                 ref return_type,
@@ -572,10 +596,30 @@ impl TypeInferencer {
         Type::new_type_var(&self.generic_type_var_naming.next())
     }
 
+    /// T -> C
+    fn new_typed_var(&mut self, ty: &Rc<RefCell<Type>>) -> Type {
+        Type::TypeVariable {
+            name: self.generic_type_var_naming.next(),
+            instance: Some(Rc::clone(ty)),
+        }
+    }
+
     /// Array<T>
-    fn new_array_type_var(&mut self) -> Type {
+    fn typed_array_constraint(&mut self) -> Type {
         let ty = self.new_type_var();
         Type::Array(wrap(ty))
+    }
+
+    // { field: T }
+    fn struct_field_constraint(&mut self, field: &str) -> Type {
+        let ty = self.new_type_var();
+
+        Type::IncompleteStruct {
+            fields: vec![TypeField {
+                name: field.to_string(),
+                r#type: wrap(ty),
+            }],
+        }
     }
 
     fn unify_and_log<S: AsRef<str>>(
@@ -669,6 +713,40 @@ impl TypeInferencer {
                     ));
                 }
             },
+            Type::IncompleteStruct { fields: fields1 } => match &*ty2.borrow() {
+                Type::IncompleteStruct { fields: fields2 } => {
+                    let mut fields_map = HashMap::new();
+                    let mut new_fields = vec![];
+
+                    // Unify types in (Fields1 & Fields2).
+                    for f in fields1 {
+                        fields_map.insert(&f.name, Rc::clone(&f.r#type));
+                        new_fields.push(f.clone());
+                    }
+
+                    for f in fields2 {
+                        if let Some(ty) = fields_map.get(&f.name) {
+                            // Both fields1 and fields2 contain same named field.
+                            // Unifies types and it should be already added to new_fields.
+                            if let Some(error) = self._unify(ty, &f.r#type) {
+                                return Some(error);
+                            }
+                        } else {
+                            // Fields2 contains a field which is not included in the Fields2.
+                            new_fields.push(f.clone());
+                        }
+                    }
+
+                    Unification::ReplaceIncompleteStruct(new_fields)
+                }
+                Type::TypeVariable { .. } => Unification::Unify(Rc::clone(ty2), Rc::clone(ty1)),
+                _ => {
+                    return Some(UnificationError::TypeMismatch(
+                        Rc::clone(ty1),
+                        Rc::clone(ty2),
+                    ));
+                }
+            },
             Type::Function {
                 params: ref params1,
                 return_type: ref return_type1,
@@ -716,7 +794,7 @@ impl TypeInferencer {
             },
         };
 
-        match &action {
+        match action {
             Unification::ReplaceInstance(new_instance) => {
                 if let Type::TypeVariable {
                     ref mut instance, ..
@@ -727,7 +805,15 @@ impl TypeInferencer {
                 self.prune(ty1);
                 None
             }
-            Unification::Unify(ty1, ty2) => self._unify(&Rc::clone(ty1), &Rc::clone(ty2)),
+            Unification::ReplaceIncompleteStruct(fields) => {
+                let struct_ty = wrap(Type::IncompleteStruct { fields });
+
+                ty1.replace(self.new_typed_var(&struct_ty));
+                ty2.replace(self.new_typed_var(&struct_ty));
+
+                None
+            }
+            Unification::Unify(ty1, ty2) => self._unify(&ty1, &ty2),
             Unification::Done => None,
         }
     }

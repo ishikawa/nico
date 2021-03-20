@@ -28,7 +28,11 @@ pub enum Type {
     Void,
     Array(Rc<RefCell<Type>>),
     Struct {
-        name: Option<String>,
+        name: String,
+        fields: Vec<TypeField>,
+    },
+    // Access `x.field` and Pattern `{ field, ...}` generates this constraint.
+    IncompleteStruct {
         fields: Vec<TypeField>,
     },
     Function {
@@ -203,9 +207,18 @@ impl fmt::Display for Type {
             Type::Struct { name, fields } => {
                 let mut it = fields.iter().peekable();
 
-                if let Some(name) = name {
-                    write!(f, "{} ", name)?;
+                write!(f, "{} ", name)?;
+                write!(f, "{{ ")?;
+                while let Some(field) = it.next() {
+                    write!(f, "{}: {}", field.name, field.r#type.borrow())?;
+                    if it.peek().is_some() {
+                        write!(f, ", ")?;
+                    }
                 }
+                write!(f, " }}")
+            }
+            Type::IncompleteStruct { fields } => {
+                let mut it = fields.iter().peekable();
 
                 write!(f, "{{ ")?;
                 while let Some(field) = it.next() {
@@ -275,7 +288,9 @@ impl Type {
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),
             Type::Array(element_type) => element_type.borrow().contains(other),
-            Type::Struct { fields, .. } => fields.iter().any(|x| x.r#type.borrow().contains(other)),
+            Type::Struct { fields, .. } | Type::IncompleteStruct { fields, .. } => {
+                fields.iter().any(|x| x.r#type.borrow().contains(other))
+            }
             Type::Void => matches!(other, Type::Void),
             Type::Function {
                 params,
@@ -306,24 +321,17 @@ impl PartialEq for Type {
                     false
                 }
             }
-            // Named struct
-            Type::Struct {
-                name: Some(name1), ..
-            } => {
-                if let Type::Struct {
-                    name: Some(name2), ..
-                } = other
-                {
+            Type::Struct { name: name1, .. } => {
+                if let Type::Struct { name: name2, .. } = other {
                     name1 == name2
                 } else {
                     false
                 }
             }
-            // Anonymous struct
-            Type::Struct {
+            Type::IncompleteStruct {
                 fields: fields1, ..
             } => {
-                if let Type::Struct {
+                if let Type::IncompleteStruct {
                     fields: fields2, ..
                 } = other
                 {
