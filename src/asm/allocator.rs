@@ -279,6 +279,7 @@ impl Allocator {
                     self.analyze_pattern(pattern, locals, frame);
                 }
             }
+            parser::Pattern::Struct { .. } => todo!(),
             parser::Pattern::Rest {
                 ref mut binding,
                 ref mut reference_offset,

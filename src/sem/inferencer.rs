@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 #[derive(Debug)]
 pub struct TypeInferencer {
@@ -388,6 +388,7 @@ impl TypeInferencer {
                     self.analyze_pattern(pattern, &element_type);
                 }
             }
+            parser::Pattern::Struct { .. } => todo!(),
             parser::Pattern::Rest {
                 ref mut binding, ..
             } => {
@@ -900,6 +901,7 @@ impl TypeInferencer {
                     self.fix_pattern(pattern);
                 }
             }
+            parser::Pattern::Struct { .. } => todo!(),
         };
     }
 }

@@ -785,6 +785,7 @@ impl AsmBuilder {
 
                 todo!("Local binding with array pattern is not yet implemented. ")
             }
+            parser::Pattern::Struct { .. } => todo!(),
             parser::Pattern::Rest { .. } => panic!("Rest pattern should not be here."),
         };
     }
@@ -971,6 +972,7 @@ impl AsmBuilder {
 
                 temp.pop_scope();
             }
+            parser::Pattern::Struct { .. } => todo!(),
             parser::Pattern::Rest {
                 ref binding,
                 ref name,
