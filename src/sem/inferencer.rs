@@ -925,7 +925,15 @@ impl TypeFixer {
                     self.fix_pattern(pattern);
                 }
             }
-            parser::Pattern::Struct { .. } => todo!(),
+            parser::Pattern::Struct { fields, r#type, .. } => {
+                if let Some(ty) = r#type {
+                    *r#type = Some(self.fixed_type(&ty));
+                }
+
+                for field in fields {
+                    self.fix_pattern(&mut field.pattern);
+                }
+            }
         };
     }
 }
