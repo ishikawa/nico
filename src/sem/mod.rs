@@ -473,12 +473,17 @@ impl Space {
 
     /// `self` <: `other`: whether `self` is a subtype of `other`
     pub fn is_subspace_of(&self, other: &Space) -> bool {
+        let subtractions = Self::_subtractions(other);
+        self._is_subspace_of(&subtractions)
+    }
+
+    pub fn _is_subspace_of(&self, subtractions: &[Subtraction]) -> bool {
         match self {
             Space::Empty => true,
-            Space::Union(a, b) => a.is_subspace_of(other) && b.is_subspace_of(other),
+            Space::Union(a, b) => {
+                a._is_subspace_of(subtractions) && b._is_subspace_of(subtractions)
+            }
             Space::Something(_, value) => {
-                let subtractions = Self::_subtractions(other);
-
                 // Everything
                 if subtractions.iter().any(|x| match x {
                     Subtraction::Everything => true,
@@ -491,8 +496,6 @@ impl Space {
                 false
             }
             Space::Everything(ty) => {
-                let subtractions = Self::_subtractions(other);
-
                 // Scan all the elements beforehand to gather the necessary information.
                 let mut cover = HashSet::<usize>::new();
                 let mut minimum_length = None;
@@ -506,7 +509,7 @@ impl Space {
                             minimum_length.replace(n);
                         }
                         Subtraction::ExactLength(n) => {
-                            cover.insert(n);
+                            cover.insert(*n);
                         }
                         _ => {}
                     }
@@ -519,19 +522,39 @@ impl Space {
                         // -- If patterns have a rest pattern, returns `true` if other
                         // patterns cover possible array lengths < minimal length.
                         if let Some(n) = minimum_length {
-                            if (0..n).all(|i| cover.contains(&i)) {
+                            if (0..*n).all(|i| cover.contains(&i)) {
                                 return true;
                             }
                         }
                     }
+                    Type::Struct { .. } => unreachable!("A space of struct must be Space::Struct"),
                     _ => {}
                 };
 
                 false
             }
-            Space::Struct(..) => todo!(),
-            Space::Array(_) => false,
-            Space::Rest(_) => false,
+            Space::Struct(fields) => {
+                let mut field_names = fields.keys().cloned().collect::<HashSet<_>>();
+
+                for subtraction in subtractions {
+                    match subtraction {
+                        Subtraction::Everything => {
+                            return true;
+                        }
+                        Subtraction::Field { name, value } => {
+                            let field_space = fields.get(name).unwrap();
+                            if field_space._is_subspace_of(&value) {
+                                field_names.remove(name);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                field_names.is_empty()
+            }
+            Space::Array(_) => todo!("Fixed length array type is not yet supported"),
+            Space::Rest(_) => unreachable!(),
         }
     }
 

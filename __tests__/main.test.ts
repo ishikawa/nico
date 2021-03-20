@@ -631,7 +631,6 @@ const cases: TestCase[] = [
   },
   // Structs
   {
-    todo: true,
     // prettier-ignore
     input: [
       "struct Rectangle {",
@@ -648,7 +647,6 @@ const cases: TestCase[] = [
     expected: 90
   },
   {
-    todo: true,
     // prettier-ignore
     input: [
       "struct Rectangle {",
@@ -667,7 +665,6 @@ const cases: TestCase[] = [
     expected: 110
   },
   {
-    todo: true,
     // prettier-ignore
     input: [
       "struct Rectangle {",
