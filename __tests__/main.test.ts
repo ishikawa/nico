@@ -683,6 +683,19 @@ const cases: TestCase[] = [
       "foo()"
     ].join("\n"),
     expected: 110
+  },
+  {
+    // prettier-ignore
+    input: [
+      "struct Point {",
+      "    x: i32,",
+      "    y: i32",
+      "}",
+      "let p = Point { x: 3, y: 7 }",
+      "let Point { x: a, y: b } = p",
+      "a + b",
+    ].join("\n"),
+    expected: 21
   }
 ];
 
