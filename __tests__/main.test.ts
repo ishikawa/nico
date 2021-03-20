@@ -685,7 +685,7 @@ const cases: TestCase[] = [
     expected: 110
   },
   {
-    todo: true,
+    focus: true,
     // prettier-ignore
     input: [
       "struct Point {",

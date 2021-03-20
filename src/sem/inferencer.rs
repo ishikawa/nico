@@ -411,7 +411,18 @@ impl TypeInferencer {
 
                 self.unify_and_log("struct pattern", &target_type, &struct_type);
 
-                todo!()
+                let target_type = self.prune(target_type);
+                let target_type = target_type.borrow();
+
+                let type_fields = match &*target_type {
+                    Type::Struct { fields, .. } => fields,
+                    ref ty => panic!("Expected struct type, but was {}", ty),
+                };
+
+                for field in fields {
+                    let field_type = type_fields.get(&field.name).unwrap();
+                    self.analyze_pattern(&mut field.pattern, field_type);
+                }
             }
             parser::Pattern::Rest {
                 ref mut binding, ..
