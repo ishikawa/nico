@@ -35,11 +35,13 @@ impl sem::SemanticAnalyzer for TypeInferencer {
         }
 
         // Replace type variables whose actual type is fixed with the actual type.
+        let fixer = TypeFixer::default();
+
         if let Some(ref mut function) = module.main {
-            self.fix_function(function);
+            fixer.fix_function(function);
         }
         for function in &mut module.functions {
-            self.fix_function(function);
+            fixer.fix_function(function);
         }
     }
 }
@@ -727,64 +729,67 @@ impl TypeInferencer {
     }
 }
 
-fn fixed_type_and_log(message: &str, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
-    let new_type = fixed_type(ty);
+#[derive(Debug, Default)]
+struct TypeFixer {}
 
-    if DEBUG {
-        eprintln!("[fix] {} {} -> {}", message, ty.borrow(), new_type.borrow());
+impl TypeFixer {
+    fn fixed_type_and_log(&self, message: &str, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+        let new_type = self.fixed_type(ty);
+
+        if DEBUG {
+            eprintln!("[fix] {} {} -> {}", message, ty.borrow(), new_type.borrow());
+        }
+
+        new_type
     }
 
-    new_type
-}
+    // Prune fixed type variables and remove indirection.
+    pub fn fixed_type(&self, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+        match &*ty.borrow() {
+            Type::Array(element_type) => wrap(Type::Array(self.fixed_type(&element_type))),
+            Type::Struct { name, fields } => {
+                let fields = fields
+                    .iter()
+                    .map(|x| TypeField {
+                        name: x.name.clone(),
+                        r#type: self.fixed_type(&x.r#type),
+                    })
+                    .collect();
 
-// Prune fixed type variables and remove indirection.
-pub fn fixed_type(ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
-    match &*ty.borrow() {
-        Type::Array(element_type) => wrap(Type::Array(fixed_type(&element_type))),
-        Type::Struct { name, fields } => {
-            let fields = fields
-                .iter()
-                .map(|x| TypeField {
-                    name: x.name.clone(),
-                    r#type: fixed_type(&x.r#type),
+                wrap(Type::Struct {
+                    name: name.clone(),
+                    fields,
                 })
-                .collect();
+            }
+            Type::Function {
+                params,
+                return_type,
+            } => wrap(Type::Function {
+                params: params.iter().map(|p| self.fixed_type(p)).collect(),
+                return_type: self.fixed_type(return_type),
+            }),
+            Type::TypeVariable {
+                instance: Some(instance),
+                ..
+            } => self.fixed_type(instance),
 
-            wrap(Type::Struct {
-                name: name.clone(),
-                fields,
-            })
+            Type::TypeVariable { instance: None, .. } => {
+                // If the type is not yet fixed, returns it.
+                Rc::clone(ty)
+            }
+            _ => Rc::clone(ty),
         }
-        Type::Function {
-            params,
-            return_type,
-        } => wrap(Type::Function {
-            params: params.iter().map(|p| fixed_type(p)).collect(),
-            return_type: fixed_type(return_type),
-        }),
-        Type::TypeVariable {
-            instance: Some(instance),
-            ..
-        } => fixed_type(instance),
-
-        Type::TypeVariable { instance: None, .. } => {
-            // If the type is not yet fixed, returns it.
-            Rc::clone(ty)
-        }
-        _ => Rc::clone(ty),
     }
-}
 
-impl TypeInferencer {
     fn fix_function(&self, function: &mut parser::Function) {
         for binding in &mut function.params {
             match *binding.borrow_mut() {
-                Binding { ref mut r#type, .. } => *r#type = fixed_type(r#type),
+                Binding { ref mut r#type, .. } => *r#type = self.fixed_type(r#type),
             };
         }
 
         self.fix_body(&mut function.body);
-        function.r#type = fixed_type(&function.r#type);
+        function.r#type = self.fixed_type(&function.r#type);
     }
 
     fn fix_body(&self, body: &mut Vec<parser::Node>) {
@@ -794,7 +799,7 @@ impl TypeInferencer {
     }
 
     fn fix_expr(&self, node: &mut parser::Node) {
-        node.r#type = fixed_type_and_log(&node.expr.short_name(), &node.r#type);
+        node.r#type = self.fixed_type_and_log(&node.expr.short_name(), &node.r#type);
 
         match &mut node.expr {
             Expr::Stmt(expr) => {
@@ -889,14 +894,14 @@ impl TypeInferencer {
         match pattern {
             parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
                 Binding { ref mut r#type, .. } => {
-                    *r#type = fixed_type(r#type);
+                    *r#type = self.fixed_type(r#type);
                 }
             },
             parser::Pattern::Rest {
                 ref mut binding, ..
             } => match *binding.borrow_mut() {
                 Binding { ref mut r#type, .. } => {
-                    *r#type = fixed_type(r#type);
+                    *r#type = self.fixed_type(r#type);
                 }
             },
             parser::Pattern::Integer(_) => {}
