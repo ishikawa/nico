@@ -388,7 +388,7 @@ enum Subtraction {
     Everything,
     Value(Value),
     ExactLength(usize),
-    MinimalLength(usize),
+    MinimumLength(usize),
     Field {
         name: String,
         value: Vec<Subtraction>,
@@ -455,7 +455,7 @@ impl Space {
                 if spaces.iter().all(|x| matches!(x, Space::Everything(_))) {
                     vec![Subtraction::ExactLength(spaces.len())]
                 } else if spaces.iter().any(|x| matches!(x, Space::Rest(_))) {
-                    vec![Subtraction::MinimalLength(spaces.len() - 1)]
+                    vec![Subtraction::MinimumLength(spaces.len() - 1)]
                 } else {
                     vec![]
                 }
@@ -493,33 +493,34 @@ impl Space {
             Space::Everything(ty) => {
                 let subtractions = Self::_subtractions(other);
 
-                // Everything
-                if subtractions
-                    .iter()
-                    .any(|x| matches!(x, Subtraction::Everything))
-                {
-                    return true;
+                // Scan all the elements beforehand to gather the necessary information.
+                let mut cover = HashSet::<usize>::new();
+                let mut minimum_length = None;
+
+                for subtraction in subtractions {
+                    match subtraction {
+                        Subtraction::Everything => {
+                            return true;
+                        }
+                        Subtraction::MinimumLength(n) => {
+                            minimum_length.replace(n);
+                        }
+                        Subtraction::ExactLength(n) => {
+                            cover.insert(n);
+                        }
+                        _ => {}
+                    }
                 }
 
                 match *ty.borrow() {
                     Type::Array(..) => {
                         // Array exhaustivity
-                        let mut cover = HashSet::<usize>::new();
-
-                        // -- collect covered length
-                        for subtraction in &subtractions {
-                            if let Subtraction::ExactLength(n) = subtraction {
-                                cover.insert(*n);
-                            }
-                        }
 
                         // -- If patterns have a rest pattern, returns `true` if other
                         // patterns cover possible array lengths < minimal length.
-                        for subtraction in &subtractions {
-                            if let Subtraction::MinimalLength(n) = subtraction {
-                                if (0..*n).all(|i| cover.contains(&i)) {
-                                    return true;
-                                }
+                        if let Some(n) = minimum_length {
+                            if (0..n).all(|i| cover.contains(&i)) {
+                                return true;
                             }
                         }
                     }
