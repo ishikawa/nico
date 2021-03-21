@@ -494,6 +494,9 @@ const cases: TestCase[] = [
     compileError: /mismatched type: expected T\[\], found i32/
   },
   {
+    input: "let _ = 1"
+  },
+  {
     // prettier-ignore
     input: [
       "let [...x] = []",

@@ -748,15 +748,15 @@ impl AsmBuilder {
     ) {
         match pattern {
             // variable pattern
-            parser::Pattern::Variable(ref name, ref binding) => {
+            parser::Pattern::Variable(_name, ref binding) => {
                 let binding = binding.borrow();
-                let var = binding
-                    .storage
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name))
-                    .unwrap_local_variable();
 
-                builder.local_set(&var.name);
+                if let Some(storage) = binding.storage.as_ref() {
+                    let var = storage.unwrap_local_variable();
+                    builder.local_set(&var.name);
+                } else {
+                    builder.drop();
+                }
             }
             parser::Pattern::Integer(_) => {
                 panic!("invalid local binding");
