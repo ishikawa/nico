@@ -696,9 +696,10 @@ const cases: TestCase[] = [
       "}",
       "let p = Point { x: 3, y: 7 }",
       "let Point { x: a, y: b } = p",
-      "a + b",
+      "let { x: c, y: d } = p",
+      "a + b + c + d",
     ].join("\n"),
-    expected: 10
+    expected: 20
   }
 ];
 
