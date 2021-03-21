@@ -140,7 +140,7 @@ impl TypeValidator {
                 {
                     // exhaustivity check
                     if head_space.is_subspace_of(&arms_space) {
-                        panic!("Unreachable pattern.: {:?}", pattern)
+                        panic!("Unreachable pattern: {}", pattern)
                     }
 
                     self.validate_pattern(pattern);

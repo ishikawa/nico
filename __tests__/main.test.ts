@@ -743,6 +743,22 @@ const cases: TestCase[] = [
       "end"
     ].join("\n"),
     expected: 99
+  },
+  {
+    // prettier-ignore
+    input: [
+      "struct Point {",
+      "    x: i32,",
+      "    y: i32",
+      "}",
+      "case Point { x: 33, y: 66 }",
+      "when Point { x: _, y: _ }",
+      "    11",
+      "when Point { x: 1 }",
+      "    22",
+      "end"
+    ].join("\n"),
+    compileError: /Unreachable pattern: Point { x: 1 }/i
   }
 ];
 
