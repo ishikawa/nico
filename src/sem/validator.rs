@@ -138,9 +138,15 @@ impl TypeValidator {
                     pattern,
                 } in arms
                 {
+                    if let parser::Pattern::Struct { r#type, .. } = pattern {
+                        if r#type.is_none() {
+                            panic!("Missing type in struct type {}", pattern);
+                        }
+                    }
+
                     // exhaustivity check
                     if head_space.is_subspace_of(&arms_space) {
-                        panic!("Unreachable pattern.: {:?}", pattern)
+                        panic!("Unreachable pattern: {}", pattern)
                     }
 
                     self.validate_pattern(pattern);

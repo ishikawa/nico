@@ -634,7 +634,6 @@ const cases: TestCase[] = [
   },
   // Structs
   {
-    // prettier-ignore
     input: [
       "struct Rectangle {",
       "    width: i32,",
@@ -650,7 +649,6 @@ const cases: TestCase[] = [
     expected: 90
   },
   {
-    // prettier-ignore
     input: [
       "struct Rectangle {",
       "    width: i32,",
@@ -668,7 +666,6 @@ const cases: TestCase[] = [
     expected: 110
   },
   {
-    // prettier-ignore
     input: [
       "struct Rectangle {",
       "    width: i32,",
@@ -687,8 +684,8 @@ const cases: TestCase[] = [
     ].join("\n"),
     expected: 110
   },
+  // let binding
   {
-    // prettier-ignore
     input: [
       "struct Point {",
       "    x: i32,",
@@ -696,9 +693,129 @@ const cases: TestCase[] = [
       "}",
       "let p = Point { x: 3, y: 7 }",
       "let Point { x: a, y: b } = p",
-      "a + b",
+      "let { x: c, y: d } = p",
+      "a + b + c + d"
     ].join("\n"),
-    expected: 10
+    expected: 20
+  },
+  {
+    input: [
+      "struct Point {",
+      "    x: i32,",
+      "    y: i32",
+      "}",
+      "let p = Point { x: 43, y: 57 }",
+      "let { x } = p",
+      "let { y } = p",
+      "x + y"
+    ].join("\n"),
+    expected: 100
+  },
+  {
+    input: [
+      "struct Point {",
+      "    x: i32,",
+      "    y: i32",
+      "}",
+      "case Point { x: 43, y: 57 }",
+      "when { z }",
+      "    1",
+      "end"
+    ].join("\n"),
+    compileError: /Type mismatch/i
+  },
+  {
+    input: [
+      "struct Point {",
+      "    x: i32,",
+      "    y: i32",
+      "}",
+      "case Point { x: 33, y: 66 }",
+      "when Point { x, y }",
+      "    x + y",
+      "end"
+    ].join("\n"),
+    expected: 99
+  },
+  {
+    input: [
+      "struct Point {",
+      "    x: i32,",
+      "    y: i32",
+      "}",
+      "case Point { x: 33, y: 66 }",
+      "when Point { x: _, y: _ }",
+      "    11",
+      "when Point { x: 1 }",
+      "    22",
+      "end"
+    ].join("\n"),
+    compileError: /Unreachable pattern: Point { x: 1 }/i
+  },
+  {
+    input: [
+      "struct Point {",
+      "    x: i32,",
+      "    y: i32,",
+      "}",
+      "",
+      "fun point_assign(p)",
+      "    case p",
+      "    when Point { x, y: 0 }",
+      "        x",
+      "    when Point { x: 0, y }",
+      "        y",
+      "    when Point { x, y }",
+      "        x + y",
+      "    end",
+      "end",
+      "",
+      "point_assign(Point { x: 0, y: 7 }) +",
+      "point_assign(Point { x: 8, y: 0 }) +",
+      "point_assign(Point { x: 8, y: 7 })"
+    ].join("\n"),
+    expected: 30
+  },
+  {
+    input: [
+      "struct Point {",
+      "    x: i32,",
+      "    y: i32",
+      "}",
+      "case Point { x: 33, y: 66 }",
+      "when Point { x: 1, y: _ }",
+      "    11",
+      "when Point { x }",
+      "    22 + x",
+      "end"
+    ].join("\n"),
+    expected: 55
+  },
+  {
+    // prettier-ignore
+    input: [
+      "struct X {",
+      "    x: i32,",
+      "}",
+      "case X { x: 33 }",
+      "when X { x }",
+      "    22 + x",
+      "end"
+    ].join("\n"),
+    expected: 55
+  },
+  {
+    // prettier-ignore
+    input: [
+      "struct X {",
+      "    x: i32,",
+      "}",
+      "case X { x: 33 }",
+      "when X { x: _ }",
+      "    22",
+      "end"
+    ].join("\n"),
+    expected: 22
   }
 ];
 

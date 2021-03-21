@@ -1,7 +1,7 @@
 use super::{wasm, wasm_type, LocalVariables, StackFrame};
 use crate::parser;
 use crate::parser::Expr;
-use crate::sem::Type;
+use crate::sem::{Binding, Type};
 use std::{cell::RefCell, rc::Rc};
 use std::{collections::HashMap, convert::TryFrom};
 
@@ -393,6 +393,10 @@ impl AsmBuilder {
                             ))
                             .global_get("fp");
 
+                        if object_offset != 0 {
+                            builder.u32_const(object_offset).i32_add();
+                        }
+
                         self.build_expr(builder, &value_field.value, temp, frame);
                         builder.i32_store(current_offset);
 
@@ -681,7 +685,7 @@ impl AsmBuilder {
                     let mut arm_builder = wasm::Builders::instructions();
 
                     arm_builder.comment(&format!("when {}", arm.pattern)).block(
-                        Some(wasm::Type::I32),
+                        wasm::Type::I32,
                         &mut |builder| {
                             // Pattern
                             builder.local_get(&head_var.name).note("head value");
@@ -735,8 +739,7 @@ impl AsmBuilder {
             Expr::Var { pattern, init } => {
                 builder.comment(format!("let {} = ...", pattern));
                 self.build_expr(builder, init, temp, frame);
-                self.build_let_pattern(builder, pattern, &init.r#type, temp);
-                builder.i32_const_(1, "let binding always push `true` value.");
+                self.build_let_pattern(builder, pattern, &init.r#type, temp, frame);
             }
         };
     }
@@ -747,18 +750,11 @@ impl AsmBuilder {
         pattern: &parser::Pattern,
         init_type: &Rc<RefCell<Type>>,
         temp: &mut LocalVariables,
+        frame: &StackFrame,
     ) {
         match pattern {
-            // variable pattern
-            parser::Pattern::Variable(_name, ref binding) => {
-                let binding = binding.borrow();
-
-                if let Some(storage) = binding.storage.as_ref() {
-                    let var = storage.unwrap_local_variable();
-                    builder.local_set(&var.name);
-                } else {
-                    builder.drop();
-                }
+            parser::Pattern::Variable(ref name, ref binding) => {
+                self.build_variable_pattern(builder, name, binding);
             }
             parser::Pattern::Integer(_) => {
                 panic!("invalid local binding");
@@ -780,6 +776,7 @@ impl AsmBuilder {
                             .unwrap_local_variable();
 
                         builder.local_set(&var.name);
+                        builder.i32_const_(1, "success value");
                         return;
                     }
                 }
@@ -787,45 +784,106 @@ impl AsmBuilder {
                 todo!("Local binding with array pattern is not yet implemented. ")
             }
             parser::Pattern::Struct { fields, .. } => {
-                temp.push_scope();
-
-                let type_fields = self.unwrap_struct_type_fields(init_type);
-                let pattern_fields = fields
-                    .iter()
-                    .map(|f| (f.name.clone(), &f.pattern))
-                    .collect::<HashMap<_, _>>();
-
-                // Load the memory index of the operand to a local variable
-                let temp_memidx = temp.reserve_name_i32();
-
-                builder
-                    .comment(&format!(
-                        "-- Destructuring assignment of {}",
-                        init_type.borrow()
-                    ))
-                    .local_set_(&temp_memidx, "memidx");
-
-                // Calculate the offset
-                let mut offset = 0;
-
-                for (field_name, field_type) in type_fields {
-                    if let Some(pattern) = pattern_fields.get(&field_name) {
-                        builder.local_get(&temp_memidx).i32_load_(
-                            offset,
-                            format!("access .{} at base + {}", field_name, offset),
-                        );
-
-                        self.build_let_pattern(builder, pattern, &field_type, temp);
-                    }
-
-                    let field_size = wasm_type(&field_type).unwrap().num_bytes();
-                    offset += field_size;
-                }
-
-                temp.pop_scope();
+                self.build_struct_pattern(
+                    builder,
+                    &fields,
+                    init_type,
+                    temp,
+                    frame,
+                    |builder, field_pattern, field_type, temp, frame| {
+                        self.build_let_pattern(builder, field_pattern, field_type, temp, frame);
+                    },
+                );
             }
             parser::Pattern::Rest { .. } => panic!("Rest pattern should not be here."),
         };
+    }
+
+    fn build_variable_pattern(
+        &self,
+        builder: &mut wasm::InstructionsBuilder,
+        name: &str,
+        binding: &Rc<RefCell<Binding>>,
+    ) {
+        let binding = binding.borrow();
+
+        match &binding.storage {
+            None => {
+                // Ignored
+                builder.drop_("ignored");
+            }
+            Some(storage) => {
+                let var = storage.unwrap_local_variable();
+
+                // set the result of head expression to the variable.
+                builder.local_set_(&var.name, format!("capture variable `{}`", name));
+            }
+        };
+
+        builder.i32_const_(1, "success value");
+    }
+
+    fn build_struct_pattern<F>(
+        &self,
+        builder: &mut wasm::InstructionsBuilder,
+        fields: &[parser::PatternField],
+        target_type: &Rc<RefCell<Type>>,
+        temp: &mut LocalVariables,
+        frame: &StackFrame,
+        build_sub_pattern: F,
+    ) where
+        F: Fn(
+            &mut wasm::InstructionsBuilder,
+            &parser::Pattern,
+            &Rc<RefCell<Type>>,
+            &mut LocalVariables,
+            &StackFrame,
+        ),
+    {
+        temp.push_scope();
+
+        let pattern_fields = fields
+            .iter()
+            .map(|f| (f.name.clone(), &f.pattern))
+            .collect::<HashMap<_, _>>();
+
+        // Load the memory index of the operand to a local variable
+        let temp_memidx = temp.reserve_name_i32();
+
+        builder
+            .comment(&format!(
+                "-- Destructuring assignment of {}",
+                target_type.borrow()
+            ))
+            .local_set_(&temp_memidx, "memidx");
+
+        // Calculate the offset
+        let mut offset = 0;
+
+        builder.labeled_block("struct_pattern", wasm::Type::I32, &mut |block| {
+            let type_fields = self.unwrap_struct_type_fields(target_type);
+
+            for (field_name, field_type) in type_fields {
+                if let Some(pattern) = pattern_fields.get(&field_name) {
+                    block.i32_const_(0, "failure value");
+
+                    block.local_get(&temp_memidx).i32_load_(
+                        offset,
+                        format!("access .{} at base + {}", field_name, offset),
+                    );
+
+                    build_sub_pattern(block, pattern, &field_type, temp, frame);
+                    block.i32_eqz().br_if(0).drop();
+                }
+
+                let field_size = wasm_type(&field_type).unwrap().num_bytes();
+                offset += field_size;
+            }
+
+            block.i32_const_(1, "success value");
+        });
+
+        temp.pop_scope();
     }
 
     /// Build a pattern.
@@ -843,22 +901,7 @@ impl AsmBuilder {
         match pattern {
             // variable pattern
             parser::Pattern::Variable(name, binding) => {
-                let binding = binding.borrow();
-
-                match &binding.storage {
-                    None => {
-                        // Ignored
-                        builder.drop_("ignored").i32_const_(1, "success value");
-                    }
-                    Some(storage) => {
-                        let var = storage.unwrap_local_variable();
-
-                        // set the result of head expression to the variable.
-                        builder
-                            .local_set_(&var.name, format!("capture variable `{}`", name))
-                            .i32_const_(1, "success value");
-                    }
-                };
+                self.build_variable_pattern(builder, name, binding);
             }
             parser::Pattern::Integer(i) => {
                 // Constant pattern is semantically identical to `_ if head == pattern`,
@@ -902,7 +945,7 @@ impl AsmBuilder {
                     .map_or(false, |x| matches!(x, parser::Pattern::Rest { .. }));
                 let n_patterns = wasm::Size::try_from(patterns.len()).unwrap();
 
-                builder.block(Some(wasm::Type::I32), &mut |block| {
+                builder.labeled_block("case_pattern", wasm::Type::I32, &mut |block| {
                     if ends_with_rest {
                         block
                             .comment(format!(
@@ -1010,7 +1053,18 @@ impl AsmBuilder {
 
                 temp.pop_scope();
             }
-            parser::Pattern::Struct { .. } => todo!(),
+            parser::Pattern::Struct { ref fields, .. } => {
+                self.build_struct_pattern(
+                    builder,
+                    &fields,
+                    target_type,
+                    temp,
+                    frame,
+                    |builder, field_pattern, field_type, temp, frame| {
+                        self.build_case_pattern(builder, field_pattern, field_type, temp, frame);
+                    },
+                );
+            }
             parser::Pattern::Rest {
                 ref binding,
                 ref name,

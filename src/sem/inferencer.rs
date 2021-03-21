@@ -399,9 +399,7 @@ impl TypeInferencer {
                     self.analyze_pattern(pattern, &element_type);
                 }
             }
-            parser::Pattern::Struct {
-                ref r#type, fields, ..
-            } => {
+            parser::Pattern::Struct { r#type, fields, .. } => {
                 let struct_type = if let Some(struct_type) = r#type {
                     Rc::clone(struct_type)
                 } else {
@@ -410,6 +408,8 @@ impl TypeInferencer {
                 };
 
                 self.unify_and_log("struct pattern", &target_type, &struct_type);
+
+                r#type.replace(Rc::clone(&target_type));
 
                 let target_type = self.prune(target_type);
                 let target_type = target_type.borrow();
@@ -631,10 +631,10 @@ impl TypeInferencer {
             } => match &*ty2.borrow() {
                 Type::IncompleteStruct { fields: fields2 } => {
                     // Unify types in Fields2 with Fields1.
-                    for (name2, ty2) in fields2 {
-                        if let Some(ty1) = fields1.get(name2) {
+                    for (field_name2, field_type2) in fields2 {
+                        if let Some(field_type1) = fields1.get(field_name2) {
                             // Both fields1 and fields2 contain same named field.
-                            if let Some(error) = self._unify(ty1, ty2) {
+                            if let Some(error) = self._unify(field_type1, field_type2) {
                                 return Some(error);
                             }
                         } else {
