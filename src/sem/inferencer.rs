@@ -631,10 +631,10 @@ impl TypeInferencer {
             } => match &*ty2.borrow() {
                 Type::IncompleteStruct { fields: fields2 } => {
                     // Unify types in Fields2 with Fields1.
-                    for (name2, ty2) in fields2 {
-                        if let Some(ty1) = fields1.get(name2) {
+                    for (field_name2, field_type2) in fields2 {
+                        if let Some(field_type1) = fields1.get(field_name2) {
                             // Both fields1 and fields2 contain same named field.
-                            if let Some(error) = self._unify(ty1, ty2) {
+                            if let Some(error) = self._unify(field_type1, field_type2) {
                                 return Some(error);
                             }
                         } else {
