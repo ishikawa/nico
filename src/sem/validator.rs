@@ -188,7 +188,12 @@ impl TypeValidator {
                 let pattern_space = sem::Space::from_pattern(&pattern);
 
                 if !right_space.is_subspace_of(&pattern_space) {
-                    panic!("refutable pattern in local binding");
+                    if let parser::Pattern::Struct { .. } = pattern {
+                        // Struct pattern is irrefutable in `let` binding as long as
+                        // type is matched.
+                    } else {
+                        panic!("refutable pattern in local binding");
+                    }
                 }
             }
         };
