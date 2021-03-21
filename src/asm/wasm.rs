@@ -89,6 +89,7 @@ pub enum Instruction {
         r#else: Option<Vec<Instruction>>,
     },
     Block {
+        label: Option<Identifier>,
         result_type: Option<Type>,
         body: Vec<Instruction>,
     },
@@ -701,7 +702,7 @@ impl InstructionsBuilder {
         self
     }
 
-    pub fn block<F>(&mut self, result_type: Option<Type>, builder_fn: &mut F) -> &mut Self
+    pub fn block<F>(&mut self, result_type: Type, builder_fn: &mut F) -> &mut Self
     where
         F: FnMut(&mut Self),
     {
@@ -710,7 +711,27 @@ impl InstructionsBuilder {
         builder_fn(&mut builder);
 
         let block = Instruction::Block {
-            result_type,
+            label: None,
+            result_type: Some(result_type),
+            body: builder.build(),
+        };
+
+        self.push(block)
+    }
+
+    pub fn labeled_block<F: FnMut(&mut Self), S: Into<String>>(
+        &mut self,
+        label: S,
+        result_type: Type,
+        builder_fn: &mut F,
+    ) -> &mut Self {
+        let mut builder = Self::default();
+
+        builder_fn(&mut builder);
+
+        let block = Instruction::Block {
+            label: Some(Identifier(label.into())),
+            result_type: Some(result_type),
             body: builder.build(),
         };
 
@@ -1396,11 +1417,19 @@ impl Printer {
                 self.end_plain();
             }
             Instruction::Block {
+                ref label,
                 ref result_type,
                 ref body,
             } => {
                 self.indent();
                 self.buffer.push_str("(block ");
+
+                if let Some(Identifier(label)) = label {
+                    self.buffer.push('$');
+                    self.buffer.push_str(label);
+                    self.buffer.push(' ');
+                }
+
                 if let Some(result_type) = result_type {
                     self.write_return_type(result_type);
                 }

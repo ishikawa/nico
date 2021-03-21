@@ -393,6 +393,10 @@ impl AsmBuilder {
                             ))
                             .global_get("fp");
 
+                        if object_offset != 0 {
+                            builder.u32_const(object_offset).i32_add();
+                        }
+
                         self.build_expr(builder, &value_field.value, temp, frame);
                         builder.i32_store(current_offset);
 
@@ -681,7 +685,7 @@ impl AsmBuilder {
                     let mut arm_builder = wasm::Builders::instructions();
 
                     arm_builder.comment(&format!("when {}", arm.pattern)).block(
-                        Some(wasm::Type::I32),
+                        wasm::Type::I32,
                         &mut |builder| {
                             // Pattern
                             builder.local_get(&head_var.name).note("head value");
@@ -736,7 +740,6 @@ impl AsmBuilder {
                 builder.comment(format!("let {} = ...", pattern));
                 self.build_expr(builder, init, temp, frame);
                 self.build_let_pattern(builder, pattern, &init.r#type, temp, frame);
-                builder.i32_const_(1, "let binding always push `true` value.");
             }
         };
     }
@@ -773,6 +776,7 @@ impl AsmBuilder {
                             .unwrap_local_variable();
 
                         builder.local_set(&var.name);
+                        builder.i32_const_(1, "success value");
                         return;
                     }
                 }
@@ -815,6 +819,8 @@ impl AsmBuilder {
                 builder.local_set_(&var.name, format!("capture variable `{}`", name));
             }
         };
+
+        builder.i32_const_(1, "success value");
     }
 
     fn build_struct_pattern<F>(
@@ -836,7 +842,6 @@ impl AsmBuilder {
     {
         temp.push_scope();
 
-        let type_fields = self.unwrap_struct_type_fields(target_type);
         let pattern_fields = fields
             .iter()
             .map(|f| (f.name.clone(), &f.pattern))
@@ -855,19 +860,28 @@ impl AsmBuilder {
         // Calculate the offset
         let mut offset = 0;
 
-        for (field_name, field_type) in type_fields {
-            if let Some(pattern) = pattern_fields.get(&field_name) {
-                builder.local_get(&temp_memidx).i32_load_(
-                    offset,
-                    format!("access .{} at base + {}", field_name, offset),
-                );
+        builder.labeled_block("struct_pattern", wasm::Type::I32, &mut |block| {
+            let type_fields = self.unwrap_struct_type_fields(target_type);
 
-                build_sub_pattern(builder, pattern, &field_type, temp, frame);
+            for (field_name, field_type) in type_fields {
+                if let Some(pattern) = pattern_fields.get(&field_name) {
+                    block.i32_const_(0, "failure value");
+
+                    block.local_get(&temp_memidx).i32_load_(
+                        offset,
+                        format!("access .{} at base + {}", field_name, offset),
+                    );
+
+                    build_sub_pattern(block, pattern, &field_type, temp, frame);
+                    block.i32_eqz().br_if(0).drop();
+                }
+
+                let field_size = wasm_type(&field_type).unwrap().num_bytes();
+                offset += field_size;
             }
 
-            let field_size = wasm_type(&field_type).unwrap().num_bytes();
-            offset += field_size;
-        }
+            block.i32_const_(1, "success value");
+        });
 
         temp.pop_scope();
     }
@@ -888,7 +902,6 @@ impl AsmBuilder {
             // variable pattern
             parser::Pattern::Variable(name, binding) => {
                 self.build_variable_pattern(builder, name, binding);
-                builder.i32_const_(1, "success value");
             }
             parser::Pattern::Integer(i) => {
                 // Constant pattern is semantically identical to `_ if head == pattern`,
@@ -932,7 +945,7 @@ impl AsmBuilder {
                     .map_or(false, |x| matches!(x, parser::Pattern::Rest { .. }));
                 let n_patterns = wasm::Size::try_from(patterns.len()).unwrap();
 
-                builder.block(Some(wasm::Type::I32), &mut |block| {
+                builder.labeled_block("case_pattern", wasm::Type::I32, &mut |block| {
                     if ends_with_rest {
                         block
                             .comment(format!(
@@ -1049,11 +1062,8 @@ impl AsmBuilder {
                     frame,
                     |builder, field_pattern, field_type, temp, frame| {
                         self.build_case_pattern(builder, field_pattern, field_type, temp, frame);
-                        builder.drop();
                     },
                 );
-
-                builder.i32_const_(1, "success value");
             }
             parser::Pattern::Rest {
                 ref binding,

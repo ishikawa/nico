@@ -78,6 +78,10 @@ const cases: TestCase[] = [
   {
     file: "./samples/struct.nico",
     consoleResult: [["1500"]]
+  },
+  {
+    file: "./samples/struct_pattern.nico",
+    consoleResult: [["7"], ["8"], ["99"], ["88"]]
   }
 ];
 

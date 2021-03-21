@@ -383,16 +383,14 @@ enum Space {
 enum Value {
     Int(i32),
 }
+
 #[derive(Debug, PartialEq, Clone)]
 enum Subtraction {
     Everything,
     Value(Value),
     ExactLength(usize),
     MinimumLength(usize),
-    Field {
-        name: String,
-        value: Vec<Subtraction>,
-    },
+    Struct(HashMap<String, Vec<Subtraction>>),
 }
 
 impl Space {
@@ -422,13 +420,24 @@ impl Space {
                 let elements = elements.iter().map(|p| Self::from_pattern(p)).collect();
                 Self::Array(elements)
             }
-            parser::Pattern::Struct { fields, .. } => {
-                let fields = fields
-                    .iter()
-                    .map(|field| (field.name.clone(), Self::from_pattern(&field.pattern)))
-                    .collect();
+            parser::Pattern::Struct { fields, r#type, .. } => {
+                let struct_type = r#type.as_ref().unwrap();
+                let mut space_fields = HashMap::new();
+                let mut type_fields = match &*struct_type.borrow() {
+                    Type::Struct { fields, .. } => fields.clone(),
+                    _ => unreachable!(),
+                };
 
-                Space::Struct(fields)
+                // Missing fields in struct pattern means `field: _`.
+                for field in fields {
+                    space_fields.insert(field.name.clone(), Self::from_pattern(&field.pattern));
+                    type_fields.remove(&field.name);
+                }
+                for (name, ty) in type_fields {
+                    space_fields.insert(name.clone(), Self::from_type(&ty));
+                }
+
+                Space::Struct(space_fields)
             }
             parser::Pattern::Rest { ref binding, .. } => {
                 Self::Rest(Rc::clone(&binding.borrow().r#type))
@@ -460,13 +469,14 @@ impl Space {
                     vec![]
                 }
             }
-            Space::Struct(fields) => fields
-                .iter()
-                .map(|(name, space)| Subtraction::Field {
-                    name: name.clone(),
-                    value: Self::_subtractions(space),
-                })
-                .collect(),
+            Space::Struct(fields) => {
+                let subtraction_fields = fields
+                    .iter()
+                    .map(|(name, space)| (name.clone(), Self::_subtractions(space)))
+                    .collect();
+
+                vec![Subtraction::Struct(subtraction_fields)]
+            }
             _ => vec![],
         }
     }
@@ -533,25 +543,26 @@ impl Space {
 
                 false
             }
-            Space::Struct(fields) => {
-                let mut field_names = fields.keys().cloned().collect::<HashSet<_>>();
-
+            Space::Struct(space_fields) => {
                 for subtraction in subtractions {
                     match subtraction {
                         Subtraction::Everything => {
                             return true;
                         }
-                        Subtraction::Field { name, value } => {
-                            let field_space = fields.get(name).unwrap();
-                            if field_space._is_subspace_of(&value) {
-                                field_names.remove(name);
+                        Subtraction::Struct(subtraction_fields) => {
+                            let exhausted = space_fields.iter().all(|(name, field_space)| {
+                                let value = subtraction_fields.get(name).unwrap();
+                                field_space._is_subspace_of(value)
+                            });
+                            if exhausted {
+                                return true;
                             }
                         }
                         _ => {}
                     }
                 }
 
-                field_names.is_empty()
+                false
             }
             Space::Array(_) => todo!("Fixed length array type is not yet supported"),
             Space::Rest(_) => unreachable!(),

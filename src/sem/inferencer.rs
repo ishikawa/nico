@@ -399,9 +399,7 @@ impl TypeInferencer {
                     self.analyze_pattern(pattern, &element_type);
                 }
             }
-            parser::Pattern::Struct {
-                ref r#type, fields, ..
-            } => {
+            parser::Pattern::Struct { r#type, fields, .. } => {
                 let struct_type = if let Some(struct_type) = r#type {
                     Rc::clone(struct_type)
                 } else {
@@ -410,6 +408,8 @@ impl TypeInferencer {
                 };
 
                 self.unify_and_log("struct pattern", &target_type, &struct_type);
+
+                r#type.replace(Rc::clone(&target_type));
 
                 let target_type = self.prune(target_type);
                 let target_type = target_type.borrow();

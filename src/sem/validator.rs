@@ -138,6 +138,12 @@ impl TypeValidator {
                     pattern,
                 } in arms
                 {
+                    if let parser::Pattern::Struct { r#type, .. } = pattern {
+                        if r#type.is_none() {
+                            panic!("Missing type in struct type {}", pattern);
+                        }
+                    }
+
                     // exhaustivity check
                     if head_space.is_subspace_of(&arms_space) {
                         panic!("Unreachable pattern: {}", pattern)
@@ -188,12 +194,7 @@ impl TypeValidator {
                 let pattern_space = sem::Space::from_pattern(&pattern);
 
                 if !right_space.is_subspace_of(&pattern_space) {
-                    if let parser::Pattern::Struct { .. } = pattern {
-                        // Struct pattern is irrefutable in `let` binding as long as
-                        // type is matched.
-                    } else {
-                        panic!("refutable pattern in local binding");
-                    }
+                    panic!("refutable pattern in local binding");
                 }
             }
         };
