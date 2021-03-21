@@ -729,6 +729,20 @@ const cases: TestCase[] = [
       "end"
     ].join("\n"),
     compileError: /Type mismatch/i
+  },
+  {
+    // prettier-ignore
+    input: [
+      "struct Point {",
+      "    x: i32,",
+      "    y: i32",
+      "}",
+      "case Point { x: 33, y: 66 }",
+      "when Point { x, y }",
+      "    x + y",
+      "end"
+    ].join("\n"),
+    expected: 99
   }
 ];
 
