@@ -2,8 +2,8 @@ use super::{wasm, wasm_type, LocalVariables, StackFrame};
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem::Type;
-use std::convert::TryFrom;
 use std::{cell::RefCell, rc::Rc};
+use std::{collections::HashMap, convert::TryFrom};
 
 // The size of the virtual stack segment (bytes). Default: 32KB (half of page size)
 const STACK_SIZE: wasm::Size = wasm::PAGE_SIZE / 2;
@@ -735,7 +735,7 @@ impl AsmBuilder {
             Expr::Var { pattern, init } => {
                 builder.comment(format!("let {} = ...", pattern));
                 self.build_expr(builder, init, temp, frame);
-                self.build_let_pattern(builder, pattern);
+                self.build_let_pattern(builder, pattern, &init.r#type, temp);
                 builder.i32_const_(1, "let binding always push `true` value.");
             }
         };
@@ -745,6 +745,8 @@ impl AsmBuilder {
         &self,
         builder: &mut wasm::InstructionsBuilder,
         pattern: &parser::Pattern,
+        init_type: &Rc<RefCell<Type>>,
+        temp: &mut LocalVariables,
     ) {
         match pattern {
             // variable pattern
@@ -784,7 +786,44 @@ impl AsmBuilder {
 
                 todo!("Local binding with array pattern is not yet implemented. ")
             }
-            parser::Pattern::Struct { .. } => todo!(),
+            parser::Pattern::Struct { fields, .. } => {
+                temp.push_scope();
+
+                let type_fields = self.unwrap_struct_type_fields(init_type);
+                let pattern_fields = fields
+                    .iter()
+                    .map(|f| (f.name.clone(), &f.pattern))
+                    .collect::<HashMap<_, _>>();
+
+                // Load the memory index of the operand to a local variable
+                let temp_memidx = temp.reserve_name_i32();
+
+                builder
+                    .comment(&format!(
+                        "-- Destructuring assignment of {}",
+                        init_type.borrow()
+                    ))
+                    .local_set_(&temp_memidx, "memidx");
+
+                // Calculate the offset
+                let mut offset = 0;
+
+                for (field_name, field_type) in type_fields {
+                    if let Some(pattern) = pattern_fields.get(&field_name) {
+                        builder.local_get(&temp_memidx).i32_load_(
+                            offset,
+                            format!("access .{} at base + {}", field_name, offset),
+                        );
+
+                        self.build_let_pattern(builder, pattern, &field_type, temp);
+                    }
+
+                    let field_size = wasm_type(&field_type).unwrap().num_bytes();
+                    offset += field_size;
+                }
+
+                temp.pop_scope();
+            }
             parser::Pattern::Rest { .. } => panic!("Rest pattern should not be here."),
         };
     }

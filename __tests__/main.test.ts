@@ -688,7 +688,6 @@ const cases: TestCase[] = [
     expected: 110
   },
   {
-    todo: true,
     // prettier-ignore
     input: [
       "struct Point {",
@@ -699,7 +698,7 @@ const cases: TestCase[] = [
       "let Point { x: a, y: b } = p",
       "a + b",
     ].join("\n"),
-    expected: 21
+    expected: 10
   }
 ];
 
