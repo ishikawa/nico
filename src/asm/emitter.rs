@@ -1,9 +1,9 @@
 use super::{wasm, wasm_type, LocalVariables, StackFrame};
 use crate::parser;
 use crate::parser::Expr;
-use crate::sem::{Type, TypeField};
-use std::convert::TryFrom;
+use crate::sem::Type;
 use std::{cell::RefCell, rc::Rc};
+use std::{collections::HashMap, convert::TryFrom};
 
 // The size of the virtual stack segment (bytes). Default: 32KB (half of page size)
 const STACK_SIZE: wasm::Size = wasm::PAGE_SIZE / 2;
@@ -366,7 +366,7 @@ impl AsmBuilder {
                 }
             }
             Expr::Struct {
-                name,
+                name: struct_name,
                 fields,
                 object_offset,
             } => {
@@ -374,23 +374,22 @@ impl AsmBuilder {
                 // We have to align the order with that of the struct type fields.
                 let type_fields = self.unwrap_struct_type_fields(&node.r#type);
 
-                builder.comment(format!("-- struct {}{{...}}", name));
+                builder.comment(format!("-- struct {}{{...}}", struct_name));
 
                 let object_offset = frame.static_size() - object_offset.unwrap();
 
                 type_fields
                     .iter()
                     .enumerate()
-                    .fold(0, |current_offset, (i, type_field)| {
+                    .fold(0, |current_offset, (i, (name, ty))| {
                         // Pick the value field.
-                        let value_field =
-                            fields.iter().find(|x| x.name == type_field.name).unwrap();
-                        let field_size = wasm_type(&type_field.r#type).unwrap().num_bytes();
+                        let value_field = fields.iter().find(|x| x.name == *name).unwrap();
+                        let field_size = wasm_type(&ty).unwrap().num_bytes();
 
                         builder
                             .comment(format!(
                                 "store the field #{} `{}.{}` at `FP + {}`",
-                                i, name, type_field.name, current_offset
+                                i, struct_name, name, current_offset
                             ))
                             .global_get("fp");
 
@@ -494,12 +493,12 @@ impl AsmBuilder {
                 // Calculate the offset
                 let mut offset = 0;
 
-                for type_field in type_fields {
-                    if &type_field.name == field_name {
+                for (name, ty) in type_fields {
+                    if &name == field_name {
                         break;
                     }
 
-                    let field_size = wasm_type(&type_field.r#type).unwrap().num_bytes();
+                    let field_size = wasm_type(&ty).unwrap().num_bytes();
                     offset += field_size;
                 }
 
@@ -736,7 +735,7 @@ impl AsmBuilder {
             Expr::Var { pattern, init } => {
                 builder.comment(format!("let {} = ...", pattern));
                 self.build_expr(builder, init, temp, frame);
-                self.build_let_pattern(builder, pattern);
+                self.build_let_pattern(builder, pattern, &init.r#type, temp);
                 builder.i32_const_(1, "let binding always push `true` value.");
             }
         };
@@ -746,18 +745,20 @@ impl AsmBuilder {
         &self,
         builder: &mut wasm::InstructionsBuilder,
         pattern: &parser::Pattern,
+        init_type: &Rc<RefCell<Type>>,
+        temp: &mut LocalVariables,
     ) {
         match pattern {
             // variable pattern
-            parser::Pattern::Variable(ref name, ref binding) => {
+            parser::Pattern::Variable(_name, ref binding) => {
                 let binding = binding.borrow();
-                let var = binding
-                    .storage
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("Unallocated pattern `{}`", name))
-                    .unwrap_local_variable();
 
-                builder.local_set(&var.name);
+                if let Some(storage) = binding.storage.as_ref() {
+                    let var = storage.unwrap_local_variable();
+                    builder.local_set(&var.name);
+                } else {
+                    builder.drop();
+                }
             }
             parser::Pattern::Integer(_) => {
                 panic!("invalid local binding");
@@ -784,6 +785,44 @@ impl AsmBuilder {
                 }
 
                 todo!("Local binding with array pattern is not yet implemented. ")
+            }
+            parser::Pattern::Struct { fields, .. } => {
+                temp.push_scope();
+
+                let type_fields = self.unwrap_struct_type_fields(init_type);
+                let pattern_fields = fields
+                    .iter()
+                    .map(|f| (f.name.clone(), &f.pattern))
+                    .collect::<HashMap<_, _>>();
+
+                // Load the memory index of the operand to a local variable
+                let temp_memidx = temp.reserve_name_i32();
+
+                builder
+                    .comment(&format!(
+                        "-- Destructuring assignment of {}",
+                        init_type.borrow()
+                    ))
+                    .local_set_(&temp_memidx, "memidx");
+
+                // Calculate the offset
+                let mut offset = 0;
+
+                for (field_name, field_type) in type_fields {
+                    if let Some(pattern) = pattern_fields.get(&field_name) {
+                        builder.local_get(&temp_memidx).i32_load_(
+                            offset,
+                            format!("access .{} at base + {}", field_name, offset),
+                        );
+
+                        self.build_let_pattern(builder, pattern, &field_type, temp);
+                    }
+
+                    let field_size = wasm_type(&field_type).unwrap().num_bytes();
+                    offset += field_size;
+                }
+
+                temp.pop_scope();
             }
             parser::Pattern::Rest { .. } => panic!("Rest pattern should not be here."),
         };
@@ -971,6 +1010,7 @@ impl AsmBuilder {
 
                 temp.pop_scope();
             }
+            parser::Pattern::Struct { .. } => todo!(),
             parser::Pattern::Rest {
                 ref binding,
                 ref name,
@@ -1008,17 +1048,23 @@ impl AsmBuilder {
         }
     }
 
-    fn unwrap_struct_type_fields(&self, ty: &Rc<RefCell<Type>>) -> Vec<TypeField> {
+    fn unwrap_struct_type_fields(
+        &self,
+        ty: &Rc<RefCell<Type>>,
+    ) -> Vec<(String, Rc<RefCell<Type>>)> {
         // Emit each field of a struct.
         // We have to align the order with that of the struct type fields.
         let struct_type = ty.borrow();
         let mut type_fields = match &*struct_type {
-            Type::Struct { fields, .. } => fields.clone(),
+            Type::Struct { fields, .. } => fields
+                .iter()
+                .map(|(name, ty)| (name.clone(), Rc::clone(ty)))
+                .collect::<Vec<_>>(),
             ref ty => panic!("Expected struct type, but was {}", ty),
         };
 
         // To keep memory layout consistency, sort fields by name.
-        type_fields.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
+        type_fields.sort_by(|(a, _), (b, _)| a.partial_cmp(b).unwrap());
         type_fields
     }
 

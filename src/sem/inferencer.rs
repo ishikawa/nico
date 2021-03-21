@@ -5,14 +5,13 @@
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem;
-use crate::sem::{Binding, Type, TypeField};
+use crate::sem::{Binding, Type};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 #[derive(Debug)]
 pub struct TypeInferencer {
@@ -35,11 +34,13 @@ impl sem::SemanticAnalyzer for TypeInferencer {
         }
 
         // Replace type variables whose actual type is fixed with the actual type.
+        let fixer = TypeFixer::default();
+
         if let Some(ref mut function) = module.main {
-            self.fix_function(function);
+            fixer.fix_function(function);
         }
         for function in &mut module.functions {
-            self.fix_function(function);
+            fixer.fix_function(function);
         }
     }
 }
@@ -144,14 +145,24 @@ impl TypeInferencer {
                 ..
             } => {
                 let struct_type = node.r#type.borrow();
-                let type_fields = match *struct_type {
-                    Type::Struct { ref fields, .. } => fields,
+                let (struct_name, type_fields) = match *struct_type {
+                    Type::Struct {
+                        ref name,
+                        ref fields,
+                    } => (name, fields),
                     ref ty => panic!("Expected struct type, but was {}", ty),
                 };
 
-                for (type_field, value_field) in type_fields.iter().zip(value_fields.iter_mut()) {
+                for value_field in value_fields {
+                    let field_type = type_fields.get(&value_field.name).unwrap_or_else(|| {
+                        panic!(
+                            "Unknown filed `{}` for struct {}",
+                            value_field.name, struct_name
+                        )
+                    });
+
                     let value_type = self.analyze_expr(&mut value_field.value);
-                    self.unify_and_log("field (type, value)", &type_field.r#type, &value_type);
+                    self.unify_and_log("field (type, value)", field_type, &value_type);
                 }
 
                 Rc::clone(&node.r#type)
@@ -169,7 +180,7 @@ impl TypeInferencer {
                         &wrap(array_type),
                     );
 
-                    fixed_type(&operand_type)
+                    self.prune(&operand_type)
                 };
 
                 let element_type = Type::unwrap_element_type_or_else(&operand_type, |ty| {
@@ -187,7 +198,7 @@ impl TypeInferencer {
                     let operand_type = self.analyze_expr(operand);
 
                     // Operand must be compatible with `struct { field: T }`
-                    let struct_type = self.struct_field_constraint(field);
+                    let struct_type = self.struct_fields_constraint(&[field]);
 
                     self.unify_and_log(
                         "access (operand, struct)",
@@ -195,7 +206,7 @@ impl TypeInferencer {
                         &wrap(struct_type),
                     );
 
-                    fixed_type(&operand_type)
+                    self.prune(&operand_type)
                 };
                 let struct_type = operand_type.borrow();
                 let type_fields = match &*struct_type {
@@ -203,11 +214,11 @@ impl TypeInferencer {
                     ref ty => panic!("Expected struct type, but was {}", ty),
                 };
 
-                type_fields
-                    .iter()
-                    .find(|x| &x.name == field)
-                    .map(|x| Rc::clone(&x.r#type))
-                    .unwrap_or_else(|| panic!("No filed `{}` found in {}", field, struct_type))
+                let field_type = type_fields
+                    .get(field)
+                    .unwrap_or_else(|| panic!("No filed `{}` found in {}", field, struct_type));
+
+                Rc::clone(field_type)
             }
             Expr::Identifier {
                 ref name,
@@ -378,7 +389,7 @@ impl TypeInferencer {
                     };
                 };
 
-                let target_type = fixed_type(target_type);
+                let target_type = self.prune(target_type);
 
                 let element_type = Type::unwrap_element_type_or_else(&target_type, |ty| {
                     panic!("mismatched type: expected T[], found {}", ty);
@@ -388,12 +399,37 @@ impl TypeInferencer {
                     self.analyze_pattern(pattern, &element_type);
                 }
             }
+            parser::Pattern::Struct {
+                ref r#type, fields, ..
+            } => {
+                let struct_type = if let Some(struct_type) = r#type {
+                    Rc::clone(struct_type)
+                } else {
+                    let fields = fields.iter().map(|x| x.name.as_ref()).collect::<Vec<_>>();
+                    wrap(self.struct_fields_constraint(&fields))
+                };
+
+                self.unify_and_log("struct pattern", &target_type, &struct_type);
+
+                let target_type = self.prune(target_type);
+                let target_type = target_type.borrow();
+
+                let type_fields = match &*target_type {
+                    Type::Struct { fields, .. } => fields,
+                    ref ty => panic!("Expected struct type, but was {}", ty),
+                };
+
+                for field in fields {
+                    let field_type = type_fields.get(&field.name).unwrap();
+                    self.analyze_pattern(&mut field.pattern, field_type);
+                }
+            }
             parser::Pattern::Rest {
                 ref mut binding, ..
             } => {
                 // For rest pattern, the target type `T` must be an element type.
                 // And then, the rest pattern's type must be `T[]`.
-                let element_type = fixed_type(target_type);
+                let element_type = self.prune(target_type);
                 let target_type = wrap(Type::Array(element_type));
 
                 let binding_type = &binding.borrow().r#type;
@@ -493,15 +529,16 @@ impl TypeInferencer {
     }
 
     // { field: T }
-    fn struct_field_constraint(&mut self, field: &str) -> Type {
-        let ty = self.new_type_var();
+    fn struct_fields_constraint(&mut self, fields: &[&str]) -> Type {
+        let fields = fields
+            .iter()
+            .map(|x| {
+                let ty = self.new_type_var();
+                (x.to_string(), wrap(ty))
+            })
+            .collect();
 
-        Type::IncompleteStruct {
-            fields: vec![TypeField {
-                name: field.to_string(),
-                r#type: wrap(ty),
-            }],
-        }
+        Type::IncompleteStruct { fields }
     }
 
     fn unify_and_log<S: AsRef<str>>(
@@ -593,17 +630,11 @@ impl TypeInferencer {
                 fields: fields1, ..
             } => match &*ty2.borrow() {
                 Type::IncompleteStruct { fields: fields2 } => {
-                    let mut fields_map = HashMap::new();
-
                     // Unify types in Fields2 with Fields1.
-                    for f in fields1 {
-                        fields_map.insert(&f.name, Rc::clone(&f.r#type));
-                    }
-
-                    for f in fields2 {
-                        if let Some(ty) = fields_map.get(&f.name) {
+                    for (name2, ty2) in fields2 {
+                        if let Some(ty1) = fields1.get(name2) {
                             // Both fields1 and fields2 contain same named field.
-                            if let Some(error) = self._unify(ty, &f.r#type) {
+                            if let Some(error) = self._unify(ty1, ty2) {
                                 return Some(error);
                             }
                         } else {
@@ -621,25 +652,19 @@ impl TypeInferencer {
             },
             Type::IncompleteStruct { fields: fields1 } => match &*ty2.borrow() {
                 Type::IncompleteStruct { fields: fields2 } => {
-                    let mut fields_map = HashMap::new();
-                    let mut new_fields = vec![];
+                    let mut new_fields = fields1.clone();
 
                     // Unify types in (Fields1 & Fields2).
-                    for f in fields1 {
-                        fields_map.insert(&f.name, Rc::clone(&f.r#type));
-                        new_fields.push(f.clone());
-                    }
-
-                    for f in fields2 {
-                        if let Some(ty) = fields_map.get(&f.name) {
+                    for (name2, ty2) in fields2 {
+                        if let Some(ty1) = fields1.get(name2) {
                             // Both fields1 and fields2 contain same named field.
                             // Unifies types and it should be already added to new_fields.
-                            if let Some(error) = self._unify(ty, &f.r#type) {
+                            if let Some(error) = self._unify(ty1, ty2) {
                                 return Some(error);
                             }
                         } else {
                             // Fields2 contains a field which is not included in the Fields2.
-                            new_fields.push(f.clone());
+                            new_fields.insert(name2.clone(), Rc::clone(ty2));
                         }
                     }
 
@@ -722,64 +747,64 @@ impl TypeInferencer {
     }
 }
 
-fn fixed_type_and_log(message: &str, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
-    let new_type = fixed_type(ty);
+#[derive(Debug, Default)]
+struct TypeFixer {}
 
-    if DEBUG {
-        eprintln!("[fix] {} {} -> {}", message, ty.borrow(), new_type.borrow());
+impl TypeFixer {
+    fn fixed_type_and_log(&self, message: &str, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+        let new_type = self.fixed_type(ty);
+
+        if DEBUG {
+            eprintln!("[fix] {} {} -> {}", message, ty.borrow(), new_type.borrow());
+        }
+
+        new_type
     }
 
-    new_type
-}
+    // Prune fixed type variables and remove indirection.
+    pub fn fixed_type(&self, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
+        match &*ty.borrow() {
+            Type::Array(element_type) => wrap(Type::Array(self.fixed_type(&element_type))),
+            Type::Struct { name, fields } => {
+                let fields = fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), Rc::clone(ty)))
+                    .collect();
 
-// Prune fixed type variables and remove indirection.
-pub fn fixed_type(ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
-    match &*ty.borrow() {
-        Type::Array(element_type) => wrap(Type::Array(fixed_type(&element_type))),
-        Type::Struct { name, fields } => {
-            let fields = fields
-                .iter()
-                .map(|x| TypeField {
-                    name: x.name.clone(),
-                    r#type: fixed_type(&x.r#type),
+                wrap(Type::Struct {
+                    name: name.clone(),
+                    fields,
                 })
-                .collect();
+            }
+            Type::Function {
+                params,
+                return_type,
+            } => wrap(Type::Function {
+                params: params.iter().map(|p| self.fixed_type(p)).collect(),
+                return_type: self.fixed_type(return_type),
+            }),
+            Type::TypeVariable {
+                instance: Some(instance),
+                ..
+            } => self.fixed_type(instance),
 
-            wrap(Type::Struct {
-                name: name.clone(),
-                fields,
-            })
+            Type::TypeVariable { instance: None, .. } => {
+                // If the type is not yet fixed, returns it.
+                Rc::clone(ty)
+            }
+            _ => Rc::clone(ty),
         }
-        Type::Function {
-            params,
-            return_type,
-        } => wrap(Type::Function {
-            params: params.iter().map(|p| fixed_type(p)).collect(),
-            return_type: fixed_type(return_type),
-        }),
-        Type::TypeVariable {
-            instance: Some(instance),
-            ..
-        } => fixed_type(instance),
-
-        Type::TypeVariable { instance: None, .. } => {
-            // If the type is not yet fixed, returns it.
-            Rc::clone(ty)
-        }
-        _ => Rc::clone(ty),
     }
-}
 
-impl TypeInferencer {
     fn fix_function(&self, function: &mut parser::Function) {
         for binding in &mut function.params {
             match *binding.borrow_mut() {
-                Binding { ref mut r#type, .. } => *r#type = fixed_type(r#type),
+                Binding { ref mut r#type, .. } => *r#type = self.fixed_type(r#type),
             };
         }
 
         self.fix_body(&mut function.body);
-        function.r#type = fixed_type(&function.r#type);
+        function.r#type = self.fixed_type(&function.r#type);
     }
 
     fn fix_body(&self, body: &mut Vec<parser::Node>) {
@@ -789,7 +814,7 @@ impl TypeInferencer {
     }
 
     fn fix_expr(&self, node: &mut parser::Node) {
-        node.r#type = fixed_type_and_log(&node.expr.short_name(), &node.r#type);
+        node.r#type = self.fixed_type_and_log(&node.expr.short_name(), &node.r#type);
 
         match &mut node.expr {
             Expr::Stmt(expr) => {
@@ -884,20 +909,29 @@ impl TypeInferencer {
         match pattern {
             parser::Pattern::Variable(_name, ref mut binding) => match *binding.borrow_mut() {
                 Binding { ref mut r#type, .. } => {
-                    *r#type = fixed_type(r#type);
+                    *r#type = self.fixed_type(r#type);
                 }
             },
             parser::Pattern::Rest {
                 ref mut binding, ..
             } => match *binding.borrow_mut() {
                 Binding { ref mut r#type, .. } => {
-                    *r#type = fixed_type(r#type);
+                    *r#type = self.fixed_type(r#type);
                 }
             },
             parser::Pattern::Integer(_) => {}
             parser::Pattern::Array(patterns) => {
                 for pattern in patterns {
                     self.fix_pattern(pattern);
+                }
+            }
+            parser::Pattern::Struct { fields, r#type, .. } => {
+                if let Some(ty) = r#type {
+                    *r#type = Some(self.fixed_type(&ty));
+                }
+
+                for field in fields {
+                    self.fix_pattern(&mut field.pattern);
                 }
             }
         };

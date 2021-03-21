@@ -494,6 +494,9 @@ const cases: TestCase[] = [
     compileError: /mismatched type: expected T\[\], found i32/
   },
   {
+    input: "let _ = 1"
+  },
+  {
     // prettier-ignore
     input: [
       "let [...x] = []",
@@ -683,6 +686,19 @@ const cases: TestCase[] = [
       "foo()"
     ].join("\n"),
     expected: 110
+  },
+  {
+    // prettier-ignore
+    input: [
+      "struct Point {",
+      "    x: i32,",
+      "    y: i32",
+      "}",
+      "let p = Point { x: 3, y: 7 }",
+      "let Point { x: a, y: b } = p",
+      "a + b",
+    ].join("\n"),
+    expected: 10
   }
 ];
 

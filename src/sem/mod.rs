@@ -29,11 +29,11 @@ pub enum Type {
     Array(Rc<RefCell<Type>>),
     Struct {
         name: String,
-        fields: Vec<TypeField>,
+        fields: HashMap<String, Rc<RefCell<Type>>>,
     },
     // Access `x.field` and Pattern `{ field, ...}` generates this constraint.
     IncompleteStruct {
-        fields: Vec<TypeField>,
+        fields: HashMap<String, Rc<RefCell<Type>>>,
     },
     Function {
         params: Vec<Rc<RefCell<Type>>>,
@@ -43,12 +43,6 @@ pub enum Type {
         name: String,
         instance: Option<Rc<RefCell<Type>>>,
     },
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct TypeField {
-    pub name: String,
-    pub r#type: Rc<RefCell<Type>>,
 }
 
 /// A variable and function representation.
@@ -209,8 +203,8 @@ impl fmt::Display for Type {
 
                 write!(f, "{} ", name)?;
                 write!(f, "{{ ")?;
-                while let Some(field) = it.next() {
-                    write!(f, "{}: {}", field.name, field.r#type.borrow())?;
+                while let Some((name, ty)) = it.next() {
+                    write!(f, "{}: {}", name, ty.borrow())?;
                     if it.peek().is_some() {
                         write!(f, ", ")?;
                     }
@@ -221,8 +215,8 @@ impl fmt::Display for Type {
                 let mut it = fields.iter().peekable();
 
                 write!(f, "{{ ")?;
-                while let Some(field) = it.next() {
-                    write!(f, "{}: {}", field.name, field.r#type.borrow())?;
+                while let Some((name, ty)) = it.next() {
+                    write!(f, "{}: {}", name, ty.borrow())?;
                     if it.peek().is_some() {
                         write!(f, ", ")?;
                     }
@@ -289,7 +283,7 @@ impl Type {
             Type::String => matches!(other, Type::String),
             Type::Array(element_type) => element_type.borrow().contains(other),
             Type::Struct { fields, .. } | Type::IncompleteStruct { fields, .. } => {
-                fields.iter().any(|x| x.r#type.borrow().contains(other))
+                fields.iter().any(|(_name, ty)| ty.borrow().contains(other))
             }
             Type::Void => matches!(other, Type::Void),
             Type::Function {
@@ -380,6 +374,8 @@ enum Space {
     Array(Vec<Space>),
     // rest
     Rest(Rc<RefCell<Type>>),
+    // struct
+    Struct(HashMap<String, Space>),
 }
 
 // Concrete value of a type.
@@ -392,14 +388,28 @@ enum Subtraction {
     Everything,
     Value(Value),
     ExactLength(usize),
-    MinimalLength(usize),
+    MinimumLength(usize),
+    Field {
+        name: String,
+        value: Vec<Subtraction>,
+    },
 }
 
 impl Space {
     // -- Projections
 
     pub fn from_type(r#type: &Rc<RefCell<Type>>) -> Space {
-        Space::Everything(Rc::clone(r#type))
+        match &*r#type.borrow() {
+            Type::Struct { fields, .. } => {
+                let fields = fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), Self::from_type(ty)))
+                    .collect();
+
+                Space::Struct(fields)
+            }
+            _ => Space::Everything(Rc::clone(r#type)),
+        }
     }
 
     pub fn from_pattern(pattern: &parser::Pattern) -> Space {
@@ -412,6 +422,14 @@ impl Space {
                 let elements = elements.iter().map(|p| Self::from_pattern(p)).collect();
                 Self::Array(elements)
             }
+            parser::Pattern::Struct { fields, .. } => {
+                let fields = fields
+                    .iter()
+                    .map(|field| (field.name.clone(), Self::from_pattern(&field.pattern)))
+                    .collect();
+
+                Space::Struct(fields)
+            }
             parser::Pattern::Rest { ref binding, .. } => {
                 Self::Rest(Rc::clone(&binding.borrow().r#type))
             }
@@ -421,13 +439,13 @@ impl Space {
     // -- Operations
 
     /// `self` - `other`
-    fn _subtract(other: &Space) -> Vec<Subtraction> {
-        match other {
+    fn _subtractions(space: &Space) -> Vec<Subtraction> {
+        match space {
             Space::Everything(_) => vec![Subtraction::Everything],
             Space::Something(_, value) => vec![Subtraction::Value(value.clone())],
             Space::Union(a, b) => {
-                let mut a = Self::_subtract(a);
-                let mut b = Self::_subtract(b);
+                let mut a = Self::_subtractions(a);
+                let mut b = Self::_subtractions(b);
 
                 a.append(&mut b);
                 a
@@ -437,23 +455,35 @@ impl Space {
                 if spaces.iter().all(|x| matches!(x, Space::Everything(_))) {
                     vec![Subtraction::ExactLength(spaces.len())]
                 } else if spaces.iter().any(|x| matches!(x, Space::Rest(_))) {
-                    vec![Subtraction::MinimalLength(spaces.len() - 1)]
+                    vec![Subtraction::MinimumLength(spaces.len() - 1)]
                 } else {
                     vec![]
                 }
             }
+            Space::Struct(fields) => fields
+                .iter()
+                .map(|(name, space)| Subtraction::Field {
+                    name: name.clone(),
+                    value: Self::_subtractions(space),
+                })
+                .collect(),
             _ => vec![],
         }
     }
 
     /// `self` <: `other`: whether `self` is a subtype of `other`
     pub fn is_subspace_of(&self, other: &Space) -> bool {
+        let subtractions = Self::_subtractions(other);
+        self._is_subspace_of(&subtractions)
+    }
+
+    pub fn _is_subspace_of(&self, subtractions: &[Subtraction]) -> bool {
         match self {
             Space::Empty => true,
-            Space::Union(a, b) => a.is_subspace_of(other) && b.is_subspace_of(other),
+            Space::Union(a, b) => {
+                a._is_subspace_of(subtractions) && b._is_subspace_of(subtractions)
+            }
             Space::Something(_, value) => {
-                let subtractions = Self::_subtract(other);
-
                 // Everything
                 if subtractions.iter().any(|x| match x {
                     Subtraction::Everything => true,
@@ -465,40 +495,66 @@ impl Space {
 
                 false
             }
-            Space::Everything(_) => {
-                let subtractions = Self::_subtract(other);
-
-                // Everything
-                if subtractions
-                    .iter()
-                    .any(|x| matches!(x, Subtraction::Everything))
-                {
-                    return true;
-                }
-
-                // Array exhaustivity
+            Space::Everything(ty) => {
+                // Scan all the elements beforehand to gather the necessary information.
                 let mut cover = HashSet::<usize>::new();
+                let mut minimum_length = None;
 
-                // -- collect covered length
-                for subtraction in &subtractions {
-                    if let Subtraction::ExactLength(n) = subtraction {
-                        cover.insert(*n);
-                    }
-                }
-                // -- If patterns have a rest pattern, returns `true` if other
-                // patterns cover possible array lengths < minimal length.
-                for subtraction in &subtractions {
-                    if let Subtraction::MinimalLength(n) = subtraction {
-                        if (0..*n).all(|i| cover.contains(&i)) {
+                for subtraction in subtractions {
+                    match subtraction {
+                        Subtraction::Everything => {
                             return true;
                         }
+                        Subtraction::MinimumLength(n) => {
+                            minimum_length.replace(n);
+                        }
+                        Subtraction::ExactLength(n) => {
+                            cover.insert(*n);
+                        }
+                        _ => {}
                     }
                 }
+
+                match *ty.borrow() {
+                    Type::Array(..) => {
+                        // Array exhaustivity
+
+                        // -- If patterns have a rest pattern, returns `true` if other
+                        // patterns cover possible array lengths < minimal length.
+                        if let Some(n) = minimum_length {
+                            if (0..*n).all(|i| cover.contains(&i)) {
+                                return true;
+                            }
+                        }
+                    }
+                    Type::Struct { .. } => unreachable!("A space of struct must be Space::Struct"),
+                    _ => {}
+                };
 
                 false
             }
-            Space::Array(_) => false,
-            Space::Rest(_) => false,
+            Space::Struct(fields) => {
+                let mut field_names = fields.keys().cloned().collect::<HashSet<_>>();
+
+                for subtraction in subtractions {
+                    match subtraction {
+                        Subtraction::Everything => {
+                            return true;
+                        }
+                        Subtraction::Field { name, value } => {
+                            let field_space = fields.get(name).unwrap();
+                            if field_space._is_subspace_of(&value) {
+                                field_names.remove(name);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                field_names.is_empty()
+            }
+            Space::Array(_) => todo!("Fixed length array type is not yet supported"),
+            Space::Rest(_) => unreachable!(),
         }
     }
 

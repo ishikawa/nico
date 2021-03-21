@@ -1,9 +1,9 @@
 use super::wrap;
-use super::{Binding, Environment, SemanticAnalyzer, Type, TypeField};
+use super::{Binding, Environment, SemanticAnalyzer, Type};
 use crate::parser;
 use parser::{Expr, Node};
-use std::cell::RefCell;
 use std::rc::Rc;
+use std::{cell::RefCell, collections::HashMap};
 
 // Analyze the AST and assign variable and function bindings.
 #[derive(Debug, Default)]
@@ -245,7 +245,7 @@ impl Binder {
                 } in arms
                 {
                     let mut arm_env = Environment::with_parent(Rc::clone(&node_env));
-                    self.bind_pattern(pattern, head, &mut arm_env);
+                    self.bind_pattern(pattern, head, &mut arm_env, type_env);
 
                     let arm_env = wrap(arm_env);
 
@@ -261,21 +261,52 @@ impl Binder {
             }
             Expr::Var { pattern, init } => {
                 self.analyze_expr(init, env, type_env);
-                self.bind_pattern(pattern, init, &mut *env.borrow_mut());
+                self.bind_pattern(pattern, init, &mut *env.borrow_mut(), type_env);
             }
         };
     }
 
-    fn bind_pattern(&self, pattern: &mut parser::Pattern, target: &Node, env: &mut Environment) {
+    fn bind_pattern(
+        &self,
+        pattern: &mut parser::Pattern,
+        target: &Node,
+        env: &mut Environment,
+        type_env: &Rc<RefCell<Environment>>,
+    ) {
         match pattern {
             // - A variable pattern introduces a new environment into arm body.
             // - The type of a this kind of pattern is always equal to the type of head.
             parser::Pattern::Variable(_name, ref binding) => env.insert(Rc::clone(binding)),
             parser::Pattern::Rest { ref binding, .. } => env.insert(Rc::clone(binding)),
             parser::Pattern::Integer(_) => {}
+            parser::Pattern::Struct {
+                name: Some(name),
+                fields,
+                r#type,
+            } => {
+                let binding = type_env
+                    .borrow()
+                    .get(name)
+                    .unwrap_or_else(|| panic!("Unrecognized type `{}`", name));
+                let binding = binding.borrow();
+
+                match *binding.r#type.borrow() {
+                    Type::Struct { .. } => r#type.replace(Rc::clone(&binding.r#type)),
+                    ref ty => panic!("Expected type struct `{}`, but was {}", name, ty),
+                };
+
+                for parser::PatternField { pattern, .. } in fields {
+                    self.bind_pattern(pattern, target, env, type_env);
+                }
+            }
+            parser::Pattern::Struct { fields, .. } => {
+                for parser::PatternField { pattern, .. } in fields {
+                    self.bind_pattern(pattern, target, env, type_env);
+                }
+            }
             parser::Pattern::Array(patterns) => {
                 for pattern in patterns {
-                    self.bind_pattern(pattern, target, env);
+                    self.bind_pattern(pattern, target, env, type_env);
                 }
             }
         };
@@ -338,7 +369,7 @@ impl Binder {
 
 fn build_struct_type(definition: &parser::StructDefinition, env: &Environment) -> Type {
     let name = definition.name.clone();
-    let mut fields = vec![];
+    let mut fields = HashMap::new();
 
     for field in definition.fields.as_slice() {
         let r#type = match field.type_annotation {
@@ -353,10 +384,7 @@ fn build_struct_type(definition: &parser::StructDefinition, env: &Environment) -
             parser::TypeAnnotation::Builtin(ref ty) => Rc::clone(ty),
         };
 
-        fields.push(TypeField {
-            name: field.name.clone(),
-            r#type,
-        });
+        fields.insert(field.name.clone(), Rc::clone(&r#type));
     }
 
     Type::Struct { name, fields }

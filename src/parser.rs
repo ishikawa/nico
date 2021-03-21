@@ -168,6 +168,11 @@ pub enum Pattern {
     Variable(String, Rc<RefCell<sem::Binding>>),
     Integer(i32),
     Array(Vec<Pattern>),
+    Struct {
+        name: Option<String>,
+        fields: Vec<PatternField>,
+        r#type: Option<Rc<RefCell<sem::Type>>>,
+    },
     Rest {
         name: String,
         binding: Rc<RefCell<sem::Binding>>,
@@ -179,6 +184,12 @@ pub enum Pattern {
 pub struct ValueField {
     pub name: String,
     pub value: Node,
+}
+
+#[derive(Debug)]
+pub struct PatternField {
+    pub name: String,
+    pub pattern: Pattern,
 }
 
 #[derive(Debug)]
@@ -941,20 +952,30 @@ fn parse_pattern(tokenizer: &mut Tokenizer, context: &mut ParserContext) -> Opti
     pattern
 }
 
+fn build_variable_pattern(name: String, context: &mut ParserContext) -> Pattern {
+    let binding = if name == "_" {
+        wrap(sem::Binding::ignored(&context.type_var()))
+    } else {
+        wrap(sem::Binding::typed_name(&name, &context.type_var()))
+    };
+
+    Pattern::Variable(name, binding)
+}
+
 fn parse_pattern_element(
     tokenizer: &mut Tokenizer,
     context: &mut ParserContext,
 ) -> Option<Pattern> {
     match tokenizer.peek()? {
         Token::Identifier(_) => {
-            let name = expect_identifier(tokenizer, "variable");
-            let binding = if name == "_" {
-                wrap(sem::Binding::ignored(&context.type_var()))
-            } else {
-                wrap(sem::Binding::typed_name(&name, &context.type_var()))
-            };
+            let name = expect_identifier(tokenizer, "variable or struct name");
 
-            Some(Pattern::Variable(name, binding))
+            if let Some(Token::Char('{')) = tokenizer.peek() {
+                // struct pattern
+                return Some(parse_struct_pattern(Some(name), tokenizer, context));
+            }
+
+            Some(build_variable_pattern(name, context))
         }
         Token::Integer(i) => {
             let pat = Pattern::Integer(*i);
@@ -980,6 +1001,7 @@ fn parse_pattern_element(
 
             Some(Pattern::Array(elements))
         }
+        Token::Char('{') => Some(parse_struct_pattern(None, tokenizer, context)),
         Token::Rest => {
             expect_token(tokenizer, Token::Rest);
 
@@ -1013,6 +1035,41 @@ fn parse_pattern_element(
         }
         _ => None,
     }
+}
+
+fn parse_struct_pattern(
+    name: Option<String>,
+    tokenizer: &mut Tokenizer,
+    context: &mut ParserContext,
+) -> Pattern {
+    expect_char(tokenizer, '{');
+
+    let fields = parse_elements(tokenizer, context, '}', &mut |tokenizer, context| {
+        parse_struct_pattern_field(tokenizer, context).expect("Expected field")
+    });
+    expect_char(tokenizer, '}');
+
+    Pattern::Struct {
+        name,
+        fields,
+        r#type: None,
+    }
+}
+
+fn parse_struct_pattern_field(
+    tokenizer: &mut Tokenizer,
+    context: &mut ParserContext,
+) -> Option<PatternField> {
+    let name = match_identifier(tokenizer, "field name")?;
+
+    let pattern = if match_char(tokenizer, ':').is_some() {
+        parse_pattern_element(tokenizer, context).expect("Expected value pattern")
+    } else {
+        // Desugar: field value can be omitted.
+        build_variable_pattern(name.clone(), context)
+    };
+
+    Some(PatternField { name, pattern })
 }
 
 fn parse_elements<F, T>(
@@ -1112,6 +1169,22 @@ impl fmt::Display for Pattern {
                     }
                 }
                 write!(f, "]")
+            }
+            Pattern::Struct { name, fields, .. } => {
+                let mut it = fields.iter().peekable();
+
+                if let Some(name) = name {
+                    write!(f, "{} ", name)?;
+                }
+
+                write!(f, "{{ ")?;
+                while let Some(field) = it.next() {
+                    write!(f, "{}: {}", field.name, field.pattern)?;
+                    if it.peek().is_some() {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, " }}")
             }
             Pattern::Rest { name, .. } => write!(f, "...{}", name),
         }
