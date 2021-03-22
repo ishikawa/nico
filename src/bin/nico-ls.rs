@@ -1,9 +1,12 @@
 use serde_json::Value;
+use std::net::Ipv4Addr;
 use tokio::net::TcpListener;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
+/// TCP port for LSP
+const RPC_PORT: u16 = 9257;
 #[derive(Debug)]
 struct Backend {
     client: Client,
@@ -118,7 +121,9 @@ impl LanguageServer for Backend {
 async fn main() {
     env_logger::init();
 
-    let mut listener = TcpListener::bind("127.0.0.1:9257").await.unwrap();
+    let mut listener = TcpListener::bind((Ipv4Addr::LOCALHOST, RPC_PORT))
+        .await
+        .unwrap();
     let (stream, _) = listener.accept().await.unwrap();
     let (read, write) = tokio::io::split(stream);
 
