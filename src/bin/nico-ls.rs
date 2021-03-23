@@ -1,3 +1,4 @@
+use log::info;
 use serde_json::Value;
 use std::net::Ipv4Addr;
 use tokio::net::TcpListener;
@@ -120,10 +121,12 @@ impl LanguageServer for Backend {
 #[tokio::main]
 async fn main() {
     env_logger::init();
+    info!("Launching language server...");
 
-    let mut listener = TcpListener::bind((Ipv4Addr::LOCALHOST, RPC_PORT))
-        .await
-        .unwrap();
+    let addr = (Ipv4Addr::LOCALHOST, RPC_PORT);
+    let mut listener = TcpListener::bind(addr).await.unwrap();
+    info!("Listening on {}:{}", addr.0, addr.1);
+
     let (stream, _) = listener.accept().await.unwrap();
     let (read, write) = tokio::io::split(stream);
 
