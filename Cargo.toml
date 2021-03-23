@@ -10,8 +10,6 @@ edition = "2018"
 # nico
 assert_matches = "1.4.0"
 # nico-ls
-tower-lsp = "0.13.3"
-serde_json = "1.0"
 log = "0.4.14"
 env_logger = "0.8.3"
-tokio = { version = "0.2", features = ["full"] }
+serde_json = "1.0.64"
