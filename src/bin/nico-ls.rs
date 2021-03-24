@@ -1,9 +1,11 @@
 use log::{info, warn};
-use lsp_types::InitializeParams;
+use lsp_types::{
+    ColorProviderCapability, InitializeParams, InitializeResult, ServerCapabilities, ServerInfo,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io;
-use std::io::Read;
+use std::io::{Read, Write};
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -19,6 +21,21 @@ struct Request {
     id: Id,
     method: String,
     params: Option<Value>,
+}
+
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+struct Response {
+    jsonrpc: String,
+    id: Id,
+    result: Option<Value>,
+    error: Option<ResponseError>,
+}
+
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+struct ResponseError {
+    code: i32,
+    message: String,
+    data: Option<Value>,
 }
 
 fn main() {
@@ -114,6 +131,33 @@ fn main() {
                     match serde_json::from_value::<InitializeParams>(request.params.unwrap()) {
                         Ok(params) => {
                             info!("[initialize] {:?}", params);
+
+                            let result = InitializeResult {
+                                capabilities: ServerCapabilities {
+                                    color_provider: Some(ColorProviderCapability::Simple(true)),
+                                    ..ServerCapabilities::default()
+                                },
+                                server_info: Some(ServerInfo {
+                                    name: "nico-ls".to_string(),
+                                    version: Some("0.0.1".to_string()),
+                                }),
+                            };
+
+                            let value = serde_json::to_value(result).unwrap();
+
+                            let response = Response {
+                                jsonrpc: request.jsonrpc,
+                                id: request.id,
+                                result: Some(value),
+                                error: None,
+                            };
+
+                            let json = serde_json::to_vec(&response).expect("json error");
+
+                            info!("[write] {:?}", &response);
+                            write!(io::stdout(), "Content-Length: {}\r\n\r\n", json.len())
+                                .expect("write error");
+                            io::stdout().write(json.as_slice()).expect("write error");
                         }
                         Err(e) => {
                             warn!("initialize: parse error : {} - {}", e, &string);
