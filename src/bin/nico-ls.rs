@@ -1,7 +1,24 @@
 use log::{info, warn};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io;
 use std::io::Read;
+
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+enum Id {
+    Int(i32),
+    Str(String),
+}
+
+// JSON-RPC
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+struct Request {
+    jsonrpc: String,
+    id: Id,
+    method: String,
+    params: Option<Value>,
+}
 
 fn main() {
     env_logger::init();
@@ -58,20 +75,40 @@ fn main() {
 
         // Content Part
         if let Some(content_length) = content_length {
-            let m: Vec<u8> = io::stdin()
+            let bytes: Vec<u8> = io::stdin()
                 .bytes()
                 .take(content_length)
                 .map(|r: Result<u8, _>| r.unwrap())
                 .collect();
 
-            match serde_json::from_slice::<Value>(m.as_slice()) {
-                Ok(v) => {
-                    info!("[JSON] {}", v);
-                }
+            let string = match String::from_utf8(bytes) {
+                Ok(s) => s,
                 Err(e) => {
-                    warn!("Received invalid json-rpc : {}", e);
+                    warn!(
+                        "Couldn't convert {} bytes into string : {}",
+                        content_length, e
+                    );
+                    continue;
                 }
-            }
+            };
+
+            let value = match serde_json::from_str::<Value>(&string) {
+                Ok(value) => value,
+                Err(e) => {
+                    warn!(": JSON parse error : {} - {}", e, &string);
+                    continue;
+                }
+            };
+
+            let request = match serde_json::from_value::<Request>(value) {
+                Ok(request) => request,
+                Err(e) => {
+                    warn!(": JSON-RPC parse error : {} - {}", e, &string);
+                    continue;
+                }
+            };
+
+            info!("[Request] {:?}", request);
         }
     }
 }
