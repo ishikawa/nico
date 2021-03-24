@@ -8,6 +8,9 @@ use serde_json::Value;
 use std::io::{Read, Write};
 use std::{io, string};
 
+#[derive(Debug)]
+struct Connection {}
+
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 enum Id {
@@ -111,6 +114,35 @@ impl Response {
     }
 }
 
+impl Connection {
+    fn on_initialize(&self, params: &InitializeParams) -> Result<InitializeResult, HandlerError> {
+        info!("[initialize] {:?}", params);
+
+        Ok(InitializeResult {
+            capabilities: ServerCapabilities {
+                text_document_sync: Some(TextDocumentSyncCapability::Kind(
+                    TextDocumentSyncKind::Incremental,
+                )),
+
+                color_provider: Some(ColorProviderCapability::Simple(true)),
+                ..ServerCapabilities::default()
+            },
+            server_info: Some(ServerInfo {
+                name: "nico-ls".to_string(),
+                version: Some("0.0.1".to_string()),
+            }),
+        })
+    }
+
+    fn on_text_document_did_open(
+        &self,
+        params: &DidOpenTextDocumentParams,
+    ) -> Result<(), HandlerError> {
+        info!("[on_text_document_did_open] {:?}", params);
+        Ok(())
+    }
+}
+
 fn write_response<T: Write, V: Serialize>(
     writer: &mut T,
     request: &Request,
@@ -122,30 +154,7 @@ fn write_response<T: Write, V: Serialize>(
     response.serialize_write(writer)
 }
 
-fn on_initialize(params: &InitializeParams) -> InitializeResult {
-    info!("[initialize] {:?}", params);
-
-    InitializeResult {
-        capabilities: ServerCapabilities {
-            text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                TextDocumentSyncKind::Incremental,
-            )),
-
-            color_provider: Some(ColorProviderCapability::Simple(true)),
-            ..ServerCapabilities::default()
-        },
-        server_info: Some(ServerInfo {
-            name: "nico-ls".to_string(),
-            version: Some("0.0.1".to_string()),
-        }),
-    }
-}
-
-fn on_text_document_did_open(params: &DidOpenTextDocumentParams) {
-    info!("[on_text_document_did_open] {:?}", params);
-}
-
-fn event_loop_main() -> Result<(), HandlerError> {
+fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
     let mut content_length: Option<usize> = None;
 
     // Header Part
@@ -208,12 +217,13 @@ fn event_loop_main() -> Result<(), HandlerError> {
         // Requests
         "initialize" => {
             let params = request.take_params::<InitializeParams>()?;
-            write_response(&mut io::stdout(), &request, on_initialize(&params))?;
+            let result = conn.on_initialize(&params)?;
+            write_response(&mut io::stdout(), &request, result)?;
         }
         // Notifications
         "textDocument/didOpen" => {
             let params = request.take_params::<DidOpenTextDocumentParams>()?;
-            on_text_document_did_open(&params);
+            conn.on_text_document_did_open(&params)?;
         }
         _ => {
             warn!("[unknown] {:?}", request);
@@ -225,10 +235,12 @@ fn event_loop_main() -> Result<(), HandlerError> {
 
 fn main() {
     env_logger::init();
-
     info!("Launching language server...");
+
+    let mut connection = Connection {};
+
     loop {
-        if let Err(err) = event_loop_main() {
+        if let Err(err) = event_loop_main(&mut connection) {
             todo!("Handle error or send notification to the client: {:?}", err)
         }
     }
