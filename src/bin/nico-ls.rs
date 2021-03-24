@@ -1,4 +1,5 @@
 use log::{info, warn};
+use lsp_types::InitializeParams;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io;
@@ -95,7 +96,7 @@ fn main() {
             let value = match serde_json::from_str::<Value>(&string) {
                 Ok(value) => value,
                 Err(e) => {
-                    warn!(": JSON parse error : {} - {}", e, &string);
+                    warn!("JSON parse error : {} - {}", e, &string);
                     continue;
                 }
             };
@@ -103,12 +104,26 @@ fn main() {
             let request = match serde_json::from_value::<Request>(value) {
                 Ok(request) => request,
                 Err(e) => {
-                    warn!(": JSON-RPC parse error : {} - {}", e, &string);
+                    warn!("JSON-RPC parse error : {} - {}", e, &string);
                     continue;
                 }
             };
 
-            info!("[Request] {:?}", request);
+            match request.method.as_str() {
+                "initialize" => {
+                    match serde_json::from_value::<InitializeParams>(request.params.unwrap()) {
+                        Ok(params) => {
+                            info!("[initialize] {:?}", params);
+                        }
+                        Err(e) => {
+                            warn!("initialize: parse error : {} - {}", e, &string);
+                        }
+                    };
+                }
+                _ => {
+                    warn!("[unknown] {:?}", request);
+                }
+            };
         }
     }
 }
