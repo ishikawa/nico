@@ -157,7 +157,9 @@ fn main() {
                             info!("[write] {:?}", &response);
                             write!(io::stdout(), "Content-Length: {}\r\n\r\n", json.len())
                                 .expect("write error");
-                            io::stdout().write(json.as_slice()).expect("write error");
+                            io::stdout()
+                                .write_all(json.as_slice())
+                                .expect("write error");
                         }
                         Err(e) => {
                             warn!("initialize: parse error : {} - {}", e, &string);
