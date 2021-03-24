@@ -1,6 +1,7 @@
 use log::{info, warn};
 use lsp_types::{
     ColorProviderCapability, InitializeParams, InitializeResult, ServerCapabilities, ServerInfo,
+    TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -134,6 +135,10 @@ fn main() {
 
                             let result = InitializeResult {
                                 capabilities: ServerCapabilities {
+                                    text_document_sync: Some(TextDocumentSyncCapability::Kind(
+                                        TextDocumentSyncKind::Full,
+                                    )),
+
                                     color_provider: Some(ColorProviderCapability::Simple(true)),
                                     ..ServerCapabilities::default()
                                 },
@@ -160,6 +165,7 @@ fn main() {
                             io::stdout()
                                 .write_all(json.as_slice())
                                 .expect("write error");
+                            io::stdout().flush().expect("write error");
                         }
                         Err(e) => {
                             warn!("initialize: parse error : {} - {}", e, &string);
