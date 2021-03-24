@@ -99,6 +99,50 @@ impl Response {
             error: None,
         }
     }
+
+    fn serialize_write<T: Write>(&self, writer: &mut T) -> Result<(), HandlerError> {
+        let json = serde_json::to_vec(self)?;
+
+        write!(writer, "Content-Length: {}\r\n\r\n", json.len())?;
+        writer.write_all(json.as_slice())?;
+        writer.flush()?;
+
+        Ok(())
+    }
+}
+
+fn write_response<T: Write, V: Serialize>(
+    writer: &mut T,
+    request: &Request,
+    value: V,
+) -> Result<(), HandlerError> {
+    let value = serde_json::to_value(value)?;
+    let response = Response::from_value(&request, value);
+
+    response.serialize_write(writer)
+}
+
+fn on_initialize(params: &InitializeParams) -> InitializeResult {
+    info!("[initialize] {:?}", params);
+
+    InitializeResult {
+        capabilities: ServerCapabilities {
+            text_document_sync: Some(TextDocumentSyncCapability::Kind(
+                TextDocumentSyncKind::Incremental,
+            )),
+
+            color_provider: Some(ColorProviderCapability::Simple(true)),
+            ..ServerCapabilities::default()
+        },
+        server_info: Some(ServerInfo {
+            name: "nico-ls".to_string(),
+            version: Some("0.0.1".to_string()),
+        }),
+    }
+}
+
+fn on_text_document_did_open(params: &DidOpenTextDocumentParams) {
+    info!("[on_text_document_did_open] {:?}", params);
 }
 
 fn event_loop_main() -> Result<(), HandlerError> {
@@ -164,35 +208,12 @@ fn event_loop_main() -> Result<(), HandlerError> {
         // Requests
         "initialize" => {
             let params = request.take_params::<InitializeParams>()?;
-            info!("[initialize] {:?}", params);
-
-            let result = InitializeResult {
-                capabilities: ServerCapabilities {
-                    text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                        TextDocumentSyncKind::Full,
-                    )),
-
-                    color_provider: Some(ColorProviderCapability::Simple(true)),
-                    ..ServerCapabilities::default()
-                },
-                server_info: Some(ServerInfo {
-                    name: "nico-ls".to_string(),
-                    version: Some("0.0.1".to_string()),
-                }),
-            };
-
-            let value = serde_json::to_value(result)?;
-            let response = Response::from_value(&request, value);
-            let json = serde_json::to_vec(&response)?;
-
-            write!(io::stdout(), "Content-Length: {}\r\n\r\n", json.len())?;
-            io::stdout().write_all(json.as_slice())?;
-            io::stdout().flush()?;
+            write_response(&mut io::stdout(), &request, on_initialize(&params))?;
         }
         // Notifications
         "textDocument/didOpen" => {
             let params = request.take_params::<DidOpenTextDocumentParams>()?;
-            info!("[textDocument/didOpen] {:?}", params);
+            on_text_document_did_open(&params);
         }
         _ => {
             warn!("[unknown] {:?}", request);
