@@ -1,8 +1,8 @@
 use log::{info, warn};
 use lsp_types::{
     ColorProviderCapability, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
-    InitializeParams, InitializeResult, ServerCapabilities, ServerInfo, TextDocumentItem,
-    TextDocumentSyncCapability, TextDocumentSyncKind,
+    InitializeParams, InitializeResult, InitializedParams, ServerCapabilities, ServerInfo,
+    TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -163,6 +163,11 @@ impl Connection {
                 version: Some("0.0.1".to_string()),
             }),
         })
+    }
+
+    fn on_initialized(&self, params: &InitializedParams) -> Result<(), HandlerError> {
+        info!("[initialized] {:?}", params);
+        Ok(())
     }
 
     // Notification callbacks
@@ -328,6 +333,10 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
             write_response(&mut io::stdout(), &request, result)?;
         }
         // Notifications
+        "initialized" => {
+            let params = request.take_params::<InitializedParams>()?;
+            conn.on_initialized(&params)?;
+        }
         "textDocument/didOpen" => {
             let params = request.take_params::<DidOpenTextDocumentParams>()?;
             conn.on_text_document_did_open(&params)?;
