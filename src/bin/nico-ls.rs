@@ -195,6 +195,7 @@ impl Connection {
             }
         }
 
+        info!("  => {}", doc.borrow().text);
         Ok(())
     }
 }
@@ -209,7 +210,41 @@ impl From<&TextDocumentItem> for Document {
 }
 
 impl Document {
-    fn replace_range(&mut self, range: &lsp_types::Range, text: &String) {}
+    fn replace_range(&mut self, range: &lsp_types::Range, replace_with: &String) {
+        // Since the Range passed in LSP is the editor's row and column,
+        // we need to calculate the string range from there.
+        let mut text_start = None;
+        let mut text_end = None;
+
+        let mut lineno: u32 = 0;
+        let mut columnno: u32 = 0;
+
+        for (i, c) in self.text.chars().enumerate() {
+            if range.start.line == lineno && range.start.character == columnno {
+                text_start = Some(i);
+            }
+            if range.end.line == lineno && range.end.character == columnno {
+                text_end = Some(i);
+            }
+
+            if c == '\n' {
+                lineno += 1;
+                columnno = 0;
+            } else {
+                columnno += 1;
+            }
+        }
+
+        if let Some(text_start) = text_start {
+            if let Some(text_end) = text_end {
+                info!("text_start:{} text_end:{}", text_start, text_end);
+                self.text.replace_range(text_start..text_end, replace_with);
+                return;
+            }
+        }
+
+        self.text.push_str(replace_with);
+    }
 }
 
 // --- Event Loop
