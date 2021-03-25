@@ -1,16 +1,21 @@
 use log::{info, warn};
 use lsp_types::{
-    ColorProviderCapability, DidOpenTextDocumentParams, InitializeParams, InitializeResult,
-    ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
+    ColorProviderCapability, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
+    InitializeParams, InitializeResult, ServerCapabilities, ServerInfo, TextDocumentItem,
+    TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::io::{Read, Write};
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::{
+    collections::HashMap,
+    io::{Read, Write},
+};
 use std::{io, string};
+use url::Url;
 
-#[derive(Debug)]
-struct Connection {}
-
+// --- JSON-RPC
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 enum Id {
@@ -56,6 +61,7 @@ enum HandlerErrorKind {
 
     // Warnings
     InvalidParams,
+    DocumentNotFound(Url),
 }
 
 impl From<io::Error> for HandlerError {
@@ -114,7 +120,31 @@ impl Response {
     }
 }
 
+// --- Language Server States
+
+#[derive(Debug, Default)]
+struct Connection {
+    documents: HashMap<Url, Rc<RefCell<Document>>>,
+}
+
+#[derive(Debug)]
+struct Document {
+    uri: Url,
+    text: String,
+}
+
 impl Connection {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn get_document(&self, uri: &Url) -> Result<&Rc<RefCell<Document>>, HandlerError> {
+        self.documents.get(uri).ok_or_else(|| HandlerError {
+            kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
+        })
+    }
+
+    // Request callbacks
     fn on_initialize(&self, params: &InitializeParams) -> Result<InitializeResult, HandlerError> {
         info!("[initialize] {:?}", params);
 
@@ -134,14 +164,55 @@ impl Connection {
         })
     }
 
+    // Notification callbacks
     fn on_text_document_did_open(
-        &self,
+        &mut self,
         params: &DidOpenTextDocumentParams,
     ) -> Result<(), HandlerError> {
         info!("[on_text_document_did_open] {:?}", params);
+
+        let doc = Document::from(&params.text_document);
+
+        self.documents
+            .insert(doc.uri.clone(), Rc::new(RefCell::new(doc)));
+
+        Ok(())
+    }
+
+    fn on_text_document_did_change(
+        &mut self,
+        params: &DidChangeTextDocumentParams,
+    ) -> Result<(), HandlerError> {
+        info!("[on_text_document_did_change] {:?}", params);
+
+        let doc = self.get_document(&params.text_document.uri)?;
+
+        for change in &params.content_changes {
+            let mut doc = doc.borrow_mut();
+
+            if let Some(range) = &change.range {
+                doc.replace_range(range, &change.text);
+            }
+        }
+
         Ok(())
     }
 }
+
+impl From<&TextDocumentItem> for Document {
+    fn from(item: &TextDocumentItem) -> Self {
+        Self {
+            uri: item.uri.clone(),
+            text: item.text.clone(),
+        }
+    }
+}
+
+impl Document {
+    fn replace_range(&mut self, range: &lsp_types::Range, text: &String) {}
+}
+
+// --- Event Loop
 
 fn write_response<T: Write, V: Serialize>(
     writer: &mut T,
@@ -225,6 +296,10 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
             let params = request.take_params::<DidOpenTextDocumentParams>()?;
             conn.on_text_document_did_open(&params)?;
         }
+        "textDocument/didChange" => {
+            let params = request.take_params::<DidChangeTextDocumentParams>()?;
+            conn.on_text_document_did_change(&params)?;
+        }
         _ => {
             warn!("[unknown] {:?}", request);
         }
@@ -237,7 +312,7 @@ fn main() {
     env_logger::init();
     info!("Launching language server...");
 
-    let mut connection = Connection {};
+    let mut connection = Connection::new();
 
     loop {
         if let Err(err) = event_loop_main(&mut connection) {
