@@ -1,8 +1,9 @@
 use log::{info, warn};
 use lsp_types::{
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult,
-    InitializedParams, ServerCapabilities, ServerInfo, TextDocumentItem,
-    TextDocumentSyncCapability, TextDocumentSyncKind,
+    InitializedParams, SemanticTokenType, SemanticTokensFullOptions, SemanticTokensLegend,
+    SemanticTokensOptions, SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo,
+    TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -149,11 +150,25 @@ impl Connection {
     fn on_initialize(&self, params: &InitializeParams) -> Result<InitializeResult, HandlerError> {
         info!("[initialize] {:?}", params);
 
+        let legend = SemanticTokensLegend {
+            token_types: vec![SemanticTokenType::KEYWORD],
+            token_modifiers: vec![],
+        };
+
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::Incremental,
                 )),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend,
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            ..SemanticTokensOptions::default()
+                        },
+                    ),
+                ),
                 ..ServerCapabilities::default()
             },
             server_info: Some(ServerInfo {
