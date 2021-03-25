@@ -157,12 +157,12 @@ impl Allocator {
             | Expr::Rem(lhs, rhs, _)
             | Expr::Mul(lhs, rhs, _)
             | Expr::Div(lhs, rhs, _)
-            | Expr::LT(lhs, rhs, _)
-            | Expr::GT(lhs, rhs, _)
-            | Expr::LE(lhs, rhs, _)
-            | Expr::GE(lhs, rhs, _)
-            | Expr::EQ(lhs, rhs, _)
-            | Expr::NE(lhs, rhs, _) => {
+            | Expr::Lt(lhs, rhs, _)
+            | Expr::Gt(lhs, rhs, _)
+            | Expr::Le(lhs, rhs, _)
+            | Expr::Ge(lhs, rhs, _)
+            | Expr::Eq(lhs, rhs, _)
+            | Expr::Ne(lhs, rhs, _) => {
                 self.analyze_expr(lhs, locals, strings, frame);
                 self.analyze_expr(rhs, locals, strings, frame);
             }

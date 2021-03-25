@@ -176,22 +176,22 @@ impl Binder {
             Expr::Div(lhs, rhs, binding) => {
                 self.bind_binary_op("/", lhs, rhs, binding, env, type_env)
             }
-            Expr::LT(lhs, rhs, binding) => {
+            Expr::Lt(lhs, rhs, binding) => {
                 self.bind_binary_op("<", lhs, rhs, binding, env, type_env)
             }
-            Expr::GT(lhs, rhs, binding) => {
+            Expr::Gt(lhs, rhs, binding) => {
                 self.bind_binary_op(">", lhs, rhs, binding, env, type_env)
             }
-            Expr::LE(lhs, rhs, binding) => {
+            Expr::Le(lhs, rhs, binding) => {
                 self.bind_binary_op("<=", lhs, rhs, binding, env, type_env)
             }
-            Expr::GE(lhs, rhs, binding) => {
+            Expr::Ge(lhs, rhs, binding) => {
                 self.bind_binary_op(">=", lhs, rhs, binding, env, type_env)
             }
-            Expr::EQ(lhs, rhs, binding) => {
+            Expr::Eq(lhs, rhs, binding) => {
                 self.bind_binary_op("==", lhs, rhs, binding, env, type_env)
             }
-            Expr::NE(lhs, rhs, binding) => {
+            Expr::Ne(lhs, rhs, binding) => {
                 self.bind_binary_op("!=", lhs, rhs, binding, env, type_env)
             }
             Expr::Plus(operand, binding) => {

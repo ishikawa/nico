@@ -247,12 +247,12 @@ impl TypeInferencer {
             | Expr::Rem(lhs, rhs, binding)
             | Expr::Mul(lhs, rhs, binding)
             | Expr::Div(lhs, rhs, binding)
-            | Expr::LT(lhs, rhs, binding)
-            | Expr::GT(lhs, rhs, binding)
-            | Expr::LE(lhs, rhs, binding)
-            | Expr::GE(lhs, rhs, binding)
-            | Expr::EQ(lhs, rhs, binding)
-            | Expr::NE(lhs, rhs, binding) => match self.lookup_function(binding) {
+            | Expr::Lt(lhs, rhs, binding)
+            | Expr::Gt(lhs, rhs, binding)
+            | Expr::Le(lhs, rhs, binding)
+            | Expr::Ge(lhs, rhs, binding)
+            | Expr::Eq(lhs, rhs, binding)
+            | Expr::Ne(lhs, rhs, binding) => match self.lookup_function(binding) {
                 None => panic!("Prelude not installed"),
                 Some(function_type) => self.analyze_invocation(
                     binding,
@@ -850,12 +850,12 @@ impl TypeFixer {
             | Expr::Rem(lhs, rhs, ..)
             | Expr::Mul(lhs, rhs, ..)
             | Expr::Div(lhs, rhs, ..)
-            | Expr::LT(lhs, rhs, ..)
-            | Expr::GT(lhs, rhs, ..)
-            | Expr::LE(lhs, rhs, ..)
-            | Expr::GE(lhs, rhs, ..)
-            | Expr::EQ(lhs, rhs, ..)
-            | Expr::NE(lhs, rhs, ..) => {
+            | Expr::Lt(lhs, rhs, ..)
+            | Expr::Gt(lhs, rhs, ..)
+            | Expr::Le(lhs, rhs, ..)
+            | Expr::Ge(lhs, rhs, ..)
+            | Expr::Eq(lhs, rhs, ..)
+            | Expr::Ne(lhs, rhs, ..) => {
                 self.fix_expr(lhs);
                 self.fix_expr(rhs);
             }

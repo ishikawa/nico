@@ -565,37 +565,37 @@ impl AsmBuilder {
                 builder.i32_div_s();
             }
             // relation
-            Expr::LT(lhs, rhs, _) => {
+            Expr::Lt(lhs, rhs, _) => {
                 self.build_expr(builder, lhs, temp, frame);
                 self.build_expr(builder, rhs, temp, frame);
 
                 builder.i32_lt_s();
             }
-            Expr::GT(lhs, rhs, _) => {
+            Expr::Gt(lhs, rhs, _) => {
                 self.build_expr(builder, lhs, temp, frame);
                 self.build_expr(builder, rhs, temp, frame);
 
                 builder.i32_gt_s();
             }
-            Expr::LE(lhs, rhs, _) => {
+            Expr::Le(lhs, rhs, _) => {
                 self.build_expr(builder, lhs, temp, frame);
                 self.build_expr(builder, rhs, temp, frame);
 
                 builder.i32_le_s();
             }
-            Expr::GE(lhs, rhs, _) => {
+            Expr::Ge(lhs, rhs, _) => {
                 self.build_expr(builder, lhs, temp, frame);
                 self.build_expr(builder, rhs, temp, frame);
 
                 builder.i32_ge_s();
             }
-            Expr::EQ(lhs, rhs, _) => {
+            Expr::Eq(lhs, rhs, _) => {
                 self.build_expr(builder, lhs, temp, frame);
                 self.build_expr(builder, rhs, temp, frame);
 
                 builder.i32_eq();
             }
-            Expr::NE(lhs, rhs, _) => {
+            Expr::Ne(lhs, rhs, _) => {
                 self.build_expr(builder, lhs, temp, frame);
                 self.build_expr(builder, rhs, temp, frame);
 
