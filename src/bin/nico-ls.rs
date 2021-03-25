@@ -133,6 +133,7 @@ struct Document {
     text: String,
 }
 
+#[allow(clippy::unnecessary_wraps)]
 impl Connection {
     pub fn new() -> Self {
         Self::default()
@@ -210,7 +211,7 @@ impl From<&TextDocumentItem> for Document {
 }
 
 impl Document {
-    fn replace_range(&mut self, range: &lsp_types::Range, replace_with: &String) {
+    fn replace_range(&mut self, range: &lsp_types::Range, replace_with: &str) {
         // Since the Range passed in LSP is the editor's row and column,
         // we need to calculate the string range from there.
         let mut text_start = None;
