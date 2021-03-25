@@ -1,8 +1,8 @@
 use log::{info, warn};
 use lsp_types::{
-    ColorProviderCapability, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
-    InitializeParams, InitializeResult, InitializedParams, ServerCapabilities, ServerInfo,
-    TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult,
+    InitializedParams, ServerCapabilities, ServerInfo, TextDocumentItem,
+    TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -154,8 +154,6 @@ impl Connection {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::Incremental,
                 )),
-
-                color_provider: Some(ColorProviderCapability::Simple(true)),
                 ..ServerCapabilities::default()
             },
             server_info: Some(ServerInfo {
