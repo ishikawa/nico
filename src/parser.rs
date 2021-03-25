@@ -129,12 +129,12 @@ pub enum Expr {
     Div(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>),
 
     // Relational operator
-    LT(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Less Than
-    GT(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Greater Than
-    LE(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Less than Equal
-    GE(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Greater than Equal
-    EQ(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Equal
-    NE(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Not Equal
+    Lt(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Less Than
+    Gt(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Greater Than
+    Le(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Less than Equal
+    Ge(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Greater than Equal
+    Eq(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Equal
+    Ne(Box<Node>, Box<Node>, Option<Rc<RefCell<sem::Binding>>>), // Not Equal
 
     // Unary operator
     Minus(Box<Node>, Option<Rc<RefCell<sem::Binding>>>),
@@ -507,8 +507,8 @@ impl Parser {
         let lhs = self.parse_rel_op2(tokenizer, context)?;
 
         let builder = match tokenizer.peek() {
-            Some(Token::EQ) => Expr::EQ,
-            Some(Token::NE) => Expr::NE,
+            Some(Token::Eq) => Expr::Eq,
+            Some(Token::Ne) => Expr::Ne,
             _ => return Some(lhs),
         };
         tokenizer.next();
@@ -529,10 +529,10 @@ impl Parser {
         let lhs = self.parse_binary_op1(tokenizer, context)?;
 
         let builder = match tokenizer.peek() {
-            Some(Token::LE) => Expr::LE,
-            Some(Token::GE) => Expr::GE,
-            Some(Token::Char('<')) => Expr::LT,
-            Some(Token::Char('>')) => Expr::GT,
+            Some(Token::Le) => Expr::Le,
+            Some(Token::Ge) => Expr::Ge,
+            Some(Token::Char('<')) => Expr::Lt,
+            Some(Token::Char('>')) => Expr::Gt,
             _ => return Some(lhs),
         };
         tokenizer.next();
@@ -1211,12 +1211,12 @@ impl Expr {
             Expr::Rem(_, _, _) => "a % b".to_string(),
             Expr::Mul(_, _, _) => "a * b".to_string(),
             Expr::Div(_, _, _) => "a / b".to_string(),
-            Expr::LT(_, _, _) => "a < b".to_string(),
-            Expr::GT(_, _, _) => "a > b".to_string(),
-            Expr::LE(_, _, _) => "a <= b".to_string(),
-            Expr::GE(_, _, _) => "a >= b".to_string(),
-            Expr::EQ(_, _, _) => "a == b".to_string(),
-            Expr::NE(_, _, _) => "a != b".to_string(),
+            Expr::Lt(_, _, _) => "a < b".to_string(),
+            Expr::Gt(_, _, _) => "a > b".to_string(),
+            Expr::Le(_, _, _) => "a <= b".to_string(),
+            Expr::Ge(_, _, _) => "a >= b".to_string(),
+            Expr::Eq(_, _, _) => "a == b".to_string(),
+            Expr::Ne(_, _, _) => "a != b".to_string(),
             Expr::Plus(_, _) => "+a".to_string(),
             Expr::Minus(_, _) => "-a".to_string(),
             Expr::Stmt(node) => format!("Stmt({})", node.expr.short_name()),

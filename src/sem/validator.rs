@@ -95,12 +95,12 @@ impl TypeValidator {
             | Expr::Rem(lhs, rhs, ..)
             | Expr::Mul(lhs, rhs, ..)
             | Expr::Div(lhs, rhs, ..)
-            | Expr::LT(lhs, rhs, ..)
-            | Expr::GT(lhs, rhs, ..)
-            | Expr::LE(lhs, rhs, ..)
-            | Expr::GE(lhs, rhs, ..)
-            | Expr::EQ(lhs, rhs, ..)
-            | Expr::NE(lhs, rhs, ..) => {
+            | Expr::Lt(lhs, rhs, ..)
+            | Expr::Gt(lhs, rhs, ..)
+            | Expr::Le(lhs, rhs, ..)
+            | Expr::Ge(lhs, rhs, ..)
+            | Expr::Eq(lhs, rhs, ..)
+            | Expr::Ne(lhs, rhs, ..) => {
                 self.validate_expr(lhs);
                 self.validate_expr(rhs);
             }

@@ -55,9 +55,9 @@ struct HandlerError {
 #[derive(Debug)]
 enum HandlerErrorKind {
     // Errors
-    UTF8Error(string::FromUtf8Error),
-    IOError(io::Error),
-    JSONError(serde_json::Error),
+    Utf8Error(string::FromUtf8Error),
+    IoError(io::Error),
+    JsonError(serde_json::Error),
 
     // Warnings
     InvalidParams,
@@ -67,7 +67,7 @@ enum HandlerErrorKind {
 impl From<io::Error> for HandlerError {
     fn from(err: io::Error) -> Self {
         Self {
-            kind: HandlerErrorKind::IOError(err),
+            kind: HandlerErrorKind::IoError(err),
         }
     }
 }
@@ -75,7 +75,7 @@ impl From<io::Error> for HandlerError {
 impl From<string::FromUtf8Error> for HandlerError {
     fn from(err: string::FromUtf8Error) -> Self {
         Self {
-            kind: HandlerErrorKind::UTF8Error(err),
+            kind: HandlerErrorKind::Utf8Error(err),
         }
     }
 }
@@ -83,7 +83,7 @@ impl From<string::FromUtf8Error> for HandlerError {
 impl From<serde_json::Error> for HandlerError {
     fn from(err: serde_json::Error) -> Self {
         Self {
-            kind: HandlerErrorKind::JSONError(err),
+            kind: HandlerErrorKind::JsonError(err),
         }
     }
 }

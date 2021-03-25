@@ -23,10 +23,10 @@ pub enum Token {
     I32,
 
     // Operators
-    EQ, // "=="
-    NE, // "!="
-    LE, // "<="
-    GE, // ">="
+    Eq, // "=="
+    Ne, // "!="
+    Le, // "<="
+    Ge, // ">="
 
     // punctuations
     Char(char),
@@ -174,10 +174,10 @@ impl<'a> Tokenizer<'a> {
         };
 
         let token = match (c, nextc) {
-            ('=', '=') => Token::EQ,
-            ('!', '=') => Token::NE,
-            ('<', '=') => Token::LE,
-            ('>', '=') => Token::GE,
+            ('=', '=') => Token::Eq,
+            ('!', '=') => Token::Ne,
+            ('<', '=') => Token::Le,
+            ('>', '=') => Token::Ge,
             _ => return Token::Char(c),
         };
 
@@ -293,10 +293,10 @@ impl fmt::Display for Token {
             Token::Rest => write!(f, "..."),
             Token::Struct => write!(f, "struct"),
             Token::I32 => write!(f, "i32"),
-            Token::EQ => write!(f, "=="),
-            Token::NE => write!(f, "!="),
-            Token::LE => write!(f, "<="),
-            Token::GE => write!(f, ">="),
+            Token::Eq => write!(f, "=="),
+            Token::Ne => write!(f, "!="),
+            Token::Le => write!(f, "<="),
+            Token::Ge => write!(f, ">="),
             Token::Char(c) => write!(f, "{}", c),
         }
     }
@@ -342,12 +342,12 @@ mod tests {
     fn operators() {
         let mut tokenizer = Tokenizer::from_string("!===<><=>=");
 
-        assert_matches!(tokenizer.next().unwrap(), Token::NE);
-        assert_matches!(tokenizer.next().unwrap(), Token::EQ);
+        assert_matches!(tokenizer.next().unwrap(), Token::Ne);
+        assert_matches!(tokenizer.next().unwrap(), Token::Eq);
         assert_matches!(tokenizer.next().unwrap(), Token::Char('<'));
         assert_matches!(tokenizer.next().unwrap(), Token::Char('>'));
-        assert_matches!(tokenizer.next().unwrap(), Token::LE);
-        assert_matches!(tokenizer.next().unwrap(), Token::GE);
+        assert_matches!(tokenizer.next().unwrap(), Token::Le);
+        assert_matches!(tokenizer.next().unwrap(), Token::Ge);
     }
 
     #[test]
