@@ -214,7 +214,7 @@ impl Connection {
             }
         }
 
-        info!("  => {}", doc.borrow().text);
+        //info!("  => {}", doc.borrow().text);
         Ok(())
     }
 }
@@ -235,10 +235,11 @@ impl Document {
         let mut text_start = None;
         let mut text_end = None;
 
+        let mut i: usize = 0;
         let mut lineno: u32 = 0;
         let mut columnno: u32 = 0;
 
-        for (i, c) in self.text.chars().enumerate() {
+        for c in self.text.chars() {
             if range.start.line == lineno && range.start.character == columnno {
                 text_start = Some(i);
             }
@@ -246,6 +247,7 @@ impl Document {
                 text_end = Some(i);
             }
 
+            i += 1;
             if c == '\n' {
                 lineno += 1;
                 columnno = 0;
@@ -254,15 +256,20 @@ impl Document {
             }
         }
 
-        if let Some(text_start) = text_start {
-            if let Some(text_end) = text_end {
-                info!("text_start:{} text_end:{}", text_start, text_end);
-                self.text.replace_range(text_start..text_end, replace_with);
-                return;
-            }
+        // The above iteration algorithm can't capture locations at the termination.
+        if range.start.line == lineno && range.start.character == columnno {
+            text_start = Some(i);
+        }
+        if range.end.line == lineno && range.end.character == columnno {
+            text_end = Some(i);
         }
 
-        self.text.push_str(replace_with);
+        if let Some(text_start) = text_start {
+            if let Some(text_end) = text_end {
+                //info!("text_start:{} text_end:{}", text_start, text_end);
+                self.text.replace_range(text_start..text_end, replace_with);
+            }
+        }
     }
 }
 
