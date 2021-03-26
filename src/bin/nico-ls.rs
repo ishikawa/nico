@@ -1,10 +1,12 @@
 use log::{info, warn};
 use lsp_types::{
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult,
-    InitializedParams, SemanticTokenType, SemanticTokensFullOptions, SemanticTokensLegend,
-    SemanticTokensOptions, SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo,
-    TextDocumentItem, TextDocumentSyncCapability, TextDocumentSyncKind,
+    InitializedParams, SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensFullOptions,
+    SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
+    SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
+    TextDocumentSyncCapability, TextDocumentSyncKind,
 };
+use nico::tokenizer::Tokenizer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -178,12 +180,35 @@ impl Connection {
         })
     }
 
+    fn on_text_document_semantic_tokens_full(
+        &self,
+        params: &SemanticTokensParams,
+    ) -> Result<SemanticTokens, HandlerError> {
+        info!("[on_text_document_semantic_tokens_full] {:?}", params);
+
+        // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_semanticTokens
+        // 1 - { line: 0, startChar: 0, length: 2, tokenType: 0, tokenModifiers: 0 },
+        // 2 - { deltaLine: 0, deltaStartChar: 0, length: 2, tokenType: 0, tokenModifiers: 0 },
+        // 3 - [ 0, 0, 2, 0, 0 ]
+
+        Ok(SemanticTokens {
+            data: vec![SemanticToken {
+                delta_line: 0,
+                delta_start: 0,
+                length: 2,
+                token_type: 0,
+                token_modifiers_bitset: 0,
+            }],
+            result_id: None,
+        })
+    }
+
+    // Notification callbacks
     fn on_initialized(&self, params: &InitializedParams) -> Result<(), HandlerError> {
         info!("[initialized] {:?}", params);
         Ok(())
     }
 
-    // Notification callbacks
     fn on_text_document_did_open(
         &mut self,
         params: &DidOpenTextDocumentParams,
@@ -350,6 +375,11 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
         "initialize" => {
             let params = request.take_params::<InitializeParams>()?;
             let result = conn.on_initialize(&params)?;
+            write_response(&mut io::stdout(), &request, result)?;
+        }
+        "textDocument/semanticTokens/full" => {
+            let params = request.take_params::<SemanticTokensParams>()?;
+            let result = conn.on_text_document_semantic_tokens_full(&params)?;
             write_response(&mut io::stdout(), &request, result)?;
         }
         // Notifications
