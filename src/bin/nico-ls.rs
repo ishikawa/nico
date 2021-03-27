@@ -6,10 +6,11 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-use nico::tokenizer::Tokenizer;
+use nico::tokenizer::{TokenKind, Tokenizer};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
+use std::convert::TryFrom;
 use std::rc::Rc;
 use std::{
     collections::HashMap,
@@ -186,19 +187,43 @@ impl Connection {
     ) -> Result<SemanticTokens, HandlerError> {
         info!("[on_text_document_semantic_tokens_full] {:?}", params);
 
+        let doc = self.get_document(&params.text_document.uri)?.borrow();
+
+        let tokenizer = Tokenizer::from_string(&doc.text);
+
+        let mut previous_line: u32 = 0;
+        let mut previous_character: u32 = 0;
+        let mut semantic_tokens = vec![];
+
+        for token in tokenizer {
+            if token.kind == TokenKind::If || token.kind == TokenKind::End {
+                let line = u32::try_from(token.range.start.line).unwrap();
+                let character = u32::try_from(token.range.start.character).unwrap();
+                let length = u32::try_from(token.range.length).unwrap();
+
+                let delta_line = line - previous_line;
+                let delta_start = character - previous_character;
+
+                semantic_tokens.push(SemanticToken {
+                    delta_line,
+                    delta_start,
+                    length,
+                    token_type: 0,
+                    token_modifiers_bitset: 0,
+                });
+
+                previous_line = line;
+                previous_character = character;
+            }
+        }
+
         // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_semanticTokens
         // 1 - { line: 0, startChar: 0, length: 2, tokenType: 0, tokenModifiers: 0 },
         // 2 - { deltaLine: 0, deltaStartChar: 0, length: 2, tokenType: 0, tokenModifiers: 0 },
         // 3 - [ 0, 0, 2, 0, 0 ]
 
         Ok(SemanticTokens {
-            data: vec![SemanticToken {
-                delta_line: 0,
-                delta_start: 0,
-                length: 2,
-                token_type: 0,
-                token_modifiers_bitset: 0,
-            }],
+            data: semantic_tokens,
             result_id: None,
         })
     }
