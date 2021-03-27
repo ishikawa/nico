@@ -163,6 +163,7 @@ impl<'a> Tokenizer<'a> {
             '!' | '=' | '<' | '>' => self.read_operator(nextc),
             '"' => self.read_string(),
             '.' => self.read_dot(),
+            '#' => self.read_comment(),
             x => {
                 self.next_char();
                 TokenKind::Char(x)
@@ -189,6 +190,22 @@ impl<'a> Tokenizer<'a> {
             }
             _ => TokenKind::Char('.'),
         }
+    }
+
+    fn read_comment(&mut self) -> TokenKind {
+        let mut comment = String::new();
+        self.next_char(); // '#'
+
+        loop {
+            match self.next_char() {
+                None | Some('\n') => break,
+                Some(c) => {
+                    comment.push(c);
+                }
+            };
+        }
+
+        TokenKind::LineComment(comment)
     }
 
     fn read_string(&mut self) -> TokenKind {
@@ -325,29 +342,19 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn skip_white_spaces(&mut self) {
-        let mut line_comment = false;
-
         self.newline_seen = false;
 
         loop {
             match self.peek_char() {
                 None => return,
                 Some(c) => match c {
-                    '#' => {
-                        line_comment = true;
-                    }
                     // whitespace
                     ' ' | '\t' => {}
                     // newline
                     '\n' | '\r' => {
-                        line_comment = false;
                         self.newline_seen = true;
                     }
-                    _ => {
-                        if !line_comment {
-                            return;
-                        }
-                    }
+                    _ => return,
                 },
             }
             self.next_char();
@@ -506,6 +513,30 @@ mod tests {
         assert_matches!(tokenizer.next().unwrap().kind, TokenKind::If);
         assert_matches!(tokenizer.next().unwrap().kind, TokenKind::End);
         assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Fun);
+    }
+
+    #[test]
+    fn comment() {
+        let mut tokenizer = Tokenizer::from_string("# comment");
+
+        let token = tokenizer.next().unwrap();
+        assert_matches!(token.kind, TokenKind::LineComment(str) => {
+            assert_eq!(str, " comment");
+        });
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 0,
+                    character: 0
+                },
+                end: Position {
+                    line: 0,
+                    character: 9
+                },
+                length: 9
+            }
+        );
     }
 
     #[test]
