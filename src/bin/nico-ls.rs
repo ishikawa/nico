@@ -129,6 +129,7 @@ impl Response {
 #[derive(Debug, Default)]
 struct Connection {
     documents: HashMap<Url, Rc<RefCell<Document>>>,
+    token_type_legend: HashMap<SemanticTokenType, usize>,
 }
 
 #[derive(Debug)]
@@ -150,11 +151,27 @@ impl Connection {
     }
 
     // Request callbacks
-    fn on_initialize(&self, params: &InitializeParams) -> Result<InitializeResult, HandlerError> {
+    fn on_initialize(
+        &mut self,
+        params: &InitializeParams,
+    ) -> Result<InitializeResult, HandlerError> {
         info!("[initialize] {:?}", params);
 
+        let token_types = vec![
+            SemanticTokenType::KEYWORD,
+            SemanticTokenType::VARIABLE,
+            SemanticTokenType::STRING,
+            SemanticTokenType::NUMBER,
+            SemanticTokenType::OPERATOR,
+        ];
+
+        // Register token type legend
+        for (i, token_type) in token_types.iter().enumerate() {
+            self.token_type_legend.insert(token_type.clone(), i);
+        }
+
         let legend = SemanticTokensLegend {
-            token_types: vec![SemanticTokenType::KEYWORD],
+            token_types,
             token_modifiers: vec![],
         };
 
@@ -196,25 +213,52 @@ impl Connection {
         let mut semantic_tokens = vec![];
 
         for token in tokenizer {
-            if token.kind == TokenKind::If || token.kind == TokenKind::End {
-                let line = u32::try_from(token.range.start.line).unwrap();
-                let character = u32::try_from(token.range.start.character).unwrap();
-                let length = u32::try_from(token.range.length).unwrap();
+            let token_type = match token.kind {
+                TokenKind::If
+                | TokenKind::Else
+                | TokenKind::End
+                | TokenKind::Export
+                | TokenKind::Fun
+                | TokenKind::Let
+                | TokenKind::Struct
+                | TokenKind::When
+                | TokenKind::Case => SemanticTokenType::KEYWORD,
+                TokenKind::String(_) => SemanticTokenType::STRING,
+                TokenKind::Identifier(_) => SemanticTokenType::VARIABLE,
+                TokenKind::Integer(_) => SemanticTokenType::NUMBER,
+                TokenKind::Eq | TokenKind::Ne | TokenKind::Le | TokenKind::Ge => {
+                    SemanticTokenType::OPERATOR
+                }
+                _ => continue,
+            };
 
-                let delta_line = line - previous_line;
-                let delta_start = character - previous_character;
+            let token_type = if let Some(ty) = self.token_type_legend.get(&token_type) {
+                u32::try_from(*ty).unwrap()
+            } else {
+                continue;
+            };
 
-                semantic_tokens.push(SemanticToken {
-                    delta_line,
-                    delta_start,
-                    length,
-                    token_type: 0,
-                    token_modifiers_bitset: 0,
-                });
+            let line = u32::try_from(token.range.start.line).unwrap();
+            let character = u32::try_from(token.range.start.character).unwrap();
+            let length = u32::try_from(token.range.length).unwrap();
 
-                previous_line = line;
-                previous_character = character;
-            }
+            let delta_line = line - previous_line;
+            let delta_start = if previous_line == line {
+                character - previous_character
+            } else {
+                character
+            };
+
+            semantic_tokens.push(SemanticToken {
+                delta_line,
+                delta_start,
+                length,
+                token_type,
+                token_modifiers_bitset: 0,
+            });
+
+            previous_line = line;
+            previous_character = character;
         }
 
         // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_semanticTokens
