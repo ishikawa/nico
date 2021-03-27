@@ -133,7 +133,7 @@ impl<'a> Tokenizer<'a> {
     // But if the iteration is over, `None` is returned.
     pub fn peek(&mut self) -> Result<&Token, &TokenError> {
         if self.peeked.is_none() {
-            let token = self.next_token();
+            let token = self.advance_token();
             self.peeked.get_or_insert(token).as_ref()
         } else {
             self.peeked.as_ref().unwrap().as_ref()
@@ -151,10 +151,10 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    pub fn next(&mut self) -> Result<Token, TokenError> {
+    pub fn next_token(&mut self) -> Result<Token, TokenError> {
         match self.peeked.take() {
             Some(v) => v,
-            None => self.next_token(),
+            None => self.advance_token(),
         }
     }
 
@@ -185,7 +185,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn next_token(&mut self) -> Result<Token, TokenError> {
+    fn advance_token(&mut self) -> Result<Token, TokenError> {
         self.newline_seen = false;
 
         loop {
@@ -202,28 +202,23 @@ impl<'a> Tokenizer<'a> {
                 '0'..='9' => self.read_integer(nextc),
                 'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
                 '!' | '=' | '<' | '>' => self.read_operator(nextc),
-                '"' => self.read_string(),
-                '.' => self.read_dot(),
+                '"' => self.read_string()?,
+                '.' => self.read_dot()?,
                 '#' => self.read_comment(),
                 x => {
                     self.next_char();
-                    Ok(TokenKind::Char(x))
+                    TokenKind::Char(x)
                 }
             };
 
             // Skip comment
-            if self.skip_comments && matches!(kind, Ok(TokenKind::LineComment(_))) {
+            if self.skip_comments && matches!(kind, TokenKind::LineComment(_)) {
                 continue;
             }
 
             let range = self.end_token();
 
-            match kind {
-                Ok(kind) => {
-                    return Ok(Token { kind, range });
-                }
-                Err(err) => return Err(err),
-            }
+            return Ok(Token { kind, range });
         }
     }
 
@@ -247,7 +242,7 @@ impl<'a> Tokenizer<'a> {
         Ok(kind)
     }
 
-    fn read_comment(&mut self) -> Result<TokenKind, TokenError> {
+    fn read_comment(&mut self) -> TokenKind {
         let mut comment = String::new();
         self.next_char(); // '#'
 
@@ -260,7 +255,7 @@ impl<'a> Tokenizer<'a> {
             };
         }
 
-        Ok(TokenKind::LineComment(comment))
+        TokenKind::LineComment(comment)
     }
 
     fn read_string(&mut self) -> Result<TokenKind, TokenError> {
@@ -307,12 +302,12 @@ impl<'a> Tokenizer<'a> {
         Ok(TokenKind::String(string))
     }
 
-    fn read_operator(&mut self, nextc: char) -> Result<TokenKind, TokenError> {
+    fn read_operator(&mut self, nextc: char) -> TokenKind {
         let c = nextc;
         self.next_char();
 
         let nextc = match self.peek_char() {
-            None => return Ok(TokenKind::Char(nextc)),
+            None => return TokenKind::Char(nextc),
             Some(c) => c,
         };
 
@@ -321,14 +316,14 @@ impl<'a> Tokenizer<'a> {
             ('!', '=') => TokenKind::Ne,
             ('<', '=') => TokenKind::Le,
             ('>', '=') => TokenKind::Ge,
-            _ => return Ok(TokenKind::Char(c)),
+            _ => return TokenKind::Char(c),
         };
 
         self.next_char();
-        Ok(token)
+        token
     }
 
-    fn read_name(&mut self, nextc: char) -> Result<TokenKind, TokenError> {
+    fn read_name(&mut self, nextc: char) -> TokenKind {
         let mut value = nextc.to_string();
         self.next_char();
 
@@ -362,10 +357,10 @@ impl<'a> Tokenizer<'a> {
             _ => TokenKind::Identifier(value),
         };
 
-        Ok(kind)
+        kind
     }
 
-    fn read_integer(&mut self, nextc: char) -> Result<TokenKind, TokenError> {
+    fn read_integer(&mut self, nextc: char) -> TokenKind {
         let mut value: i32 = (nextc as i32) - ('0' as i32);
         self.next_char();
 
@@ -377,7 +372,7 @@ impl<'a> Tokenizer<'a> {
                     value = value * 10 + n;
                 }
                 _ => {
-                    return Ok(TokenKind::Integer(value));
+                    return TokenKind::Integer(value);
                 }
             };
             self.next_char();
@@ -463,7 +458,7 @@ mod tests {
     fn is_at_end_one() {
         let mut tokenizer = Tokenizer::from_string("o");
         assert!(!tokenizer.is_at_end());
-        tokenizer.next();
+        tokenizer.next_token().unwrap();
         assert!(tokenizer.is_at_end());
     }
 
@@ -473,7 +468,7 @@ mod tests {
 
         assert!(!tokenizer.is_at_end());
 
-        let token = tokenizer.next().unwrap();
+        let token = tokenizer.next_token().unwrap();
         assert_matches!(token.kind, TokenKind::Integer(42));
         assert_eq!(
             token.range,
@@ -490,7 +485,7 @@ mod tests {
             }
         );
 
-        let token = tokenizer.next().unwrap();
+        let token = tokenizer.next_token().unwrap();
         assert_matches!(token.kind, TokenKind::Char('('));
         assert_eq!(
             token.range,
@@ -507,7 +502,7 @@ mod tests {
             }
         );
 
-        let token = tokenizer.next().unwrap();
+        let token = tokenizer.next_token().unwrap();
         assert_matches!(token.kind, TokenKind::Char(')'));
         assert_eq!(
             token.range,
@@ -526,7 +521,7 @@ mod tests {
 
         assert!(!tokenizer.is_at_end());
 
-        let token = tokenizer.next().unwrap();
+        let token = tokenizer.next_token().unwrap();
         assert_matches!(token.kind, TokenKind::Identifier(name) => {
             assert_eq!(name, "ab_01");
         });
@@ -546,7 +541,7 @@ mod tests {
         );
         assert!(tokenizer.is_at_end());
         assert_eq!(
-            tokenizer.next().unwrap_err(),
+            tokenizer.next_token().unwrap_err(),
             TokenError {
                 kind: TokenErrorKind::Eos,
                 position: Position {
@@ -561,21 +556,21 @@ mod tests {
     fn operators() {
         let mut tokenizer = Tokenizer::from_string("!===<><=>=");
 
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Ne);
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Eq);
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Char('<'));
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Char('>'));
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Le);
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Ge);
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Ne);
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Eq);
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Char('<'));
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Char('>'));
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Le);
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Ge);
     }
 
     #[test]
     fn keywords() {
         let mut tokenizer = Tokenizer::from_string("if end fun");
 
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::If);
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::End);
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Fun);
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::If);
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::End);
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Fun);
     }
 
     #[test]
@@ -583,7 +578,7 @@ mod tests {
         let mut tokenizer = Tokenizer::from_string("# comment");
         tokenizer.skip_comments = false;
 
-        let token = tokenizer.next().unwrap();
+        let token = tokenizer.next_token().unwrap();
         assert_matches!(token.kind, TokenKind::LineComment(str) => {
             assert_eq!(str, " comment");
         });
@@ -607,14 +602,19 @@ mod tests {
     fn skip_comments() {
         let mut tokenizer = Tokenizer::from_string("# comment");
         tokenizer.skip_comments = true;
-        assert!(tokenizer.is_at_end());
+
+        let result = tokenizer.next_token();
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(err.kind, TokenErrorKind::Eos);
     }
 
     #[test]
     fn strings() {
         let mut tokenizer = Tokenizer::from_string("\"\" \"\\n\" \n\"\\\"\"");
 
-        let token = tokenizer.next().unwrap();
+        let token = tokenizer.next_token().unwrap();
         assert_matches!(token.kind, TokenKind::String(str) => {
             assert_eq!(str, "");
         });
@@ -633,7 +633,7 @@ mod tests {
             }
         );
 
-        let token = tokenizer.next().unwrap();
+        let token = tokenizer.next_token().unwrap();
         assert_matches!(token.kind, TokenKind::String(str) => {
             assert_eq!(str, "\n");
         });
@@ -652,7 +652,7 @@ mod tests {
             }
         );
 
-        let token = tokenizer.next().unwrap();
+        let token = tokenizer.next_token().unwrap();
         assert_matches!(token.kind, TokenKind::String(str) => {
             assert_eq!(str, "\"");
         });
@@ -676,16 +676,16 @@ mod tests {
     fn identifiers() {
         let mut tokenizer = Tokenizer::from_string("abc abc! ab!c");
 
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Identifier(str) => {
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Identifier(str) => {
             assert_eq!(str, "abc");
         });
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Identifier(str) => {
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Identifier(str) => {
             assert_eq!(str, "abc!");
         });
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Identifier(str) => {
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Identifier(str) => {
             assert_eq!(str, "ab!");
         });
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Identifier(str) => {
+        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Identifier(str) => {
             assert_eq!(str, "c");
         });
     }
@@ -696,13 +696,13 @@ mod tests {
 
         // peek() lets us see into the future
         assert_eq!(tokenizer.peek().unwrap().kind, TokenKind::Integer(1));
-        assert_eq!(tokenizer.next().unwrap().kind, TokenKind::Integer(1));
-        assert_eq!(tokenizer.next().unwrap().kind, TokenKind::Integer(2));
+        assert_eq!(tokenizer.next_token().unwrap().kind, TokenKind::Integer(1));
+        assert_eq!(tokenizer.next_token().unwrap().kind, TokenKind::Integer(2));
 
         // The tokenizer does not advance even if we `peek` multiple times
         assert_eq!(tokenizer.peek().unwrap().kind, TokenKind::Integer(3));
         assert_eq!(tokenizer.peek().unwrap().kind, TokenKind::Integer(3));
-        assert_eq!(tokenizer.next().unwrap().kind, TokenKind::Integer(3));
+        assert_eq!(tokenizer.next_token().unwrap().kind, TokenKind::Integer(3));
 
         // After the iterator is finished, so is `peek()`
         assert!(tokenizer.peek().is_err());
