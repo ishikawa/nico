@@ -163,6 +163,7 @@ impl Connection {
             SemanticTokenType::STRING,
             SemanticTokenType::NUMBER,
             SemanticTokenType::OPERATOR,
+            SemanticTokenType::COMMENT,
         ];
 
         // Register token type legend
@@ -206,7 +207,8 @@ impl Connection {
 
         let doc = self.get_document(&params.text_document.uri)?.borrow();
 
-        let tokenizer = Tokenizer::from_string(&doc.text);
+        let mut tokenizer = Tokenizer::from_string(&doc.text);
+        tokenizer.skip_comments = false;
 
         let mut previous_line: u32 = 0;
         let mut previous_character: u32 = 0;
@@ -229,6 +231,7 @@ impl Connection {
                 TokenKind::Eq | TokenKind::Ne | TokenKind::Le | TokenKind::Ge => {
                     SemanticTokenType::OPERATOR
                 }
+                TokenKind::LineComment(_) => SemanticTokenType::COMMENT,
                 _ => continue,
             };
 
