@@ -60,6 +60,9 @@ pub struct Tokenizer<'a> {
     chars: Peekable<Chars<'a>>,
     at_end: bool,
     newline_seen: bool,
+    /// Tracking the range of token.
+    token_length: usize,
+
     /// Remember a peeked value, even if it was None.
     peeked: Option<Option<Token>>,
 }
@@ -84,6 +87,7 @@ impl<'a> Tokenizer<'a> {
             chars: iter,
             at_end,
             newline_seen: false,
+            token_length: 0,
             peeked: None,
         }
     }
@@ -133,7 +137,7 @@ impl<'a> Tokenizer<'a> {
             '"' => self.read_string(),
             '.' => self.read_dot(),
             x => {
-                self.chars.next();
+                self.next_char();
                 TokenKind::Char(x)
             }
         };
@@ -142,21 +146,26 @@ impl<'a> Tokenizer<'a> {
         Some(Token { kind, range })
     }
 
-    fn begin_token(&mut self) {}
+    fn begin_token(&mut self) {
+        self.token_length = 0;
+    }
 
     fn end_token(&mut self) -> EffectiveRange {
-        EffectiveRange::default()
+        EffectiveRange {
+            length: self.token_length,
+            ..EffectiveRange::default()
+        }
     }
 
     fn read_dot(&mut self) -> TokenKind {
-        self.chars.next();
+        self.next_char();
 
         match self.peek_char() {
             Some('.') => {
-                self.chars.next();
+                self.next_char();
                 match self.peek_char() {
                     Some('.') => {
-                        self.chars.next();
+                        self.next_char();
                         TokenKind::Rest
                     }
                     _ => panic!("Unrecognized token `..`"),
@@ -168,16 +177,16 @@ impl<'a> Tokenizer<'a> {
 
     fn read_string(&mut self) -> TokenKind {
         let mut string = String::new();
-        self.chars.next();
+        self.next_char();
 
         loop {
             match self.chars.peek() {
                 Some('"') => {
-                    self.chars.next();
+                    self.next_char();
                     break;
                 }
                 Some('\\') => {
-                    self.chars.next();
+                    self.next_char();
                     let c = match self.chars.peek() {
                         Some(c) => *c,
                         None => panic!("Premature EOF while reading escape sequence"),
@@ -191,11 +200,11 @@ impl<'a> Tokenizer<'a> {
                         '\\' => string.push('\\'),
                         c => panic!("Unrecognized escape sequence: \"\\{}\"", c),
                     };
-                    self.chars.next();
+                    self.next_char();
                 }
                 Some(c) => {
                     string.push(*c);
-                    self.chars.next();
+                    self.next_char();
                 }
                 None => panic!("Premature EOF while reading string"),
             };
@@ -206,7 +215,7 @@ impl<'a> Tokenizer<'a> {
 
     fn read_operator(&mut self, nextc: char) -> TokenKind {
         let c = nextc;
-        self.chars.next();
+        self.next_char();
 
         let nextc = match self.peek_char() {
             None => return TokenKind::Char(nextc),
@@ -221,13 +230,13 @@ impl<'a> Tokenizer<'a> {
             _ => return TokenKind::Char(c),
         };
 
-        self.chars.next();
+        self.next_char();
         token
     }
 
     fn read_name(&mut self, nextc: char) -> TokenKind {
         let mut value = nextc.to_string();
-        self.chars.next();
+        self.next_char();
 
         while let Some(nextc) = self.peek_char() {
             match nextc {
@@ -236,13 +245,13 @@ impl<'a> Tokenizer<'a> {
                 }
                 _ => break,
             };
-            self.chars.next();
+            self.next_char();
         }
 
         // trailing "!"
         if let Some(nextc @ '!') = self.peek_char() {
             value.push(*nextc);
-            self.chars.next();
+            self.next_char();
         }
 
         match value.as_str() {
@@ -262,7 +271,7 @@ impl<'a> Tokenizer<'a> {
 
     fn read_integer(&mut self, nextc: char) -> TokenKind {
         let mut value: i32 = (nextc as i32) - ('0' as i32);
-        self.chars.next();
+        self.next_char();
 
         loop {
             match self.peek_char() {
@@ -275,13 +284,22 @@ impl<'a> Tokenizer<'a> {
                     return TokenKind::Integer(value);
                 }
             };
-            self.chars.next();
+            self.next_char();
         }
     }
 
     fn peek_char(&mut self) -> Option<&char> {
         let c = self.chars.peek();
         self.at_end = c.is_none();
+        c
+    }
+
+    fn next_char(&mut self) -> Option<char> {
+        let c = self.chars.next();
+
+        if c.is_some() {
+            self.token_length += 1;
+        }
         c
     }
 
@@ -311,7 +329,7 @@ impl<'a> Tokenizer<'a> {
                     }
                 },
             }
-            self.chars.next();
+            self.next_char();
         }
     }
 }
