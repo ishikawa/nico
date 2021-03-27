@@ -12,6 +12,8 @@ pub struct Position {
     pub character: usize,
 }
 
+// The effective range of a token.
+// start inclusive, end exclusive.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default)]
 pub struct EffectiveRange {
     pub length: usize,
@@ -61,6 +63,9 @@ pub struct Tokenizer<'a> {
     at_end: bool,
     newline_seen: bool,
     /// Tracking the range of token.
+    lineno: usize,
+    columnno: usize,
+    start_position: Option<Position>,
     token_length: usize,
 
     /// Remember a peeked value, even if it was None.
@@ -87,6 +92,9 @@ impl<'a> Tokenizer<'a> {
             chars: iter,
             at_end,
             newline_seen: false,
+            lineno: 0,
+            columnno: 0,
+            start_position: None,
             token_length: 0,
             peeked: None,
         }
@@ -118,7 +126,23 @@ impl<'a> Tokenizer<'a> {
     }
 
     pub fn current_position(&self) -> Position {
-        Position::default()
+        Position {
+            line: self.lineno,
+            character: self.columnno,
+        }
+    }
+
+    fn begin_token(&mut self) {
+        self.token_length = 0;
+        self.start_position = Some(self.current_position());
+    }
+
+    fn end_token(&mut self) -> EffectiveRange {
+        EffectiveRange {
+            length: self.token_length,
+            start: self.start_position.take().unwrap(),
+            end: self.current_position(),
+        }
     }
 
     fn next_token(&mut self) -> Option<Token> {
@@ -144,17 +168,6 @@ impl<'a> Tokenizer<'a> {
 
         let range = self.end_token();
         Some(Token { kind, range })
-    }
-
-    fn begin_token(&mut self) {
-        self.token_length = 0;
-    }
-
-    fn end_token(&mut self) -> EffectiveRange {
-        EffectiveRange {
-            length: self.token_length,
-            ..EffectiveRange::default()
-        }
     }
 
     fn read_dot(&mut self) -> TokenKind {
@@ -295,12 +308,17 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn next_char(&mut self) -> Option<char> {
-        let c = self.chars.next();
+        let c = self.chars.next()?;
 
-        if c.is_some() {
-            self.token_length += 1;
+        self.token_length += 1;
+        self.columnno += 1;
+
+        if c == '\n' {
+            self.lineno += 1;
+            self.columnno = 0;
         }
-        c
+
+        Some(c)
     }
 
     fn skip_white_spaces(&mut self) {
@@ -401,7 +419,7 @@ mod tests {
                 },
                 end: Position {
                     line: 0,
-                    character: 1
+                    character: 2
                 },
                 length: 2
             }
@@ -418,7 +436,7 @@ mod tests {
                 },
                 end: Position {
                     line: 0,
-                    character: 2
+                    character: 3
                 },
                 length: 1
             }
@@ -435,7 +453,7 @@ mod tests {
                 },
                 end: Position {
                     line: 0,
-                    character: 3
+                    character: 4
                 },
                 length: 1
             }
@@ -456,7 +474,7 @@ mod tests {
                 },
                 end: Position {
                     line: 0,
-                    character: 9
+                    character: 10
                 },
                 length: 5
             }
@@ -488,17 +506,64 @@ mod tests {
 
     #[test]
     fn strings() {
-        let mut tokenizer = Tokenizer::from_string("\"\" \"\\n\" \"\\\"\"");
+        let mut tokenizer = Tokenizer::from_string("\"\" \"\\n\" \n\"\\\"\"");
 
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::String(str) => {
+        let token = tokenizer.next().unwrap();
+        assert_matches!(token.kind, TokenKind::String(str) => {
             assert_eq!(str, "");
         });
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::String(str) => {
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 0,
+                    character: 0
+                },
+                end: Position {
+                    line: 0,
+                    character: 2
+                },
+                length: 2
+            }
+        );
+
+        let token = tokenizer.next().unwrap();
+        assert_matches!(token.kind, TokenKind::String(str) => {
             assert_eq!(str, "\n");
         });
-        assert_matches!(tokenizer.next().unwrap().kind, TokenKind::String(str) => {
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 0,
+                    character: 3
+                },
+                end: Position {
+                    line: 0,
+                    character: 7
+                },
+                length: 4
+            }
+        );
+
+        let token = tokenizer.next().unwrap();
+        assert_matches!(token.kind, TokenKind::String(str) => {
             assert_eq!(str, "\"");
         });
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 0
+                },
+                end: Position {
+                    line: 1,
+                    character: 4
+                },
+                length: 4
+            }
+        );
     }
 
     #[test]
