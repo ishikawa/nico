@@ -403,7 +403,8 @@ mod tests {
                 i
             end
             ",
-        );
+        )
+        .unwrap();
 
         analyze(&mut module);
 
@@ -432,7 +433,8 @@ mod tests {
                 end
             end
             ",
-        );
+        )
+        .unwrap();
 
         analyze(&mut module);
 

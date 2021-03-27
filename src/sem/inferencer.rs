@@ -1221,7 +1221,7 @@ mod tests {
 
     #[test]
     fn infer_i32() {
-        let mut module = parser::parse_string("42");
+        let mut module = parser::parse_string("42").unwrap();
         analyze(&mut module);
 
         let body = module.main.unwrap().body;
@@ -1232,7 +1232,7 @@ mod tests {
 
     #[test]
     fn infer_string() {
-        let mut module = parser::parse_string("\"\"");
+        let mut module = parser::parse_string("\"\"").unwrap();
         analyze(&mut module);
 
         let body = module.main.unwrap().body;
@@ -1243,7 +1243,7 @@ mod tests {
 
     #[test]
     fn infer_add_i32() {
-        let mut module = parser::parse_string("1 + 2");
+        let mut module = parser::parse_string("1 + 2").unwrap();
         analyze(&mut module);
 
         let body = module.main.unwrap().body;
@@ -1260,7 +1260,8 @@ mod tests {
                 n + 10
             end
             ",
-        );
+        )
+        .unwrap();
 
         analyze(&mut module);
 
@@ -1283,7 +1284,8 @@ mod tests {
                 n - 10
             end
             ",
-        );
+        )
+        .unwrap();
 
         analyze(&mut module);
 
@@ -1307,7 +1309,8 @@ mod tests {
             end
             plus10(5)
             ",
-        );
+        )
+        .unwrap();
 
         analyze(&mut module);
 
@@ -1333,7 +1336,8 @@ mod tests {
                 end
             end
             ",
-        );
+        )
+        .unwrap();
 
         analyze(&mut module);
 
@@ -1365,7 +1369,8 @@ mod tests {
                 end
             end
             ",
-        );
+        )
+        .unwrap();
 
         analyze(&mut module);
 
@@ -1397,7 +1402,8 @@ mod tests {
                 end
             end
             ",
-        );
+        )
+        .unwrap();
 
         analyze(&mut module);
 
