@@ -1,12 +1,16 @@
 use log::{info, warn};
 use lsp_types::{
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult,
-    InitializedParams, ServerCapabilities, ServerInfo, TextDocumentItem,
+    InitializedParams, SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensFullOptions,
+    SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
+    SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
+use nico::tokenizer::{TokenKind, Tokenizer};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
+use std::convert::TryFrom;
 use std::rc::Rc;
 use std::{
     collections::HashMap,
@@ -125,6 +129,7 @@ impl Response {
 #[derive(Debug, Default)]
 struct Connection {
     documents: HashMap<Url, Rc<RefCell<Document>>>,
+    token_type_legend: HashMap<SemanticTokenType, usize>,
 }
 
 #[derive(Debug)]
@@ -146,14 +151,44 @@ impl Connection {
     }
 
     // Request callbacks
-    fn on_initialize(&self, params: &InitializeParams) -> Result<InitializeResult, HandlerError> {
+    fn on_initialize(
+        &mut self,
+        params: &InitializeParams,
+    ) -> Result<InitializeResult, HandlerError> {
         info!("[initialize] {:?}", params);
+
+        let token_types = vec![
+            SemanticTokenType::KEYWORD,
+            SemanticTokenType::VARIABLE,
+            SemanticTokenType::STRING,
+            SemanticTokenType::NUMBER,
+            SemanticTokenType::OPERATOR,
+        ];
+
+        // Register token type legend
+        for (i, token_type) in token_types.iter().enumerate() {
+            self.token_type_legend.insert(token_type.clone(), i);
+        }
+
+        let legend = SemanticTokensLegend {
+            token_types,
+            token_modifiers: vec![],
+        };
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::Incremental,
                 )),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend,
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            ..SemanticTokensOptions::default()
+                        },
+                    ),
+                ),
                 ..ServerCapabilities::default()
             },
             server_info: Some(ServerInfo {
@@ -163,12 +198,86 @@ impl Connection {
         })
     }
 
+    fn on_text_document_semantic_tokens_full(
+        &self,
+        params: &SemanticTokensParams,
+    ) -> Result<SemanticTokens, HandlerError> {
+        info!("[on_text_document_semantic_tokens_full] {:?}", params);
+
+        let doc = self.get_document(&params.text_document.uri)?.borrow();
+
+        let tokenizer = Tokenizer::from_string(&doc.text);
+
+        let mut previous_line: u32 = 0;
+        let mut previous_character: u32 = 0;
+        let mut semantic_tokens = vec![];
+
+        for token in tokenizer {
+            let token_type = match token.kind {
+                TokenKind::If
+                | TokenKind::Else
+                | TokenKind::End
+                | TokenKind::Export
+                | TokenKind::Fun
+                | TokenKind::Let
+                | TokenKind::Struct
+                | TokenKind::When
+                | TokenKind::Case => SemanticTokenType::KEYWORD,
+                TokenKind::String(_) => SemanticTokenType::STRING,
+                TokenKind::Identifier(_) => SemanticTokenType::VARIABLE,
+                TokenKind::Integer(_) => SemanticTokenType::NUMBER,
+                TokenKind::Eq | TokenKind::Ne | TokenKind::Le | TokenKind::Ge => {
+                    SemanticTokenType::OPERATOR
+                }
+                _ => continue,
+            };
+
+            let token_type = if let Some(ty) = self.token_type_legend.get(&token_type) {
+                u32::try_from(*ty).unwrap()
+            } else {
+                continue;
+            };
+
+            let line = u32::try_from(token.range.start.line).unwrap();
+            let character = u32::try_from(token.range.start.character).unwrap();
+            let length = u32::try_from(token.range.length).unwrap();
+
+            let delta_line = line - previous_line;
+            let delta_start = if previous_line == line {
+                character - previous_character
+            } else {
+                character
+            };
+
+            semantic_tokens.push(SemanticToken {
+                delta_line,
+                delta_start,
+                length,
+                token_type,
+                token_modifiers_bitset: 0,
+            });
+
+            previous_line = line;
+            previous_character = character;
+        }
+
+        // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_semanticTokens
+        // 1 - { line: 0, startChar: 0, length: 2, tokenType: 0, tokenModifiers: 0 },
+        // 2 - { deltaLine: 0, deltaStartChar: 0, length: 2, tokenType: 0, tokenModifiers: 0 },
+        // 3 - [ 0, 0, 2, 0, 0 ]
+
+        Ok(SemanticTokens {
+            data: semantic_tokens,
+            result_id: None,
+        })
+    }
+
+    // Notification callbacks
     fn on_initialized(&self, params: &InitializedParams) -> Result<(), HandlerError> {
         info!("[initialized] {:?}", params);
         Ok(())
     }
 
-    // Notification callbacks
     fn on_text_document_did_open(
         &mut self,
         params: &DidOpenTextDocumentParams,
@@ -199,7 +308,7 @@ impl Connection {
             }
         }
 
-        info!("  => {}", doc.borrow().text);
+        //info!("  => {}", doc.borrow().text);
         Ok(())
     }
 }
@@ -220,10 +329,11 @@ impl Document {
         let mut text_start = None;
         let mut text_end = None;
 
+        let mut i: usize = 0;
         let mut lineno: u32 = 0;
         let mut columnno: u32 = 0;
 
-        for (i, c) in self.text.chars().enumerate() {
+        for c in self.text.chars() {
             if range.start.line == lineno && range.start.character == columnno {
                 text_start = Some(i);
             }
@@ -231,6 +341,7 @@ impl Document {
                 text_end = Some(i);
             }
 
+            i += 1;
             if c == '\n' {
                 lineno += 1;
                 columnno = 0;
@@ -239,15 +350,20 @@ impl Document {
             }
         }
 
-        if let Some(text_start) = text_start {
-            if let Some(text_end) = text_end {
-                info!("text_start:{} text_end:{}", text_start, text_end);
-                self.text.replace_range(text_start..text_end, replace_with);
-                return;
-            }
+        // The above iteration algorithm can't capture locations at the termination.
+        if range.start.line == lineno && range.start.character == columnno {
+            text_start = Some(i);
+        }
+        if range.end.line == lineno && range.end.character == columnno {
+            text_end = Some(i);
         }
 
-        self.text.push_str(replace_with);
+        if let Some(text_start) = text_start {
+            if let Some(text_end) = text_end {
+                //info!("text_start:{} text_end:{}", text_start, text_end);
+                self.text.replace_range(text_start..text_end, replace_with);
+            }
+        }
     }
 }
 
@@ -328,6 +444,11 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
         "initialize" => {
             let params = request.take_params::<InitializeParams>()?;
             let result = conn.on_initialize(&params)?;
+            write_response(&mut io::stdout(), &request, result)?;
+        }
+        "textDocument/semanticTokens/full" => {
+            let params = request.take_params::<SemanticTokensParams>()?;
+            let result = conn.on_text_document_semantic_tokens_full(&params)?;
             write_response(&mut io::stdout(), &request, result)?;
         }
         // Notifications
