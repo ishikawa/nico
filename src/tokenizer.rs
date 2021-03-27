@@ -54,6 +54,9 @@ pub enum TokenKind {
     Le, // "<="
     Ge, // ">="
 
+    // comment
+    LineComment(String),
+
     // punctuations
     Char(char),
 }
@@ -70,6 +73,9 @@ pub struct Tokenizer<'a> {
 
     /// Remember a peeked value, even if it was None.
     peeked: Option<Option<Token>>,
+
+    /// Options
+    skip_comments: bool,
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
@@ -97,6 +103,7 @@ impl<'a> Tokenizer<'a> {
             start_position: None,
             token_length: 0,
             peeked: None,
+            skip_comments: true,
         }
     }
 
@@ -146,28 +153,37 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn next_token(&mut self) -> Option<Token> {
-        self.skip_white_spaces();
-        self.begin_token();
+        self.newline_seen = false;
 
-        let nextc = match self.peek_char() {
-            None => return None,
-            Some(c) => *c,
-        };
+        loop {
+            self.skip_white_spaces();
+            self.begin_token();
 
-        let kind = match nextc {
-            '0'..='9' => self.read_integer(nextc),
-            'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
-            '!' | '=' | '<' | '>' => self.read_operator(nextc),
-            '"' => self.read_string(),
-            '.' => self.read_dot(),
-            x => {
-                self.next_char();
-                TokenKind::Char(x)
+            let nextc = match self.peek_char() {
+                None => return None,
+                Some(c) => c,
+            };
+
+            let kind = match nextc {
+                '0'..='9' => self.read_integer(nextc),
+                'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
+                '!' | '=' | '<' | '>' => self.read_operator(nextc),
+                '"' => self.read_string(),
+                '.' => self.read_dot(),
+                '#' => self.read_comment(),
+                x => {
+                    self.next_char();
+                    TokenKind::Char(x)
+                }
+            };
+
+            if self.skip_comments && matches!(kind, TokenKind::LineComment(_)) {
+                continue;
             }
-        };
 
-        let range = self.end_token();
-        Some(Token { kind, range })
+            let range = self.end_token();
+            return Some(Token { kind, range });
+        }
     }
 
     fn read_dot(&mut self) -> TokenKind {
@@ -186,6 +202,22 @@ impl<'a> Tokenizer<'a> {
             }
             _ => TokenKind::Char('.'),
         }
+    }
+
+    fn read_comment(&mut self) -> TokenKind {
+        let mut comment = String::new();
+        self.next_char(); // '#'
+
+        loop {
+            match self.next_char() {
+                None | Some('\n') => break,
+                Some(c) => {
+                    comment.push(c);
+                }
+            };
+        }
+
+        TokenKind::LineComment(comment)
     }
 
     fn read_string(&mut self) -> TokenKind {
@@ -232,7 +264,7 @@ impl<'a> Tokenizer<'a> {
 
         let nextc = match self.peek_char() {
             None => return TokenKind::Char(nextc),
-            Some(c) => *c,
+            Some(c) => c,
         };
 
         let token = match (c, nextc) {
@@ -254,7 +286,7 @@ impl<'a> Tokenizer<'a> {
         while let Some(nextc) = self.peek_char() {
             match nextc {
                 'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => {
-                    value.push(*nextc);
+                    value.push(nextc);
                 }
                 _ => break,
             };
@@ -263,7 +295,7 @@ impl<'a> Tokenizer<'a> {
 
         // trailing "!"
         if let Some(nextc @ '!') = self.peek_char() {
-            value.push(*nextc);
+            value.push(nextc);
             self.next_char();
         }
 
@@ -289,7 +321,7 @@ impl<'a> Tokenizer<'a> {
         loop {
             match self.peek_char() {
                 Some(x @ '0'..='9') => {
-                    let n = (*x as i32) - ('0' as i32);
+                    let n = (x as i32) - ('0' as i32);
 
                     value = value * 10 + n;
                 }
@@ -301,10 +333,10 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn peek_char(&mut self) -> Option<&char> {
+    fn peek_char(&mut self) -> Option<char> {
         let c = self.chars.peek();
         self.at_end = c.is_none();
-        c
+        c.copied()
     }
 
     fn next_char(&mut self) -> Option<char> {
@@ -316,38 +348,19 @@ impl<'a> Tokenizer<'a> {
         if c == '\n' {
             self.lineno += 1;
             self.columnno = 0;
+            self.newline_seen = true;
         }
 
         Some(c)
     }
 
     fn skip_white_spaces(&mut self) {
-        let mut line_comment = false;
-
-        self.newline_seen = false;
-
-        loop {
-            match self.peek_char() {
-                None => return,
-                Some(c) => match c {
-                    '#' => {
-                        line_comment = true;
-                    }
-                    // whitespace
-                    ' ' | '\t' => {}
-                    // newline
-                    '\n' | '\r' => {
-                        line_comment = false;
-                        self.newline_seen = true;
-                    }
-                    _ => {
-                        if !line_comment {
-                            return;
-                        }
-                    }
-                },
+        while let Some(c) = self.peek_char() {
+            if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+                self.next_char();
+            } else {
+                break;
             }
-            self.next_char();
         }
     }
 }
@@ -364,6 +377,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Identifier(name) => write!(f, "id<{}>", name),
             TokenKind::Integer(i) => write!(f, "int<{}>", i),
             TokenKind::String(s) => write!(f, "str<{}>", s),
+            TokenKind::LineComment(s) => write!(f, "comment<{}>", s),
             TokenKind::If => write!(f, "if"),
             TokenKind::Else => write!(f, "else"),
             TokenKind::End => write!(f, "end"),
@@ -502,6 +516,40 @@ mod tests {
         assert_matches!(tokenizer.next().unwrap().kind, TokenKind::If);
         assert_matches!(tokenizer.next().unwrap().kind, TokenKind::End);
         assert_matches!(tokenizer.next().unwrap().kind, TokenKind::Fun);
+    }
+
+    #[test]
+    fn comment() {
+        let mut tokenizer = Tokenizer::from_string("# comment");
+        tokenizer.skip_comments = false;
+
+        let token = tokenizer.next().unwrap();
+        assert_matches!(token.kind, TokenKind::LineComment(str) => {
+            assert_eq!(str, " comment");
+        });
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 0,
+                    character: 0
+                },
+                end: Position {
+                    line: 0,
+                    character: 9
+                },
+                length: 9
+            }
+        );
+    }
+
+    #[test]
+    fn skip_comments() {
+        let mut tokenizer = Tokenizer::from_string("# comment");
+        tokenizer.skip_comments = true;
+
+        let token = tokenizer.next();
+        assert!(token.is_none());
     }
 
     #[test]

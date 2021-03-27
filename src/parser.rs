@@ -1277,6 +1277,7 @@ mod tests {
         let expr = &program.main.unwrap().body[0].expr;
         assert_matches!(expr, Expr::Integer(42));
     }
+
     #[test]
     fn number_integer_followed_by_letter() {
         let program = parse_string("123a");
