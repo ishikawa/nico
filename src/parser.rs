@@ -518,7 +518,7 @@ impl Parser {
 
         let rhs = self
             .parse_rel_op2(tokenizer, context)
-            .expect("Expected RHS at");
+            .unwrap_or_else(|| panic!("Expected RHS at {}", tokenizer.current_position()));
 
         Some(context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
@@ -542,7 +542,7 @@ impl Parser {
 
         let rhs = self
             .parse_binary_op1(tokenizer, context)
-            .expect("Expected RHS");
+            .unwrap_or_else(|| panic!("Expected RHS at {}", tokenizer.current_position()));
 
         Some(context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
@@ -571,7 +571,7 @@ impl Parser {
 
             let rhs = self
                 .parse_binary_op2(tokenizer, context)
-                .expect("Expected RHS");
+                .unwrap_or_else(|| panic!("Expected RHS at {}", tokenizer.current_position()));
 
             lhs = context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
         }
@@ -597,7 +597,7 @@ impl Parser {
 
             let rhs = self
                 .parse_unary_op(tokenizer, context)
-                .expect("Expected RHS");
+                .unwrap_or_else(|| panic!("Expected RHS at {}", tokenizer.current_position()));
 
             lhs = context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None));
         }
