@@ -36,7 +36,9 @@ fn main() {
 
     let mut tokenizer = Tokenizer::from_string(&src);
     let parser = Parser::new();
-    let mut module = parser.parse(&mut tokenizer);
+    let mut module = parser
+        .parse(&mut tokenizer)
+        .unwrap_or_else(|err| panic!("{}", err));
 
     let mut passes = CompilerPasses::new();
     passes.apply(&mut module);

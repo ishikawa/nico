@@ -9,6 +9,14 @@ use std::fmt;
 use std::rc::Rc;
 use thiserror::Error;
 
+const DEBUG: bool = false;
+
+fn debug_trace(name: &str, tokenizer: &Tokenizer) {
+    if DEBUG {
+        eprintln!("[{}] position: {}", name, tokenizer.current_position());
+    }
+}
+
 // Program
 pub struct Module {
     pub structs: Vec<StructDefinition>,
@@ -225,7 +233,7 @@ impl ParseError {
 
     fn mismatch_token<S: AsRef<str>>(token: &Token, expected: S) -> Self {
         Self::syntax_error(
-            token.range.start.clone(),
+            token.range.start,
             format!("Expected {}, but found {}", expected.as_ref(), token.kind),
         )
     }
@@ -248,14 +256,14 @@ impl fmt::Display for ParseErrorKind {
 
 impl From<&TokenError> for ParseError {
     fn from(err: &TokenError) -> Self {
-        match err.kind {
+        match &err.kind {
             TokenErrorKind::Eos => ParseError {
                 position: err.position,
                 kind: ParseErrorKind::PrematureEos,
             },
             TokenErrorKind::Error(message) => ParseError {
                 position: err.position,
-                kind: ParseErrorKind::SyntaxError(message),
+                kind: ParseErrorKind::SyntaxError(message.clone()),
             },
         }
     }
@@ -309,15 +317,15 @@ impl Parser {
 
         loop {
             // Type declaration
-            if let Some(struct_def) = self.parse_struct_definition(tokenizer, &mut context) {
+            if let Some(struct_def) = self.parse_struct_definition(tokenizer, &mut context)? {
                 structs.push(struct_def);
             }
             // Function
-            else if let Some(function) = self.parse_function(tokenizer, &mut context) {
+            else if let Some(function) = self.parse_function(tokenizer, &mut context)? {
                 functions.push(function);
             }
             // Body for main function
-            else if let Some(expr) = self.parse_stmt(tokenizer, &mut context) {
+            else if let Some(expr) = self.parse_stmt(tokenizer, &mut context)? {
                 body.push(Some(expr));
             }
             // No top level constructs can be consumed. It may be at the end of input or
@@ -376,16 +384,21 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<StructDefinition>, ParseError> {
-        match_token(tokenizer, TokenKind::Struct)?;
+        debug_trace("parse_struct_definition", tokenizer);
+
+        if match_token(tokenizer, TokenKind::Struct).is_none() {
+            return Ok(None);
+        }
 
         let name = expect_identifier(tokenizer, "struct name")?;
 
         // {...}
         expect_char(tokenizer, '{')?;
         let fields = parse_elements(tokenizer, context, '}', &mut |tokenizer, context| {
-            self.parse_type_field(tokenizer, context)
-                .expect("Expected struct field")
-        });
+            self.parse_type_field(tokenizer, context)?.ok_or_else(|| {
+                ParseError::syntax_error(tokenizer.current_position(), "Expected struct field")
+            })
+        })?;
         expect_char(tokenizer, '}')?;
 
         Ok(Some(StructDefinition { name, fields }))
@@ -396,8 +409,9 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<TypeField>, ParseError> {
-        let name = match_identifier(tokenizer, "field name")?;
-        let name = if let Some(name) = name {
+        debug_trace("parse_type_field", tokenizer);
+
+        let name = if let Some(name) = match_identifier(tokenizer, "field name") {
             name
         } else {
             return Ok(None);
@@ -406,7 +420,7 @@ impl Parser {
         expect_char(tokenizer, ':')?;
 
         let type_annotation = self
-            .parse_type_annotation(tokenizer, context)?
+            .parse_type_annotation(tokenizer, context)
             .ok_or_else(|| {
                 ParseError::syntax_error(tokenizer.current_position(), "Expected type annotation")
             })?;
@@ -422,15 +436,16 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<ValueField>, ParseError> {
-        let name = match_identifier(tokenizer, "field name")?;
-        let name = if let Some(name) = name {
+        debug_trace("parse_value_field", tokenizer);
+
+        let name = if let Some(name) = match_identifier(tokenizer, "field name") {
             name
         } else {
             return Ok(None);
         };
 
         // Desugar: field init shorthand syntax
-        let value = if match_char(tokenizer, ':')?.is_some() {
+        let value = if match_char(tokenizer, ':').is_some() {
             self.parse_expr(tokenizer, context)?.ok_or_else(|| {
                 ParseError::syntax_error(tokenizer.current_position(), "Expected field value")
             })?
@@ -448,16 +463,18 @@ impl Parser {
         &self,
         tokenizer: &mut Tokenizer,
         _context: &mut ParserContext,
-    ) -> Result<Option<TypeAnnotation>, ParseError> {
-        let type_annotation = if let Some(name) = match_identifier(tokenizer, "type name")? {
+    ) -> Option<TypeAnnotation> {
+        debug_trace("parse_type_annotation", tokenizer);
+
+        let type_annotation = if let Some(name) = match_identifier(tokenizer, "type name") {
             TypeAnnotation::Name(name)
-        } else if match_token(tokenizer, TokenKind::I32)?.is_some() {
+        } else if match_token(tokenizer, TokenKind::I32).is_some() {
             TypeAnnotation::Builtin(wrap(sem::Type::Int32))
         } else {
-            return Ok(None);
+            return None;
         };
 
-        Ok(Some(type_annotation))
+        Some(type_annotation)
     }
 
     fn parse_function(
@@ -465,24 +482,28 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<Function>, ParseError> {
+        debug_trace("parse_function", tokenizer);
+
         // modifiers
-        let export = match_token(tokenizer, TokenKind::Export)?.is_some();
+        let export = match_token(tokenizer, TokenKind::Export).is_some();
 
         // fun
-        match_token(tokenizer, TokenKind::Fun)?;
+        if match_token(tokenizer, TokenKind::Fun).is_none() {
+            return Ok(None);
+        }
 
         let name = expect_identifier(tokenizer, "function name")?;
 
         let mut param_names = vec![];
 
-        expect_char(tokenizer, '(');
+        expect_char(tokenizer, '(')?;
         while let Ok(TokenKind::Identifier(_)) = tokenizer.peek_kind() {
             let name = expect_identifier(tokenizer, "param")?;
             param_names.push(name);
 
             match tokenizer.peek_kind()? {
                 TokenKind::Char(',') => {
-                    tokenizer.next();
+                    tokenizer.next_token()?;
                 }
                 _ => break,
             };
@@ -493,10 +514,9 @@ impl Parser {
         let mut body = vec![];
 
         loop {
-            match tokenizer.peek_kind()? {
-                TokenKind::End => break,
-                _ => {}
-            };
+            if let TokenKind::End = tokenizer.peek_kind()? {
+                break;
+            }
 
             match self.parse_stmt(tokenizer, context)? {
                 None => break,
@@ -544,6 +564,8 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
+        debug_trace("parse_stmt", tokenizer);
+
         let node = self.parse_stmt_expr(tokenizer, context)?;
         let node = if let Some(node) = node {
             node
@@ -564,9 +586,11 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
+        debug_trace("parse_stmt_expr", tokenizer);
+
         match tokenizer.peek_kind() {
             Ok(TokenKind::Let) => {
-                tokenizer.next();
+                tokenizer.next_token()?;
             }
             _ => return self.parse_expr(tokenizer, context),
         };
@@ -602,6 +626,8 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
+        debug_trace("parse_rel_op1", tokenizer);
+
         let lhs = self.parse_rel_op2(tokenizer, context)?;
         let lhs = if let Some(lhs) = lhs {
             lhs
@@ -614,7 +640,7 @@ impl Parser {
             Ok(TokenKind::Ne) => Expr::Ne,
             _ => return Ok(Some(lhs)),
         };
-        tokenizer.next();
+        tokenizer.next_token()?;
 
         let rhs = self.parse_rel_op2(tokenizer, context)?.ok_or_else(|| {
             ParseError::syntax_error(tokenizer.current_position(), "Expected RHS")
@@ -633,6 +659,8 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
+        debug_trace("parse_rel_op2", tokenizer);
+
         let lhs = self.parse_binary_op1(tokenizer, context)?;
         let lhs = if let Some(lhs) = lhs {
             lhs
@@ -647,7 +675,7 @@ impl Parser {
             Ok(TokenKind::Char('>')) => Expr::Gt,
             _ => return Ok(Some(lhs)),
         };
-        tokenizer.next();
+        tokenizer.next_token()?;
 
         let rhs = self.parse_binary_op1(tokenizer, context)?.ok_or_else(|| {
             ParseError::syntax_error(tokenizer.current_position(), "Expected RHS")
@@ -665,6 +693,8 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
+        debug_trace("parse_binary_op1", tokenizer);
+
         let lhs = self.parse_binary_op2(tokenizer, context)?;
         let mut lhs = if let Some(lhs) = lhs {
             lhs
@@ -685,7 +715,7 @@ impl Parser {
                 break;
             }
 
-            tokenizer.next();
+            tokenizer.next_token()?;
 
             let rhs = self.parse_binary_op2(tokenizer, context)?.ok_or_else(|| {
                 ParseError::syntax_error(tokenizer.current_position(), "Expected RHS")
@@ -702,6 +732,8 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
+        debug_trace("parse_binary_op2", tokenizer);
+
         let lhs = self.parse_unary_op(tokenizer, context)?;
         let mut lhs = if let Some(lhs) = lhs {
             lhs
@@ -715,7 +747,7 @@ impl Parser {
                 Ok(TokenKind::Char('/')) => Expr::Div,
                 _ => break,
             };
-            tokenizer.next();
+            tokenizer.next_token()?;
 
             let rhs = self.parse_unary_op(tokenizer, context)?.ok_or_else(|| {
                 ParseError::syntax_error(tokenizer.current_position(), "Expected RHS")
@@ -732,12 +764,14 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
+        debug_trace("parse_unary_op", tokenizer);
+
         let builder = match tokenizer.peek_kind() {
             Ok(TokenKind::Char('+')) => Expr::Plus,
             Ok(TokenKind::Char('-')) => Expr::Minus,
             _ => return self.parse_access(tokenizer, context),
         };
-        tokenizer.next();
+        tokenizer.next_token()?;
 
         // unary operators are right associative.
         let expr = match self.parse_unary_op(tokenizer, context)? {
@@ -759,16 +793,21 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
-        let mut node = self.parse_primary(tokenizer, context)?;
-        let node = if let Some(node) = node {
+        debug_trace("parse_access", tokenizer);
+
+        let node = self.parse_primary(tokenizer, context)?;
+        let mut node = if let Some(node) = node {
             node
         } else {
             return Ok(None);
         };
 
         loop {
-            // x\n[...] should not be interpreted.
-            tokenizer.peek();
+            // To distinguish `x\n[...]` and `x[...]`, we have to capture
+            // `tokenizer.is_newline_seen()`, so try to advance tokenizer.
+            if tokenizer.peek().is_err() {
+                return Ok(Some(node));
+            }
 
             if tokenizer.is_newline_seen() {
                 break;
@@ -790,9 +829,13 @@ impl Parser {
                     expect_char(tokenizer, '[')?;
                     let mut arguments =
                         parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
-                            self.parse_expr(tokenizer, context)
-                                .expect("Expected subscript argument")
-                        });
+                            self.parse_expr(tokenizer, context)?.ok_or_else(|| {
+                                ParseError::syntax_error(
+                                    tokenizer.current_position(),
+                                    "Expected subscript argument",
+                                )
+                            })
+                        })?;
                     expect_char(tokenizer, ']')?;
 
                     if arguments.len() != 1 {
@@ -829,6 +872,8 @@ impl Parser {
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
+        debug_trace("parse_primary", tokenizer);
+
         let token = match tokenizer.peek() {
             Ok(token) => token,
             Err(error) => match error {
@@ -851,9 +896,13 @@ impl Parser {
                 expect_char(tokenizer, '[')?;
                 let elements =
                     parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
-                        self.parse_expr(tokenizer, context)
-                            .expect("Expected element")
-                    });
+                        self.parse_expr(tokenizer, context)?.ok_or_else(|| {
+                            ParseError::syntax_error(
+                                tokenizer.current_position(),
+                                "Expected element",
+                            )
+                        })
+                    })?;
                 expect_char(tokenizer, ']')?;
 
                 Ok(Some(context.typed_expr(Expr::Array {
@@ -871,9 +920,13 @@ impl Parser {
                         expect_char(tokenizer, '(')?;
                         let arguments =
                             parse_elements(tokenizer, context, ')', &mut |tokenizer, context| {
-                                self.parse_expr(tokenizer, context)
-                                    .expect("Expected argument")
-                            });
+                                self.parse_expr(tokenizer, context)?.ok_or_else(|| {
+                                    ParseError::syntax_error(
+                                        tokenizer.current_position(),
+                                        "Expected argument",
+                                    )
+                                })
+                            })?;
                         expect_char(tokenizer, ')')?;
 
                         return Ok(Some(context.typed_expr(Expr::Invocation {
@@ -889,9 +942,13 @@ impl Parser {
                         expect_char(tokenizer, '{')?;
                         let fields =
                             parse_elements(tokenizer, context, '}', &mut |tokenizer, context| {
-                                self.parse_value_field(tokenizer, context)
-                                    .expect("Expected struct field")
-                            });
+                                self.parse_value_field(tokenizer, context)?.ok_or_else(|| {
+                                    ParseError::syntax_error(
+                                        tokenizer.current_position(),
+                                        "Expected struct field",
+                                    )
+                                })
+                            })?;
                         expect_char(tokenizer, '}')?;
 
                         return Ok(Some(context.typed_expr(Expr::Struct {
@@ -909,7 +966,7 @@ impl Parser {
             }
             TokenKind::Integer(i) => {
                 let expr = Expr::Integer(*i);
-                tokenizer.next()?;
+                tokenizer.next_token()?;
                 Ok(Some(context.typed_expr(expr)))
             }
             TokenKind::String(_) => {
@@ -921,7 +978,7 @@ impl Parser {
                 Ok(Some(context.typed_expr(expr)))
             }
             TokenKind::If => {
-                tokenizer.next()?;
+                tokenizer.next_token()?;
 
                 let condition = self.parse_expr(tokenizer, context)?.ok_or_else(|| {
                     ParseError::syntax_error(tokenizer.current_position(), "missing condition")
@@ -931,12 +988,10 @@ impl Parser {
                 let mut else_body = None;
 
                 loop {
-                    let token = expect_peek(tokenizer)?;
-
-                    match token.kind {
+                    match tokenizer.peek_kind()? {
                         TokenKind::Else => break,
                         TokenKind::End => break,
-                        _ => self.parse_stmts(&mut then_body, tokenizer, context)?,
+                        _ => self.expect_stmt_push(&mut then_body, tokenizer, context)?,
                     };
                 }
 
@@ -944,21 +999,19 @@ impl Parser {
 
                 if let Ok(TokenKind::Else) = tokenizer.peek_kind() {
                     let mut body = vec![];
-                    expect_token_with(tokenizer, TokenKind::Else);
+                    expect_token_with(tokenizer, TokenKind::Else)?;
 
                     loop {
-                        let token = expect_peek(tokenizer)?;
-
-                        match token.kind {
+                        match tokenizer.peek_kind()? {
                             TokenKind::End => {
                                 else_body.replace(self.wrap_stmts(&mut body, context));
                                 break;
                             }
-                            _ => self.parse_stmts(&mut body, tokenizer, context),
+                            _ => self.expect_stmt_push(&mut body, tokenizer, context)?,
                         };
                     }
                 }
-                expect_token_with(tokenizer, TokenKind::End);
+                expect_token_with(tokenizer, TokenKind::End)?;
 
                 let expr = Expr::If {
                     condition: Box::new(condition),
@@ -966,32 +1019,43 @@ impl Parser {
                     else_body,
                 };
 
-                Some(context.typed_expr(expr))
+                Ok(Some(context.typed_expr(expr)))
             }
             TokenKind::Case => {
-                tokenizer.next();
+                let case_token = tokenizer.next_token()?;
 
-                let head = self
-                    .parse_expr(tokenizer, context)
-                    .expect("Missing head expression after `case`");
+                let head = self.parse_expr(tokenizer, context)?.ok_or_else(|| {
+                    ParseError::syntax_error(
+                        tokenizer.current_position(),
+                        "Missing head expression after `case`",
+                    )
+                })?;
 
                 // when, ...
                 let mut arms = vec![];
 
-                while let Ok(TokenKind::When) = tokenizer.peek_kind() {
-                    tokenizer.next();
+                while let TokenKind::When = tokenizer.peek_kind()? {
+                    tokenizer.next_token()?;
 
                     // pattern
-                    let pattern =
-                        parse_pattern(tokenizer, context).expect("Missing pattern in `when`");
+                    let pattern = parse_pattern(tokenizer, context)?.ok_or_else(|| {
+                        ParseError::syntax_error(
+                            tokenizer.current_position(),
+                            "Missing pattern in `when`",
+                        )
+                    })?;
 
                     // guard
-                    let condition = match tokenizer.peek_kind() {
-                        Ok(TokenKind::If) => {
-                            tokenizer.next();
-                            let cond = self
-                                .parse_expr(tokenizer, context)
-                                .expect("Missing condition in `when if ...`");
+                    let condition = match tokenizer.peek_kind()? {
+                        TokenKind::If => {
+                            tokenizer.next_token()?;
+                            let cond = self.parse_expr(tokenizer, context)?.ok_or_else(|| {
+                                ParseError::syntax_error(
+                                    tokenizer.current_position(),
+                                    "Missing condition in `when if ...`",
+                                )
+                            })?;
+
                             Some(cond)
                         }
                         _ => None,
@@ -1000,13 +1064,11 @@ impl Parser {
                     let mut then_body = vec![];
 
                     loop {
-                        let token = expect_peek(tokenizer);
-
-                        match token.kind {
+                        match tokenizer.peek_kind()? {
                             TokenKind::When => break,
                             TokenKind::Else => break,
                             TokenKind::End => break,
-                            _ => self.parse_stmts(&mut then_body, tokenizer, context),
+                            _ => self.expect_stmt_push(&mut then_body, tokenizer, context)?,
                         };
                     }
 
@@ -1022,27 +1084,28 @@ impl Parser {
                 // else
                 let mut else_body = None;
 
-                if let Ok(TokenKind::Else) = tokenizer.peek_kind() {
+                if let TokenKind::Else = tokenizer.peek_kind()? {
                     let mut body = vec![];
-                    tokenizer.next();
+                    tokenizer.next_token()?;
 
                     loop {
-                        let token = expect_peek(tokenizer);
-
-                        match token.kind {
+                        match tokenizer.peek_kind()? {
                             TokenKind::End => {
                                 let body = self.wrap_stmts(&mut body, context);
                                 else_body.replace(body);
                                 break;
                             }
-                            _ => self.parse_stmts(&mut body, tokenizer, context),
+                            _ => self.expect_stmt_push(&mut body, tokenizer, context)?,
                         };
                     }
                 }
-                expect_token_with(tokenizer, TokenKind::End);
+                expect_token_with(tokenizer, TokenKind::End)?;
 
                 if arms.is_empty() {
-                    panic!("At least one arm required for `case`")
+                    return Err(ParseError::syntax_error(
+                        case_token.range.start,
+                        "At least one arm required for `case`",
+                    ));
                 }
 
                 let expr = Expr::Case {
@@ -1051,9 +1114,14 @@ impl Parser {
                     arms,
                     else_body,
                 };
-                Some(context.typed_expr(expr))
+                Ok(Some(context.typed_expr(expr)))
             }
-            token => panic!("Unexpected token {:?}", token),
+            token_kind => {
+                return Err(ParseError::syntax_error(
+                    token.range.start,
+                    format!("Unexpected token {}", token_kind),
+                ));
+            }
         }
     }
 }
@@ -1085,18 +1153,25 @@ impl Parser {
         stmts
     }
 
-    fn parse_stmts(
+    fn expect_stmt_push(
         &self,
         stmts: &mut Vec<Option<Node>>,
         tokenizer: &mut Tokenizer,
         context: &mut ParserContext,
-    ) {
+    ) -> Result<(), ParseError> {
         if !tokenizer.is_newline_seen() {
-            panic!("Syntax error: missing line terminator")
+            return Err(ParseError::syntax_error(
+                tokenizer.current_position(),
+                "missing line terminator",
+            ));
         }
 
-        let stmt = self.parse_stmt(tokenizer, context).expect("Premature EOF");
+        let stmt = self.parse_stmt(tokenizer, context)?.ok_or_else(|| {
+            ParseError::syntax_error(tokenizer.current_position(), "Premature EOF")
+        })?;
+
         stmts.push(Some(stmt));
+        Ok(())
     }
 }
 
@@ -1104,6 +1179,8 @@ fn parse_pattern(
     tokenizer: &mut Tokenizer,
     context: &mut ParserContext,
 ) -> Result<Option<Pattern>, ParseError> {
+    debug_trace("parse_pattern", tokenizer);
+
     let pattern = parse_pattern_element(tokenizer, context)?;
 
     // Assert: Rest pattern must be in `[...]`
@@ -1117,42 +1194,36 @@ fn parse_pattern(
     Ok(pattern)
 }
 
-fn build_variable_pattern(name: String, context: &mut ParserContext) -> Pattern {
-    let binding = if name == "_" {
-        wrap(sem::Binding::ignored(&context.type_var()))
-    } else {
-        wrap(sem::Binding::typed_name(&name, &context.type_var()))
-    };
-
-    Pattern::Variable(name, binding)
-}
-
 fn parse_pattern_element(
     tokenizer: &mut Tokenizer,
     context: &mut ParserContext,
 ) -> Result<Option<Pattern>, ParseError> {
+    debug_trace("parse_pattern_element", tokenizer);
+
     match tokenizer.peek_kind()? {
         TokenKind::Identifier(_) => {
-            let name = expect_identifier(tokenizer, "variable or struct name");
+            let name = expect_identifier(tokenizer, "variable or struct name")?;
 
-            if let Ok(TokenKind::Char('{')) = tokenizer.peek_kind() {
+            if let TokenKind::Char('{') = tokenizer.peek_kind()? {
                 // struct pattern
-                return Ok(Some(parse_struct_pattern(Some(name), tokenizer, context)));
+                return Ok(Some(parse_struct_pattern(Some(name), tokenizer, context)?));
             }
 
             Ok(Some(build_variable_pattern(name, context)))
         }
         TokenKind::Integer(i) => {
             let pat = Pattern::Integer(*i);
-            tokenizer.next();
-            Some(pat)
+            tokenizer.next_token()?;
+            Ok(Some(pat))
         }
         TokenKind::Char('[') => {
-            expect_char(tokenizer, '[');
+            expect_char(tokenizer, '[')?;
             let elements = parse_elements(tokenizer, context, ']', &mut |tokenizer, context| {
-                parse_pattern_element(tokenizer, context).expect("Expected pattern")
-            });
-            expect_char(tokenizer, ']');
+                parse_pattern_element(tokenizer, context)?.ok_or_else(|| {
+                    ParseError::syntax_error(tokenizer.current_position(), "Expected pattern")
+                })
+            })?;
+            expect_char(tokenizer, ']')?;
 
             // Assert: Rest element must be last element
             if let Some(i) = elements
@@ -1160,31 +1231,34 @@ fn parse_pattern_element(
                 .position(|x| matches!(x, Pattern::Rest { .. }))
             {
                 if i != (elements.len() - 1) {
-                    panic!("Syntax error: Rest element (#{}) must be last element", i);
+                    return Err(ParseError::syntax_error(
+                        tokenizer.current_position(),
+                        format!("Rest element (#{}) must be last element", i),
+                    ));
                 }
             }
 
-            Some(Pattern::Array(elements))
+            Ok(Some(Pattern::Array(elements)))
         }
-        TokenKind::Char('{') => Some(parse_struct_pattern(None, tokenizer, context)),
+        TokenKind::Char('{') => Ok(Some(parse_struct_pattern(None, tokenizer, context)?)),
         TokenKind::Rest => {
-            expect_token_with(tokenizer, TokenKind::Rest);
+            expect_token_with(tokenizer, TokenKind::Rest)?;
 
             // Rest pattern can be ignored by expressing `..._` or `...`.
-            match tokenizer.peek_kind() {
-                Ok(TokenKind::Identifier(_)) => {
-                    let name = expect_identifier(tokenizer, "rest variable");
+            match tokenizer.peek_kind()? {
+                TokenKind::Identifier(_) => {
+                    let name = expect_identifier(tokenizer, "rest variable")?;
                     let binding = if name == "_" {
                         wrap(sem::Binding::ignored(&context.type_var()))
                     } else {
                         wrap(sem::Binding::typed_name(&name, &context.type_var()))
                     };
 
-                    Some(Pattern::Rest {
+                    Ok(Some(Pattern::Rest {
                         name,
                         binding,
                         reference_offset: None,
-                    })
+                    }))
                 }
                 _ => {
                     // ignored
@@ -1194,11 +1268,11 @@ fn parse_pattern_element(
                         binding,
                         reference_offset: None,
                     };
-                    Some(pat)
+                    Ok(Some(pat))
                 }
             }
         }
-        _ => None,
+        _ => Ok(None),
     }
 }
 
@@ -1207,13 +1281,14 @@ fn parse_struct_pattern(
     tokenizer: &mut Tokenizer,
     context: &mut ParserContext,
 ) -> Result<Pattern, ParseError> {
+    debug_trace("parse_struct_pattern", tokenizer);
+
     expect_char(tokenizer, '{')?;
 
     let fields = parse_elements(tokenizer, context, '}', &mut |tokenizer, context| {
-        parse_struct_pattern_field(tokenizer, context)?.ok_or_else(|| {
-            ParseError::syntax_error(tokenizer.current_position(), "Expected field")
-        })?
-    });
+        parse_struct_pattern_field(tokenizer, context)?
+            .ok_or_else(|| ParseError::syntax_error(tokenizer.current_position(), "Expected field"))
+    })?;
     expect_char(tokenizer, '}')?;
 
     Ok(Pattern::Struct {
@@ -1227,14 +1302,15 @@ fn parse_struct_pattern_field(
     tokenizer: &mut Tokenizer,
     context: &mut ParserContext,
 ) -> Result<Option<PatternField>, ParseError> {
-    let name = match_identifier(tokenizer, "field name")?;
-    let name = if let Some(name) = name {
+    debug_trace("parse_struct_pattern_field", tokenizer);
+
+    let name = if let Some(name) = match_identifier(tokenizer, "field name") {
         name
     } else {
         return Ok(None);
     };
 
-    let pattern = if match_char(tokenizer, ':')?.is_some() {
+    let pattern = if match_char(tokenizer, ':').is_some() {
         parse_pattern_element(tokenizer, context)?.ok_or_else(|| {
             ParseError::syntax_error(tokenizer.current_position(), "Expected value pattern")
         })?
@@ -1251,55 +1327,59 @@ fn parse_elements<F, T>(
     context: &mut ParserContext,
     stop_char: char,
     parser: &mut F,
-) -> Vec<T>
+) -> Result<Vec<T>, ParseError>
 where
-    F: Fn(&mut Tokenizer, &mut ParserContext) -> T,
+    F: Fn(&mut Tokenizer, &mut ParserContext) -> Result<T, ParseError>,
 {
+    debug_trace("parse_elements", tokenizer);
+
     let mut elements = vec![];
 
     loop {
-        let token = expect_peek(tokenizer);
-
-        if let TokenKind::Char(c) = token.kind {
-            if c == stop_char {
+        if let TokenKind::Char(c) = tokenizer.peek_kind()? {
+            if *c == stop_char {
                 break;
             }
         };
 
-        let element = parser(tokenizer, context);
+        let element = parser(tokenizer, context)?;
         elements.push(element);
 
-        if let Ok(TokenKind::Char(',')) = tokenizer.peek_kind() {
-            tokenizer.next();
+        if let TokenKind::Char(',') = tokenizer.peek_kind()? {
+            tokenizer.next_token()?;
         } else {
             break;
         }
     }
 
-    elements
+    Ok(elements)
 }
 
-fn match_token(
-    tokenizer: &mut Tokenizer,
-    expected: TokenKind,
-) -> Result<Option<Token>, ParseError> {
-    match tokenizer.peek_kind()? {
-        kind if *kind == expected => Ok(Some(tokenizer.next().unwrap())),
-        _ => Ok(None),
+fn build_variable_pattern(name: String, context: &mut ParserContext) -> Pattern {
+    let binding = if name == "_" {
+        wrap(sem::Binding::ignored(&context.type_var()))
+    } else {
+        wrap(sem::Binding::typed_name(&name, &context.type_var()))
+    };
+
+    Pattern::Variable(name, binding)
+}
+
+fn match_token(tokenizer: &mut Tokenizer, expected: TokenKind) -> Option<Token> {
+    match tokenizer.peek_kind() {
+        Ok(kind) if *kind == expected => Some(tokenizer.next_token().unwrap()),
+        _ => None,
     }
 }
 
-fn match_identifier(
-    tokenizer: &mut Tokenizer,
-    node_kind: &str,
-) -> Result<Option<String>, ParseError> {
-    match tokenizer.peek_kind()? {
-        TokenKind::Identifier(_) => expect_identifier(tokenizer, node_kind).map(|x| Some(x)),
-        _ => Ok(None),
+fn match_identifier(tokenizer: &mut Tokenizer, node_kind: &str) -> Option<String> {
+    match tokenizer.peek_kind() {
+        Ok(TokenKind::Identifier(_)) => Some(expect_identifier(tokenizer, node_kind).unwrap()),
+        _ => None,
     }
 }
 
-fn match_char(tokenizer: &mut Tokenizer, expected: char) -> Result<Option<Token>, ParseError> {
+fn match_char(tokenizer: &mut Tokenizer, expected: char) -> Option<Token> {
     match_token(tokenizer, TokenKind::Char(expected))
 }
 
@@ -1307,15 +1387,8 @@ fn expect_char(tokenizer: &mut Tokenizer, expected: char) -> Result<Token, Parse
     expect_token_with(tokenizer, TokenKind::Char(expected))
 }
 
-fn expect_peek<'a>(tokenizer: &'a mut Tokenizer) -> Result<&'a Token, ParseError> {
-    match tokenizer.peek() {
-        Ok(token) => Ok(token),
-        Err(err) => Err(ParseError::from(err)),
-    }
-}
-
 fn expect_token_with(tokenizer: &mut Tokenizer, expected: TokenKind) -> Result<Token, ParseError> {
-    let token = tokenizer.next()?;
+    let token = tokenizer.next_token()?;
 
     match token {
         token if token.kind == expected => Ok(token),
@@ -1324,7 +1397,7 @@ fn expect_token_with(tokenizer: &mut Tokenizer, expected: TokenKind) -> Result<T
 }
 
 fn expect_identifier(tokenizer: &mut Tokenizer, node_kind: &str) -> Result<String, ParseError> {
-    let token = tokenizer.next()?;
+    let token = tokenizer.next_token()?;
 
     if let TokenKind::Identifier(name) = token.kind {
         Ok(name)
@@ -1334,7 +1407,7 @@ fn expect_identifier(tokenizer: &mut Tokenizer, node_kind: &str) -> Result<Strin
 }
 
 fn expect_string(tokenizer: &mut Tokenizer, node_kind: &str) -> Result<String, ParseError> {
-    let token = tokenizer.next()?;
+    let token = tokenizer.next_token()?;
 
     if let TokenKind::String(s) = token.kind {
         Ok(s)
@@ -1424,7 +1497,7 @@ mod tests {
 
     #[test]
     fn number_integer() {
-        let program = parse_string("42");
+        let program = parse_string("42").unwrap();
         assert!(program.functions.is_empty());
         assert!(program.main.is_some());
 
@@ -1434,7 +1507,7 @@ mod tests {
 
     #[test]
     fn number_integer_followed_by_letter() {
-        let program = parse_string("123a");
+        let program = parse_string("123a").unwrap();
         assert!(program.functions.is_empty());
 
         let node = &program.main.unwrap().body[0];
@@ -1445,7 +1518,7 @@ mod tests {
 
     #[test]
     fn add_integer() {
-        let program = parse_string("1 + 2");
+        let program = parse_string("1 + 2").unwrap();
         assert!(program.functions.is_empty());
 
         let body = program.main.unwrap().body;
@@ -1457,7 +1530,7 @@ mod tests {
 
     #[test]
     fn operator_associative() {
-        let program = parse_string("1 + 2 + 3");
+        let program = parse_string("1 + 2 + 3").unwrap();
         assert!(program.functions.is_empty());
 
         let body = program.main.unwrap().body;
@@ -1471,7 +1544,7 @@ mod tests {
     }
     #[test]
     fn paren_grouping() {
-        let program = parse_string("(1 + 2) * 3");
+        let program = parse_string("(1 + 2) * 3").unwrap();
         assert!(program.functions.is_empty());
 
         let body = program.main.unwrap().body;
@@ -1486,7 +1559,7 @@ mod tests {
 
     #[test]
     fn paren_array_empty() {
-        let program = parse_string("[]");
+        let program = parse_string("[]").unwrap();
         let body = program.main.unwrap().body;
 
         assert_matches!(&body[0].expr, Expr::Array { elements, .. } => {
@@ -1496,7 +1569,7 @@ mod tests {
 
     #[test]
     fn paren_array() {
-        let program = parse_string("[1, 2, 3]");
+        let program = parse_string("[1, 2, 3]").unwrap();
         let body = program.main.unwrap().body;
 
         assert_matches!(&body[0].expr, Expr::Array { elements, .. } => {
@@ -1508,7 +1581,7 @@ mod tests {
 
     #[test]
     fn parse_newline0() {
-        let program = parse_string("1+\n2");
+        let program = parse_string("1+\n2").unwrap();
         let body = program.main.unwrap().body;
 
         assert_matches!(&body[0].expr, Expr::Add(lhs, rhs, None) => {
@@ -1519,7 +1592,7 @@ mod tests {
 
     #[test]
     fn parse_newline1() {
-        let program = parse_string("1\n+2");
+        let program = parse_string("1\n+2").unwrap();
         let body = program.main.unwrap().body;
 
         assert_matches!(&body[0].expr, Expr::Stmt(node) => {
