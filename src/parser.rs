@@ -267,7 +267,10 @@ impl Parser {
                 match tokenizer.peek() {
                     None => break,
                     Some(token) => {
-                        panic!("Unrecognized token: {:?}", token)
+                        panic!(
+                            "Unrecognized token: {} at {}",
+                            token.kind, token.range.start
+                        )
                     }
                 }
             }
@@ -515,7 +518,7 @@ impl Parser {
 
         let rhs = self
             .parse_rel_op2(tokenizer, context)
-            .expect("Expected RHS");
+            .expect("Expected RHS at");
 
         Some(context.typed_expr(builder(Box::new(lhs), Box::new(rhs), None)))
     }
@@ -636,7 +639,10 @@ impl Parser {
                 break;
             }
 
-            let token = tokenizer.peek()?;
+            let token = match tokenizer.peek() {
+                Some(token) => token,
+                None => return Some(node),
+            };
 
             match token.kind {
                 TokenKind::Char('[') => {
@@ -1269,6 +1275,7 @@ mod tests {
     fn number_integer() {
         let program = parse_string("42");
         assert!(program.functions.is_empty());
+        assert!(program.main.is_some());
 
         let expr = &program.main.unwrap().body[0].expr;
         assert_matches!(expr, Expr::Integer(42));
