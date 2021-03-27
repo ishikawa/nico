@@ -6,7 +6,7 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-use nico::tokenizer::{TokenKind, Tokenizer};
+use nico::tokenizer::{TokenErrorKind, TokenKind, Tokenizer};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -218,7 +218,9 @@ impl Connection {
             let token = match tokenizer.next_token() {
                 Ok(token) => token,
                 Err(err) => {
-                    warn!("ERROR: {}", err);
+                    if err.kind != TokenErrorKind::Eos {
+                        warn!("ERROR: {}", err);
+                    }
                     break;
                 }
             };
