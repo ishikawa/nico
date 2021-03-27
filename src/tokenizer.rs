@@ -73,6 +73,9 @@ pub struct Tokenizer<'a> {
 
     /// Remember a peeked value, even if it was None.
     peeked: Option<Option<Token>>,
+
+    /// Options
+    skip_comments: bool,
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
@@ -100,6 +103,7 @@ impl<'a> Tokenizer<'a> {
             start_position: None,
             token_length: 0,
             peeked: None,
+            skip_comments: true,
         }
     }
 
@@ -149,29 +153,37 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn next_token(&mut self) -> Option<Token> {
-        self.skip_white_spaces();
-        self.begin_token();
+        self.newline_seen = false;
 
-        let nextc = match self.peek_char() {
-            None => return None,
-            Some(c) => *c,
-        };
+        loop {
+            self.skip_white_spaces();
+            self.begin_token();
 
-        let kind = match nextc {
-            '0'..='9' => self.read_integer(nextc),
-            'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
-            '!' | '=' | '<' | '>' => self.read_operator(nextc),
-            '"' => self.read_string(),
-            '.' => self.read_dot(),
-            '#' => self.read_comment(),
-            x => {
-                self.next_char();
-                TokenKind::Char(x)
+            let nextc = match self.peek_char() {
+                None => return None,
+                Some(c) => c,
+            };
+
+            let kind = match nextc {
+                '0'..='9' => self.read_integer(nextc),
+                'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
+                '!' | '=' | '<' | '>' => self.read_operator(nextc),
+                '"' => self.read_string(),
+                '.' => self.read_dot(),
+                '#' => self.read_comment(),
+                x => {
+                    self.next_char();
+                    TokenKind::Char(x)
+                }
+            };
+
+            if self.skip_comments && matches!(kind, TokenKind::LineComment(_)) {
+                continue;
             }
-        };
 
-        let range = self.end_token();
-        Some(Token { kind, range })
+            let range = self.end_token();
+            return Some(Token { kind, range });
+        }
     }
 
     fn read_dot(&mut self) -> TokenKind {
@@ -252,7 +264,7 @@ impl<'a> Tokenizer<'a> {
 
         let nextc = match self.peek_char() {
             None => return TokenKind::Char(nextc),
-            Some(c) => *c,
+            Some(c) => c,
         };
 
         let token = match (c, nextc) {
@@ -274,7 +286,7 @@ impl<'a> Tokenizer<'a> {
         while let Some(nextc) = self.peek_char() {
             match nextc {
                 'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => {
-                    value.push(*nextc);
+                    value.push(nextc);
                 }
                 _ => break,
             };
@@ -283,7 +295,7 @@ impl<'a> Tokenizer<'a> {
 
         // trailing "!"
         if let Some(nextc @ '!') = self.peek_char() {
-            value.push(*nextc);
+            value.push(nextc);
             self.next_char();
         }
 
@@ -309,7 +321,7 @@ impl<'a> Tokenizer<'a> {
         loop {
             match self.peek_char() {
                 Some(x @ '0'..='9') => {
-                    let n = (*x as i32) - ('0' as i32);
+                    let n = (x as i32) - ('0' as i32);
 
                     value = value * 10 + n;
                 }
@@ -321,10 +333,10 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn peek_char(&mut self) -> Option<&char> {
+    fn peek_char(&mut self) -> Option<char> {
         let c = self.chars.peek();
         self.at_end = c.is_none();
-        c
+        c.map(|c| *c)
     }
 
     fn next_char(&mut self) -> Option<char> {
@@ -336,28 +348,19 @@ impl<'a> Tokenizer<'a> {
         if c == '\n' {
             self.lineno += 1;
             self.columnno = 0;
+            self.newline_seen = true;
         }
 
         Some(c)
     }
 
     fn skip_white_spaces(&mut self) {
-        self.newline_seen = false;
-
-        loop {
-            match self.peek_char() {
-                None => return,
-                Some(c) => match c {
-                    // whitespace
-                    ' ' | '\t' => {}
-                    // newline
-                    '\n' | '\r' => {
-                        self.newline_seen = true;
-                    }
-                    _ => return,
-                },
+        while let Some(c) = self.peek_char() {
+            if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+                self.next_char();
+            } else {
+                break;
             }
-            self.next_char();
         }
     }
 }
@@ -518,6 +521,7 @@ mod tests {
     #[test]
     fn comment() {
         let mut tokenizer = Tokenizer::from_string("# comment");
+        tokenizer.skip_comments = false;
 
         let token = tokenizer.next().unwrap();
         assert_matches!(token.kind, TokenKind::LineComment(str) => {
@@ -537,6 +541,15 @@ mod tests {
                 length: 9
             }
         );
+    }
+
+    #[test]
+    fn skip_comments() {
+        let mut tokenizer = Tokenizer::from_string("# comment");
+        tokenizer.skip_comments = true;
+
+        let token = tokenizer.next();
+        assert!(token.is_none());
     }
 
     #[test]
