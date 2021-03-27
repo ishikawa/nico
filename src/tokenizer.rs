@@ -75,7 +75,7 @@ pub struct Tokenizer<'a> {
     peeked: Option<Option<Token>>,
 
     /// Options
-    skip_comments: bool,
+    pub skip_comments: bool,
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
