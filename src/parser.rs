@@ -1093,13 +1093,10 @@ where
     loop {
         let token = expect_peek(tokenizer);
 
-        match token.kind {
-            TokenKind::Char(c) => {
-                if c == stop_char {
-                    break;
-                }
+        if let TokenKind::Char(c) = token.kind {
+            if c == stop_char {
+                break;
             }
-            _ => {}
         };
 
         let element = parser(tokenizer, context);
