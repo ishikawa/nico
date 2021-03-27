@@ -1,5 +1,6 @@
 use std::fmt;
 use std::{iter::Peekable, str::Chars};
+use thiserror::Error;
 
 /// Position in a text document expressed as zero-based line and character offset.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default)]
@@ -72,19 +73,30 @@ pub struct Tokenizer<'a> {
     token_length: usize,
 
     /// Remember a peeked value, even if it was None.
-    peeked: Option<Option<Token>>,
+    peeked: Option<Result<Token, TokenError>>,
 
     /// Options
     pub skip_comments: bool,
 }
 
-impl<'a> Iterator for Tokenizer<'a> {
-    type Item = Token;
+#[derive(Debug, Error, PartialEq, Eq)]
+#[error("{kind} at {position}")]
+pub struct TokenError {
+    pub position: Position,
+    pub kind: TokenErrorKind,
+}
 
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.peeked.take() {
-            Some(v) => v,
-            None => self.next_token(),
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenErrorKind {
+    Eos,           // End of source
+    Error(String), // Genetic error
+}
+
+impl fmt::Display for TokenErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TokenErrorKind::Eos => write!(f, "End of file"),
+            TokenErrorKind::Error(message) => write!(f, "{}", message),
         }
     }
 }
@@ -119,7 +131,7 @@ impl<'a> Tokenizer<'a> {
     ///
     /// Like [`next`], if there is a token, it is wrapped in a `Some(T)`.
     // But if the iteration is over, `None` is returned.
-    pub fn peek(&mut self) -> Option<&Token> {
+    pub fn peek(&mut self) -> Result<&Token, &TokenError> {
         if self.peeked.is_none() {
             let token = self.next_token();
             self.peeked.get_or_insert(token).as_ref()
@@ -128,7 +140,7 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    pub fn peek_kind(&mut self) -> Option<&TokenKind> {
+    pub fn peek_kind(&mut self) -> Result<&TokenKind, &TokenError> {
         self.peek().map(|x| &x.kind)
     }
 
@@ -136,6 +148,13 @@ impl<'a> Tokenizer<'a> {
         Position {
             line: self.lineno,
             character: self.columnno,
+        }
+    }
+
+    pub fn next(&mut self) -> Result<Token, TokenError> {
+        match self.peeked.take() {
+            Some(v) => v,
+            None => self.next_token(),
         }
     }
 
@@ -152,15 +171,30 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn next_token(&mut self) -> Option<Token> {
+    fn eos(&self) -> TokenError {
+        TokenError {
+            position: self.current_position(),
+            kind: TokenErrorKind::Eos,
+        }
+    }
+
+    fn error<S: Into<String>>(&self, message: S) -> TokenError {
+        TokenError {
+            position: self.current_position(),
+            kind: TokenErrorKind::Error(message.into()),
+        }
+    }
+
+    fn next_token(&mut self) -> Result<Token, TokenError> {
         self.newline_seen = false;
 
         loop {
             self.skip_white_spaces();
+
             self.begin_token();
 
             let nextc = match self.peek_char() {
-                None => return None,
+                None => return Err(self.eos()),
                 Some(c) => c,
             };
 
@@ -173,23 +207,30 @@ impl<'a> Tokenizer<'a> {
                 '#' => self.read_comment(),
                 x => {
                     self.next_char();
-                    TokenKind::Char(x)
+                    Ok(TokenKind::Char(x))
                 }
             };
 
-            if self.skip_comments && matches!(kind, TokenKind::LineComment(_)) {
+            // Skip comment
+            if self.skip_comments && matches!(kind, Ok(TokenKind::LineComment(_))) {
                 continue;
             }
 
             let range = self.end_token();
-            return Some(Token { kind, range });
+
+            match kind {
+                Ok(kind) => {
+                    return Ok(Token { kind, range });
+                }
+                Err(err) => return Err(err),
+            }
         }
     }
 
-    fn read_dot(&mut self) -> TokenKind {
+    fn read_dot(&mut self) -> Result<TokenKind, TokenError> {
         self.next_char();
 
-        match self.peek_char() {
+        let kind = match self.peek_char() {
             Some('.') => {
                 self.next_char();
                 match self.peek_char() {
@@ -197,14 +238,16 @@ impl<'a> Tokenizer<'a> {
                         self.next_char();
                         TokenKind::Rest
                     }
-                    _ => panic!("Unrecognized token `..`"),
+                    _ => return Err(self.error("Unrecognized token `..`")),
                 }
             }
             _ => TokenKind::Char('.'),
-        }
+        };
+
+        Ok(kind)
     }
 
-    fn read_comment(&mut self) -> TokenKind {
+    fn read_comment(&mut self) -> Result<TokenKind, TokenError> {
         let mut comment = String::new();
         self.next_char(); // '#'
 
@@ -217,10 +260,10 @@ impl<'a> Tokenizer<'a> {
             };
         }
 
-        TokenKind::LineComment(comment)
+        Ok(TokenKind::LineComment(comment))
     }
 
-    fn read_string(&mut self) -> TokenKind {
+    fn read_string(&mut self) -> Result<TokenKind, TokenError> {
         let mut string = String::new();
         self.next_char();
 
@@ -234,7 +277,9 @@ impl<'a> Tokenizer<'a> {
                     self.next_char();
                     let c = match self.chars.peek() {
                         Some(c) => *c,
-                        None => panic!("Premature EOF while reading escape sequence"),
+                        None => {
+                            return Err(self.error("Premature EOF while reading escape sequence"))
+                        }
                     };
 
                     match c {
@@ -243,7 +288,11 @@ impl<'a> Tokenizer<'a> {
                         't' => string.push('\t'),
                         '"' => string.push('"'),
                         '\\' => string.push('\\'),
-                        c => panic!("Unrecognized escape sequence: \"\\{}\"", c),
+                        c => {
+                            return Err(
+                                self.error(format!("Unrecognized escape sequence: \"\\{}\"", c))
+                            )
+                        }
                     };
                     self.next_char();
                 }
@@ -251,19 +300,19 @@ impl<'a> Tokenizer<'a> {
                     string.push(*c);
                     self.next_char();
                 }
-                None => panic!("Premature EOF while reading string"),
+                None => return Err(self.error("Premature EOF while reading string")),
             };
         }
 
-        TokenKind::String(string)
+        Ok(TokenKind::String(string))
     }
 
-    fn read_operator(&mut self, nextc: char) -> TokenKind {
+    fn read_operator(&mut self, nextc: char) -> Result<TokenKind, TokenError> {
         let c = nextc;
         self.next_char();
 
         let nextc = match self.peek_char() {
-            None => return TokenKind::Char(nextc),
+            None => return Ok(TokenKind::Char(nextc)),
             Some(c) => c,
         };
 
@@ -272,14 +321,14 @@ impl<'a> Tokenizer<'a> {
             ('!', '=') => TokenKind::Ne,
             ('<', '=') => TokenKind::Le,
             ('>', '=') => TokenKind::Ge,
-            _ => return TokenKind::Char(c),
+            _ => return Ok(TokenKind::Char(c)),
         };
 
         self.next_char();
-        token
+        Ok(token)
     }
 
-    fn read_name(&mut self, nextc: char) -> TokenKind {
+    fn read_name(&mut self, nextc: char) -> Result<TokenKind, TokenError> {
         let mut value = nextc.to_string();
         self.next_char();
 
@@ -299,7 +348,7 @@ impl<'a> Tokenizer<'a> {
             self.next_char();
         }
 
-        match value.as_str() {
+        let kind = match value.as_str() {
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
             "end" => TokenKind::End,
@@ -311,10 +360,12 @@ impl<'a> Tokenizer<'a> {
             "struct" => TokenKind::Struct,
             "i32" => TokenKind::I32,
             _ => TokenKind::Identifier(value),
-        }
+        };
+
+        Ok(kind)
     }
 
-    fn read_integer(&mut self, nextc: char) -> TokenKind {
+    fn read_integer(&mut self, nextc: char) -> Result<TokenKind, TokenError> {
         let mut value: i32 = (nextc as i32) - ('0' as i32);
         self.next_char();
 
@@ -326,7 +377,7 @@ impl<'a> Tokenizer<'a> {
                     value = value * 10 + n;
                 }
                 _ => {
-                    return TokenKind::Integer(value);
+                    return Ok(TokenKind::Integer(value));
                 }
             };
             self.next_char();
@@ -494,7 +545,16 @@ mod tests {
             }
         );
         assert!(tokenizer.is_at_end());
-        assert!(tokenizer.next().is_none());
+        assert_eq!(
+            tokenizer.next().unwrap_err(),
+            TokenError {
+                kind: TokenErrorKind::Eos,
+                position: Position {
+                    line: 0,
+                    character: 10
+                }
+            }
+        )
     }
 
     #[test]
@@ -547,9 +607,7 @@ mod tests {
     fn skip_comments() {
         let mut tokenizer = Tokenizer::from_string("# comment");
         tokenizer.skip_comments = true;
-
-        let token = tokenizer.next();
-        assert!(token.is_none());
+        assert!(tokenizer.is_at_end());
     }
 
     #[test]
@@ -647,7 +705,7 @@ mod tests {
         assert_eq!(tokenizer.next().unwrap().kind, TokenKind::Integer(3));
 
         // After the iterator is finished, so is `peek()`
-        assert_eq!(tokenizer.peek(), None);
-        assert_eq!(tokenizer.next(), None);
+        assert!(tokenizer.peek().is_err());
+        assert!(tokenizer.peek().is_err());
     }
 }

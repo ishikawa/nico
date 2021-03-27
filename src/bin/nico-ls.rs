@@ -214,7 +214,7 @@ impl Connection {
         let mut previous_character: u32 = 0;
         let mut semantic_tokens = vec![];
 
-        for token in tokenizer {
+        while let Some(token) = tokenizer.next() {
             let token_type = match token.kind {
                 TokenKind::If
                 | TokenKind::Else
