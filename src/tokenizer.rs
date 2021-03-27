@@ -54,6 +54,9 @@ pub enum TokenKind {
     Le, // "<="
     Ge, // ">="
 
+    // comment
+    LineComment(String),
+
     // punctuations
     Char(char),
 }
@@ -364,6 +367,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Identifier(name) => write!(f, "id<{}>", name),
             TokenKind::Integer(i) => write!(f, "int<{}>", i),
             TokenKind::String(s) => write!(f, "str<{}>", s),
+            TokenKind::LineComment(s) => write!(f, "comment<{}>", s),
             TokenKind::If => write!(f, "if"),
             TokenKind::Else => write!(f, "else"),
             TokenKind::End => write!(f, "end"),
