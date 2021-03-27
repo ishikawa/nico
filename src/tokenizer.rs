@@ -336,7 +336,7 @@ impl<'a> Tokenizer<'a> {
     fn peek_char(&mut self) -> Option<char> {
         let c = self.chars.peek();
         self.at_end = c.is_none();
-        c.map(|c| *c)
+        c.copied()
     }
 
     fn next_char(&mut self) -> Option<char> {
