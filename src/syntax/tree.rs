@@ -112,44 +112,36 @@ pub enum Expr {
     ),
 }
 
-type SyntaxTokenIterator<'a> = Box<dyn Iterator<Item = &'a SyntaxToken> + 'a>;
-
 // --- tokens
 impl StatementNode {
-    pub fn tokens(&self) -> SyntaxTokenIterator<'_> {
+    pub fn tokens(&self) -> SyntaxTokens<'_> {
         self.expr.tokens()
     }
 }
 
 impl ExprNode {
-    pub fn tokens(&self) -> SyntaxTokenIterator<'_> {
+    pub fn tokens(&self) -> SyntaxTokens<'_> {
         match self.kind {
-            Expr::Integer(_) => Box::new(self.code.tokens.iter()),
-            Expr::Add(ref lhs, ref rhs, ..) => Box::new(SyntaxTokens::new(
-                self.code.tokens.iter(),
-                vec![lhs.tokens(), rhs.tokens()],
-            )),
+            Expr::Integer(_) => SyntaxTokens::new(self.code.tokens.iter(), vec![]),
+            Expr::Add(ref lhs, ref rhs, ..) => {
+                SyntaxTokens::new(self.code.tokens.iter(), vec![lhs.tokens(), rhs.tokens()])
+            }
         }
     }
 }
 
 pub struct SyntaxTokens<'a> {
     iterator: slice::Iter<'a, SyntaxToken>,
-    children: Vec<SyntaxTokenIterator<'a>>,
-    child_iterator: Option<SyntaxTokenIterator<'a>>,
-    child_index: usize,
+    children: Vec<SyntaxTokens<'a>>,
+    in_child: bool,
 }
 
 impl<'a> SyntaxTokens<'a> {
-    pub fn new(
-        iterator: slice::Iter<'a, SyntaxToken>,
-        children: Vec<SyntaxTokenIterator<'a>>,
-    ) -> Self {
+    pub fn new(iterator: slice::Iter<'a, SyntaxToken>, children: Vec<SyntaxTokens<'a>>) -> Self {
         Self {
             iterator,
             children,
-            child_iterator: None,
-            child_index: 0,
+            in_child: false,
         }
     }
 }
@@ -158,11 +150,16 @@ impl<'a> Iterator for SyntaxTokens<'a> {
     type Item = &'a SyntaxToken;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(ref mut child_iterator) = self.child_iterator {
-            let token = child_iterator.next();
+        if self.in_child {
+            if self.children.is_empty() {
+                panic!("children  overflow");
+            }
+
+            let token = self.children[0].next();
 
             if token.is_none() {
-                self.child_iterator = None;
+                self.children.remove(0);
+                self.in_child = false;
             } else {
                 return token;
             }
@@ -171,15 +168,8 @@ impl<'a> Iterator for SyntaxTokens<'a> {
         let next = self.iterator.next();
 
         if let Some(SyntaxToken::Child) = next {
-            if self.child_index >= self.children.len() {
-                panic!("children vec overflow: {}", self.children.len());
-            }
-
-            let mut it = self.children.remove(self.child_index);
-            let token = it.next();
-
-            self.child_iterator.replace(it);
-            return token;
+            self.in_child = true;
+            return self.next();
         }
 
         next
