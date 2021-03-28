@@ -4,12 +4,20 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct Source {
+pub struct Code {
     pub tokens: Vec<Rc<Token>>,
 }
 
+impl Code {
+    pub fn with_token(token: Token) -> Self {
+        Self {
+            tokens: vec![Rc::new(token)],
+        }
+    }
+}
+
 pub struct ModuleNode {
-    pub nodes: Vec<TopLevel>,
+    pub children: Vec<TopLevel>,
 }
 
 #[derive(Debug)]
@@ -29,62 +37,62 @@ pub enum TopLevel {
 /// type        := name
 /// name        := IDENT
 /// ```
+///
+/// tokens: ["struct", <Identifier>, "{", ...fields, "}"]
 #[derive(Debug)]
 pub struct StructNode {
     pub name: String,
     pub fields: Vec<TypeFieldNode>,
-    // ["struct", <Identifier>, "{", ...fields, "}"]
-    pub source: Source,
+    pub code: Code,
 }
 
 #[derive(Debug)]
+/// tokens: [<Identifier>, ":", ...type_annotation]
 pub struct TypeFieldNode {
     pub name: String,
     pub type_annotation: TypeAnnotationNode,
-    // [<Identifier>, ":", ...type_annotation]
-    pub source: Source,
+    pub code: Code,
 }
 
 #[derive(Debug)]
+/// tokens: [<Identifier>]
 pub struct TypeAnnotationNode {
     pub name: String,
     pub r#type: Option<Rc<RefCell<sem::Type>>>,
-    // [<Identifier>]
-    pub source: Source,
+    pub code: Code,
 }
 
 #[derive(Debug)]
+/// tokens: ["fun", <Identifier>, "(", ...params, ")", ...body, "end"]
 pub struct FunctionNode {
     pub name: String,
     pub params: Vec<ParamNode>,
     pub body: Vec<StatementNode>,
-    // ["fun", <Identifier>, "(", ...params, ")", ...body, "end"]
-    pub source: Source,
+    pub code: Code,
 }
 
 #[derive(Debug)]
+/// tokens: [<Identifier>]
 pub struct ParamNode {
-    pub expr: Vec<ExprNode>,
-    // ["fun", <Identifier>, "(", ...params, ")", ...body, "end"]
-    pub source: Source,
+    pub name: String,
+    pub code: Code,
 }
 
 #[derive(Debug)]
+/// tokens: [...expr]
 pub struct StatementNode {
-    pub name: String,
-    // [<Identifier>, "(", ...params, ")", ...body, "end"]
-    pub source: Source,
+    pub expr: ExprNode,
 }
 
 #[derive(Debug)]
 pub struct ExprNode {
-    pub kind: ExprKind,
+    pub kind: Expr,
     pub r#type: Rc<RefCell<sem::Type>>,
-    pub source: Source,
+    pub code: Code,
 }
 
 #[derive(Debug)]
-pub enum ExprKind {
+pub enum Expr {
     Integer(i32),
     Add(
         Box<ExprNode>,
