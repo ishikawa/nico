@@ -4,14 +4,21 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(Debug)]
+pub enum SyntaxToken {
+    Interpreted(Rc<Token>),
+    Missing(Rc<Token>),
+    Skipped(Rc<Token>),
+}
+
+#[derive(Debug)]
 pub struct Code {
-    pub tokens: Vec<Rc<Token>>,
+    pub tokens: Vec<SyntaxToken>,
 }
 
 impl Code {
     pub fn with_token(token: Token) -> Self {
         Self {
-            tokens: vec![Rc::new(token)],
+            tokens: vec![SyntaxToken::Interpreted(Rc::new(token))],
         }
     }
 }
@@ -94,9 +101,19 @@ pub struct ExprNode {
 #[derive(Debug)]
 pub enum Expr {
     Integer(i32),
-    Add(
-        Box<ExprNode>,
-        Box<ExprNode>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ),
+}
+
+// --- tokens
+impl StatementNode {
+    pub fn tokens(&self) -> Box<dyn Iterator<Item = &'_ SyntaxToken> + '_> {
+        self.expr.tokens()
+    }
+}
+
+impl ExprNode {
+    pub fn tokens(&self) -> Box<dyn Iterator<Item = &'_ SyntaxToken> + '_> {
+        match self.kind {
+            Expr::Integer(_) => Box::new(self.code.tokens.iter()),
+        }
+    }
 }

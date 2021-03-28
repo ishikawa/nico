@@ -186,8 +186,13 @@ impl Parser<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use super::*;
-    use crate::syntax::{Expr, StatementNode, TopLevel};
+    use crate::{
+        syntax::{Expr, StatementNode, TopLevel},
+        tokenizer::Token,
+    };
     use assert_matches::assert_matches;
 
     #[test]
@@ -199,11 +204,29 @@ mod tests {
 
         //let expr = &program.main.unwrap().body[0].expr;
         assert_matches!(stmt.expr.kind, Expr::Integer(42));
+
+        let tokens = stmt.tokens().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 1);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(token.kind, TokenKind::Integer(i) => {
+            assert_eq!(i, 42);
+        });
     }
+
+    // --- helpers
 
     fn unwrap_statement(node: &TopLevel) -> &StatementNode {
         if let TopLevel::Statement(node) = node {
             node
+        } else {
+            panic!()
+        }
+    }
+
+    fn unwrap_interpreted_token(token: &SyntaxToken) -> Rc<Token> {
+        if let SyntaxToken::Interpreted(token) = token {
+            Rc::clone(token)
         } else {
             panic!()
         }
