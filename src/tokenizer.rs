@@ -14,7 +14,7 @@ pub struct Position {
 }
 
 // The effective range of a token.
-// start inclusive, end exclusive.
+// `start` inclusive, `end` exclusive.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default)]
 pub struct EffectiveRange {
     pub length: usize,
@@ -26,6 +26,28 @@ pub struct EffectiveRange {
 pub struct Token {
     pub kind: TokenKind,
     pub range: EffectiveRange,
+    pub leading_trivia: Vec<Trivia>,
+    text: String,
+}
+
+/// Trivia is not part of the normal language syntax and can appear anywhere between any two tokens.
+#[derive(Debug, PartialEq, Clone)]
+pub struct Trivia {
+    pub kind: TriviaKind,
+    pub range: EffectiveRange,
+    text: String,
+}
+
+impl Token {
+    pub fn text(&self) -> &str {
+        self.text.as_str()
+    }
+}
+
+impl Trivia {
+    pub fn text(&self) -> &str {
+        self.text.as_str()
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -55,11 +77,18 @@ pub enum TokenKind {
     Le, // "<="
     Ge, // ">="
 
-    // comment
-    LineComment(String),
-
     // punctuations
     Char(char),
+
+    // End of input source
+    Eos,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum TriviaKind {
+    // comment
+    LineComment(String),
+    Whitespace,
 }
 
 pub struct Tokenizer<'a> {
@@ -70,13 +99,10 @@ pub struct Tokenizer<'a> {
     lineno: usize,
     columnno: usize,
     start_position: Option<Position>,
-    token_length: usize,
+    token_text: String,
 
     /// Remember a peeked value, even if it was None.
     peeked: Option<Result<Token, TokenError>>,
-
-    /// Options
-    pub skip_comments: bool,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -88,14 +114,12 @@ pub struct TokenError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenErrorKind {
-    Eos,           // End of source
     Error(String), // Genetic error
 }
 
 impl fmt::Display for TokenErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenErrorKind::Eos => write!(f, "End of file"),
             TokenErrorKind::Error(message) => write!(f, "{}", message),
         }
     }
@@ -113,9 +137,8 @@ impl<'a> Tokenizer<'a> {
             lineno: 0,
             columnno: 0,
             start_position: None,
-            token_length: 0,
+            token_text: "".to_string(),
             peeked: None,
-            skip_comments: true,
         }
     }
 
@@ -159,23 +182,18 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn begin_token(&mut self) {
-        self.token_length = 0;
+        self.token_text.clear();
         self.start_position = Some(self.current_position());
     }
 
-    fn end_token(&mut self) -> EffectiveRange {
-        EffectiveRange {
-            length: self.token_length,
+    fn end_token(&mut self) -> (String, EffectiveRange) {
+        let range = EffectiveRange {
+            length: self.token_text.len(),
             start: self.start_position.take().unwrap(),
             end: self.current_position(),
-        }
-    }
+        };
 
-    fn eos(&self) -> TokenError {
-        TokenError {
-            position: self.current_position(),
-            kind: TokenErrorKind::Eos,
-        }
+        (self.token_text.clone(), range)
     }
 
     fn error<S: Into<String>>(&self, message: S) -> TokenError {
@@ -188,38 +206,33 @@ impl<'a> Tokenizer<'a> {
     fn advance_token(&mut self) -> Result<Token, TokenError> {
         self.newline_seen = false;
 
-        loop {
-            self.skip_white_spaces();
+        let leading_trivia = self.read_trivia();
 
-            self.begin_token();
+        self.begin_token();
 
-            let nextc = match self.peek_char() {
-                None => return Err(self.eos()),
-                Some(c) => c,
-            };
-
-            let kind = match nextc {
+        let kind = match self.peek_char() {
+            None => TokenKind::Eos,
+            Some(nextc) => match nextc {
                 '0'..='9' => self.read_integer(nextc),
                 'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
                 '!' | '=' | '<' | '>' => self.read_operator(nextc),
                 '"' => self.read_string()?,
                 '.' => self.read_dot()?,
-                '#' => self.read_comment(),
                 x => {
                     self.next_char();
                     TokenKind::Char(x)
                 }
-            };
+            },
+        };
 
-            // Skip comment
-            if self.skip_comments && matches!(kind, TokenKind::LineComment(_)) {
-                continue;
-            }
+        let (text, range) = self.end_token();
 
-            let range = self.end_token();
-
-            return Ok(Token { kind, range });
-        }
+        Ok(Token {
+            kind,
+            range,
+            text,
+            leading_trivia,
+        })
     }
 
     fn read_dot(&mut self) -> Result<TokenKind, TokenError> {
@@ -240,22 +253,6 @@ impl<'a> Tokenizer<'a> {
         };
 
         Ok(kind)
-    }
-
-    fn read_comment(&mut self) -> TokenKind {
-        let mut comment = String::new();
-        self.next_char(); // '#'
-
-        loop {
-            match self.next_char() {
-                None | Some('\n') => break,
-                Some(c) => {
-                    comment.push(c);
-                }
-            };
-        }
-
-        TokenKind::LineComment(comment)
     }
 
     fn read_string(&mut self) -> Result<TokenKind, TokenError> {
@@ -388,7 +385,7 @@ impl<'a> Tokenizer<'a> {
     fn next_char(&mut self) -> Option<char> {
         let c = self.chars.next()?;
 
-        self.token_length += 1;
+        self.token_text.push(c);
         self.columnno += 1;
 
         if c == '\n' {
@@ -400,14 +397,53 @@ impl<'a> Tokenizer<'a> {
         Some(c)
     }
 
-    fn skip_white_spaces(&mut self) {
+    fn read_whitespace(&mut self) -> TriviaKind {
         while let Some(c) = self.peek_char() {
-            if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
-                self.next_char();
-            } else {
+            if !(c == ' ' || c == '\t' || c == '\n' || c == '\r') {
                 break;
             }
+            self.next_char();
         }
+
+        TriviaKind::Whitespace
+    }
+
+    fn read_comment(&mut self) -> TriviaKind {
+        let mut comment = String::new();
+        self.next_char(); // '#'
+
+        while let Some(c) = self.peek_char() {
+            if c == '\n' {
+                break;
+            }
+
+            comment.push(c);
+            self.next_char();
+        }
+
+        TriviaKind::LineComment(comment)
+    }
+
+    fn read_trivia(&mut self) -> Vec<Trivia> {
+        let mut trivia = vec![];
+
+        while let Some(c) = self.peek_char() {
+            self.begin_token();
+
+            let kind = if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+                self.read_whitespace()
+            } else if c == '#' {
+                self.read_comment()
+            } else {
+                break;
+            };
+
+            let (text, range) = self.end_token();
+
+            trivia.push(Trivia { kind, text, range })
+        }
+
+        trivia
     }
 }
 
@@ -423,7 +459,6 @@ impl fmt::Display for TokenKind {
             TokenKind::Identifier(name) => write!(f, "id<{}>", name),
             TokenKind::Integer(i) => write!(f, "int<{}>", i),
             TokenKind::String(s) => write!(f, "str<{}>", s),
-            TokenKind::LineComment(s) => write!(f, "comment<{}>", s),
             TokenKind::If => write!(f, "if"),
             TokenKind::Else => write!(f, "else"),
             TokenKind::End => write!(f, "end"),
@@ -440,6 +475,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Le => write!(f, "<="),
             TokenKind::Ge => write!(f, ">="),
             TokenKind::Char(c) => write!(f, "{}", c),
+            TokenKind::Eos => write!(f, "(EOF)"),
         }
     }
 }
@@ -539,17 +575,11 @@ mod tests {
                 length: 5
             }
         );
+
+        let token = tokenizer.next_token().unwrap();
+
         assert!(tokenizer.is_at_end());
-        assert_eq!(
-            tokenizer.next_token().unwrap_err(),
-            TokenError {
-                kind: TokenErrorKind::Eos,
-                position: Position {
-                    line: 0,
-                    character: 10
-                }
-            }
-        )
+        assert_eq!(token.kind, TokenKind::Eos);
     }
 
     #[test]
@@ -575,15 +605,20 @@ mod tests {
 
     #[test]
     fn comment() {
-        let mut tokenizer = Tokenizer::from_string("# comment");
-        tokenizer.skip_comments = false;
+        let mut tokenizer = Tokenizer::from_string("# comment\n");
 
         let token = tokenizer.next_token().unwrap();
-        assert_matches!(token.kind, TokenKind::LineComment(str) => {
+
+        assert_eq!(token.kind, TokenKind::Eos);
+        assert_eq!(token.leading_trivia.len(), 2);
+
+        let trivia = &token.leading_trivia[0];
+
+        assert_matches!(trivia.kind, TriviaKind::LineComment(ref str) => {
             assert_eq!(str, " comment");
         });
         assert_eq!(
-            token.range,
+            trivia.range,
             EffectiveRange {
                 start: Position {
                     line: 0,
@@ -596,18 +631,24 @@ mod tests {
                 length: 9
             }
         );
-    }
 
-    #[test]
-    fn skip_comments() {
-        let mut tokenizer = Tokenizer::from_string("# comment");
-        tokenizer.skip_comments = true;
+        let trivia = &token.leading_trivia[1];
 
-        let result = tokenizer.next_token();
-        assert!(result.is_err());
-
-        let err = result.unwrap_err();
-        assert_eq!(err.kind, TokenErrorKind::Eos);
+        assert_eq!(trivia.kind, TriviaKind::Whitespace);
+        assert_eq!(
+            trivia.range,
+            EffectiveRange {
+                start: Position {
+                    line: 0,
+                    character: 9
+                },
+                end: Position {
+                    line: 1,
+                    character: 0
+                },
+                length: 1
+            }
+        );
     }
 
     #[test]
@@ -704,8 +745,8 @@ mod tests {
         assert_eq!(tokenizer.peek().unwrap().kind, TokenKind::Integer(3));
         assert_eq!(tokenizer.next_token().unwrap().kind, TokenKind::Integer(3));
 
-        // After the iterator is finished, so is `peek()`
-        assert!(tokenizer.peek().is_err());
-        assert!(tokenizer.peek().is_err());
+        // After an iterator is finished.
+        assert_eq!(tokenizer.peek().unwrap().kind, TokenKind::Eos);
+        assert_eq!(tokenizer.peek().unwrap().kind, TokenKind::Eos);
     }
 }

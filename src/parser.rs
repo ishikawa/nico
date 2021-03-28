@@ -257,10 +257,6 @@ impl fmt::Display for ParseErrorKind {
 impl From<&TokenError> for ParseError {
     fn from(err: &TokenError) -> Self {
         match &err.kind {
-            TokenErrorKind::Eos => ParseError {
-                position: err.position,
-                kind: ParseErrorKind::PrematureEos,
-            },
             TokenErrorKind::Error(message) => ParseError {
                 position: err.position,
                 kind: ParseErrorKind::SyntaxError(message.clone()),
@@ -331,18 +327,16 @@ impl Parser {
             // No top level constructs can be consumed. It may be at the end of input or
             // parse error.
             else {
-                match tokenizer.peek() {
-                    Err(TokenError {
-                        kind: TokenErrorKind::Eos,
-                        ..
-                    }) => break,
-                    Err(err) => return Err(ParseError::from(err)),
-                    Ok(token) => {
+                let token = tokenizer.peek()?;
+
+                match &token.kind {
+                    TokenKind::Eos => break,
+                    kind => {
                         return Err(ParseError {
                             position: token.range.start,
                             kind: ParseErrorKind::SyntaxError(format!(
                                 "Unrecognized token: {}",
-                                token.kind
+                                kind
                             )),
                         });
                     }
@@ -813,16 +807,7 @@ impl Parser {
                 break;
             }
 
-            let token = match tokenizer.peek() {
-                Ok(token) => token,
-                Err(error) => match error {
-                    TokenError {
-                        kind: TokenErrorKind::Eos,
-                        ..
-                    } => return Ok(Some(node)),
-                    err => return Err(ParseError::from(err)),
-                },
-            };
+            let token = tokenizer.peek()?;
 
             match token.kind {
                 TokenKind::Char('[') => {
@@ -874,18 +859,10 @@ impl Parser {
     ) -> Result<Option<Node>, ParseError> {
         debug_trace("parse_primary", tokenizer);
 
-        let token = match tokenizer.peek() {
-            Ok(token) => token,
-            Err(error) => match error {
-                TokenError {
-                    kind: TokenErrorKind::Eos,
-                    ..
-                } => return Ok(None),
-                err => return Err(ParseError::from(err)),
-            },
-        };
+        let token = tokenizer.peek()?;
 
         match &token.kind {
+            TokenKind::Eos => Ok(None),
             TokenKind::Char('(') => {
                 expect_char(tokenizer, '(')?;
                 let node = self.parse_expr(tokenizer, context)?;
