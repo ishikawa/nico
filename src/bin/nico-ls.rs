@@ -245,31 +245,33 @@ impl Connection {
             }
 
             // Token
-            let token_type = match token.kind {
-                TokenKind::If
-                | TokenKind::Else
-                | TokenKind::End
-                | TokenKind::Export
-                | TokenKind::Fun
-                | TokenKind::Let
-                | TokenKind::Struct
-                | TokenKind::When
-                | TokenKind::Case => SemanticTokenType::KEYWORD,
-                TokenKind::String(_) => SemanticTokenType::STRING,
-                TokenKind::Identifier(_) => SemanticTokenType::VARIABLE,
-                TokenKind::Integer(_) => SemanticTokenType::NUMBER,
-                TokenKind::Eq | TokenKind::Ne | TokenKind::Le | TokenKind::Ge => {
-                    SemanticTokenType::OPERATOR
-                }
-                _ => continue,
-            };
+            if token.kind != TokenKind::Eos {
+                let token_type = match token.kind {
+                    TokenKind::If
+                    | TokenKind::Else
+                    | TokenKind::End
+                    | TokenKind::Export
+                    | TokenKind::Fun
+                    | TokenKind::Let
+                    | TokenKind::Struct
+                    | TokenKind::When
+                    | TokenKind::Case => SemanticTokenType::KEYWORD,
+                    TokenKind::String(_) => SemanticTokenType::STRING,
+                    TokenKind::Identifier(_) => SemanticTokenType::VARIABLE,
+                    TokenKind::Integer(_) => SemanticTokenType::NUMBER,
+                    TokenKind::Eq | TokenKind::Ne | TokenKind::Le | TokenKind::Ge => {
+                        SemanticTokenType::OPERATOR
+                    }
+                    _ => continue,
+                };
 
-            abs_semantic_tokens.push(SemanticTokenAbsolute {
-                token_type,
-                line: token.range.start.line,
-                character: token.range.start.character,
-                length: token.range.length,
-            });
+                abs_semantic_tokens.push(SemanticTokenAbsolute {
+                    token_type,
+                    line: token.range.start.line,
+                    character: token.range.start.character,
+                    length: token.range.length,
+                });
+            }
 
             for abs_sem_token in abs_semantic_tokens {
                 let token_type =
