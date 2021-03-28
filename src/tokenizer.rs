@@ -91,6 +91,7 @@ pub enum TriviaKind {
     Whitespace,
 }
 
+#[derive(Debug)]
 pub struct Tokenizer<'a> {
     chars: Peekable<Chars<'a>>,
     at_end: bool,

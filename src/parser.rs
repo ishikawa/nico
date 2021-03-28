@@ -1,13 +1,13 @@
 use crate::asm::wasm;
 use crate::sem;
-use crate::tokenizer::{Position, Token, TokenError, TokenErrorKind, Tokenizer};
+use crate::syntax::{ParseError, ParseErrorKind};
+use crate::tokenizer::{Token, Tokenizer};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use crate::{asm, tokenizer::TokenKind};
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
-use thiserror::Error;
 
 const DEBUG: bool = false;
 
@@ -214,60 +214,6 @@ pub struct Parser {}
 #[derive(Debug)]
 struct ParserContext {
     naming: PrefixNaming,
-}
-
-#[derive(Debug, Error, PartialEq, Eq)]
-#[error("{kind} at {position}")]
-pub struct ParseError {
-    pub position: Position,
-    pub kind: ParseErrorKind,
-}
-
-impl ParseError {
-    fn syntax_error<S: Into<String>>(position: Position, message: S) -> Self {
-        Self {
-            position,
-            kind: ParseErrorKind::SyntaxError(message.into()),
-        }
-    }
-
-    fn mismatch_token<S: AsRef<str>>(token: &Token, expected: S) -> Self {
-        Self::syntax_error(
-            token.range.start,
-            format!("Expected {}, but found {}", expected.as_ref(), token.kind),
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParseErrorKind {
-    PrematureEos,        // Unexpected end of source
-    SyntaxError(String), // Genetic error
-}
-
-impl fmt::Display for ParseErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ParseErrorKind::PrematureEos => write!(f, "Premature end of file"),
-            ParseErrorKind::SyntaxError(message) => write!(f, "Syntax error: {}", message),
-        }
-    }
-}
-
-impl From<&TokenError> for ParseError {
-    fn from(err: &TokenError) -> Self {
-        match &err.kind {
-            TokenErrorKind::Error(message) => ParseError {
-                position: err.position,
-                kind: ParseErrorKind::SyntaxError(message.clone()),
-            },
-        }
-    }
-}
-impl From<TokenError> for ParseError {
-    fn from(err: TokenError) -> Self {
-        Self::from(&err)
-    }
 }
 
 impl ParserContext {
