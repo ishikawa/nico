@@ -4,6 +4,8 @@ use crate::sem;
 use crate::tokenizer::{TokenKind, Tokenizer};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 const DEBUG: bool = false;
 
@@ -72,15 +74,15 @@ impl Parser<'_> {
         Ok(ModuleNode { children })
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn parse_struct_definition(&mut self) -> Result<Option<StructNode>, ParseError> {
         self.debug_trace("parse_struct_definition");
-
         Ok(None)
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     fn parse_function(&mut self) -> Result<Option<FunctionNode>, ParseError> {
         self.debug_trace("parse_function");
-
         Ok(None)
     }
 
@@ -125,7 +127,46 @@ impl Parser<'_> {
 
     fn parse_binary_op1(&mut self) -> Result<Option<ExprNode>, ParseError> {
         self.debug_trace("parse_binary_op1");
-        self.parse_binary_op2()
+
+        let lhs = self.parse_binary_op2()?;
+        let mut lhs = if let Some(lhs) = lhs {
+            lhs
+        } else {
+            return Ok(None);
+        };
+
+        loop {
+            let builder = match self.tokenizer.peek_kind() {
+                Ok(TokenKind::Char('+')) => Expr::Add,
+                Ok(TokenKind::Char('-')) => Expr::Sub,
+                Ok(TokenKind::Char('%')) => Expr::Rem,
+                _ => break,
+            };
+
+            // A newline character terminates node construction.
+            if self.tokenizer.is_newline_seen() {
+                break;
+            }
+
+            let op_token = self.tokenizer.next_token()?;
+
+            let rhs = self.parse_binary_op2()?.ok_or_else(|| {
+                ParseError::syntax_error(self.tokenizer.current_position(), "Expected RHS")
+            })?;
+
+            // node
+            let kind = builder(Box::new(lhs), Box::new(rhs), None);
+            let code = Code::new(vec![
+                SyntaxToken::Child,
+                SyntaxToken::Interpreted(Rc::new(op_token)),
+                SyntaxToken::Child,
+            ]);
+            let r#type = self.new_type_var();
+
+            lhs = ExprNode { kind, code, r#type };
+        }
+
+        Ok(Some(lhs))
     }
 
     fn parse_binary_op2(&mut self) -> Result<Option<ExprNode>, ParseError> {
@@ -170,12 +211,10 @@ impl Parser<'_> {
     // --- Helpers
 
     /// Returns a new type variable.
-    /*
     fn new_type_var(&mut self) -> Rc<RefCell<sem::Type>> {
         let name = self.naming.next();
         wrap(sem::Type::new_type_var(&name))
     }
-    */
 
     fn debug_trace(&self, name: &str) {
         if DEBUG {
@@ -201,8 +240,6 @@ mod tests {
         assert!(!module.children.is_empty());
 
         let stmt = unwrap_statement(&module.children[0]);
-
-        //let expr = &program.main.unwrap().body[0].expr;
         assert_matches!(stmt.expr.kind, Expr::Integer(42));
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -212,6 +249,30 @@ mod tests {
         assert_matches!(token.kind, TokenKind::Integer(i) => {
             assert_eq!(i, 42);
         });
+    }
+
+    #[test]
+    fn add_integer() {
+        let module = Parser::parse_string("1+2").unwrap();
+        assert!(!module.children.is_empty());
+
+        let stmt = unwrap_statement(&module.children[0]);
+        assert_matches!(&stmt.expr.kind, Expr::Add(lhs, rhs, ..) => {
+            assert_matches!(lhs.kind, Expr::Integer(1));
+            assert_matches!(rhs.kind, Expr::Integer(2));
+        });
+
+        let tokens = stmt.tokens().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 3);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(token.kind, TokenKind::Integer(1));
+
+        let token = unwrap_interpreted_token(tokens[1]);
+        assert_matches!(token.kind, TokenKind::Char('+'));
+
+        let token = unwrap_interpreted_token(tokens[2]);
+        assert_matches!(token.kind, TokenKind::Integer(2));
     }
 
     // --- helpers

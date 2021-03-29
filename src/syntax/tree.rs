@@ -17,10 +17,12 @@ pub struct Code {
 }
 
 impl Code {
+    pub fn new(tokens: Vec<SyntaxToken>) -> Self {
+        Self { tokens }
+    }
+
     pub fn with_token(token: Token) -> Self {
-        Self {
-            tokens: vec![SyntaxToken::Interpreted(Rc::new(token))],
-        }
+        Self::new(vec![SyntaxToken::Interpreted(Rc::new(token))])
     }
 }
 
@@ -110,6 +112,16 @@ pub enum Expr {
         Box<ExprNode>,
         Option<Rc<RefCell<sem::Binding>>>,
     ),
+    Sub(
+        Box<ExprNode>,
+        Box<ExprNode>,
+        Option<Rc<RefCell<sem::Binding>>>,
+    ),
+    Rem(
+        Box<ExprNode>,
+        Box<ExprNode>,
+        Option<Rc<RefCell<sem::Binding>>>,
+    ),
 }
 
 // --- tokens
@@ -123,7 +135,9 @@ impl ExprNode {
     pub fn tokens(&self) -> SyntaxTokens<'_> {
         match self.kind {
             Expr::Integer(_) => SyntaxTokens::new(self.code.tokens.iter(), vec![]),
-            Expr::Add(ref lhs, ref rhs, ..) => {
+            Expr::Add(ref lhs, ref rhs, ..)
+            | Expr::Sub(ref lhs, ref rhs, ..)
+            | Expr::Rem(ref lhs, ref rhs, ..) => {
                 SyntaxTokens::new(self.code.tokens.iter(), vec![lhs.tokens(), rhs.tokens()])
             }
         }
