@@ -135,6 +135,16 @@ pub enum Expr {
         Option<Box<ExprNode>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ),
+    Mul(
+        Box<ExprNode>,
+        Option<Box<ExprNode>>,
+        Option<Rc<RefCell<sem::Binding>>>,
+    ),
+    Div(
+        Box<ExprNode>,
+        Option<Box<ExprNode>>,
+        Option<Rc<RefCell<sem::Binding>>>,
+    ),
 }
 
 // --- tokens
@@ -150,7 +160,9 @@ impl ExprNode {
             Expr::Integer(_) => SyntaxTokens::new(self.code.tokens.iter(), vec![]),
             Expr::Add(ref lhs, ref rhs, ..)
             | Expr::Sub(ref lhs, ref rhs, ..)
-            | Expr::Rem(ref lhs, ref rhs, ..) => {
+            | Expr::Rem(ref lhs, ref rhs, ..)
+            | Expr::Mul(ref lhs, ref rhs, ..)
+            | Expr::Div(ref lhs, ref rhs, ..) => {
                 let mut children = vec![lhs.tokens()];
 
                 if let Some(rhs) = rhs {

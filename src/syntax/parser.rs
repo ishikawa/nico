@@ -135,7 +135,10 @@ impl<'a> Parser<'a> {
 
     fn parse_binary_op2(&mut self) -> Result<Option<ExprNode>, ParseError> {
         self.debug_trace("parse_binary_op2");
-        self.parse_unary_op()
+        self._parse_binary_op(
+            Parser::parse_unary_op,
+            &[('*', Expr::Mul), ('/', Expr::Div)],
+        )
     }
 
     fn parse_unary_op(&mut self) -> Result<Option<ExprNode>, ParseError> {
