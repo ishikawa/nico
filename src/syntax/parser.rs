@@ -148,20 +148,35 @@ impl Parser<'_> {
                 break;
             }
 
+            let mut rhs;
             let op_token = self.tokenizer.next_token()?;
-
-            let rhs = self.parse_binary_op2()?.ok_or_else(|| {
-                ParseError::syntax_error(self.tokenizer.current_position(), "Expected RHS")
-            })?;
-
-            // node
-            let kind = builder(Box::new(lhs), Box::new(rhs), None);
-            let code = Code::new(vec![
+            let mut tokens = vec![
                 SyntaxToken::Child,
                 SyntaxToken::Interpreted(Rc::new(op_token)),
-                SyntaxToken::Child,
-            ]);
+            ];
+
+            loop {
+                rhs = self.parse_binary_op2()?.map(|rhs| Box::new(rhs));
+
+                if rhs.is_some() {
+                    tokens.push(SyntaxToken::Child);
+                    break;
+                } else {
+                    // If we couldn't parse the right hand expression, retry
+                    // parsing after consuming a token as skipped.
+                    let t = self.tokenizer.next_token()?;
+                    tokens.push(SyntaxToken::skipped(t, "expression"));
+
+                    if self.tokenizer.is_at_end() {
+                        break;
+                    }
+                }
+            }
+
+            // node
+            let kind = builder(Box::new(lhs), rhs, None);
             let r#type = self.new_type_var();
+            let code = Code::new(tokens);
 
             lhs = ExprNode { kind, code, r#type };
         }
@@ -199,12 +214,7 @@ impl Parser<'_> {
 
                 Ok(Some(ExprNode { kind, code, r#type }))
             }
-            token_kind => {
-                return Err(ParseError::syntax_error(
-                    token.range.start,
-                    format!("Unexpected token {}", token_kind),
-                ));
-            }
+            _token_kind => Ok(None),
         }
     }
 
@@ -257,7 +267,7 @@ mod tests {
         assert!(!module.children.is_empty());
 
         let stmt = unwrap_statement(&module.children[0]);
-        assert_matches!(&stmt.expr.kind, Expr::Add(lhs, rhs, ..) => {
+        assert_matches!(&stmt.expr.kind, Expr::Add(lhs, Some(rhs), ..) => {
             assert_matches!(lhs.kind, Expr::Integer(1));
             assert_matches!(rhs.kind, Expr::Integer(2));
         });
@@ -275,13 +285,69 @@ mod tests {
         assert_matches!(token.kind, TokenKind::Integer(2));
     }
 
+    #[test]
+    fn add_integer_missing_node() {
+        let module = Parser::parse_string("1+").unwrap();
+        assert!(!module.children.is_empty());
+
+        let stmt = unwrap_statement(&module.children[0]);
+        assert_matches!(&stmt.expr.kind, Expr::Add(lhs, None, ..) => {
+            assert_matches!(lhs.kind, Expr::Integer(1));
+        });
+
+        let tokens = stmt.tokens().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 3);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(token.kind, TokenKind::Integer(1));
+
+        let token = unwrap_interpreted_token(tokens[1]);
+        assert_matches!(token.kind, TokenKind::Char('+'));
+
+        let (token, expected) = unwrap_skipped_token(tokens[2]);
+        assert_eq!(token.kind, TokenKind::Eos);
+        assert_eq!(expected, "expression");
+    }
+
+    #[test]
+    fn add_integer_skipped_tokens() {
+        let module = Parser::parse_string("1 + % ? 2").unwrap();
+        assert!(!module.children.is_empty());
+
+        let stmt = unwrap_statement(&module.children[0]);
+        assert_matches!(&stmt.expr.kind, Expr::Add(lhs, Some(rhs), ..) => {
+            assert_matches!(lhs.kind, Expr::Integer(1));
+            assert_matches!(rhs.kind, Expr::Integer(2));
+        });
+
+        let tokens = stmt.tokens().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 5);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(token.kind, TokenKind::Integer(1));
+
+        let token = unwrap_interpreted_token(tokens[1]);
+        assert_matches!(token.kind, TokenKind::Char('+'));
+
+        let (token, expected) = unwrap_skipped_token(tokens[2]);
+        assert_eq!(token.kind, TokenKind::Char('%'));
+        assert_eq!(expected, "expression");
+
+        let (token, expected) = unwrap_skipped_token(tokens[3]);
+        assert_eq!(token.kind, TokenKind::Char('?'));
+        assert_eq!(expected, "expression");
+
+        let token = unwrap_interpreted_token(tokens[4]);
+        assert_matches!(token.kind, TokenKind::Integer(2));
+    }
+
     // --- helpers
 
     fn unwrap_statement(node: &TopLevel) -> &StatementNode {
         if let TopLevel::Statement(node) = node {
             node
         } else {
-            panic!()
+            panic!("expected statement")
         }
     }
 
@@ -289,7 +355,15 @@ mod tests {
         if let SyntaxToken::Interpreted(token) = token {
             Rc::clone(token)
         } else {
-            panic!()
+            panic!("expected interpreted token")
+        }
+    }
+
+    fn unwrap_skipped_token(token: &SyntaxToken) -> (Rc<Token>, String) {
+        if let SyntaxToken::Skipped { token, expected } = token {
+            (Rc::clone(token), expected.clone())
+        } else {
+            panic!("expected interpreted token")
         }
     }
 }

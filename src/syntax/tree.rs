@@ -7,8 +7,21 @@ use std::{cell::RefCell, slice};
 pub enum SyntaxToken {
     Interpreted(Rc<Token>),
     Missing(Rc<Token>),
-    Skipped(Rc<Token>),
+    /// A skipped token with the description of an expected node.
+    Skipped {
+        token: Rc<Token>,
+        expected: String,
+    },
     Child,
+}
+
+impl SyntaxToken {
+    pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
+        Self::Skipped {
+            token: Rc::new(token),
+            expected: expected.into(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -109,17 +122,17 @@ pub enum Expr {
     // tokens: [...lhs, <operator>, ...rhs]
     Add(
         Box<ExprNode>,
-        Box<ExprNode>,
+        Option<Box<ExprNode>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ),
     Sub(
         Box<ExprNode>,
-        Box<ExprNode>,
+        Option<Box<ExprNode>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ),
     Rem(
         Box<ExprNode>,
-        Box<ExprNode>,
+        Option<Box<ExprNode>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ),
 }
@@ -138,7 +151,13 @@ impl ExprNode {
             Expr::Add(ref lhs, ref rhs, ..)
             | Expr::Sub(ref lhs, ref rhs, ..)
             | Expr::Rem(ref lhs, ref rhs, ..) => {
-                SyntaxTokens::new(self.code.tokens.iter(), vec![lhs.tokens(), rhs.tokens()])
+                let mut children = vec![lhs.tokens()];
+
+                if let Some(rhs) = rhs {
+                    children.push(rhs.tokens())
+                }
+
+                SyntaxTokens::new(self.code.tokens.iter(), children)
             }
         }
     }
