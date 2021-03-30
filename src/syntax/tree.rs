@@ -145,6 +145,38 @@ pub enum Expr {
         Option<Box<ExprNode>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ),
+
+    // Relational operator
+    Lt(
+        Box<ExprNode>,
+        Option<Box<ExprNode>>,
+        Option<Rc<RefCell<sem::Binding>>>,
+    ), // Less Than
+    Gt(
+        Box<ExprNode>,
+        Option<Box<ExprNode>>,
+        Option<Rc<RefCell<sem::Binding>>>,
+    ), // Greater Than
+    Le(
+        Box<ExprNode>,
+        Option<Box<ExprNode>>,
+        Option<Rc<RefCell<sem::Binding>>>,
+    ), // Less than Equal
+    Ge(
+        Box<ExprNode>,
+        Option<Box<ExprNode>>,
+        Option<Rc<RefCell<sem::Binding>>>,
+    ), // Greater than Equal
+    Eq(
+        Box<ExprNode>,
+        Option<Box<ExprNode>>,
+        Option<Rc<RefCell<sem::Binding>>>,
+    ), // Equal
+    Ne(
+        Box<ExprNode>,
+        Option<Box<ExprNode>>,
+        Option<Rc<RefCell<sem::Binding>>>,
+    ), // Not Equal
 }
 
 // --- tokens
@@ -162,7 +194,13 @@ impl ExprNode {
             | Expr::Sub(ref lhs, ref rhs, ..)
             | Expr::Rem(ref lhs, ref rhs, ..)
             | Expr::Mul(ref lhs, ref rhs, ..)
-            | Expr::Div(ref lhs, ref rhs, ..) => {
+            | Expr::Div(ref lhs, ref rhs, ..)
+            | Expr::Eq(ref lhs, ref rhs, ..)
+            | Expr::Ne(ref lhs, ref rhs, ..)
+            | Expr::Le(ref lhs, ref rhs, ..)
+            | Expr::Ge(ref lhs, ref rhs, ..)
+            | Expr::Lt(ref lhs, ref rhs, ..)
+            | Expr::Gt(ref lhs, ref rhs, ..) => {
                 let mut children = vec![lhs.tokens()];
 
                 if let Some(rhs) = rhs {

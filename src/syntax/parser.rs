@@ -117,19 +117,34 @@ impl<'a> Parser<'a> {
 
     fn parse_rel_op1(&mut self) -> Result<Option<ExprNode>, ParseError> {
         self.debug_trace("parse_rel_op1");
-        self.parse_rel_op2()
+        self._parse_binary_op(
+            Parser::parse_rel_op2,
+            &[(TokenKind::Eq, Expr::Eq), (TokenKind::Ne, Expr::Ne)],
+        )
     }
 
     fn parse_rel_op2(&mut self) -> Result<Option<ExprNode>, ParseError> {
         self.debug_trace("parse_rel_op2");
-        self.parse_binary_op1()
+        self._parse_binary_op(
+            Parser::parse_binary_op1,
+            &[
+                (TokenKind::Le, Expr::Le),
+                (TokenKind::Ge, Expr::Ge),
+                (TokenKind::Char('<'), Expr::Lt),
+                (TokenKind::Char('>'), Expr::Gt),
+            ],
+        )
     }
 
     fn parse_binary_op1(&mut self) -> Result<Option<ExprNode>, ParseError> {
         self.debug_trace("parse_binary_op1");
         self._parse_binary_op(
             Parser::parse_binary_op2,
-            &[('+', Expr::Add), ('-', Expr::Sub), ('%', Expr::Rem)],
+            &[
+                (TokenKind::Char('+'), Expr::Add),
+                (TokenKind::Char('-'), Expr::Sub),
+                (TokenKind::Char('%'), Expr::Rem),
+            ],
         )
     }
 
@@ -137,7 +152,10 @@ impl<'a> Parser<'a> {
         self.debug_trace("parse_binary_op2");
         self._parse_binary_op(
             Parser::parse_unary_op,
-            &[('*', Expr::Mul), ('/', Expr::Div)],
+            &[
+                (TokenKind::Char('*'), Expr::Mul),
+                (TokenKind::Char('/'), Expr::Div),
+            ],
         )
     }
 
@@ -175,7 +193,7 @@ impl<'a> Parser<'a> {
         &mut self,
         next_parser: fn(&mut Parser<'a>) -> Result<Option<ExprNode>, ParseError>,
         operators: &[(
-            char,
+            TokenKind,
             fn(Box<ExprNode>, Option<Box<ExprNode>>, Option<Rc<RefCell<Binding>>>) -> Expr,
         )],
     ) -> Result<Option<ExprNode>, ParseError> {
@@ -188,10 +206,10 @@ impl<'a> Parser<'a> {
 
         loop {
             let mut builder = None;
-            if let Ok(TokenKind::Char(c)) = self.tokenizer.peek_kind() {
+            if let Ok(kind) = self.tokenizer.peek_kind() {
                 builder = operators
                     .iter()
-                    .find(|(op, _)| op == c)
+                    .find(|(op, _)| op == kind)
                     .map(|(_, builder)| builder);
             };
             let builder = if let Some(builder) = builder {
