@@ -1,6 +1,6 @@
 use super::errors::{ParseError, ParseErrorKind};
 use super::tree::*;
-use crate::sem;
+use crate::sem::{self, Binding};
 use crate::tokenizer::{TokenKind, Tokenizer};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
@@ -27,7 +27,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-impl Parser<'_> {
+impl<'a> Parser<'a> {
     pub fn parse_string<S: AsRef<str>>(src: S) -> Result<ModuleNode, ParseError> {
         let tokenizer = Tokenizer::from_string(&src);
         let mut parser = Parser::new(tokenizer, "-");
@@ -127,61 +127,10 @@ impl Parser<'_> {
 
     fn parse_binary_op1(&mut self) -> Result<Option<ExprNode>, ParseError> {
         self.debug_trace("parse_binary_op1");
-
-        let lhs = self.parse_binary_op2()?;
-        let mut lhs = if let Some(lhs) = lhs {
-            lhs
-        } else {
-            return Ok(None);
-        };
-
-        loop {
-            let builder = match self.tokenizer.peek_kind() {
-                Ok(TokenKind::Char('+')) => Expr::Add,
-                Ok(TokenKind::Char('-')) => Expr::Sub,
-                Ok(TokenKind::Char('%')) => Expr::Rem,
-                _ => break,
-            };
-
-            // A newline character terminates node construction.
-            if self.tokenizer.is_newline_seen() {
-                break;
-            }
-
-            let mut rhs;
-            let op_token = self.tokenizer.next_token()?;
-            let mut tokens = vec![
-                SyntaxToken::Child,
-                SyntaxToken::Interpreted(Rc::new(op_token)),
-            ];
-
-            loop {
-                rhs = self.parse_binary_op2()?.map(|rhs| Box::new(rhs));
-
-                if rhs.is_some() {
-                    tokens.push(SyntaxToken::Child);
-                    break;
-                } else {
-                    // If we couldn't parse the right hand expression, retry
-                    // parsing after consuming a token as skipped.
-                    let t = self.tokenizer.next_token()?;
-                    tokens.push(SyntaxToken::skipped(t, "expression"));
-
-                    if self.tokenizer.is_at_end() {
-                        break;
-                    }
-                }
-            }
-
-            // node
-            let kind = builder(Box::new(lhs), rhs, None);
-            let r#type = self.new_type_var();
-            let code = Code::new(tokens);
-
-            lhs = ExprNode { kind, code, r#type };
-        }
-
-        Ok(Some(lhs))
+        self._parse_binary_op(
+            Parser::parse_binary_op2,
+            &[('+', Expr::Add), ('-', Expr::Sub), ('%', Expr::Rem)],
+        )
     }
 
     fn parse_binary_op2(&mut self) -> Result<Option<ExprNode>, ParseError> {
@@ -216,6 +165,77 @@ impl Parser<'_> {
             }
             _token_kind => Ok(None),
         }
+    }
+
+    // --- Generic implementations
+    fn _parse_binary_op(
+        &mut self,
+        next_parser: fn(&mut Parser<'a>) -> Result<Option<ExprNode>, ParseError>,
+        operators: &[(
+            char,
+            fn(Box<ExprNode>, Option<Box<ExprNode>>, Option<Rc<RefCell<Binding>>>) -> Expr,
+        )],
+    ) -> Result<Option<ExprNode>, ParseError> {
+        let lhs = next_parser(self)?;
+        let mut lhs = if let Some(lhs) = lhs {
+            lhs
+        } else {
+            return Ok(None);
+        };
+
+        loop {
+            let mut builder = None;
+            if let Ok(TokenKind::Char(c)) = self.tokenizer.peek_kind() {
+                builder = operators
+                    .iter()
+                    .find(|(op, _)| op == c)
+                    .map(|(_, builder)| builder);
+            };
+            let builder = if let Some(builder) = builder {
+                builder
+            } else {
+                break;
+            };
+
+            // A newline character terminates node construction.
+            if self.tokenizer.is_newline_seen() {
+                break;
+            }
+
+            let mut rhs;
+            let op_token = self.tokenizer.next_token()?;
+            let mut tokens = vec![
+                SyntaxToken::Child,
+                SyntaxToken::Interpreted(Rc::new(op_token)),
+            ];
+
+            loop {
+                rhs = next_parser(self)?.map(|rhs| Box::new(rhs));
+
+                if rhs.is_some() {
+                    tokens.push(SyntaxToken::Child);
+                    break;
+                } else {
+                    // If we couldn't parse the right hand expression, retry
+                    // parsing after consuming a token as skipped.
+                    let t = self.tokenizer.next_token()?;
+                    tokens.push(SyntaxToken::skipped(t, "expression"));
+
+                    if self.tokenizer.is_at_end() {
+                        break;
+                    }
+                }
+            }
+
+            // node
+            let kind = builder(Box::new(lhs), rhs, None);
+            let r#type = self.new_type_var();
+            let code = Code::new(tokens);
+
+            lhs = ExprNode { kind, code, r#type };
+        }
+
+        Ok(Some(lhs))
     }
 
     // --- Helpers
