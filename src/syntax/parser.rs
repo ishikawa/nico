@@ -292,24 +292,41 @@ impl<'a> Parser<'a> {
 
         let token = self.tokenizer.peek()?;
 
-        match &token.kind {
+        match token.kind {
             TokenKind::Eos => Ok(None),
-            TokenKind::Integer(i) => {
-                let i = *i;
-                self._parse_integer(i)
-            }
-            _token_kind => Ok(None),
+            TokenKind::Integer(_) => self._parse_primary_integer(),
+            TokenKind::Identifier(_) => self._parse_primary_identifier(),
+            _ => Ok(None),
         }
     }
 
     // --- Generic implementations
-    fn _parse_integer(&mut self, i: i32) -> ParseResult {
+    fn _parse_primary_integer(&mut self) -> ParseResult {
         let token = self.tokenizer.next_token()?;
-        let kind = Expr::Integer(i);
-        let code = Code::with_token(token);
-        let r#type = wrap(sem::Type::Int32);
 
-        Ok(Some(ExprNode { kind, code, r#type }))
+        if let TokenKind::Integer(i) = token.kind {
+            let kind = Expr::Integer(i);
+            let code = Code::with_token(token);
+            let r#type = wrap(sem::Type::Int32);
+
+            Ok(Some(ExprNode { kind, code, r#type }))
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn _parse_primary_identifier(&mut self) -> ParseResult {
+        let token = self.tokenizer.next_token()?;
+
+        if let TokenKind::Identifier(ref id) = token.kind {
+            let kind = Expr::Identifier(id.clone());
+            let code = Code::with_token(token);
+            let r#type = self.new_type_var();
+
+            Ok(Some(ExprNode { kind, code, r#type }))
+        } else {
+            unreachable!()
+        }
     }
 
     fn _parse_binary_op(
@@ -555,13 +572,15 @@ mod tests {
 
     #[test]
     fn subscript_0() {
-        let module = Parser::parse_string("2[0]").unwrap();
+        let module = Parser::parse_string("a[0]").unwrap();
         assert!(!module.children.is_empty());
         assert_eq!(module.children.len(), 1);
 
         let stmt = unwrap_statement(&module.children[0]);
         assert_matches!(&stmt.expr.kind, Expr::Subscript{ operand, index: Some(index) } => {
-            assert_matches!(&operand.kind, Expr::Integer(2));
+            assert_matches!(&operand.kind, Expr::Identifier(id) => {
+                assert_eq!(id, "a");
+            });
             assert_matches!(&index.kind, Expr::Integer(0));
         });
 
@@ -569,7 +588,9 @@ mod tests {
         assert_eq!(tokens.len(), 4);
 
         let token = unwrap_interpreted_token(tokens[0]);
-        assert_matches!(token.kind, TokenKind::Integer(2));
+        assert_matches!(&token.kind, TokenKind::Identifier(id) => {
+            assert_eq!(id, "a");
+        });
 
         let token = unwrap_interpreted_token(tokens[1]);
         assert_matches!(token.kind, TokenKind::Char('['));
