@@ -9,6 +9,8 @@ use std::rc::Rc;
 
 const DEBUG: bool = false;
 
+pub type ParseResult = Result<Option<ExprNode>, ParseError>;
+
 type BinaryOpBuilder =
     fn(Box<ExprNode>, Option<Box<ExprNode>>, Option<Rc<RefCell<Binding>>>) -> Expr;
 
@@ -113,12 +115,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expr(&mut self) -> Result<Option<ExprNode>, ParseError> {
+    fn parse_expr(&mut self) -> ParseResult {
         self.debug_trace("parse_expr");
         self.parse_rel_op1()
     }
 
-    fn parse_rel_op1(&mut self) -> Result<Option<ExprNode>, ParseError> {
+    fn parse_rel_op1(&mut self) -> ParseResult {
         self.debug_trace("parse_rel_op1");
         self._parse_binary_op(
             Parser::parse_rel_op2,
@@ -126,7 +128,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_rel_op2(&mut self) -> Result<Option<ExprNode>, ParseError> {
+    fn parse_rel_op2(&mut self) -> ParseResult {
         self.debug_trace("parse_rel_op2");
         self._parse_binary_op(
             Parser::parse_binary_op1,
@@ -139,7 +141,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_binary_op1(&mut self) -> Result<Option<ExprNode>, ParseError> {
+    fn parse_binary_op1(&mut self) -> ParseResult {
         self.debug_trace("parse_binary_op1");
         self._parse_binary_op(
             Parser::parse_binary_op2,
@@ -151,7 +153,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_binary_op2(&mut self) -> Result<Option<ExprNode>, ParseError> {
+    fn parse_binary_op2(&mut self) -> ParseResult {
         self.debug_trace("parse_binary_op2");
         self._parse_binary_op(
             Parser::parse_unary_op,
@@ -162,7 +164,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_unary_op(&mut self) -> Result<Option<ExprNode>, ParseError> {
+    fn parse_unary_op(&mut self) -> ParseResult {
         self.debug_trace("parse_unary_op");
 
         let builder = match self.tokenizer.peek_kind() {
@@ -204,12 +206,12 @@ impl<'a> Parser<'a> {
         Ok(Some(ExprNode { kind, code, r#type }))
     }
 
-    fn parse_access(&mut self) -> Result<Option<ExprNode>, ParseError> {
+    fn parse_access(&mut self) -> ParseResult {
         self.debug_trace("parse_access");
         self.parse_primary()
     }
 
-    fn parse_primary(&mut self) -> Result<Option<ExprNode>, ParseError> {
+    fn parse_primary(&mut self) -> ParseResult {
         self.debug_trace("parse_primary");
 
         let token = self.tokenizer.peek()?;
@@ -217,24 +219,28 @@ impl<'a> Parser<'a> {
         match &token.kind {
             TokenKind::Eos => Ok(None),
             TokenKind::Integer(i) => {
-                let kind = Expr::Integer(*i);
-                let token = self.tokenizer.next_token()?;
-                let code = Code::with_token(token);
-                let r#type = wrap(sem::Type::Int32);
-
-                Ok(Some(ExprNode { kind, code, r#type }))
+                let i = *i;
+                self._parse_integer(i)
             }
             _token_kind => Ok(None),
         }
     }
 
     // --- Generic implementations
+    fn _parse_integer(&mut self, i: i32) -> ParseResult {
+        let token = self.tokenizer.next_token()?;
+        let kind = Expr::Integer(i);
+        let code = Code::with_token(token);
+        let r#type = wrap(sem::Type::Int32);
+
+        Ok(Some(ExprNode { kind, code, r#type }))
+    }
 
     fn _parse_binary_op(
         &mut self,
-        next_parser: fn(&mut Parser<'a>) -> Result<Option<ExprNode>, ParseError>,
+        next_parser: fn(&mut Parser<'a>) -> ParseResult,
         operators: &[(TokenKind, BinaryOpBuilder)],
-    ) -> Result<Option<ExprNode>, ParseError> {
+    ) -> ParseResult {
         let lhs = next_parser(self)?;
         let mut lhs = if let Some(lhs) = lhs {
             lhs
