@@ -175,6 +175,21 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
+    pub fn build_token<S: Into<String>>(&self, kind: TokenKind, text: S) -> Token {
+        let text = text.into();
+
+        Token {
+            kind,
+            range: EffectiveRange {
+                length: text.len(),
+                start: self.current_position(),
+                end: self.current_position(),
+            },
+            text,
+            leading_trivia: vec![],
+        }
+    }
+
     pub fn next_token(&mut self) -> Result<Token, TokenError> {
         match self.peeked.take() {
             Some(v) => v,

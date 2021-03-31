@@ -117,6 +117,10 @@ pub struct ExprNode {
 #[derive(Debug)]
 pub enum Expr {
     Integer(i32),
+    Subscript {
+        operand: Box<ExprNode>,
+        index: Option<Box<ExprNode>>,
+    },
 
     // Binary Op
     // tokens: [...lhs, <operator>, ...rhs]
@@ -194,7 +198,11 @@ impl ExprNode {
     pub fn tokens(&self) -> SyntaxTokens<'_> {
         match self.kind {
             Expr::Integer(_) => SyntaxTokens::new(self.code.tokens.iter(), vec![]),
-            Expr::Add(ref lhs, ref rhs, ..)
+            Expr::Subscript {
+                operand: ref lhs,
+                index: ref rhs,
+            }
+            | Expr::Add(ref lhs, ref rhs, ..)
             | Expr::Sub(ref lhs, ref rhs, ..)
             | Expr::Rem(ref lhs, ref rhs, ..)
             | Expr::Mul(ref lhs, ref rhs, ..)

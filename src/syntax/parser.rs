@@ -208,7 +208,83 @@ impl<'a> Parser<'a> {
 
     fn parse_access(&mut self) -> ParseResult {
         self.debug_trace("parse_access");
-        self.parse_primary()
+
+        let operand = self.parse_primary()?;
+        let mut operand = if let Some(operand) = operand {
+            operand
+        } else {
+            return Ok(None);
+        };
+
+        loop {
+            // To distinguish `x\n[...]` and `x[...]`, we have to capture
+            // `tokenizer.is_newline_seen()`, so try to advance tokenizer.
+            if self.tokenizer.peek().is_err() || self.tokenizer.is_newline_seen() {
+                break;
+            }
+
+            let token = self.tokenizer.peek()?;
+
+            match token.kind {
+                TokenKind::Char('[') => {
+                    let open_token = self.tokenizer.next_token()?;
+                    let mut index_node;
+                    let mut tokens = vec![
+                        SyntaxToken::Child,
+                        SyntaxToken::Interpreted(Rc::new(open_token)),
+                    ];
+                    let mut closed = false;
+
+                    loop {
+                        index_node = self.parse_expr()?.map(Box::new);
+
+                        if index_node.is_some() {
+                            tokens.push(SyntaxToken::Child);
+                            break;
+                        } else {
+                            // If we couldn't parse the subscript expression, retry
+                            // parsing after consuming a token as skipped.
+                            let t = self.tokenizer.next_token()?;
+
+                            if let TokenKind::Char(']') = t.kind {
+                                closed = true;
+                            }
+
+                            tokens.push(SyntaxToken::skipped(t, "expression"));
+
+                            if self.tokenizer.is_at_end() || closed {
+                                break;
+                            }
+                        }
+                    }
+
+                    // Read "]" if needed.
+                    if !closed {
+                        let t = self.tokenizer.next_token()?;
+
+                        if let TokenKind::Char(']') = t.kind {
+                            tokens.push(SyntaxToken::Interpreted(Rc::new(t)));
+                        } else {
+                            let missed = self.tokenizer.build_token(TokenKind::Char(']'), "]");
+                            tokens.push(SyntaxToken::Missing(Rc::new(missed)))
+                        }
+                    }
+
+                    // node
+                    let kind = Expr::Subscript {
+                        operand: Box::new(operand),
+                        index: index_node,
+                    };
+                    let r#type = self.new_type_var();
+                    let code = Code::new(tokens);
+
+                    operand = ExprNode { kind, code, r#type };
+                }
+                _ => break,
+            }
+        }
+
+        Ok(Some(operand))
     }
 
     fn parse_primary(&mut self) -> ParseResult {
@@ -475,6 +551,34 @@ mod tests {
 
         let token = unwrap_interpreted_token(tokens[2]);
         assert_matches!(token.kind, TokenKind::Integer(1));
+    }
+
+    #[test]
+    fn subscript_0() {
+        let module = Parser::parse_string("2[0]").unwrap();
+        assert!(!module.children.is_empty());
+        assert_eq!(module.children.len(), 1);
+
+        let stmt = unwrap_statement(&module.children[0]);
+        assert_matches!(&stmt.expr.kind, Expr::Subscript{ operand, index: Some(index) } => {
+            assert_matches!(&operand.kind, Expr::Integer(2));
+            assert_matches!(&index.kind, Expr::Integer(0));
+        });
+
+        let tokens = stmt.tokens().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 4);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(token.kind, TokenKind::Integer(2));
+
+        let token = unwrap_interpreted_token(tokens[1]);
+        assert_matches!(token.kind, TokenKind::Char('['));
+
+        let token = unwrap_interpreted_token(tokens[2]);
+        assert_matches!(token.kind, TokenKind::Integer(0));
+
+        let token = unwrap_interpreted_token(tokens[3]);
+        assert_matches!(token.kind, TokenKind::Char(']'));
     }
 
     // --- helpers
