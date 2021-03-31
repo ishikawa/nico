@@ -177,6 +177,10 @@ pub enum Expr {
         Option<Box<ExprNode>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ), // Not Equal
+
+    // Unary operator
+    Minus(Option<Box<ExprNode>>, Option<Rc<RefCell<sem::Binding>>>),
+    Plus(Option<Box<ExprNode>>, Option<Rc<RefCell<sem::Binding>>>),
 }
 
 // --- tokens
@@ -205,6 +209,15 @@ impl ExprNode {
 
                 if let Some(rhs) = rhs {
                     children.push(rhs.tokens())
+                }
+
+                SyntaxTokens::new(self.code.tokens.iter(), children)
+            }
+            Expr::Plus(ref operand, ..) | Expr::Minus(ref operand, ..) => {
+                let mut children = vec![];
+
+                if let Some(operand) = operand {
+                    children.push(operand.tokens())
                 }
 
                 SyntaxTokens::new(self.code.tokens.iter(), children)

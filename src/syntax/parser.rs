@@ -9,6 +9,9 @@ use std::rc::Rc;
 
 const DEBUG: bool = false;
 
+type BinaryOpBuilder =
+    fn(Box<ExprNode>, Option<Box<ExprNode>>, Option<Rc<RefCell<Binding>>>) -> Expr;
+
 #[derive(Debug)]
 pub struct Parser<'a> {
     /// The filename, uri of a source code.
@@ -161,7 +164,44 @@ impl<'a> Parser<'a> {
 
     fn parse_unary_op(&mut self) -> Result<Option<ExprNode>, ParseError> {
         self.debug_trace("parse_unary_op");
-        self.parse_access()
+
+        let builder = match self.tokenizer.peek_kind() {
+            Ok(TokenKind::Char('+')) => Expr::Plus,
+            Ok(TokenKind::Char('-')) => Expr::Minus,
+            _ => return self.parse_access(),
+        };
+
+        // unary operators are right associative.
+        let op_token = self.tokenizer.next_token()?;
+        let mut tokens = vec![SyntaxToken::Interpreted(Rc::new(op_token))];
+        let mut operand = None;
+
+        loop {
+            match self.parse_unary_op()? {
+                None => {
+                    // If we couldn't parse the right hand expression, retry
+                    // parsing after consuming a token as skipped.
+                    let t = self.tokenizer.next_token()?;
+                    tokens.push(SyntaxToken::skipped(t, "expression"));
+
+                    if self.tokenizer.is_at_end() {
+                        break;
+                    }
+                }
+                Some(node) => {
+                    operand = Some(node);
+                    tokens.push(SyntaxToken::Child);
+                    break;
+                }
+            }
+        }
+
+        // node
+        let kind = builder(operand.map(Box::new), None);
+        let r#type = self.new_type_var();
+        let code = Code::new(tokens);
+
+        Ok(Some(ExprNode { kind, code, r#type }))
     }
 
     fn parse_access(&mut self) -> Result<Option<ExprNode>, ParseError> {
@@ -189,13 +229,11 @@ impl<'a> Parser<'a> {
     }
 
     // --- Generic implementations
+
     fn _parse_binary_op(
         &mut self,
         next_parser: fn(&mut Parser<'a>) -> Result<Option<ExprNode>, ParseError>,
-        operators: &[(
-            TokenKind,
-            fn(Box<ExprNode>, Option<Box<ExprNode>>, Option<Rc<RefCell<Binding>>>) -> Expr,
-        )],
+        operators: &[(TokenKind, BinaryOpBuilder)],
     ) -> Result<Option<ExprNode>, ParseError> {
         let lhs = next_parser(self)?;
         let mut lhs = if let Some(lhs) = lhs {
@@ -223,15 +261,15 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            let mut rhs;
             let op_token = self.tokenizer.next_token()?;
+            let mut rhs;
             let mut tokens = vec![
                 SyntaxToken::Child,
                 SyntaxToken::Interpreted(Rc::new(op_token)),
             ];
 
             loop {
-                rhs = next_parser(self)?.map(|rhs| Box::new(rhs));
+                rhs = next_parser(self)?.map(Box::new);
 
                 if rhs.is_some() {
                     tokens.push(SyntaxToken::Child);
@@ -289,6 +327,7 @@ mod tests {
     fn number_integer() {
         let module = Parser::parse_string("42").unwrap();
         assert!(!module.children.is_empty());
+        assert_eq!(module.children.len(), 1);
 
         let stmt = unwrap_statement(&module.children[0]);
         assert_matches!(stmt.expr.kind, Expr::Integer(42));
@@ -306,6 +345,7 @@ mod tests {
     fn add_integer() {
         let module = Parser::parse_string("1+2").unwrap();
         assert!(!module.children.is_empty());
+        assert_eq!(module.children.len(), 1);
 
         let stmt = unwrap_statement(&module.children[0]);
         assert_matches!(&stmt.expr.kind, Expr::Add(lhs, Some(rhs), ..) => {
@@ -330,6 +370,7 @@ mod tests {
     fn add_integer_missing_node() {
         let module = Parser::parse_string("1+").unwrap();
         assert!(!module.children.is_empty());
+        assert_eq!(module.children.len(), 1);
 
         let stmt = unwrap_statement(&module.children[0]);
         assert_matches!(&stmt.expr.kind, Expr::Add(lhs, None, ..) => {
@@ -354,6 +395,7 @@ mod tests {
     fn add_integer_skipped_tokens() {
         let module = Parser::parse_string("1 + % ? 2").unwrap();
         assert!(!module.children.is_empty());
+        assert_eq!(module.children.len(), 1);
 
         let stmt = unwrap_statement(&module.children[0]);
         assert_matches!(&stmt.expr.kind, Expr::Add(lhs, Some(rhs), ..) => {
@@ -380,6 +422,53 @@ mod tests {
 
         let token = unwrap_interpreted_token(tokens[4]);
         assert_matches!(token.kind, TokenKind::Integer(2));
+    }
+
+    #[test]
+    fn unary_op() {
+        let module = Parser::parse_string("-1").unwrap();
+        assert!(!module.children.is_empty());
+        assert_eq!(module.children.len(), 1);
+
+        let stmt = unwrap_statement(&module.children[0]);
+        assert_matches!(&stmt.expr.kind, Expr::Minus(Some(operand), ..) => {
+            assert_matches!(operand.kind, Expr::Integer(1));
+        });
+
+        let tokens = stmt.tokens().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 2);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(token.kind, TokenKind::Char('-'));
+
+        let token = unwrap_interpreted_token(tokens[1]);
+        assert_matches!(token.kind, TokenKind::Integer(1));
+    }
+
+    #[test]
+    fn unary_op_nested() {
+        let module = Parser::parse_string("-+1").unwrap();
+        assert!(!module.children.is_empty());
+        assert_eq!(module.children.len(), 1);
+
+        let stmt = unwrap_statement(&module.children[0]);
+        assert_matches!(&stmt.expr.kind, Expr::Minus(Some(operand), ..) => {
+            assert_matches!(&operand.kind, Expr::Plus(Some(operand), ..) => {
+                assert_matches!(operand.kind, Expr::Integer(1));
+            });
+        });
+
+        let tokens = stmt.tokens().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 3);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(token.kind, TokenKind::Char('-'));
+
+        let token = unwrap_interpreted_token(tokens[1]);
+        assert_matches!(token.kind, TokenKind::Char('+'));
+
+        let token = unwrap_interpreted_token(tokens[2]);
+        assert_matches!(token.kind, TokenKind::Integer(1));
     }
 
     // --- helpers
