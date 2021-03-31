@@ -39,6 +39,7 @@ impl Code {
     }
 }
 
+#[derive(Debug)]
 pub struct ModuleNode {
     pub children: Vec<TopLevel>,
 }

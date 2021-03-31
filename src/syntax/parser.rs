@@ -260,9 +260,8 @@ impl<'a> Parser<'a> {
 
                     // Read "]" if needed.
                     if !closed {
-                        let t = self.tokenizer.next_token()?;
-
-                        if let TokenKind::Char(']') = t.kind {
+                        if let TokenKind::Char(']') = self.tokenizer.peek_kind()? {
+                            let t = self.tokenizer.next_token()?;
                             tokens.push(SyntaxToken::Interpreted(Rc::new(t)));
                         } else {
                             let missed = self.tokenizer.build_token(TokenKind::Char(']'), "]");
@@ -571,7 +570,7 @@ mod tests {
     }
 
     #[test]
-    fn subscript_0() {
+    fn subscript_index() {
         let module = Parser::parse_string("a[0]").unwrap();
         assert!(!module.children.is_empty());
         assert_eq!(module.children.len(), 1);
@@ -602,6 +601,56 @@ mod tests {
         assert_matches!(token.kind, TokenKind::Char(']'));
     }
 
+    #[test]
+    fn subscript_skip_close() {
+        let module = Parser::parse_string("a[]").unwrap();
+        assert!(!module.children.is_empty());
+        assert_eq!(module.children.len(), 1);
+
+        let stmt = unwrap_statement(&module.children[0]);
+        assert_matches!(&stmt.expr.kind, Expr::Subscript{ operand, index: None } => {
+            assert_matches!(&operand.kind, Expr::Identifier(id) => {
+                assert_eq!(id, "a");
+            });
+        });
+
+        let tokens = stmt.tokens().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 3);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(&token.kind, TokenKind::Identifier(id) => {
+            assert_eq!(id, "a");
+        });
+
+        let token = unwrap_interpreted_token(tokens[1]);
+        assert_matches!(token.kind, TokenKind::Char('['));
+
+        let (token, expected) = unwrap_skipped_token(tokens[2]);
+        assert_eq!(expected, "expression");
+        assert_matches!(token.kind, TokenKind::Char(']'));
+    }
+
+    #[test]
+    fn subscript_not_closed() {
+        let module = Parser::parse_string("a[1\nb").unwrap();
+        assert_eq!(module.children.len(), 2);
+
+        // subscript
+        let stmt = unwrap_statement(&module.children[0]);
+        assert_matches!(&stmt.expr.kind, Expr::Subscript{ operand, index: Some(index) } => {
+            assert_matches!(&operand.kind, Expr::Identifier(id) => {
+                assert_eq!(id, "a");
+            });
+            assert_matches!(&index.kind, Expr::Integer(1));
+        });
+
+        let tokens = stmt.tokens().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 4);
+
+        let token = unwrap_missing_token(tokens[3]);
+        assert_matches!(token.kind, TokenKind::Char(']'));
+    }
+
     // --- helpers
 
     fn unwrap_statement(node: &TopLevel) -> &StatementNode {
@@ -620,11 +669,19 @@ mod tests {
         }
     }
 
+    fn unwrap_missing_token(token: &SyntaxToken) -> Rc<Token> {
+        if let SyntaxToken::Missing(token) = token {
+            Rc::clone(token)
+        } else {
+            panic!("expected missing token")
+        }
+    }
+
     fn unwrap_skipped_token(token: &SyntaxToken) -> (Rc<Token>, String) {
         if let SyntaxToken::Skipped { token, expected } = token {
             (Rc::clone(token), expected.clone())
         } else {
-            panic!("expected interpreted token")
+            panic!("expected skipped token")
         }
     }
 }
