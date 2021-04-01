@@ -209,7 +209,7 @@ impl<'a> Parser<'a> {
     fn parse_access(&mut self) -> ParseResult {
         self.debug_trace("parse_access");
 
-        let operand = self.parse_primary()?;
+        let operand = self.parse_primary();
         let mut operand = if let Some(operand) = operand {
             operand
         } else {
@@ -288,21 +288,22 @@ impl<'a> Parser<'a> {
         Ok(Some(operand))
     }
 
-    fn parse_primary(&mut self) -> ParseResult {
+    fn parse_primary(&mut self) -> Option<ExprNode> {
         self.debug_trace("parse_primary");
 
         let token = self.tokenizer.peek();
+        let node = match token.kind {
+            TokenKind::Integer(_) => self.read_integer(),
+            TokenKind::Identifier(_) => self.read_identifier(),
+            TokenKind::StringStart => self.read_string(),
+            _ => return None,
+        };
 
-        match token.kind {
-            TokenKind::Eos => Ok(None),
-            TokenKind::Integer(_) => self._parse_primary_integer(),
-            TokenKind::Identifier(_) => self._parse_primary_identifier(),
-            _ => Ok(None),
-        }
+        Some(node)
     }
 
     // --- Generic implementations
-    fn _parse_primary_integer(&mut self) -> ParseResult {
+    fn read_integer(&mut self) -> ExprNode {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
@@ -310,13 +311,13 @@ impl<'a> Parser<'a> {
             let code = Code::with_token(token);
             let r#type = wrap(sem::Type::Int32);
 
-            Ok(Some(ExprNode { kind, code, r#type }))
+            ExprNode { kind, code, r#type }
         } else {
             unreachable!()
         }
     }
 
-    fn _parse_primary_identifier(&mut self) -> ParseResult {
+    fn read_identifier(&mut self) -> ExprNode {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Identifier(ref id) = token.kind {
@@ -324,10 +325,54 @@ impl<'a> Parser<'a> {
             let code = Code::with_token(token);
             let r#type = self.new_type_var();
 
-            Ok(Some(ExprNode { kind, code, r#type }))
+            ExprNode { kind, code, r#type }
         } else {
             unreachable!()
         }
+    }
+
+    fn read_string(&mut self) -> ExprNode {
+        let start_token = self.tokenizer.next_token(); // StringStart
+        let mut tokens = vec![SyntaxToken::Interpreted(Rc::new(start_token))];
+        let mut string = String::new();
+        let mut has_error = false;
+
+        loop {
+            let token = self.tokenizer.next_token();
+
+            match token.kind {
+                TokenKind::StringContent(ref s) => {
+                    if !has_error {
+                        string.push_str(s);
+                    }
+                    tokens.push(SyntaxToken::Interpreted(Rc::new(token)));
+                }
+                TokenKind::StringEnd => {
+                    tokens.push(SyntaxToken::Interpreted(Rc::new(token)));
+                    break;
+                }
+                TokenKind::UnrecognizedEscapeSequence(_) => {
+                    tokens.push(SyntaxToken::skipped(token, "ESCAPE SEQUENCE"));
+                    has_error = true;
+                }
+                _ => {
+                    let missed = self.tokenizer.build_token(TokenKind::StringEnd, "\"");
+                    tokens.push(SyntaxToken::Missing(Rc::new(missed)));
+                    has_error = true;
+                    break;
+                }
+            }
+        }
+
+        let kind = if has_error {
+            Expr::String(None)
+        } else {
+            Expr::String(Some(string))
+        };
+        let code = Code::new(tokens);
+        let r#type = wrap(sem::Type::String);
+
+        ExprNode { kind, code, r#type }
     }
 
     fn _parse_binary_op(
