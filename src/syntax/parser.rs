@@ -59,7 +59,7 @@ impl<'a> Parser<'a> {
             // No top level constructs can be consumed. It may be at the end of input or
             // parse error.
             else {
-                let token = self.tokenizer.peek()?;
+                let token = self.tokenizer.peek();
 
                 match &token.kind {
                     TokenKind::Eos => break,
@@ -94,9 +94,9 @@ impl<'a> Parser<'a> {
     fn parse_stmt(&mut self) -> Result<Option<StatementNode>, ParseError> {
         self.debug_trace("parse_stmt");
 
-        match self.tokenizer.peek_kind()? {
+        match self.tokenizer.peek_kind() {
             TokenKind::Let => {
-                self.tokenizer.next_token()?;
+                self.tokenizer.next_token();
             }
             _ => return self.parse_stmt_expr(),
         };
@@ -168,13 +168,13 @@ impl<'a> Parser<'a> {
         self.debug_trace("parse_unary_op");
 
         let builder = match self.tokenizer.peek_kind() {
-            Ok(TokenKind::Char('+')) => Expr::Plus,
-            Ok(TokenKind::Char('-')) => Expr::Minus,
+            TokenKind::Char('+') => Expr::Plus,
+            TokenKind::Char('-') => Expr::Minus,
             _ => return self.parse_access(),
         };
 
         // unary operators are right associative.
-        let op_token = self.tokenizer.next_token()?;
+        let op_token = self.tokenizer.next_token();
         let mut tokens = vec![SyntaxToken::Interpreted(Rc::new(op_token))];
         let mut operand = None;
 
@@ -183,7 +183,7 @@ impl<'a> Parser<'a> {
                 None => {
                     // If we couldn't parse the right hand expression, retry
                     // parsing after consuming a token as skipped.
-                    let t = self.tokenizer.next_token()?;
+                    let t = self.tokenizer.next_token();
                     tokens.push(SyntaxToken::skipped(t, "expression"));
 
                     if self.tokenizer.is_at_end() {
@@ -219,15 +219,17 @@ impl<'a> Parser<'a> {
         loop {
             // To distinguish `x\n[...]` and `x[...]`, we have to capture
             // `tokenizer.is_newline_seen()`, so try to advance tokenizer.
-            if self.tokenizer.peek().is_err() || self.tokenizer.is_newline_seen() {
+            self.tokenizer.peek();
+
+            if self.tokenizer.is_newline_seen() {
                 break;
             }
 
-            let token = self.tokenizer.peek()?;
+            let token = self.tokenizer.peek();
 
             match token.kind {
                 TokenKind::Char('[') => {
-                    let open_token = self.tokenizer.next_token()?;
+                    let open_token = self.tokenizer.next_token();
                     let mut index_node;
                     let mut tokens = vec![
                         SyntaxToken::Child,
@@ -244,7 +246,7 @@ impl<'a> Parser<'a> {
                         } else {
                             // If we couldn't parse the subscript expression, retry
                             // parsing after consuming a token as skipped.
-                            let t = self.tokenizer.next_token()?;
+                            let t = self.tokenizer.next_token();
 
                             if let TokenKind::Char(']') = t.kind {
                                 closed = true;
@@ -260,8 +262,8 @@ impl<'a> Parser<'a> {
 
                     // Read "]" if needed.
                     if !closed {
-                        if let TokenKind::Char(']') = self.tokenizer.peek_kind()? {
-                            let t = self.tokenizer.next_token()?;
+                        if let TokenKind::Char(']') = self.tokenizer.peek_kind() {
+                            let t = self.tokenizer.next_token();
                             tokens.push(SyntaxToken::Interpreted(Rc::new(t)));
                         } else {
                             let missed = self.tokenizer.build_token(TokenKind::Char(']'), "]");
@@ -289,7 +291,7 @@ impl<'a> Parser<'a> {
     fn parse_primary(&mut self) -> ParseResult {
         self.debug_trace("parse_primary");
 
-        let token = self.tokenizer.peek()?;
+        let token = self.tokenizer.peek();
 
         match token.kind {
             TokenKind::Eos => Ok(None),
@@ -301,7 +303,7 @@ impl<'a> Parser<'a> {
 
     // --- Generic implementations
     fn _parse_primary_integer(&mut self) -> ParseResult {
-        let token = self.tokenizer.next_token()?;
+        let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
             let kind = Expr::Integer(i);
@@ -315,7 +317,7 @@ impl<'a> Parser<'a> {
     }
 
     fn _parse_primary_identifier(&mut self) -> ParseResult {
-        let token = self.tokenizer.next_token()?;
+        let token = self.tokenizer.next_token();
 
         if let TokenKind::Identifier(ref id) = token.kind {
             let kind = Expr::Identifier(id.clone());
@@ -341,13 +343,12 @@ impl<'a> Parser<'a> {
         };
 
         loop {
-            let mut builder = None;
-            if let Ok(kind) = self.tokenizer.peek_kind() {
-                builder = operators
-                    .iter()
-                    .find(|(op, _)| op == kind)
-                    .map(|(_, builder)| builder);
-            };
+            let kind = self.tokenizer.peek_kind();
+            let builder = operators
+                .iter()
+                .find(|(op, _)| op == kind)
+                .map(|(_, builder)| builder);
+
             let builder = if let Some(builder) = builder {
                 builder
             } else {
@@ -359,7 +360,7 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            let op_token = self.tokenizer.next_token()?;
+            let op_token = self.tokenizer.next_token();
             let mut rhs;
             let mut tokens = vec![
                 SyntaxToken::Child,
@@ -375,7 +376,7 @@ impl<'a> Parser<'a> {
                 } else {
                     // If we couldn't parse the right hand expression, retry
                     // parsing after consuming a token as skipped.
-                    let t = self.tokenizer.next_token()?;
+                    let t = self.tokenizer.next_token();
                     tokens.push(SyntaxToken::skipped(t, "expression"));
 
                     if self.tokenizer.is_at_end() {

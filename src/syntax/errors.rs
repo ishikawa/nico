@@ -1,4 +1,4 @@
-use crate::tokenizer::{Position, Token, TokenError, TokenErrorKind};
+use crate::tokenizer::{Position, Token};
 use std::fmt;
 use thiserror::Error;
 
@@ -35,21 +35,5 @@ impl fmt::Display for ParseErrorKind {
         match self {
             ParseErrorKind::SyntaxError(message) => write!(f, "Syntax error: {}", message),
         }
-    }
-}
-
-impl From<&TokenError> for ParseError {
-    fn from(err: &TokenError) -> Self {
-        match &err.kind {
-            TokenErrorKind::Error(message) => ParseError {
-                position: err.position,
-                kind: ParseErrorKind::SyntaxError(message.clone()),
-            },
-        }
-    }
-}
-impl From<TokenError> for ParseError {
-    fn from(err: TokenError) -> Self {
-        Self::from(&err)
     }
 }

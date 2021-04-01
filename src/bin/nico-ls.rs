@@ -224,13 +224,7 @@ impl Connection {
         loop {
             let mut abs_semantic_tokens = vec![];
 
-            let token = match tokenizer.next_token() {
-                Ok(token) => token,
-                Err(err) => {
-                    warn!("ERROR: {}", err);
-                    break;
-                }
-            };
+            let token = tokenizer.next_token();
 
             // Comments
             for trivia in token.leading_trivia {
@@ -256,7 +250,6 @@ impl Connection {
                     | TokenKind::Struct
                     | TokenKind::When
                     | TokenKind::Case => SemanticTokenType::KEYWORD,
-                    TokenKind::String(_) => SemanticTokenType::STRING,
                     TokenKind::Identifier(_) => SemanticTokenType::VARIABLE,
                     TokenKind::Integer(_) => SemanticTokenType::NUMBER,
                     TokenKind::Eq | TokenKind::Ne | TokenKind::Le | TokenKind::Ge => {
