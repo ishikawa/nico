@@ -49,6 +49,7 @@ pub enum TopLevel {
     Struct(StructNode),
     Function(FunctionNode),
     Statement(StatementNode),
+    Unknown(Token),
 }
 
 /// Types

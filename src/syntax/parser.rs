@@ -1,4 +1,4 @@
-use super::errors::{ParseError, ParseErrorKind};
+use super::errors::ParseError;
 use super::tree::*;
 use crate::sem::{self, Binding};
 use crate::tokenizer::{TokenKind, Tokenizer};
@@ -63,14 +63,9 @@ impl<'a> Parser<'a> {
 
                 match &token.kind {
                     TokenKind::Eos => break,
-                    kind => {
-                        return Err(ParseError {
-                            position: token.range.start,
-                            kind: ParseErrorKind::SyntaxError(format!(
-                                "Unrecognized token: {}",
-                                kind
-                            )),
-                        });
+                    _ => {
+                        let token = self.tokenizer.next_token();
+                        children.push(TopLevel::Unknown(token));
                     }
                 }
             }
