@@ -203,7 +203,7 @@ impl<'a> Tokenizer<'a> {
     fn current_range(&self) -> EffectiveRange {
         EffectiveRange {
             length: self.token_text.len(),
-            start: self.start_position.take().unwrap(),
+            start: self.start_position.unwrap().clone(),
             end: self.current_position(),
         }
     }

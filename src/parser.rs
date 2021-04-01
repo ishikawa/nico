@@ -890,7 +890,7 @@ impl Parser {
                 tokenizer.next_token();
                 Ok(Some(context.typed_expr(expr)))
             }
-            TokenKind::String(_) => {
+            TokenKind::StringStart => {
                 let content = expect_string(tokenizer, "constant")?;
                 let expr = Expr::String {
                     content,
@@ -1331,11 +1331,23 @@ fn expect_identifier(tokenizer: &mut Tokenizer, node_kind: &str) -> Result<Strin
 fn expect_string(tokenizer: &mut Tokenizer, node_kind: &str) -> Result<String, ParseError> {
     let token = tokenizer.next_token();
 
-    if let TokenKind::String(s) = token.kind {
-        Ok(s)
-    } else {
-        Err(ParseError::mismatch_token(&token, node_kind))
+    if let TokenKind::StringStart = token.kind {
+        let mut string = String::new();
+
+        loop {
+            let token = tokenizer.next_token();
+
+            match token.kind {
+                TokenKind::StringEnd => break,
+                TokenKind::StringContent(ref s) => string.push_str(s),
+                _ => return Err(ParseError::mismatch_token(&token, node_kind)),
+            }
+        }
+
+        return Ok(string);
     }
+
+    Err(ParseError::mismatch_token(&token, node_kind))
 }
 
 impl fmt::Display for Pattern {
