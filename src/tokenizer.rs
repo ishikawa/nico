@@ -203,7 +203,7 @@ impl<'a> Tokenizer<'a> {
     fn current_range(&self) -> EffectiveRange {
         EffectiveRange {
             length: self.token_text.len(),
-            start: self.start_position.unwrap().clone(),
+            start: self.start_position.unwrap(),
             end: self.current_position(),
         }
     }
@@ -235,6 +235,7 @@ impl<'a> Tokenizer<'a> {
                         '.' => self.read_dot(),
                         '"' => {
                             self.next_char();
+                            self.mode = TokenizerMode::String;
                             TokenKind::StringStart
                         }
                         x => {
@@ -300,7 +301,7 @@ impl<'a> Tokenizer<'a> {
         let mut string = String::new();
         self.next_char();
 
-        let c = match self.peek_char() {
+        let c = match self.next_char() {
             Some(c) => c,
             None => return TokenKind::Char('\\'),
         };
@@ -318,21 +319,16 @@ impl<'a> Tokenizer<'a> {
             }
         };
 
-        return TokenKind::StringContent(string);
+        TokenKind::StringContent(string)
     }
 
     fn read_string_content(&mut self) -> TokenKind {
         let mut string = String::new();
         string.push(self.next_char().unwrap());
 
-        loop {
-            let c = match self.peek_char() {
-                Some(c) => c,
-                None => break,
-            };
-
+        while let Some(c) = self.peek_char() {
             match c {
-                '"' | '\r' | '\n' => {
+                '"' | '\\' | '\r' | '\n' => {
                     break;
                 }
                 c => {
@@ -342,7 +338,7 @@ impl<'a> Tokenizer<'a> {
             };
         }
 
-        return TokenKind::StringContent(string);
+        TokenKind::StringContent(string)
     }
 
     fn read_operator(&mut self, nextc: char) -> TokenKind {
@@ -705,7 +701,7 @@ mod tests {
 
     #[test]
     fn strings() {
-        let mut tokenizer = Tokenizer::from_string("\"\" \"\\n\" \n\"\\\"\"");
+        let mut tokenizer = Tokenizer::from_string("\"\" \"\\n\" \n\"\\\"\" \"hello\\n\"");
 
         // ""
         let token = tokenizer.next_token();
@@ -773,9 +769,9 @@ mod tests {
                 },
                 end: Position {
                     line: 0,
-                    character: 5
+                    character: 6
                 },
-                length: 1
+                length: 2
             }
         );
 
@@ -786,11 +782,138 @@ mod tests {
             EffectiveRange {
                 start: Position {
                     line: 0,
-                    character: 5
+                    character: 6
                 },
                 end: Position {
                     line: 0,
+                    character: 7
+                },
+                length: 1
+            }
+        );
+
+        // \"
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringStart);
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 0
+                },
+                end: Position {
+                    line: 1,
+                    character: 1
+                },
+                length: 1
+            }
+        );
+
+        let token = tokenizer.next_token();
+        assert_matches!(token.kind, TokenKind::StringContent(s) => {
+            assert_eq!(s, "\"");
+        });
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 1
+                },
+                end: Position {
+                    line: 1,
+                    character: 3
+                },
+                length: 2
+            }
+        );
+
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringEnd);
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 3
+                },
+                end: Position {
+                    line: 1,
+                    character: 4
+                },
+                length: 1
+            }
+        );
+
+        // "hello\n"
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringStart);
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 5
+                },
+                end: Position {
+                    line: 1,
                     character: 6
+                },
+                length: 1
+            }
+        );
+
+        let token = tokenizer.next_token();
+        assert_matches!(token.kind, TokenKind::StringContent(s) => {
+            assert_eq!(s, "hello");
+        });
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 6
+                },
+                end: Position {
+                    line: 1,
+                    character: 11
+                },
+                length: 5
+            }
+        );
+
+        let token = tokenizer.next_token();
+        assert_matches!(token.kind, TokenKind::StringContent(s) => {
+            assert_eq!(s, "\n");
+        });
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 11
+                },
+                end: Position {
+                    line: 1,
+                    character: 13
+                },
+                length: 2
+            }
+        );
+
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringEnd);
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 13
+                },
+                end: Position {
+                    line: 1,
+                    character: 14
                 },
                 length: 1
             }
