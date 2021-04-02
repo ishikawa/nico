@@ -196,9 +196,12 @@ impl<'a> Parser<'a> {
         // node
         let kind = builder(operand.map(Box::new), None);
         let r#type = self.new_type_var();
-        let code = Code::new(tokens);
 
-        Ok(Some(ExprNode { kind, code, r#type }))
+        Ok(Some(ExprNode {
+            kind,
+            tokens,
+            r#type,
+        }))
     }
 
     fn parse_access(&mut self) -> ParseResult {
@@ -269,9 +272,12 @@ impl<'a> Parser<'a> {
                         index: index_node,
                     };
                     let r#type = self.new_type_var();
-                    let code = Code::new(tokens);
 
-                    operand = ExprNode { kind, code, r#type };
+                    operand = ExprNode {
+                        kind,
+                        tokens,
+                        r#type,
+                    };
                 }
                 _ => break,
             }
@@ -300,10 +306,14 @@ impl<'a> Parser<'a> {
 
         if let TokenKind::Integer(i) = token.kind {
             let kind = Expr::Integer(i);
-            let code = Code::with_token(token);
+            let tokens = vec![SyntaxToken::interpreted(token)];
             let r#type = wrap(sem::Type::Int32);
 
-            ExprNode { kind, code, r#type }
+            ExprNode {
+                kind,
+                tokens,
+                r#type,
+            }
         } else {
             unreachable!()
         }
@@ -314,10 +324,14 @@ impl<'a> Parser<'a> {
 
         if let TokenKind::Identifier(ref id) = token.kind {
             let kind = Expr::Identifier(id.clone());
-            let code = Code::with_token(token);
+            let tokens = vec![SyntaxToken::interpreted(token)];
             let r#type = self.new_type_var();
 
-            ExprNode { kind, code, r#type }
+            ExprNode {
+                kind,
+                tokens,
+                r#type,
+            }
         } else {
             unreachable!()
         }
@@ -361,10 +375,13 @@ impl<'a> Parser<'a> {
         } else {
             Expr::String(Some(string))
         };
-        let code = Code::new(tokens);
         let r#type = wrap(sem::Type::String);
 
-        ExprNode { kind, code, r#type }
+        ExprNode {
+            kind,
+            tokens,
+            r#type,
+        }
     }
 
     fn _parse_binary_op(
@@ -422,9 +439,12 @@ impl<'a> Parser<'a> {
             // node
             let kind = builder(Box::new(lhs), rhs, None);
             let r#type = self.new_type_var();
-            let code = Code::new(tokens);
 
-            lhs = ExprNode { kind, code, r#type };
+            lhs = ExprNode {
+                kind,
+                tokens,
+                r#type,
+            };
         }
 
         Ok(Some(lhs))

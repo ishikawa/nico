@@ -33,21 +33,6 @@ impl SyntaxToken {
 }
 
 #[derive(Debug)]
-pub struct Code {
-    pub tokens: Vec<SyntaxToken>,
-}
-
-impl Code {
-    pub fn new(tokens: Vec<SyntaxToken>) -> Self {
-        Self { tokens }
-    }
-
-    pub fn with_token(token: Token) -> Self {
-        Self::new(vec![SyntaxToken::interpreted(token)])
-    }
-}
-
-#[derive(Debug)]
 pub struct ModuleNode {
     pub children: Vec<TopLevel>,
 }
@@ -76,7 +61,7 @@ pub enum TopLevel {
 pub struct StructNode {
     pub name: String,
     pub fields: Vec<TypeFieldNode>,
-    pub code: Code,
+    pub tokens: Vec<SyntaxToken>,
 }
 
 #[derive(Debug)]
@@ -84,7 +69,7 @@ pub struct StructNode {
 pub struct TypeFieldNode {
     pub name: String,
     pub type_annotation: TypeAnnotationNode,
-    pub code: Code,
+    pub tokens: Vec<SyntaxToken>,
 }
 
 #[derive(Debug)]
@@ -92,7 +77,7 @@ pub struct TypeFieldNode {
 pub struct TypeAnnotationNode {
     pub name: String,
     pub r#type: Option<Rc<RefCell<sem::Type>>>,
-    pub code: Code,
+    pub tokens: Vec<SyntaxToken>,
 }
 
 #[derive(Debug)]
@@ -101,14 +86,14 @@ pub struct FunctionNode {
     pub name: String,
     pub params: Vec<ParamNode>,
     pub body: Vec<StatementNode>,
-    pub code: Code,
+    pub tokens: Vec<SyntaxToken>,
 }
 
 #[derive(Debug)]
 /// tokens: [<Identifier>]
 pub struct ParamNode {
     pub name: String,
-    pub code: Code,
+    pub tokens: Vec<SyntaxToken>,
 }
 
 #[derive(Debug)]
@@ -121,7 +106,7 @@ pub struct StatementNode {
 pub struct ExprNode {
     pub kind: Expr,
     pub r#type: Rc<RefCell<sem::Type>>,
-    pub code: Code,
+    pub tokens: Vec<SyntaxToken>,
 }
 
 #[derive(Debug)]
@@ -210,7 +195,7 @@ impl ExprNode {
     pub fn tokens(&self) -> SyntaxTokens<'_> {
         match self.kind {
             Expr::Integer(_) | Expr::Identifier(_) | Expr::String(_) => {
-                SyntaxTokens::new(self.code.tokens.iter(), vec![])
+                SyntaxTokens::new(self.tokens.iter(), vec![])
             }
             Expr::Subscript {
                 operand: ref lhs,
@@ -233,7 +218,7 @@ impl ExprNode {
                     children.push(rhs.tokens())
                 }
 
-                SyntaxTokens::new(self.code.tokens.iter(), children)
+                SyntaxTokens::new(self.tokens.iter(), children)
             }
             Expr::Plus(ref operand, ..) | Expr::Minus(ref operand, ..) => {
                 let mut children = vec![];
@@ -242,7 +227,7 @@ impl ExprNode {
                     children.push(operand.tokens())
                 }
 
-                SyntaxTokens::new(self.code.tokens.iter(), children)
+                SyntaxTokens::new(self.tokens.iter(), children)
             }
         }
     }
