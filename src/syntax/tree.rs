@@ -16,6 +16,14 @@ pub enum SyntaxToken {
 }
 
 impl SyntaxToken {
+    pub fn interpreted(token: Token) -> Self {
+        Self::Interpreted(Rc::new(token))
+    }
+
+    pub fn missing(token: Token) -> Self {
+        Self::Missing(Rc::new(token))
+    }
+
     pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
         Self::Skipped {
             token: Rc::new(token),
@@ -35,7 +43,7 @@ impl Code {
     }
 
     pub fn with_token(token: Token) -> Self {
-        Self::new(vec![SyntaxToken::Interpreted(Rc::new(token))])
+        Self::new(vec![SyntaxToken::interpreted(token)])
     }
 }
 

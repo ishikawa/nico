@@ -170,7 +170,7 @@ impl<'a> Parser<'a> {
 
         // unary operators are right associative.
         let op_token = self.tokenizer.next_token();
-        let mut tokens = vec![SyntaxToken::Interpreted(Rc::new(op_token))];
+        let mut tokens = vec![SyntaxToken::interpreted(op_token)];
         let mut operand = None;
 
         loop {
@@ -226,10 +226,7 @@ impl<'a> Parser<'a> {
                 TokenKind::Char('[') => {
                     let open_token = self.tokenizer.next_token();
                     let mut index_node;
-                    let mut tokens = vec![
-                        SyntaxToken::Child,
-                        SyntaxToken::Interpreted(Rc::new(open_token)),
-                    ];
+                    let mut tokens = vec![SyntaxToken::Child, SyntaxToken::interpreted(open_token)];
                     let mut closed = false;
 
                     loop {
@@ -259,10 +256,10 @@ impl<'a> Parser<'a> {
                     if !closed {
                         if let TokenKind::Char(']') = self.tokenizer.peek_kind() {
                             let t = self.tokenizer.next_token();
-                            tokens.push(SyntaxToken::Interpreted(Rc::new(t)));
+                            tokens.push(SyntaxToken::interpreted(t));
                         } else {
                             let missed = self.tokenizer.build_token(TokenKind::Char(']'), "]");
-                            tokens.push(SyntaxToken::Missing(Rc::new(missed)))
+                            tokens.push(SyntaxToken::missing(missed))
                         }
                     }
 
@@ -328,7 +325,7 @@ impl<'a> Parser<'a> {
 
     fn read_string(&mut self) -> ExprNode {
         let start_token = self.tokenizer.next_token(); // StringStart
-        let mut tokens = vec![SyntaxToken::Interpreted(Rc::new(start_token))];
+        let mut tokens = vec![SyntaxToken::interpreted(start_token)];
         let mut string = String::new();
         let mut has_error = false;
 
@@ -340,10 +337,10 @@ impl<'a> Parser<'a> {
                     if !has_error {
                         string.push_str(s);
                     }
-                    tokens.push(SyntaxToken::Interpreted(Rc::new(token)));
+                    tokens.push(SyntaxToken::interpreted(token));
                 }
                 TokenKind::StringEnd => {
-                    tokens.push(SyntaxToken::Interpreted(Rc::new(token)));
+                    tokens.push(SyntaxToken::interpreted(token));
                     break;
                 }
                 TokenKind::UnrecognizedEscapeSequence(_) => {
@@ -352,7 +349,7 @@ impl<'a> Parser<'a> {
                 }
                 _ => {
                     let missed = self.tokenizer.build_token(TokenKind::StringEnd, "\"");
-                    tokens.push(SyntaxToken::Missing(Rc::new(missed)));
+                    tokens.push(SyntaxToken::missing(missed));
                     has_error = true;
                     break;
                 }
@@ -402,10 +399,7 @@ impl<'a> Parser<'a> {
 
             let op_token = self.tokenizer.next_token();
             let mut rhs;
-            let mut tokens = vec![
-                SyntaxToken::Child,
-                SyntaxToken::Interpreted(Rc::new(op_token)),
-            ];
+            let mut tokens = vec![SyntaxToken::Child, SyntaxToken::interpreted(op_token)];
 
             loop {
                 rhs = next_parser(self)?.map(Box::new);
