@@ -200,9 +200,15 @@ impl SemanticTokenizer {
             | TokenKind::Case => SemanticTokenType::KEYWORD,
             TokenKind::Identifier(_) => SemanticTokenType::VARIABLE,
             TokenKind::Integer(_) => SemanticTokenType::NUMBER,
-            TokenKind::Eq | TokenKind::Ne | TokenKind::Le | TokenKind::Ge => {
-                SemanticTokenType::OPERATOR
-            }
+            TokenKind::Eq
+            | TokenKind::Ne
+            | TokenKind::Le
+            | TokenKind::Ge
+            | TokenKind::Char('+')
+            | TokenKind::Char('-')
+            | TokenKind::Char('*')
+            | TokenKind::Char('/')
+            | TokenKind::Char('%') => SemanticTokenType::OPERATOR,
             _ => return,
         };
 
