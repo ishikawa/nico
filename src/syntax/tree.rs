@@ -78,79 +78,97 @@ pub struct Expression {
     pub tokens: Vec<SyntaxToken>,
 }
 
+impl Expression {
+    pub fn unwrap_identifier(&self) -> &Identifier {
+        if let ExpressionKind::Identifier(ref expr) = self.kind {
+            expr
+        } else {
+            panic!("Expected identifier");
+        }
+    }
+
+    pub fn unwrap_subscript_expression(&self) -> &SubscriptExpression {
+        if let ExpressionKind::SubscriptExpression(ref expr) = self.kind {
+            expr
+        } else {
+            panic!("Expected subscript expression");
+        }
+    }
+
+    pub fn unwrap_binary_expression(&self) -> &BinaryExpression {
+        if let ExpressionKind::BinaryExpression(ref expr) = self.kind {
+            expr
+        } else {
+            panic!("Expected binary expression");
+        }
+    }
+
+    pub fn unwrap_unary_expression(&self) -> &UnaryExpression {
+        if let ExpressionKind::UnaryExpression(ref expr) = self.kind {
+            expr
+        } else {
+            panic!("Expected unary expression");
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct IntegerLiteral(pub i32);
+
+#[derive(Debug)]
+pub struct StringLiteral(pub Option<String>);
+
+#[derive(Debug)]
+pub struct Identifier(pub String);
+
+#[derive(Debug)]
+pub struct SubscriptExpression {
+    pub operand: Box<Expression>,
+    pub index: Option<Box<Expression>>,
+}
+
+#[derive(Debug)]
+pub struct BinaryExpression {
+    pub operator: BinaryOperator,
+    pub lhs: Box<Expression>,
+    pub rhs: Option<Box<Expression>>,
+}
+
+#[derive(Debug)]
+pub struct UnaryExpression {
+    pub operator: UnaryOperator,
+    pub operand: Option<Box<Expression>>,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum BinaryOperator {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    Eq,
+    Ne,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum UnaryOperator {
+    Minus,
+    Plus,
+}
+
 #[derive(Debug)]
 pub enum ExpressionKind {
-    Integer(i32),
-    Identifier(String),
-    String(Option<String>),
-    Subscript {
-        operand: Box<Expression>,
-        index: Option<Box<Expression>>,
-    },
-
-    // Binary Op
-    // tokens: [...lhs, <operator>, ...rhs]
-    Add(
-        Box<Expression>,
-        Option<Box<Expression>>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ),
-    Sub(
-        Box<Expression>,
-        Option<Box<Expression>>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ),
-    Rem(
-        Box<Expression>,
-        Option<Box<Expression>>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ),
-    Mul(
-        Box<Expression>,
-        Option<Box<Expression>>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ),
-    Div(
-        Box<Expression>,
-        Option<Box<Expression>>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ),
-
-    // Relational operator
-    Lt(
-        Box<Expression>,
-        Option<Box<Expression>>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ), // Less Than
-    Gt(
-        Box<Expression>,
-        Option<Box<Expression>>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ), // Greater Than
-    Le(
-        Box<Expression>,
-        Option<Box<Expression>>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ), // Less than Equal
-    Ge(
-        Box<Expression>,
-        Option<Box<Expression>>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ), // Greater than Equal
-    Eq(
-        Box<Expression>,
-        Option<Box<Expression>>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ), // Equal
-    Ne(
-        Box<Expression>,
-        Option<Box<Expression>>,
-        Option<Rc<RefCell<sem::Binding>>>,
-    ), // Not Equal
-
-    // Unary operator
-    Minus(Option<Box<Expression>>, Option<Rc<RefCell<sem::Binding>>>),
-    Plus(Option<Box<Expression>>, Option<Rc<RefCell<sem::Binding>>>),
+    IntegerLiteral(IntegerLiteral),
+    StringLiteral(StringLiteral),
+    Identifier(Identifier),
+    SubscriptExpression(SubscriptExpression),
+    BinaryExpression(BinaryExpression),
+    UnaryExpression(UnaryExpression),
 }
 
 // --- tokens
@@ -163,24 +181,16 @@ impl Statement {
 impl Expression {
     pub fn tokens(&self) -> SyntaxTokens<'_> {
         match self.kind {
-            ExpressionKind::Integer(_)
+            ExpressionKind::IntegerLiteral(_)
             | ExpressionKind::Identifier(_)
-            | ExpressionKind::String(_) => SyntaxTokens::new(self.tokens.iter(), vec![]),
-            ExpressionKind::Subscript {
+            | ExpressionKind::StringLiteral(_) => SyntaxTokens::new(self.tokens.iter(), vec![]),
+            ExpressionKind::SubscriptExpression(SubscriptExpression {
                 operand: ref lhs,
                 index: ref rhs,
-            }
-            | ExpressionKind::Add(ref lhs, ref rhs, ..)
-            | ExpressionKind::Sub(ref lhs, ref rhs, ..)
-            | ExpressionKind::Rem(ref lhs, ref rhs, ..)
-            | ExpressionKind::Mul(ref lhs, ref rhs, ..)
-            | ExpressionKind::Div(ref lhs, ref rhs, ..)
-            | ExpressionKind::Eq(ref lhs, ref rhs, ..)
-            | ExpressionKind::Ne(ref lhs, ref rhs, ..)
-            | ExpressionKind::Le(ref lhs, ref rhs, ..)
-            | ExpressionKind::Ge(ref lhs, ref rhs, ..)
-            | ExpressionKind::Lt(ref lhs, ref rhs, ..)
-            | ExpressionKind::Gt(ref lhs, ref rhs, ..) => {
+            })
+            | ExpressionKind::BinaryExpression(BinaryExpression {
+                ref lhs, ref rhs, ..
+            }) => {
                 let mut children = vec![lhs.tokens()];
 
                 if let Some(rhs) = rhs {
@@ -189,7 +199,7 @@ impl Expression {
 
                 SyntaxTokens::new(self.tokens.iter(), children)
             }
-            ExpressionKind::Plus(ref operand, ..) | ExpressionKind::Minus(ref operand, ..) => {
+            ExpressionKind::UnaryExpression(UnaryExpression { ref operand, .. }) => {
                 let mut children = vec![];
 
                 if let Some(operand) = operand {

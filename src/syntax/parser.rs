@@ -1,6 +1,6 @@
 use super::errors::ParseError;
 use super::tree::*;
-use crate::sem::{self, Binding};
+use crate::sem;
 use crate::tokenizer::{SyntaxToken, TokenKind, Tokenizer};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
@@ -10,9 +10,6 @@ use std::rc::Rc;
 const DEBUG: bool = false;
 
 pub type ParseResult = Result<Option<Expression>, ParseError>;
-
-type BinaryOpBuilder =
-    fn(Box<Expression>, Option<Box<Expression>>, Option<Rc<RefCell<Binding>>>) -> ExpressionKind;
 
 #[derive(Debug)]
 pub struct Parser<'a> {
@@ -120,8 +117,8 @@ impl<'a> Parser<'a> {
         self._parse_binary_op(
             Parser::parse_rel_op2,
             &[
-                (TokenKind::Eq, ExpressionKind::Eq),
-                (TokenKind::Ne, ExpressionKind::Ne),
+                (TokenKind::Eq, BinaryOperator::Eq),
+                (TokenKind::Ne, BinaryOperator::Ne),
             ],
         )
     }
@@ -131,10 +128,10 @@ impl<'a> Parser<'a> {
         self._parse_binary_op(
             Parser::parse_binary_op1,
             &[
-                (TokenKind::Le, ExpressionKind::Le),
-                (TokenKind::Ge, ExpressionKind::Ge),
-                (TokenKind::Char('<'), ExpressionKind::Lt),
-                (TokenKind::Char('>'), ExpressionKind::Gt),
+                (TokenKind::Le, BinaryOperator::Le),
+                (TokenKind::Ge, BinaryOperator::Ge),
+                (TokenKind::Char('<'), BinaryOperator::Lt),
+                (TokenKind::Char('>'), BinaryOperator::Gt),
             ],
         )
     }
@@ -144,9 +141,9 @@ impl<'a> Parser<'a> {
         self._parse_binary_op(
             Parser::parse_binary_op2,
             &[
-                (TokenKind::Char('+'), ExpressionKind::Add),
-                (TokenKind::Char('-'), ExpressionKind::Sub),
-                (TokenKind::Char('%'), ExpressionKind::Rem),
+                (TokenKind::Char('+'), BinaryOperator::Add),
+                (TokenKind::Char('-'), BinaryOperator::Sub),
+                (TokenKind::Char('%'), BinaryOperator::Rem),
             ],
         )
     }
@@ -156,8 +153,8 @@ impl<'a> Parser<'a> {
         self._parse_binary_op(
             Parser::parse_unary_op,
             &[
-                (TokenKind::Char('*'), ExpressionKind::Mul),
-                (TokenKind::Char('/'), ExpressionKind::Div),
+                (TokenKind::Char('*'), BinaryOperator::Mul),
+                (TokenKind::Char('/'), BinaryOperator::Div),
             ],
         )
     }
@@ -165,9 +162,9 @@ impl<'a> Parser<'a> {
     fn parse_unary_op(&mut self) -> ParseResult {
         self.debug_trace("parse_unary_op");
 
-        let builder = match self.tokenizer.peek_kind() {
-            TokenKind::Char('+') => ExpressionKind::Plus,
-            TokenKind::Char('-') => ExpressionKind::Minus,
+        let operator = match self.tokenizer.peek_kind() {
+            TokenKind::Char('+') => UnaryOperator::Plus,
+            TokenKind::Char('-') => UnaryOperator::Minus,
             _ => return self.parse_access(),
         };
 
@@ -197,13 +194,15 @@ impl<'a> Parser<'a> {
         }
 
         // node
-        let kind = builder(operand.map(Box::new), None);
-        let r#type = self.new_type_var();
+        let expr = UnaryExpression {
+            operand: operand.map(Box::new),
+            operator,
+        };
 
         Ok(Some(Expression {
-            kind,
+            kind: ExpressionKind::UnaryExpression(expr),
+            r#type: self.new_type_var(),
             tokens,
-            r#type,
         }))
     }
 
@@ -270,16 +269,15 @@ impl<'a> Parser<'a> {
                     }
 
                     // node
-                    let kind = ExpressionKind::Subscript {
+                    let expr = SubscriptExpression {
                         operand: Box::new(operand),
                         index: index_node,
                     };
-                    let r#type = self.new_type_var();
 
                     operand = Expression {
-                        kind,
+                        kind: ExpressionKind::SubscriptExpression(expr),
+                        r#type: self.new_type_var(),
                         tokens,
-                        r#type,
                     };
                 }
                 _ => break,
@@ -308,14 +306,13 @@ impl<'a> Parser<'a> {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
-            let kind = ExpressionKind::Integer(i);
+            let literal = IntegerLiteral(i);
             let tokens = vec![SyntaxToken::interpreted(token)];
-            let r#type = wrap(sem::Type::Int32);
 
             Expression {
-                kind,
+                kind: ExpressionKind::IntegerLiteral(literal),
+                r#type: wrap(sem::Type::Int32),
                 tokens,
-                r#type,
             }
         } else {
             unreachable!()
@@ -326,14 +323,13 @@ impl<'a> Parser<'a> {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Identifier(ref id) = token.kind {
-            let kind = ExpressionKind::Identifier(id.clone());
+            let id = Identifier(id.clone());
             let tokens = vec![SyntaxToken::interpreted(token)];
-            let r#type = self.new_type_var();
 
             Expression {
-                kind,
+                kind: ExpressionKind::Identifier(id),
+                r#type: self.new_type_var(),
                 tokens,
-                r#type,
             }
         } else {
             unreachable!()
@@ -373,24 +369,23 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let kind = if has_error {
-            ExpressionKind::String(None)
+        let literal = if has_error {
+            StringLiteral(None)
         } else {
-            ExpressionKind::String(Some(string))
+            StringLiteral(Some(string))
         };
-        let r#type = wrap(sem::Type::String);
 
         Expression {
-            kind,
+            kind: ExpressionKind::StringLiteral(literal),
+            r#type: wrap(sem::Type::String),
             tokens,
-            r#type,
         }
     }
 
     fn _parse_binary_op(
         &mut self,
         next_parser: fn(&mut Parser<'a>) -> ParseResult,
-        operators: &[(TokenKind, BinaryOpBuilder)],
+        operators: &[(TokenKind, BinaryOperator)],
     ) -> ParseResult {
         let lhs = next_parser(self)?;
         let mut lhs = if let Some(lhs) = lhs {
@@ -401,16 +396,16 @@ impl<'a> Parser<'a> {
 
         loop {
             let kind = self.tokenizer.peek_kind();
-            let builder = operators
+            let operator = operators
                 .iter()
                 .find(|(op, _)| op == kind)
-                .map(|(_, builder)| builder);
+                .map(|(_, operator)| operator);
 
-            let builder = if let Some(builder) = builder {
-                builder
-            } else {
+            if operator.is_none() {
                 break;
-            };
+            }
+
+            let operator = *operator.unwrap();
 
             // A newline character terminates node construction.
             if self.tokenizer.is_newline_seen() {
@@ -440,13 +435,16 @@ impl<'a> Parser<'a> {
             }
 
             // node
-            let kind = builder(Box::new(lhs), rhs, None);
-            let r#type = self.new_type_var();
+            let expr = BinaryExpression {
+                lhs: Box::new(lhs),
+                rhs,
+                operator,
+            };
 
             lhs = Expression {
-                kind,
+                kind: ExpressionKind::BinaryExpression(expr),
                 tokens,
-                r#type,
+                r#type: self.new_type_var(),
             };
         }
 
@@ -486,7 +484,10 @@ mod tests {
         assert_eq!(module.body.len(), 1);
 
         let stmt = unwrap_statement(&module.body[0]);
-        assert_matches!(stmt.expression.kind, ExpressionKind::Integer(42));
+        assert_matches!(
+            stmt.expression.kind,
+            ExpressionKind::IntegerLiteral(IntegerLiteral(42))
+        );
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 1);
@@ -504,9 +505,11 @@ mod tests {
         assert_eq!(module.body.len(), 1);
 
         let stmt = unwrap_statement(&module.body[0]);
-        assert_matches!(&stmt.expression.kind, ExpressionKind::Add(lhs, Some(rhs), ..) => {
-            assert_matches!(lhs.kind, ExpressionKind::Integer(1));
-            assert_matches!(rhs.kind, ExpressionKind::Integer(2));
+        let expr = stmt.expression.unwrap_binary_expression();
+
+        assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
+            assert_matches!(lhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(rhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(2)));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -529,8 +532,10 @@ mod tests {
         assert_eq!(module.body.len(), 1);
 
         let stmt = unwrap_statement(&module.body[0]);
-        assert_matches!(&stmt.expression.kind, ExpressionKind::Add(lhs, None, ..) => {
-            assert_matches!(lhs.kind, ExpressionKind::Integer(1));
+        let expr = stmt.expression.unwrap_binary_expression();
+
+        assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: None } => {
+            assert_matches!(lhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -554,9 +559,11 @@ mod tests {
         assert_eq!(module.body.len(), 1);
 
         let stmt = unwrap_statement(&module.body[0]);
-        assert_matches!(&stmt.expression.kind, ExpressionKind::Add(lhs, Some(rhs), ..) => {
-            assert_matches!(lhs.kind, ExpressionKind::Integer(1));
-            assert_matches!(rhs.kind, ExpressionKind::Integer(2));
+        let expr = stmt.expression.unwrap_binary_expression();
+
+        assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
+            assert_matches!(lhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(rhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(2)));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -587,8 +594,10 @@ mod tests {
         assert_eq!(module.body.len(), 1);
 
         let stmt = unwrap_statement(&module.body[0]);
-        assert_matches!(&stmt.expression.kind, ExpressionKind::Minus(Some(operand), ..) => {
-            assert_matches!(operand.kind, ExpressionKind::Integer(1));
+        let expr = stmt.expression.unwrap_unary_expression();
+
+        assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
+            assert_matches!(operand.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -608,9 +617,13 @@ mod tests {
         assert_eq!(module.body.len(), 1);
 
         let stmt = unwrap_statement(&module.body[0]);
-        assert_matches!(&stmt.expression.kind, ExpressionKind::Minus(Some(operand), ..) => {
-            assert_matches!(&operand.kind, ExpressionKind::Plus(Some(operand), ..) => {
-                assert_matches!(operand.kind, ExpressionKind::Integer(1));
+        let expr = stmt.expression.unwrap_unary_expression();
+
+        assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
+            let operand = operand.unwrap_unary_expression();
+
+            assert_matches!(operand, UnaryExpression { operator: UnaryOperator::Plus, operand: Some(operand) } => {
+                assert_matches!(operand.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
             });
         });
 
@@ -634,11 +647,14 @@ mod tests {
         assert_eq!(module.body.len(), 1);
 
         let stmt = unwrap_statement(&module.body[0]);
-        assert_matches!(&stmt.expression.kind, ExpressionKind::Subscript{ operand, index: Some(index) } => {
-            assert_matches!(&operand.kind, ExpressionKind::Identifier(id) => {
+        let expr = stmt.expression.unwrap_subscript_expression();
+
+        assert_matches!(expr, SubscriptExpression{ operand, index: Some(index) } => {
+            let id = operand.unwrap_identifier();
+            assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
-            assert_matches!(&index.kind, ExpressionKind::Integer(0));
+            assert_matches!(index.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(0)));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -666,8 +682,11 @@ mod tests {
         assert_eq!(module.body.len(), 1);
 
         let stmt = unwrap_statement(&module.body[0]);
-        assert_matches!(&stmt.expression.kind, ExpressionKind::Subscript{ operand, index: None } => {
-            assert_matches!(&operand.kind, ExpressionKind::Identifier(id) => {
+        let expr = stmt.expression.unwrap_subscript_expression();
+
+        assert_matches!(expr, SubscriptExpression{ operand, index: None } => {
+            let id = operand.unwrap_identifier();
+            assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
         });
@@ -695,11 +714,14 @@ mod tests {
 
         // subscript
         let stmt = unwrap_statement(&module.body[0]);
-        assert_matches!(&stmt.expression.kind, ExpressionKind::Subscript{ operand, index: Some(index) } => {
-            assert_matches!(&operand.kind, ExpressionKind::Identifier(id) => {
+        let expr = stmt.expression.unwrap_subscript_expression();
+
+        assert_matches!(expr, SubscriptExpression{ operand, index: Some(index) } => {
+            let id = operand.unwrap_identifier();
+            assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
-            assert_matches!(&index.kind, ExpressionKind::Integer(1));
+            assert_matches!(index.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
