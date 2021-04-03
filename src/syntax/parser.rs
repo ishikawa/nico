@@ -227,52 +227,9 @@ impl<'a> Parser<'a> {
 
             match token.kind {
                 TokenKind::Char('[') => {
-                    //let (arguments, tokens) = self.read_arguments(']')?;
+                    let (arguments, mut tokens) = self.read_arguments(']')?;
+                    tokens.insert(0, SyntaxTokenItem::Child);
 
-                    let open_token = self.tokenizer.next_token();
-                    let mut arguments = vec![];
-                    let mut tokens = vec![
-                        SyntaxTokenItem::Child,
-                        SyntaxTokenItem::interpreted(open_token),
-                    ];
-                    let mut closed = false;
-
-                    loop {
-                        let index_node = self.parse_expr()?;
-
-                        if let Some(index_node) = index_node {
-                            arguments.push(index_node);
-                            tokens.push(SyntaxTokenItem::Child);
-                            break;
-                        } else {
-                            // If we couldn't parse the subscript expression, retry
-                            // parsing after consuming a token as skipped.
-                            let t = self.tokenizer.next_token();
-
-                            if let TokenKind::Char(']') = t.kind {
-                                closed = true;
-                            }
-
-                            tokens.push(SyntaxTokenItem::skipped(t, "expression"));
-
-                            if self.tokenizer.is_at_end() || closed {
-                                break;
-                            }
-                        }
-                    }
-
-                    // Read "]" if needed.
-                    if !closed {
-                        if let TokenKind::Char(']') = self.tokenizer.peek_kind() {
-                            let t = self.tokenizer.next_token();
-                            tokens.push(SyntaxTokenItem::interpreted(t));
-                        } else {
-                            let missed = self.tokenizer.build_token(TokenKind::Char(']'), "]");
-                            tokens.push(SyntaxTokenItem::missing(missed))
-                        }
-                    }
-
-                    // node
                     let expr = SubscriptExpression {
                         callee: Box::new(operand),
                         arguments,
@@ -393,7 +350,7 @@ impl<'a> Parser<'a> {
         let open_token = self.tokenizer.next_token();
         let mut arguments = vec![];
         let mut tokens = vec![SyntaxTokenItem::interpreted(open_token)];
-        let mut argument_read = false;
+        let mut argument_read = true;
 
         loop {
             if argument_read {
@@ -408,29 +365,28 @@ impl<'a> Parser<'a> {
                 }
             }
 
-            let t = self.tokenizer.next_token();
-
-            match t.kind {
-                TokenKind::Char(c) if c == close_char => {
+            match self.tokenizer.peek_kind() {
+                TokenKind::Char(c) if *c == close_char => {
                     // arguments closed
-                    break;
-                }
-                TokenKind::Eos => {
-                    // Premature EOF
-                    let missed = self.tokenizer.build_token(TokenKind::Char(']'), "]");
-                    tokens.push(SyntaxTokenItem::missing(missed));
+                    let t = self.tokenizer.next_token();
+                    tokens.push(SyntaxTokenItem::interpreted(t));
                     break;
                 }
                 TokenKind::Char(',') => {
+                    let t = self.tokenizer.next_token();
+
                     if !argument_read {
                         // Missing argument, so skip token.
                         tokens.push(SyntaxTokenItem::skipped(t, "expression"));
-                        continue;
+                    } else {
+                        tokens.push(SyntaxTokenItem::interpreted(t));
                     }
                 }
                 _ => {
-                    // Missing argument, so skip token.
-                    tokens.push(SyntaxTokenItem::skipped(t, "expression"));
+                    // Premature EOF or unknown token.
+                    let missed = self.tokenizer.build_token(TokenKind::Char(']'), "]");
+                    tokens.push(SyntaxTokenItem::missing(missed));
+                    break;
                 }
             }
         }
@@ -737,7 +693,7 @@ mod tests {
     }
 
     #[test]
-    fn subscript_skip_close() {
+    fn subscript_empty() {
         let module = Parser::parse_string("a[]").unwrap();
         assert!(!module.body.is_empty());
         assert_eq!(module.body.len(), 1);
@@ -764,8 +720,7 @@ mod tests {
         let token = unwrap_interpreted_token(tokens[1]);
         assert_matches!(token.kind, TokenKind::Char('['));
 
-        let (token, expected) = unwrap_skipped_token(tokens[2]);
-        assert_eq!(expected, "expression");
+        let token = unwrap_interpreted_token(tokens[2]);
         assert_matches!(token.kind, TokenKind::Char(']'));
     }
 
