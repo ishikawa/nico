@@ -6,8 +6,9 @@
 //! sequences and EOF in the middle.
 //!
 //! It is responsibility of parsers to interpret these tokens and generate strings and other nodes.
-use std::{fmt, rc::Rc};
-use std::{iter::Peekable, str::Chars};
+use std::fmt;
+use std::iter::Peekable;
+use std::str::Chars;
 
 /// Position in a text document expressed as zero-based line and character offset.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default)]
@@ -112,17 +113,17 @@ pub enum TokenizerMode {
 
 #[derive(Debug)]
 pub enum SyntaxToken {
-    Interpreted(Rc<Token>),
-    Missing(Rc<Token>),
+    Interpreted(Token),
+    Missing(Token),
     /// A skipped token with the description of an expected node.
     Skipped {
-        token: Rc<Token>,
+        token: Token,
         expected: String,
     },
 }
 
 impl SyntaxToken {
-    pub fn token(&self) -> &Rc<Token> {
+    pub fn token(&self) -> &Token {
         match self {
             SyntaxToken::Interpreted(token)
             | SyntaxToken::Missing(token)
@@ -139,16 +140,16 @@ pub enum SyntaxTokenItem {
 
 impl SyntaxTokenItem {
     pub fn interpreted(token: Token) -> Self {
-        Self::Token(SyntaxToken::Interpreted(Rc::new(token)))
+        Self::Token(SyntaxToken::Interpreted(token))
     }
 
     pub fn missing(token: Token) -> Self {
-        Self::Token(SyntaxToken::Missing(Rc::new(token)))
+        Self::Token(SyntaxToken::Missing(token))
     }
 
     pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
         Self::Token(SyntaxToken::Skipped {
-            token: Rc::new(token),
+            token,
             expected: expected.into(),
         })
     }

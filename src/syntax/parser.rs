@@ -498,8 +498,6 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
-
     use super::*;
     use crate::{
         syntax::{ExpressionKind, Statement, TopLevelKind},
@@ -774,25 +772,25 @@ mod tests {
         }
     }
 
-    fn unwrap_interpreted_token(token: &SyntaxToken) -> Rc<Token> {
+    fn unwrap_interpreted_token(token: &SyntaxToken) -> &Token {
         if let SyntaxToken::Interpreted(token) = token {
-            Rc::clone(token)
+            token
         } else {
             panic!("expected interpreted token")
         }
     }
 
-    fn unwrap_missing_token(token: &SyntaxToken) -> Rc<Token> {
+    fn unwrap_missing_token(token: &SyntaxToken) -> &Token {
         if let SyntaxToken::Missing(token) = token {
-            Rc::clone(token)
+            token
         } else {
             panic!("expected missing token")
         }
     }
 
-    fn unwrap_skipped_token(token: &SyntaxToken) -> (Rc<Token>, String) {
+    fn unwrap_skipped_token(token: &SyntaxToken) -> (&Token, String) {
         if let SyntaxToken::Skipped { token, expected } = token {
-            (Rc::clone(token), expected.clone())
+            (token, expected.clone())
         } else {
             panic!("expected skipped token")
         }
