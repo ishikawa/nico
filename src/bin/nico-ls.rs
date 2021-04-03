@@ -7,7 +7,8 @@ use lsp_types::{
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use nico::syntax::{
-    traverse, Expression, ExpressionKind, ParseError, Parser, Token, TokenKind, Trivia, TriviaKind,
+    traverse, CallExpression, Expression, ExpressionKind, ParseError, Parser, StringLiteral, Token,
+    TokenKind, Trivia, TriviaKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -216,28 +217,6 @@ impl SemanticTokenizer {
         self._add_token_with_type(token_type, token);
     }
 
-    fn add_expression(&mut self, node: &Expression) {
-        match node.kind {
-            ExpressionKind::StringLiteral(_) => {
-                self._add_expression_with_type(SemanticTokenType::STRING, node);
-            }
-            ExpressionKind::CallExpression(ref expr) => {
-                if let ExpressionKind::Identifier(_) = expr.callee.kind {
-                    self._add_expression_with_type(SemanticTokenType::FUNCTION, &expr.callee);
-                } else {
-                    self.add_expression(&expr.callee);
-                }
-
-                for arg in &expr.arguments {
-                    self.add_expression(arg);
-                }
-            }
-            _ => {
-                self._add_expression_generic(node);
-            }
-        }
-    }
-
     fn _add_expression_generic(&mut self, node: &Expression) {
         for token in node.tokens() {
             let token = token.token();
@@ -302,10 +281,36 @@ impl traverse::Visitor for SemanticTokenizer {
         self.add_token(path.node());
     }
 
-    fn enter_expression(&mut self, path: &mut traverse::Path<Expression>) {
-        let node = path.node();
+    fn enter_string_literal(
+        &mut self,
+        path: &mut traverse::Path<Expression>,
+        _literal: &StringLiteral,
+    ) {
+        self._add_expression_with_type(SemanticTokenType::STRING, path.node());
+        path.skip();
+    }
 
-        self.add_expression(node);
+    fn enter_call_expression(
+        &mut self,
+        path: &mut traverse::Path<Expression>,
+        expr: &CallExpression,
+    ) {
+        if let ExpressionKind::Identifier(_) = expr.callee.kind {
+            self._add_expression_with_type(SemanticTokenType::FUNCTION, &expr.callee);
+        } else {
+            traverse::traverse_expression(self, &expr.callee);
+        }
+
+        for arg in &expr.arguments {
+            traverse::traverse_expression(self, arg);
+        }
+
+        path.skip();
+    }
+
+    // Fallback for other expressions.
+    fn exit_expression(&mut self, path: &mut traverse::Path<Expression>) {
+        self._add_expression_generic(path.node());
         path.skip();
     }
 }
