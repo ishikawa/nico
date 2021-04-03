@@ -1,5 +1,5 @@
-use super::errors::ParseError;
 use super::tree::*;
+use super::{errors::ParseError, Token};
 use super::{TokenKind, Tokenizer};
 use crate::sem;
 use crate::util::naming::PrefixNaming;
@@ -78,6 +78,7 @@ impl<'a> Parser<'a> {
     #[allow(clippy::unnecessary_wraps)]
     fn parse_function(&mut self) -> Result<Option<FunctionDefinition>, ParseError> {
         self.debug_trace("parse_function");
+
         Ok(None)
     }
 
@@ -337,7 +338,7 @@ impl<'a> Parser<'a> {
                     has_error = true;
                 }
                 _ => {
-                    let missed = self.tokenizer.build_token(TokenKind::StringEnd, "\"");
+                    let missed = self.tokenizer.build_missing(TokenKind::StringEnd, "\"");
                     tokens.push(SyntaxTokenItem::missing(missed));
                     has_error = true;
                     break;
@@ -399,7 +400,7 @@ impl<'a> Parser<'a> {
                 }
                 _ => {
                     // Premature EOF or unknown token.
-                    let missed = self.tokenizer.build_token(TokenKind::Char(']'), "]");
+                    let missed = self.tokenizer.build_missing(TokenKind::Char(']'), "]");
                     tokens.push(SyntaxTokenItem::missing(missed));
                     break;
                 }
@@ -482,6 +483,9 @@ impl<'a> Parser<'a> {
     }
 
     // --- Helpers
+    fn match_token(&mut self, kind: TokenKind) -> bool {
+        *self.tokenizer.peek_kind() == kind
+    }
 
     /// Returns a new type variable.
     fn new_type_var(&mut self) -> Rc<RefCell<sem::Type>> {

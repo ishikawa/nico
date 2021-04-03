@@ -1,4 +1,4 @@
-use super::{SyntaxToken, Token};
+use super::{SyntaxToken, Token, TokenKind};
 use crate::sem;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -25,6 +25,38 @@ impl SyntaxTokenItem {
             token,
             expected: expected.into(),
         })
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct TokensBuilder {
+    tokens: Vec<SyntaxTokenItem>,
+}
+
+impl TokensBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn interpret(&mut self, token: Token) -> &mut Self {
+        self.tokens
+            .push(SyntaxTokenItem::Token(SyntaxToken::Interpreted(token)));
+        self
+    }
+
+    pub fn missing(&mut self, token: Token) -> &mut Self {
+        self.tokens
+            .push(SyntaxTokenItem::Token(SyntaxToken::Missing(token)));
+        self
+    }
+
+    pub fn skip<S: Into<String>>(&mut self, token: Token, expected: S) -> &mut Self {
+        self.tokens
+            .push(SyntaxTokenItem::Token(SyntaxToken::Skipped {
+                token,
+                expected: expected.into(),
+            }));
+        self
     }
 }
 
@@ -76,7 +108,7 @@ pub struct TypeAnnotation {
 
 #[derive(Debug)]
 pub struct FunctionDefinition {
-    pub name: String,
+    pub name: Option<String>,
     pub params: Vec<FunctionParameter>,
     pub body: Vec<Statement>,
     pub tokens: Vec<SyntaxTokenItem>,

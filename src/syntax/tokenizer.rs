@@ -195,17 +195,16 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    pub fn build_token<S: Into<String>>(&self, kind: TokenKind, text: S) -> Token {
-        let text = text.into();
-
+    pub fn build_missing<S: Into<String>>(&self, kind: TokenKind, name: S) -> Token {
         Token {
             kind,
             range: EffectiveRange {
-                length: text.len(),
                 start: self.current_position(),
                 end: self.current_position(),
+                // A missing token must not have length.
+                length: 0,
             },
-            text,
+            text: name.into(),
             leading_trivia: vec![],
         }
     }
