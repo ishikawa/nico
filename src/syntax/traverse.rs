@@ -1,4 +1,5 @@
-use crate::{syntax::tree::*, tokenizer::Token};
+use crate::syntax::tree::*;
+use crate::tokenizer::Token;
 
 pub struct Path<'a, T> {
     stopped: bool,
@@ -51,7 +52,7 @@ pub trait Visitor {
     fn exit_expression(&mut self, path: &mut Path<Expression>) {}
 }
 
-pub fn walk_program(visitor: &mut dyn Visitor, node: &Program) {
+pub fn traverse_program(visitor: &mut dyn Visitor, node: &Program) {
     let mut path = Path::new(node);
 
     if !path.stopped {
@@ -61,10 +62,12 @@ pub fn walk_program(visitor: &mut dyn Visitor, node: &Program) {
     if !path.skip_children {
         for node in &node.body {
             match node {
-                TopLevelKind::StructDefinition(child) => walk_struct_definition(visitor, child),
-                TopLevelKind::FunctionDefinition(child) => walk_function_definition(visitor, child),
-                TopLevelKind::Statement(child) => walk_statement(visitor, child),
-                TopLevelKind::Unknown(token) => walk_unknown_token(visitor, token),
+                TopLevelKind::StructDefinition(child) => traverse_struct_definition(visitor, child),
+                TopLevelKind::FunctionDefinition(child) => {
+                    traverse_function_definition(visitor, child)
+                }
+                TopLevelKind::Statement(child) => traverse_statement(visitor, child),
+                TopLevelKind::Unknown(token) => traverse_unknown_token(visitor, token),
             }
         }
     }
@@ -74,7 +77,7 @@ pub fn walk_program(visitor: &mut dyn Visitor, node: &Program) {
     }
 }
 
-pub fn walk_struct_definition(visitor: &mut dyn Visitor, node: &StructDefinition) {
+pub fn traverse_struct_definition(visitor: &mut dyn Visitor, node: &StructDefinition) {
     let mut path = Path::new(node);
 
     if !path.stopped {
@@ -85,7 +88,7 @@ pub fn walk_struct_definition(visitor: &mut dyn Visitor, node: &StructDefinition
     }
 }
 
-pub fn walk_function_definition(visitor: &mut dyn Visitor, node: &FunctionDefinition) {
+pub fn traverse_function_definition(visitor: &mut dyn Visitor, node: &FunctionDefinition) {
     let mut path = Path::new(node);
 
     if !path.stopped {
@@ -96,7 +99,7 @@ pub fn walk_function_definition(visitor: &mut dyn Visitor, node: &FunctionDefini
     }
 }
 
-pub fn walk_unknown_token(visitor: &mut dyn Visitor, token: &Token) {
+pub fn traverse_unknown_token(visitor: &mut dyn Visitor, token: &Token) {
     let mut path = Path::new(token);
 
     if !path.stopped {
@@ -107,7 +110,7 @@ pub fn walk_unknown_token(visitor: &mut dyn Visitor, token: &Token) {
     }
 }
 
-pub fn walk_statement(visitor: &mut dyn Visitor, node: &Statement) {
+pub fn traverse_statement(visitor: &mut dyn Visitor, node: &Statement) {
     let mut path = Path::new(node);
 
     if !path.stopped {
@@ -115,7 +118,7 @@ pub fn walk_statement(visitor: &mut dyn Visitor, node: &Statement) {
     }
 
     if !path.skip_children {
-        walk_expression(visitor, &node.expression);
+        traverse_expression(visitor, &node.expression);
     }
 
     if !path.stopped {
@@ -123,7 +126,7 @@ pub fn walk_statement(visitor: &mut dyn Visitor, node: &Statement) {
     }
 }
 
-pub fn walk_expression(visitor: &mut dyn Visitor, node: &Expression) {
+pub fn traverse_expression(visitor: &mut dyn Visitor, node: &Expression) {
     let mut path = Path::new(node);
 
     if !path.stopped {
@@ -155,7 +158,7 @@ mod tests {
         let mut visitor = NodeCounter::default();
         let program = Parser::parse_string("42").unwrap();
 
-        walk_program(&mut visitor, &program);
+        traverse_program(&mut visitor, &program);
 
         assert_eq!(visitor.number_of_expressions, 1);
     }

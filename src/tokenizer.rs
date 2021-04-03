@@ -119,23 +119,28 @@ pub enum SyntaxToken {
         token: Rc<Token>,
         expected: String,
     },
+}
+
+#[derive(Debug)]
+pub enum SyntaxTokenItem {
+    Token(SyntaxToken),
     Child,
 }
 
-impl SyntaxToken {
+impl SyntaxTokenItem {
     pub fn interpreted(token: Token) -> Self {
-        Self::Interpreted(Rc::new(token))
+        Self::Token(SyntaxToken::Interpreted(Rc::new(token)))
     }
 
     pub fn missing(token: Token) -> Self {
-        Self::Missing(Rc::new(token))
+        Self::Token(SyntaxToken::Missing(Rc::new(token)))
     }
 
     pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
-        Self::Skipped {
+        Self::Token(SyntaxToken::Skipped {
             token: Rc::new(token),
             expected: expected.into(),
-        }
+        })
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::tokenizer::Token;
+use crate::tokenizer::{SyntaxTokenItem, Token};
 use crate::{sem, tokenizer::SyntaxToken};
 use std::rc::Rc;
 use std::{cell::RefCell, slice};
@@ -32,7 +32,7 @@ pub enum TopLevelKind {
 pub struct StructDefinition {
     pub name: String,
     pub fields: Vec<TypeField>,
-    pub tokens: Vec<SyntaxToken>,
+    pub tokens: Vec<SyntaxTokenItem>,
 }
 
 #[derive(Debug)]
@@ -40,7 +40,7 @@ pub struct StructDefinition {
 pub struct TypeField {
     pub name: String,
     pub type_annotation: TypeAnnotation,
-    pub tokens: Vec<SyntaxToken>,
+    pub tokens: Vec<SyntaxTokenItem>,
 }
 
 #[derive(Debug)]
@@ -48,7 +48,7 @@ pub struct TypeField {
 pub struct TypeAnnotation {
     pub name: String,
     pub r#type: Option<Rc<RefCell<sem::Type>>>,
-    pub tokens: Vec<SyntaxToken>,
+    pub tokens: Vec<SyntaxTokenItem>,
 }
 
 #[derive(Debug)]
@@ -57,13 +57,13 @@ pub struct FunctionDefinition {
     pub name: String,
     pub params: Vec<FunctionParameter>,
     pub body: Vec<Statement>,
-    pub tokens: Vec<SyntaxToken>,
+    pub tokens: Vec<SyntaxTokenItem>,
 }
 
 #[derive(Debug)]
 pub struct FunctionParameter {
     pub name: String,
-    pub tokens: Vec<SyntaxToken>,
+    pub tokens: Vec<SyntaxTokenItem>,
 }
 
 #[derive(Debug)]
@@ -75,7 +75,7 @@ pub struct Statement {
 pub struct Expression {
     pub kind: ExpressionKind,
     pub r#type: Rc<RefCell<sem::Type>>,
-    pub tokens: Vec<SyntaxToken>,
+    pub tokens: Vec<SyntaxTokenItem>,
 }
 
 impl Expression {
@@ -213,13 +213,16 @@ impl Expression {
 }
 
 pub struct SyntaxTokens<'a> {
-    iterator: slice::Iter<'a, SyntaxToken>,
+    iterator: slice::Iter<'a, SyntaxTokenItem>,
     children: Vec<SyntaxTokens<'a>>,
     in_child: bool,
 }
 
 impl<'a> SyntaxTokens<'a> {
-    pub fn new(iterator: slice::Iter<'a, SyntaxToken>, children: Vec<SyntaxTokens<'a>>) -> Self {
+    pub fn new(
+        iterator: slice::Iter<'a, SyntaxTokenItem>,
+        children: Vec<SyntaxTokens<'a>>,
+    ) -> Self {
         Self {
             iterator,
             children,
@@ -247,13 +250,13 @@ impl<'a> Iterator for SyntaxTokens<'a> {
             }
         }
 
-        let next = self.iterator.next();
-
-        if let Some(SyntaxToken::Child) = next {
-            self.in_child = true;
-            return self.next();
+        match self.iterator.next() {
+            None => None,
+            Some(SyntaxTokenItem::Child) => {
+                self.in_child = true;
+                return self.next();
+            }
+            Some(SyntaxTokenItem::Token(ref t)) => Some(t),
         }
-
-        next
     }
 }

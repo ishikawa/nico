@@ -6,9 +6,11 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
+use nico::tokenizer::{SyntaxToken, TriviaKind};
+use nico::{syntax::traverse, tokenizer::Token};
 use nico::{
-    syntax::Parser,
-    tokenizer::{TokenKind, Tokenizer, TriviaKind},
+    syntax::{Expression, ParseError, Parser},
+    tokenizer::Trivia,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -69,6 +71,7 @@ enum HandlerErrorKind {
     // Warnings
     InvalidParams,
     DocumentNotFound(Url),
+    ParseError(ParseError),
 }
 
 impl From<io::Error> for HandlerError {
@@ -91,6 +94,14 @@ impl From<serde_json::Error> for HandlerError {
     fn from(err: serde_json::Error) -> Self {
         Self {
             kind: HandlerErrorKind::JsonError(err),
+        }
+    }
+}
+
+impl From<ParseError> for HandlerError {
+    fn from(err: ParseError) -> Self {
+        Self {
+            kind: HandlerErrorKind::ParseError(err),
         }
     }
 }
@@ -132,7 +143,7 @@ impl Response {
 #[derive(Debug, Default)]
 struct Connection {
     documents: HashMap<Url, Rc<RefCell<Document>>>,
-    token_type_legend: HashMap<SemanticTokenType, usize>,
+    token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
 }
 
 #[derive(Debug)]
@@ -147,6 +158,88 @@ struct SemanticTokenAbsolute {
     character: usize,
     length: usize,
     token_type: SemanticTokenType,
+}
+
+#[derive(Debug)]
+struct SemanticTokenizer {
+    legend: Rc<HashMap<SemanticTokenType, usize>>,
+    previous_line: u32,
+    previous_character: u32,
+    pub tokens: Vec<SemanticToken>,
+}
+
+impl SemanticTokenizer {
+    pub fn new(legend: Rc<HashMap<SemanticTokenType, usize>>) -> Self {
+        Self {
+            legend,
+            previous_line: 0,
+            previous_character: 0,
+            tokens: vec![],
+        }
+    }
+
+    fn on_leading_trivia(&mut self, leading_trivia: &[Trivia]) {
+        for trivia in leading_trivia {
+            if let TriviaKind::LineComment(_) = trivia.kind {
+                self.add_absolute(SemanticTokenAbsolute {
+                    token_type: SemanticTokenType::COMMENT,
+                    line: trivia.range.start.line,
+                    character: trivia.range.start.character,
+                    length: trivia.range.length,
+                })
+            }
+        }
+    }
+
+    fn add_absolute(&mut self, abs_sem_token: SemanticTokenAbsolute) {
+        let token_type = if let Some(ty) = self.legend.get(&abs_sem_token.token_type) {
+            u32::try_from(*ty).unwrap()
+        } else {
+            return;
+        };
+
+        let line = u32::try_from(abs_sem_token.line).unwrap();
+        let character = u32::try_from(abs_sem_token.character).unwrap();
+        let length = u32::try_from(abs_sem_token.length).unwrap();
+
+        let delta_line = line - self.previous_line;
+        let delta_start = if self.previous_line == line {
+            character - self.previous_character
+        } else {
+            character
+        };
+
+        self.tokens.push(SemanticToken {
+            delta_line,
+            delta_start,
+            length,
+            token_type,
+            token_modifiers_bitset: 0,
+        });
+
+        self.previous_line = line;
+        self.previous_character = character;
+    }
+}
+
+impl traverse::Visitor for SemanticTokenizer {
+    fn enter_unknown_token(&mut self, path: &mut traverse::Path<Token>) {
+        self.on_leading_trivia(&path.node().leading_trivia);
+    }
+
+    fn enter_expression(&mut self, path: &mut traverse::Path<Expression>) {
+        info!("Expression - {:?}", path.node());
+
+        for token in path.node().tokens() {
+            match token {
+                SyntaxToken::Interpreted(token)
+                | SyntaxToken::Missing(token)
+                | SyntaxToken::Skipped { token, .. } => {
+                    self.on_leading_trivia(&token.leading_trivia);
+                }
+            };
+        }
+    }
 }
 
 #[allow(clippy::unnecessary_wraps)]
@@ -175,12 +268,16 @@ impl Connection {
             SemanticTokenType::NUMBER,
             SemanticTokenType::OPERATOR,
             SemanticTokenType::COMMENT,
+            SemanticTokenType::FUNCTION,
+            SemanticTokenType::STRUCT,
         ];
 
         // Register token type legend
+        let mut legend = HashMap::new();
         for (i, token_type) in token_types.iter().enumerate() {
-            self.token_type_legend.insert(token_type.clone(), i);
+            legend.insert(token_type.clone(), i);
         }
+        self.token_type_legend = Rc::new(legend);
 
         let legend = SemanticTokensLegend {
             token_types,
@@ -217,108 +314,14 @@ impl Connection {
         info!("[on_text_document_semantic_tokens_full] {:?}", params);
 
         let doc = self.get_document(&params.text_document.uri)?.borrow();
+        let mut tokenizer = SemanticTokenizer::new(Rc::clone(&self.token_type_legend));
+        let program = Parser::parse_string(&doc.text)?;
 
-        // ---
-        let module = Parser::parse_string(&doc.text);
+        traverse::traverse_program(&mut tokenizer, &program);
 
-        info!("module = {:?}", module);
-
-        // ---
-
-        let mut tokenizer = Tokenizer::from_string(&doc.text);
-
-        let mut previous_line: u32 = 0;
-        let mut previous_character: u32 = 0;
-        let mut semantic_tokens = vec![];
-
-        loop {
-            let mut abs_semantic_tokens = vec![];
-
-            let token = tokenizer.next_token();
-
-            // Comments
-            for trivia in token.leading_trivia {
-                if let TriviaKind::LineComment(_) = trivia.kind {
-                    abs_semantic_tokens.push(SemanticTokenAbsolute {
-                        token_type: SemanticTokenType::COMMENT,
-                        line: trivia.range.start.line,
-                        character: trivia.range.start.character,
-                        length: trivia.range.length,
-                    })
-                }
-            }
-
-            // Token
-            if token.kind != TokenKind::Eos {
-                let token_type = match token.kind {
-                    TokenKind::If
-                    | TokenKind::Else
-                    | TokenKind::End
-                    | TokenKind::Export
-                    | TokenKind::Fun
-                    | TokenKind::Let
-                    | TokenKind::Struct
-                    | TokenKind::When
-                    | TokenKind::Case => SemanticTokenType::KEYWORD,
-                    TokenKind::Identifier(_) => SemanticTokenType::VARIABLE,
-                    TokenKind::Integer(_) => SemanticTokenType::NUMBER,
-                    TokenKind::Eq | TokenKind::Ne | TokenKind::Le | TokenKind::Ge => {
-                        SemanticTokenType::OPERATOR
-                    }
-                    _ => continue,
-                };
-
-                abs_semantic_tokens.push(SemanticTokenAbsolute {
-                    token_type,
-                    line: token.range.start.line,
-                    character: token.range.start.character,
-                    length: token.range.length,
-                });
-            }
-
-            for abs_sem_token in abs_semantic_tokens {
-                let token_type =
-                    if let Some(ty) = self.token_type_legend.get(&abs_sem_token.token_type) {
-                        u32::try_from(*ty).unwrap()
-                    } else {
-                        continue;
-                    };
-
-                let line = u32::try_from(abs_sem_token.line).unwrap();
-                let character = u32::try_from(abs_sem_token.character).unwrap();
-                let length = u32::try_from(abs_sem_token.length).unwrap();
-
-                let delta_line = line - previous_line;
-                let delta_start = if previous_line == line {
-                    character - previous_character
-                } else {
-                    character
-                };
-
-                semantic_tokens.push(SemanticToken {
-                    delta_line,
-                    delta_start,
-                    length,
-                    token_type,
-                    token_modifiers_bitset: 0,
-                });
-
-                previous_line = line;
-                previous_character = character;
-            }
-
-            if token.kind == TokenKind::Eos {
-                break;
-            }
-        }
-
-        // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_semanticTokens
-        // 1 - { line: 0, startChar: 0, length: 2, tokenType: 0, tokenModifiers: 0 },
-        // 2 - { deltaLine: 0, deltaStartChar: 0, length: 2, tokenType: 0, tokenModifiers: 0 },
-        // 3 - [ 0, 0, 2, 0, 0 ]
-
+        info!("tokens = {:?}", tokenizer.tokens);
         Ok(SemanticTokens {
-            data: semantic_tokens,
+            data: tokenizer.tokens,
             result_id: None,
         })
     }
