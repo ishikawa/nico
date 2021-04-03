@@ -56,6 +56,9 @@ pub trait Visitor {
 
     fn enter_string_literal(&mut self, path: &mut Path<Expression>, literal: &StringLiteral) {}
     fn exit_string_literal(&mut self, path: &mut Path<Expression>, literal: &StringLiteral) {}
+
+    fn enter_call_expression(&mut self, path: &mut Path<Expression>, expr: &CallExpression) {}
+    fn exit_call_expression(&mut self, path: &mut Path<Expression>, expr: &CallExpression) {}
 }
 
 pub fn traverse_program(visitor: &mut dyn Visitor, node: &Program) {
@@ -147,6 +150,9 @@ pub fn traverse_expression(visitor: &mut dyn Visitor, node: &Expression) {
             ExpressionKind::StringLiteral(ref literal) => {
                 traverse_string_literal(visitor, node, literal);
             }
+            ExpressionKind::CallExpression(ref expr) => {
+                traverse_call_expression(visitor, node, expr);
+            }
             _ => {}
         }
     }
@@ -179,6 +185,27 @@ fn traverse_string_literal(visitor: &mut dyn Visitor, node: &Expression, literal
     }
     if !path.stopped {
         visitor.exit_string_literal(&mut path, literal);
+    }
+}
+
+fn traverse_call_expression(visitor: &mut dyn Visitor, node: &Expression, expr: &CallExpression) {
+    let mut path = Path::new(node);
+
+    if !path.stopped {
+        visitor.enter_call_expression(&mut path, expr);
+    }
+
+    if !path.skip_children {
+        traverse_expression(visitor, &expr.callee);
+        for arg in &expr.arguments {
+            if let Some(arg) = arg {
+                traverse_expression(visitor, arg);
+            }
+        }
+    }
+
+    if !path.stopped {
+        visitor.exit_call_expression(&mut path, expr);
     }
 }
 

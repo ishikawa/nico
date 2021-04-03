@@ -9,8 +9,6 @@ use std::rc::Rc;
 
 const DEBUG: bool = false;
 
-pub type ParseResult = Result<Option<Expression>, ParseError>;
-
 #[derive(Debug)]
 pub struct Parser<'a> {
     /// The filename, uri of a source code.
@@ -107,12 +105,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expr(&mut self) -> ParseResult {
+    fn parse_expr(&mut self) -> Result<Option<Expression>, ParseError> {
         self.debug_trace("parse_expr");
         self.parse_rel_op1()
     }
 
-    fn parse_rel_op1(&mut self) -> ParseResult {
+    fn parse_rel_op1(&mut self) -> Result<Option<Expression>, ParseError> {
         self.debug_trace("parse_rel_op1");
         self._parse_binary_op(
             Parser::parse_rel_op2,
@@ -123,7 +121,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_rel_op2(&mut self) -> ParseResult {
+    fn parse_rel_op2(&mut self) -> Result<Option<Expression>, ParseError> {
         self.debug_trace("parse_rel_op2");
         self._parse_binary_op(
             Parser::parse_binary_op1,
@@ -136,7 +134,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_binary_op1(&mut self) -> ParseResult {
+    fn parse_binary_op1(&mut self) -> Result<Option<Expression>, ParseError> {
         self.debug_trace("parse_binary_op1");
         self._parse_binary_op(
             Parser::parse_binary_op2,
@@ -148,7 +146,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_binary_op2(&mut self) -> ParseResult {
+    fn parse_binary_op2(&mut self) -> Result<Option<Expression>, ParseError> {
         self.debug_trace("parse_binary_op2");
         self._parse_binary_op(
             Parser::parse_unary_op,
@@ -159,7 +157,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_unary_op(&mut self) -> ParseResult {
+    fn parse_unary_op(&mut self) -> Result<Option<Expression>, ParseError> {
         self.debug_trace("parse_unary_op");
 
         let operator = match self.tokenizer.peek_kind() {
@@ -206,7 +204,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_access(&mut self) -> ParseResult {
+    fn parse_access(&mut self) -> Result<Option<Expression>, ParseError> {
         self.debug_trace("parse_access");
 
         let operand = self.parse_primary();
@@ -385,11 +383,63 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn read_arguments(
+        &mut self,
+        close_char: char,
+    ) -> Result<(Vec<Expression>, Vec<SyntaxTokenItem>), ParseError> {
+        let open_token = self.tokenizer.next_token();
+        let mut arguments = vec![];
+        let mut tokens = vec![SyntaxTokenItem::interpreted(open_token)];
+        let mut argument_read = false;
+
+        loop {
+            if argument_read {
+                let argument = self.parse_expr()?;
+
+                if let Some(argument) = argument {
+                    argument_read = true;
+                    arguments.push(argument);
+                    tokens.push(SyntaxTokenItem::Child);
+                } else {
+                    argument_read = false;
+                }
+            }
+
+            let t = self.tokenizer.next_token();
+
+            match t.kind {
+                TokenKind::Char(c) if c == close_char => {
+                    // arguments closed
+                    break;
+                }
+                TokenKind::Eos => {
+                    // Premature EOF
+                    let missed = self.tokenizer.build_token(TokenKind::Char(']'), "]");
+                    tokens.push(SyntaxTokenItem::missing(missed));
+                    break;
+                }
+                TokenKind::Char(',') => {
+                    if !argument_read {
+                        // Missing argument, so skip token.
+                        tokens.push(SyntaxTokenItem::skipped(t, "expression"));
+                        continue;
+                    }
+                }
+                _ => {
+                    // Missing argument, so skip token.
+                    tokens.push(SyntaxTokenItem::skipped(t, "expression"));
+                }
+            }
+        }
+
+        Ok((arguments, tokens))
+    }
+
     fn _parse_binary_op(
         &mut self,
-        next_parser: fn(&mut Parser<'a>) -> ParseResult,
+        next_parser: fn(&mut Parser<'a>) -> Result<Option<Expression>, ParseError>,
         operators: &[(TokenKind, BinaryOperator)],
-    ) -> ParseResult {
+    ) -> Result<Option<Expression>, ParseError> {
         let lhs = next_parser(self)?;
         let mut lhs = if let Some(lhs) = lhs {
             lhs
