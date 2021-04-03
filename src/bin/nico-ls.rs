@@ -174,7 +174,7 @@ impl SemanticTokenizer {
         }
     }
 
-    fn on_leading_trivia(&mut self, leading_trivia: &[Trivia]) {
+    fn add_leading_trivia(&mut self, leading_trivia: &[Trivia]) {
         for trivia in leading_trivia {
             if let TriviaKind::LineComment(_) = trivia.kind {
                 self.add_semantic_token_absolute(SemanticTokenAbsolute {
@@ -187,7 +187,7 @@ impl SemanticTokenizer {
         }
     }
 
-    fn on_token(&mut self, token: &Token) {
+    fn add_token(&mut self, token: &Token) {
         let token_type = match token.kind {
             TokenKind::If
             | TokenKind::Else
@@ -200,13 +200,19 @@ impl SemanticTokenizer {
             | TokenKind::Case => SemanticTokenType::KEYWORD,
             TokenKind::Identifier(_) => SemanticTokenType::VARIABLE,
             TokenKind::Integer(_) => SemanticTokenType::NUMBER,
-            TokenKind::Eq | TokenKind::Ne | TokenKind::Le | TokenKind::Ge => {
-                SemanticTokenType::OPERATOR
-            }
+            TokenKind::Eq
+            | TokenKind::Ne
+            | TokenKind::Le
+            | TokenKind::Ge
+            | TokenKind::Char('+')
+            | TokenKind::Char('-')
+            | TokenKind::Char('*')
+            | TokenKind::Char('/')
+            | TokenKind::Char('%') => SemanticTokenType::OPERATOR,
             _ => return,
         };
 
-        self.add_token(token_type, token);
+        self._add_token_with_type(token_type, token);
     }
 
     fn add_expression(&mut self, node: &Expression) {
@@ -226,17 +232,17 @@ impl SemanticTokenizer {
                 }
             }
             _ => {
-                self._add_expression_without_type(node);
+                self._add_expression_generic(node);
             }
         }
     }
 
-    fn _add_expression_without_type(&mut self, node: &Expression) {
+    fn _add_expression_generic(&mut self, node: &Expression) {
         for token in node.tokens() {
             let token = token.token();
 
-            self.on_leading_trivia(&token.leading_trivia);
-            self.on_token(token);
+            self.add_leading_trivia(&token.leading_trivia);
+            self.add_token(token);
         }
     }
 
@@ -244,12 +250,12 @@ impl SemanticTokenizer {
         for token in node.tokens() {
             let token = token.token();
 
-            self.on_leading_trivia(&token.leading_trivia);
-            self.add_token(token_type.clone(), token);
+            self.add_leading_trivia(&token.leading_trivia);
+            self._add_token_with_type(token_type.clone(), token);
         }
     }
 
-    fn add_token(&mut self, token_type: SemanticTokenType, token: &Token) {
+    fn _add_token_with_type(&mut self, token_type: SemanticTokenType, token: &Token) {
         self.add_semantic_token_absolute(SemanticTokenAbsolute {
             token_type,
             line: token.range.start.line,
@@ -291,8 +297,8 @@ impl SemanticTokenizer {
 
 impl traverse::Visitor for SemanticTokenizer {
     fn enter_unknown_token(&mut self, path: &mut traverse::Path<Token>) {
-        self.on_leading_trivia(&path.node().leading_trivia);
-        self.on_token(path.node());
+        self.add_leading_trivia(&path.node().leading_trivia);
+        self.add_token(path.node());
     }
 
     fn enter_expression(&mut self, path: &mut traverse::Path<Expression>) {
