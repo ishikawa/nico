@@ -1,6 +1,13 @@
-use std::fmt;
+//! Even if there are syntax errors in the source code, a full token is generated and the source code is
+//! published.For this purpose the tokenizer will never fail except for IO errors.
+//!
+//! Also, the tokenizer generates tokens only in units that do not require interpretation where tokenizer
+//! syntax errors can occur. For example, a string consists of several tokens because of possible escape
+//! sequences and EOF in the middle.
+//!
+//! It is responsibility of parsers to interpret these tokens and generate strings and other nodes.
+use std::{fmt, rc::Rc};
 use std::{iter::Peekable, str::Chars};
-use thiserror::Error;
 
 /// Position in a text document expressed as zero-based line and character offset.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default)]
@@ -55,7 +62,6 @@ pub enum TokenKind {
     // Primitive
     Identifier(String),
     Integer(i32),
-    String(String),
 
     // Keywords
     If,
@@ -66,7 +72,8 @@ pub enum TokenKind {
     When,
     Export,
     Let,
-    Rest, // "..."
+    Range, // ".."
+    Rest,  // "..."
     Struct,
     // Keywords (types)
     I32,
@@ -82,6 +89,12 @@ pub enum TokenKind {
 
     // End of input source
     Eos,
+
+    // String and interpretation errors
+    StringStart,
+    StringContent(String),
+    UnrecognizedEscapeSequence(char),
+    StringEnd,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -91,7 +104,49 @@ pub enum TriviaKind {
     Whitespace,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum TokenizerMode {
+    Code,
+    String,
+}
+
+#[derive(Debug)]
+pub enum SyntaxToken {
+    Interpreted(Rc<Token>),
+    Missing(Rc<Token>),
+    /// A skipped token with the description of an expected node.
+    Skipped {
+        token: Rc<Token>,
+        expected: String,
+    },
+}
+
+#[derive(Debug)]
+pub enum SyntaxTokenItem {
+    Token(SyntaxToken),
+    Child,
+}
+
+impl SyntaxTokenItem {
+    pub fn interpreted(token: Token) -> Self {
+        Self::Token(SyntaxToken::Interpreted(Rc::new(token)))
+    }
+
+    pub fn missing(token: Token) -> Self {
+        Self::Token(SyntaxToken::Missing(Rc::new(token)))
+    }
+
+    pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
+        Self::Token(SyntaxToken::Skipped {
+            token: Rc::new(token),
+            expected: expected.into(),
+        })
+    }
+}
+
+#[derive(Debug)]
 pub struct Tokenizer<'a> {
+    mode: TokenizerMode,
     chars: Peekable<Chars<'a>>,
     at_end: bool,
     newline_seen: bool,
@@ -101,28 +156,8 @@ pub struct Tokenizer<'a> {
     start_position: Option<Position>,
     token_text: String,
 
-    /// Remember a peeked value, even if it was None.
-    peeked: Option<Result<Token, TokenError>>,
-}
-
-#[derive(Debug, Error, PartialEq, Eq)]
-#[error("{kind} at {position}")]
-pub struct TokenError {
-    pub position: Position,
-    pub kind: TokenErrorKind,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TokenErrorKind {
-    Error(String), // Genetic error
-}
-
-impl fmt::Display for TokenErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TokenErrorKind::Error(message) => write!(f, "{}", message),
-        }
-    }
+    /// Remember a peeked value.
+    peeked: Option<Token>,
 }
 
 impl<'a> Tokenizer<'a> {
@@ -131,6 +166,7 @@ impl<'a> Tokenizer<'a> {
         let at_end = iter.peek().is_none();
 
         Tokenizer {
+            mode: TokenizerMode::Code,
             chars: iter,
             at_end,
             newline_seen: false,
@@ -151,20 +187,17 @@ impl<'a> Tokenizer<'a> {
     }
 
     /// Returns a reference to the `next()` value without advance the tokenizer.
-    ///
-    /// Like [`next`], if there is a token, it is wrapped in a `Some(T)`.
-    // But if the iteration is over, `None` is returned.
-    pub fn peek(&mut self) -> Result<&Token, &TokenError> {
+    pub fn peek(&mut self) -> &Token {
         if self.peeked.is_none() {
             let token = self.advance_token();
-            self.peeked.get_or_insert(token).as_ref()
+            self.peeked.get_or_insert(token)
         } else {
-            self.peeked.as_ref().unwrap().as_ref()
+            self.peeked.as_ref().unwrap()
         }
     }
 
-    pub fn peek_kind(&mut self) -> Result<&TokenKind, &TokenError> {
-        self.peek().map(|x| &x.kind)
+    pub fn peek_kind(&mut self) -> &TokenKind {
+        &self.peek().kind
     }
 
     pub fn current_position(&self) -> Position {
@@ -174,7 +207,22 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    pub fn next_token(&mut self) -> Result<Token, TokenError> {
+    pub fn build_token<S: Into<String>>(&self, kind: TokenKind, text: S) -> Token {
+        let text = text.into();
+
+        Token {
+            kind,
+            range: EffectiveRange {
+                length: text.len(),
+                start: self.current_position(),
+                end: self.current_position(),
+            },
+            text,
+            leading_trivia: vec![],
+        }
+    }
+
+    pub fn next_token(&mut self) -> Token {
         match self.peeked.take() {
             Some(v) => v,
             None => self.advance_token(),
@@ -186,59 +234,89 @@ impl<'a> Tokenizer<'a> {
         self.start_position = Some(self.current_position());
     }
 
-    fn end_token(&mut self) -> (String, EffectiveRange) {
-        let range = EffectiveRange {
+    fn current_range(&self) -> EffectiveRange {
+        EffectiveRange {
             length: self.token_text.len(),
-            start: self.start_position.take().unwrap(),
+            start: self.start_position.unwrap(),
             end: self.current_position(),
-        };
-
-        (self.token_text.clone(), range)
-    }
-
-    fn error<S: Into<String>>(&self, message: S) -> TokenError {
-        TokenError {
-            position: self.current_position(),
-            kind: TokenErrorKind::Error(message.into()),
         }
     }
 
-    fn advance_token(&mut self) -> Result<Token, TokenError> {
-        self.newline_seen = false;
-
-        let leading_trivia = self.read_trivia();
-
-        self.begin_token();
-
-        let kind = match self.peek_char() {
-            None => TokenKind::Eos,
-            Some(nextc) => match nextc {
-                '0'..='9' => self.read_integer(nextc),
-                'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
-                '!' | '=' | '<' | '>' => self.read_operator(nextc),
-                '"' => self.read_string()?,
-                '.' => self.read_dot()?,
-                x => {
-                    self.next_char();
-                    TokenKind::Char(x)
-                }
-            },
-        };
-
-        let (text, range) = self.end_token();
-
-        Ok(Token {
+    fn end_token(&mut self, kind: TokenKind, leading_trivia: Vec<Trivia>) -> Token {
+        Token {
             kind,
-            range,
-            text,
+            range: self.current_range(),
+            text: self.token_text.clone(),
             leading_trivia,
-        })
+        }
     }
 
-    fn read_dot(&mut self) -> Result<TokenKind, TokenError> {
+    fn advance_token(&mut self) -> Token {
+        self.newline_seen = false;
+
+        match self.mode {
+            TokenizerMode::Code => {
+                let leading_trivia = self.read_trivia();
+
+                self.begin_token();
+
+                let kind = match self.peek_char() {
+                    None => TokenKind::Eos,
+                    Some(nextc) => match nextc {
+                        '0'..='9' => self.read_integer(nextc),
+                        'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
+                        '!' | '=' | '<' | '>' => self.read_operator(nextc),
+                        '.' => self.read_dot(),
+                        '"' => {
+                            self.next_char();
+                            self.mode = TokenizerMode::String;
+                            TokenKind::StringStart
+                        }
+                        x => {
+                            self.next_char();
+                            TokenKind::Char(x)
+                        }
+                    },
+                };
+
+                self.end_token(kind, leading_trivia)
+            }
+            TokenizerMode::String => {
+                self.begin_token();
+
+                let kind = match self.peek_char() {
+                    None => {
+                        self.mode = TokenizerMode::Code;
+                        TokenKind::Eos
+                    }
+                    Some(nextc) => match nextc {
+                        '"' => {
+                            self.next_char();
+                            self.mode = TokenizerMode::Code;
+                            TokenKind::StringEnd
+                        }
+                        // Do not include the newline character to prevent everything after
+                        // the string when developer forgot to close from being interpreted as a string.
+                        '\n' | '\r' => {
+                            let c = self.next_char().unwrap();
+
+                            self.mode = TokenizerMode::Code;
+                            TokenKind::Char(c)
+                        }
+                        '\\' => self.read_escape_sequence(),
+                        _ => self.read_string_content(),
+                    },
+                };
+
+                self.end_token(kind, vec![])
+            }
+        }
+    }
+
+    fn read_dot(&mut self) -> TokenKind {
         self.next_char();
 
-        let kind = match self.peek_char() {
+        match self.peek_char() {
             Some('.') => {
                 self.next_char();
                 match self.peek_char() {
@@ -246,57 +324,55 @@ impl<'a> Tokenizer<'a> {
                         self.next_char();
                         TokenKind::Rest
                     }
-                    _ => return Err(self.error("Unrecognized token `..`")),
+                    _ => TokenKind::Range,
                 }
             }
             _ => TokenKind::Char('.'),
-        };
-
-        Ok(kind)
+        }
     }
 
-    fn read_string(&mut self) -> Result<TokenKind, TokenError> {
+    fn read_escape_sequence(&mut self) -> TokenKind {
         let mut string = String::new();
         self.next_char();
 
-        loop {
-            match self.chars.peek() {
-                Some('"') => {
-                    self.next_char();
+        let c = match self.next_char() {
+            Some(c) => c,
+            None => return TokenKind::Char('\\'),
+        };
+
+        match c {
+            'n' => string.push('\n'),
+            'r' => string.push('\r'),
+            't' => string.push('\t'),
+            '"' => string.push('"'),
+            '\\' => string.push('\\'),
+            c => {
+                // If an uninterpretable escape sequence is encountered,
+                // ignore it for the time being and continue interpreting the string.
+                return TokenKind::UnrecognizedEscapeSequence(c);
+            }
+        };
+
+        TokenKind::StringContent(string)
+    }
+
+    fn read_string_content(&mut self) -> TokenKind {
+        let mut string = String::new();
+        string.push(self.next_char().unwrap());
+
+        while let Some(c) = self.peek_char() {
+            match c {
+                '"' | '\\' | '\r' | '\n' => {
                     break;
                 }
-                Some('\\') => {
-                    self.next_char();
-                    let c = match self.chars.peek() {
-                        Some(c) => *c,
-                        None => {
-                            return Err(self.error("Premature EOF while reading escape sequence"))
-                        }
-                    };
-
-                    match c {
-                        'n' => string.push('\n'),
-                        'r' => string.push('\r'),
-                        't' => string.push('\t'),
-                        '"' => string.push('"'),
-                        '\\' => string.push('\\'),
-                        c => {
-                            return Err(
-                                self.error(format!("Unrecognized escape sequence: \"\\{}\"", c))
-                            )
-                        }
-                    };
+                c => {
+                    string.push(c);
                     self.next_char();
                 }
-                Some(c) => {
-                    string.push(*c);
-                    self.next_char();
-                }
-                None => return Err(self.error("Premature EOF while reading string")),
             };
         }
 
-        Ok(TokenKind::String(string))
+        TokenKind::StringContent(string)
     }
 
     fn read_operator(&mut self, nextc: char) -> TokenKind {
@@ -438,9 +514,11 @@ impl<'a> Tokenizer<'a> {
                 break;
             };
 
-            let (text, range) = self.end_token();
-
-            trivia.push(Trivia { kind, text, range })
+            trivia.push(Trivia {
+                kind,
+                range: self.current_range(),
+                text: self.token_text.clone(),
+            })
         }
 
         trivia
@@ -458,7 +536,6 @@ impl fmt::Display for TokenKind {
         match self {
             TokenKind::Identifier(name) => write!(f, "id<{}>", name),
             TokenKind::Integer(i) => write!(f, "int<{}>", i),
-            TokenKind::String(s) => write!(f, "str<{}>", s),
             TokenKind::If => write!(f, "if"),
             TokenKind::Else => write!(f, "else"),
             TokenKind::End => write!(f, "end"),
@@ -467,6 +544,7 @@ impl fmt::Display for TokenKind {
             TokenKind::When => write!(f, "when"),
             TokenKind::Export => write!(f, "export"),
             TokenKind::Let => write!(f, "let"),
+            TokenKind::Range => write!(f, ".."),
             TokenKind::Rest => write!(f, "..."),
             TokenKind::Struct => write!(f, "struct"),
             TokenKind::I32 => write!(f, "i32"),
@@ -476,6 +554,10 @@ impl fmt::Display for TokenKind {
             TokenKind::Ge => write!(f, ">="),
             TokenKind::Char(c) => write!(f, "{}", c),
             TokenKind::Eos => write!(f, "(EOF)"),
+            TokenKind::StringStart => write!(f, "\"..."),
+            TokenKind::StringContent(s) => write!(f, "\"{}\"", s),
+            TokenKind::UnrecognizedEscapeSequence(c) => write!(f, "\\{}", c),
+            TokenKind::StringEnd => write!(f, "...\""),
         }
     }
 }
@@ -494,7 +576,7 @@ mod tests {
     fn is_at_end_one() {
         let mut tokenizer = Tokenizer::from_string("o");
         assert!(!tokenizer.is_at_end());
-        tokenizer.next_token().unwrap();
+        tokenizer.next_token();
         assert!(tokenizer.is_at_end());
     }
 
@@ -504,7 +586,7 @@ mod tests {
 
         assert!(!tokenizer.is_at_end());
 
-        let token = tokenizer.next_token().unwrap();
+        let token = tokenizer.next_token();
         assert_matches!(token.kind, TokenKind::Integer(42));
         assert_eq!(
             token.range,
@@ -521,7 +603,7 @@ mod tests {
             }
         );
 
-        let token = tokenizer.next_token().unwrap();
+        let token = tokenizer.next_token();
         assert_matches!(token.kind, TokenKind::Char('('));
         assert_eq!(
             token.range,
@@ -538,7 +620,7 @@ mod tests {
             }
         );
 
-        let token = tokenizer.next_token().unwrap();
+        let token = tokenizer.next_token();
         assert_matches!(token.kind, TokenKind::Char(')'));
         assert_eq!(
             token.range,
@@ -557,7 +639,7 @@ mod tests {
 
         assert!(!tokenizer.is_at_end());
 
-        let token = tokenizer.next_token().unwrap();
+        let token = tokenizer.next_token();
         assert_matches!(token.kind, TokenKind::Identifier(name) => {
             assert_eq!(name, "ab_01");
         });
@@ -576,7 +658,7 @@ mod tests {
             }
         );
 
-        let token = tokenizer.next_token().unwrap();
+        let token = tokenizer.next_token();
 
         assert!(tokenizer.is_at_end());
         assert_eq!(token.kind, TokenKind::Eos);
@@ -586,28 +668,28 @@ mod tests {
     fn operators() {
         let mut tokenizer = Tokenizer::from_string("!===<><=>=");
 
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Ne);
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Eq);
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Char('<'));
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Char('>'));
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Le);
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Ge);
+        assert_matches!(tokenizer.next_token().kind, TokenKind::Ne);
+        assert_matches!(tokenizer.next_token().kind, TokenKind::Eq);
+        assert_matches!(tokenizer.next_token().kind, TokenKind::Char('<'));
+        assert_matches!(tokenizer.next_token().kind, TokenKind::Char('>'));
+        assert_matches!(tokenizer.next_token().kind, TokenKind::Le);
+        assert_matches!(tokenizer.next_token().kind, TokenKind::Ge);
     }
 
     #[test]
     fn keywords() {
         let mut tokenizer = Tokenizer::from_string("if end fun");
 
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::If);
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::End);
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Fun);
+        assert_matches!(tokenizer.next_token().kind, TokenKind::If);
+        assert_matches!(tokenizer.next_token().kind, TokenKind::End);
+        assert_matches!(tokenizer.next_token().kind, TokenKind::Fun);
     }
 
     #[test]
     fn comment() {
         let mut tokenizer = Tokenizer::from_string("# comment\n");
 
-        let token = tokenizer.next_token().unwrap();
+        let token = tokenizer.next_token();
 
         assert_eq!(token.kind, TokenKind::Eos);
         assert_eq!(token.leading_trivia.len(), 2);
@@ -653,12 +735,11 @@ mod tests {
 
     #[test]
     fn strings() {
-        let mut tokenizer = Tokenizer::from_string("\"\" \"\\n\" \n\"\\\"\"");
+        let mut tokenizer = Tokenizer::from_string("\"\" \"\\n\" \n\"\\\"\" \"hello\\n\"");
 
-        let token = tokenizer.next_token().unwrap();
-        assert_matches!(token.kind, TokenKind::String(str) => {
-            assert_eq!(str, "");
-        });
+        // ""
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringStart);
         assert_eq!(
             token.range,
             EffectiveRange {
@@ -668,16 +749,32 @@ mod tests {
                 },
                 end: Position {
                     line: 0,
-                    character: 2
+                    character: 1
                 },
-                length: 2
+                length: 1
             }
         );
 
-        let token = tokenizer.next_token().unwrap();
-        assert_matches!(token.kind, TokenKind::String(str) => {
-            assert_eq!(str, "\n");
-        });
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringEnd);
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 0,
+                    character: 1
+                },
+                end: Position {
+                    line: 0,
+                    character: 2
+                },
+                length: 1
+            }
+        );
+
+        // "\n"
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringStart);
         assert_eq!(
             token.range,
             EffectiveRange {
@@ -687,16 +784,51 @@ mod tests {
                 },
                 end: Position {
                     line: 0,
-                    character: 7
+                    character: 4
                 },
-                length: 4
+                length: 1
             }
         );
 
-        let token = tokenizer.next_token().unwrap();
-        assert_matches!(token.kind, TokenKind::String(str) => {
-            assert_eq!(str, "\"");
+        let token = tokenizer.next_token();
+        assert_matches!(token.kind, TokenKind::StringContent(s) => {
+            assert_eq!(s, "\n");
         });
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 0,
+                    character: 4
+                },
+                end: Position {
+                    line: 0,
+                    character: 6
+                },
+                length: 2
+            }
+        );
+
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringEnd);
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 0,
+                    character: 6
+                },
+                end: Position {
+                    line: 0,
+                    character: 7
+                },
+                length: 1
+            }
+        );
+
+        // \"
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringStart);
         assert_eq!(
             token.range,
             EffectiveRange {
@@ -706,9 +838,118 @@ mod tests {
                 },
                 end: Position {
                     line: 1,
+                    character: 1
+                },
+                length: 1
+            }
+        );
+
+        let token = tokenizer.next_token();
+        assert_matches!(token.kind, TokenKind::StringContent(s) => {
+            assert_eq!(s, "\"");
+        });
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 1
+                },
+                end: Position {
+                    line: 1,
+                    character: 3
+                },
+                length: 2
+            }
+        );
+
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringEnd);
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 3
+                },
+                end: Position {
+                    line: 1,
                     character: 4
                 },
-                length: 4
+                length: 1
+            }
+        );
+
+        // "hello\n"
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringStart);
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 5
+                },
+                end: Position {
+                    line: 1,
+                    character: 6
+                },
+                length: 1
+            }
+        );
+
+        let token = tokenizer.next_token();
+        assert_matches!(token.kind, TokenKind::StringContent(s) => {
+            assert_eq!(s, "hello");
+        });
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 6
+                },
+                end: Position {
+                    line: 1,
+                    character: 11
+                },
+                length: 5
+            }
+        );
+
+        let token = tokenizer.next_token();
+        assert_matches!(token.kind, TokenKind::StringContent(s) => {
+            assert_eq!(s, "\n");
+        });
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 11
+                },
+                end: Position {
+                    line: 1,
+                    character: 13
+                },
+                length: 2
+            }
+        );
+
+        let token = tokenizer.next_token();
+        assert_eq!(token.kind, TokenKind::StringEnd);
+        assert_eq!(
+            token.range,
+            EffectiveRange {
+                start: Position {
+                    line: 1,
+                    character: 13
+                },
+                end: Position {
+                    line: 1,
+                    character: 14
+                },
+                length: 1
             }
         );
     }
@@ -717,16 +958,16 @@ mod tests {
     fn identifiers() {
         let mut tokenizer = Tokenizer::from_string("abc abc! ab!c");
 
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Identifier(str) => {
+        assert_matches!(tokenizer.next_token().kind, TokenKind::Identifier(str) => {
             assert_eq!(str, "abc");
         });
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Identifier(str) => {
+        assert_matches!(tokenizer.next_token().kind, TokenKind::Identifier(str) => {
             assert_eq!(str, "abc!");
         });
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Identifier(str) => {
+        assert_matches!(tokenizer.next_token().kind, TokenKind::Identifier(str) => {
             assert_eq!(str, "ab!");
         });
-        assert_matches!(tokenizer.next_token().unwrap().kind, TokenKind::Identifier(str) => {
+        assert_matches!(tokenizer.next_token().kind, TokenKind::Identifier(str) => {
             assert_eq!(str, "c");
         });
     }
@@ -736,17 +977,26 @@ mod tests {
         let mut tokenizer = Tokenizer::from_string("1 2 3");
 
         // peek() lets us see into the future
-        assert_eq!(tokenizer.peek().unwrap().kind, TokenKind::Integer(1));
-        assert_eq!(tokenizer.next_token().unwrap().kind, TokenKind::Integer(1));
-        assert_eq!(tokenizer.next_token().unwrap().kind, TokenKind::Integer(2));
+        assert_eq!(tokenizer.peek().kind, TokenKind::Integer(1));
+        assert_eq!(tokenizer.next_token().kind, TokenKind::Integer(1));
+        assert_eq!(tokenizer.next_token().kind, TokenKind::Integer(2));
 
         // The tokenizer does not advance even if we `peek` multiple times
-        assert_eq!(tokenizer.peek().unwrap().kind, TokenKind::Integer(3));
-        assert_eq!(tokenizer.peek().unwrap().kind, TokenKind::Integer(3));
-        assert_eq!(tokenizer.next_token().unwrap().kind, TokenKind::Integer(3));
+        assert_eq!(tokenizer.peek().kind, TokenKind::Integer(3));
+        assert_eq!(tokenizer.peek().kind, TokenKind::Integer(3));
+        assert_eq!(tokenizer.next_token().kind, TokenKind::Integer(3));
 
         // After an iterator is finished.
-        assert_eq!(tokenizer.peek().unwrap().kind, TokenKind::Eos);
-        assert_eq!(tokenizer.peek().unwrap().kind, TokenKind::Eos);
+        assert_eq!(tokenizer.peek().kind, TokenKind::Eos);
+        assert_eq!(tokenizer.peek().kind, TokenKind::Eos);
+    }
+
+    #[test]
+    fn dots() {
+        let mut tokenizer = Tokenizer::from_string(".....");
+
+        assert_eq!(tokenizer.next_token().kind, TokenKind::Rest);
+        assert_eq!(tokenizer.next_token().kind, TokenKind::Range);
+        assert_eq!(tokenizer.next_token().kind, TokenKind::Eos);
     }
 }
