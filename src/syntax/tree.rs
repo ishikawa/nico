@@ -1,9 +1,34 @@
-use super::{SyntaxToken, SyntaxTokenItem, Token};
+use super::{SyntaxToken, Token};
 use crate::sem;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::slice;
 
+// Token
+#[derive(Debug)]
+pub enum SyntaxTokenItem {
+    Token(SyntaxToken),
+    Child,
+}
+
+impl SyntaxTokenItem {
+    pub fn interpreted(token: Token) -> Self {
+        Self::Token(SyntaxToken::Interpreted(token))
+    }
+
+    pub fn missing(token: Token) -> Self {
+        Self::Token(SyntaxToken::Missing(token))
+    }
+
+    pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
+        Self::Token(SyntaxToken::Skipped {
+            token,
+            expected: expected.into(),
+        })
+    }
+}
+
+// Node
 #[derive(Debug)]
 pub struct Program {
     pub body: Vec<TopLevelKind>,
@@ -28,7 +53,6 @@ pub enum TopLevelKind {
 /// name        := IDENT
 /// ```
 ///
-/// tokens: ["struct", <Identifier>, "{", ...fields, "}"]
 #[derive(Debug)]
 pub struct StructDefinition {
     pub name: String,
@@ -37,7 +61,6 @@ pub struct StructDefinition {
 }
 
 #[derive(Debug)]
-/// tokens: [<Identifier>, ":", ...type_annotation]
 pub struct TypeField {
     pub name: String,
     pub type_annotation: TypeAnnotation,
@@ -45,7 +68,6 @@ pub struct TypeField {
 }
 
 #[derive(Debug)]
-/// tokens: [<Identifier>]
 pub struct TypeAnnotation {
     pub name: String,
     pub r#type: Option<Rc<RefCell<sem::Type>>>,
@@ -53,7 +75,6 @@ pub struct TypeAnnotation {
 }
 
 #[derive(Debug)]
-/// tokens: ["fun", <Identifier>, "(", ...params, ")", ...body, "end"]
 pub struct FunctionDefinition {
     pub name: String,
     pub params: Vec<FunctionParameter>,

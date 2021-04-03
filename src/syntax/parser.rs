@@ -1,6 +1,6 @@
 use super::errors::ParseError;
 use super::tree::*;
-use super::{SyntaxTokenItem, TokenKind, Tokenizer};
+use super::{TokenKind, Tokenizer};
 use crate::sem;
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
