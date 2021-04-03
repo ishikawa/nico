@@ -122,16 +122,22 @@ pub struct StringLiteral(pub Option<String>);
 pub struct Identifier(pub String);
 
 #[derive(Debug)]
-pub struct SubscriptExpression {
-    pub operand: Box<Expression>,
-    pub index: Option<Box<Expression>>,
-}
-
-#[derive(Debug)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
     pub lhs: Box<Expression>,
     pub rhs: Option<Box<Expression>>,
+}
+
+#[derive(Debug)]
+pub struct SubscriptExpression {
+    pub callee: Box<Expression>,
+    pub arguments: Vec<Expression>,
+}
+
+#[derive(Debug)]
+pub struct CallExpression {
+    pub callee: Box<Expression>,
+    pub arguments: Vec<Expression>,
 }
 
 #[derive(Debug)]
@@ -166,9 +172,10 @@ pub enum ExpressionKind {
     IntegerLiteral(IntegerLiteral),
     StringLiteral(StringLiteral),
     Identifier(Identifier),
-    SubscriptExpression(SubscriptExpression),
     BinaryExpression(BinaryExpression),
     UnaryExpression(UnaryExpression),
+    SubscriptExpression(SubscriptExpression),
+    CallExpression(CallExpression),
 }
 
 // --- tokens
@@ -179,36 +186,41 @@ impl Statement {
 }
 
 impl Expression {
-    pub fn tokens(&self) -> SyntaxTokens<'_> {
-        match self.kind {
+    pub fn children(&self) -> Vec<&Expression> {
+        let mut children = vec![];
+
+        match &self.kind {
             ExpressionKind::IntegerLiteral(_)
             | ExpressionKind::Identifier(_)
-            | ExpressionKind::StringLiteral(_) => SyntaxTokens::new(self.tokens.iter(), vec![]),
-            ExpressionKind::SubscriptExpression(SubscriptExpression {
-                operand: ref lhs,
-                index: ref rhs,
-            })
-            | ExpressionKind::BinaryExpression(BinaryExpression {
-                ref lhs, ref rhs, ..
-            }) => {
-                let mut children = vec![lhs.tokens()];
+            | ExpressionKind::StringLiteral(_) => {}
+            ExpressionKind::BinaryExpression(BinaryExpression { lhs, rhs, .. }) => {
+                children.push(&**lhs);
 
                 if let Some(rhs) = rhs {
-                    children.push(rhs.tokens())
+                    children.push(&**rhs)
                 }
-
-                SyntaxTokens::new(self.tokens.iter(), children)
             }
-            ExpressionKind::UnaryExpression(UnaryExpression { ref operand, .. }) => {
-                let mut children = vec![];
-
+            ExpressionKind::UnaryExpression(UnaryExpression { operand, .. }) => {
                 if let Some(operand) = operand {
-                    children.push(operand.tokens())
+                    children.push(&**operand)
                 }
-
-                SyntaxTokens::new(self.tokens.iter(), children)
             }
-        }
+            ExpressionKind::SubscriptExpression(SubscriptExpression { callee, arguments })
+            | ExpressionKind::CallExpression(CallExpression { callee, arguments }) => {
+                children.push(&**callee);
+
+                for arg in arguments {
+                    children.push(arg)
+                }
+            }
+        };
+
+        children
+    }
+
+    pub fn tokens(&self) -> SyntaxTokens<'_> {
+        let children = self.children().iter().map(|x| x.tokens()).collect();
+        SyntaxTokens::new(self.tokens.iter(), children)
     }
 }
 

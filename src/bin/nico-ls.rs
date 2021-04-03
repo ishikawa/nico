@@ -323,6 +323,9 @@ impl Connection {
             SemanticTokenType::COMMENT,
             SemanticTokenType::FUNCTION,
             SemanticTokenType::STRUCT,
+            SemanticTokenType::FUNCTION,
+            SemanticTokenType::PARAMETER,
+            SemanticTokenType::PROPERTY,
         ];
 
         // Register token type legend
