@@ -7,9 +7,10 @@ use lsp_types::{
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use nico::tokenizer::{SyntaxToken, TriviaKind};
+use nico::{syntax, tokenizer::TokenKind};
 use nico::{syntax::traverse, tokenizer::Token};
 use nico::{
-    syntax::{Expression, ParseError, Parser},
+    syntax::{ParseError, Parser},
     tokenizer::Trivia,
 };
 use serde::{Deserialize, Serialize};
@@ -191,6 +192,33 @@ impl SemanticTokenizer {
         }
     }
 
+    fn on_token(&mut self, token: &Token) {
+        let token_type = match token.kind {
+            TokenKind::If
+            | TokenKind::Else
+            | TokenKind::End
+            | TokenKind::Export
+            | TokenKind::Fun
+            | TokenKind::Let
+            | TokenKind::Struct
+            | TokenKind::When
+            | TokenKind::Case => SemanticTokenType::KEYWORD,
+            TokenKind::Identifier(_) => SemanticTokenType::VARIABLE,
+            TokenKind::Integer(_) => SemanticTokenType::NUMBER,
+            TokenKind::Eq | TokenKind::Ne | TokenKind::Le | TokenKind::Ge => {
+                SemanticTokenType::OPERATOR
+            }
+            _ => return,
+        };
+
+        self.add_absolute(SemanticTokenAbsolute {
+            token_type,
+            line: token.range.start.line,
+            character: token.range.start.character,
+            length: token.range.length,
+        })
+    }
+
     fn add_absolute(&mut self, abs_sem_token: SemanticTokenAbsolute) {
         let token_type = if let Some(ty) = self.legend.get(&abs_sem_token.token_type) {
             u32::try_from(*ty).unwrap()
@@ -225,9 +253,10 @@ impl SemanticTokenizer {
 impl traverse::Visitor for SemanticTokenizer {
     fn enter_unknown_token(&mut self, path: &mut traverse::Path<Token>) {
         self.on_leading_trivia(&path.node().leading_trivia);
+        self.on_token(path.node());
     }
 
-    fn enter_expression(&mut self, path: &mut traverse::Path<Expression>) {
+    fn enter_expression(&mut self, path: &mut traverse::Path<syntax::Expression>) {
         info!("Expression - {:?}", path.node());
 
         for token in path.node().tokens() {
@@ -236,6 +265,7 @@ impl traverse::Visitor for SemanticTokenizer {
                 | SyntaxToken::Missing(token)
                 | SyntaxToken::Skipped { token, .. } => {
                     self.on_leading_trivia(&token.leading_trivia);
+                    self.on_token(token);
                 }
             };
         }
@@ -319,7 +349,7 @@ impl Connection {
 
         traverse::traverse_program(&mut tokenizer, &program);
 
-        info!("tokens = {:?}", tokenizer.tokens);
+        //info!("tokens = {:?}", tokenizer.tokens);
         Ok(SemanticTokens {
             data: tokenizer.tokens,
             result_id: None,
