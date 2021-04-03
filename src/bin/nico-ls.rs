@@ -6,8 +6,9 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-use nico::syntax::{traverse, Expression, ExpressionKind, ParseError, Parser};
-use nico::tokenizer::{Token, TokenKind, Trivia, TriviaKind};
+use nico::syntax::{
+    traverse, Expression, ExpressionKind, ParseError, Parser, Token, TokenKind, Trivia, TriviaKind,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;

@@ -1,7 +1,7 @@
 use super::errors::ParseError;
 use super::tree::*;
+use super::{TokenKind, Tokenizer};
 use crate::sem;
-use crate::tokenizer::{SyntaxTokenItem, TokenKind, Tokenizer};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use std::cell::RefCell;
@@ -499,11 +499,7 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        syntax::{ExpressionKind, Statement, TopLevelKind},
-        tokenizer::SyntaxToken,
-        tokenizer::Token,
-    };
+    use crate::syntax::{ExpressionKind, Statement, SyntaxToken, Token, TopLevelKind};
     use assert_matches::assert_matches;
 
     #[test]

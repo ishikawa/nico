@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 # nico
-assert_matches = "1.4.0"
+assert_matches = "1.5.0"
 thiserror = "1.0.24"
 # nico-ls
 log = "0.4.14"

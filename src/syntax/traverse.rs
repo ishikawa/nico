@@ -1,5 +1,5 @@
 use crate::syntax::tree::*;
-use crate::tokenizer::Token;
+use crate::syntax::Token;
 
 pub struct Path<'a, T> {
     skipped: bool,

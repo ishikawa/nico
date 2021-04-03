@@ -133,29 +133,6 @@ impl SyntaxToken {
 }
 
 #[derive(Debug)]
-pub enum SyntaxTokenItem {
-    Token(SyntaxToken),
-    Child,
-}
-
-impl SyntaxTokenItem {
-    pub fn interpreted(token: Token) -> Self {
-        Self::Token(SyntaxToken::Interpreted(token))
-    }
-
-    pub fn missing(token: Token) -> Self {
-        Self::Token(SyntaxToken::Missing(token))
-    }
-
-    pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
-        Self::Token(SyntaxToken::Skipped {
-            token,
-            expected: expected.into(),
-        })
-    }
-}
-
-#[derive(Debug)]
 pub struct Tokenizer<'a> {
     mode: TokenizerMode,
     chars: Peekable<Chars<'a>>,

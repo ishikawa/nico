@@ -1,10 +1,9 @@
+use crate::asm;
 use crate::asm::wasm;
 use crate::sem;
-use crate::syntax::{ParseError, ParseErrorKind};
-use crate::tokenizer::{Token, Tokenizer};
+use crate::syntax::{ParseError, ParseErrorKind, Token, TokenKind, Tokenizer};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
-use crate::{asm, tokenizer::TokenKind};
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
