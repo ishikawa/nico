@@ -1,47 +1,18 @@
-use crate::sem;
 use crate::tokenizer::Token;
+use crate::{sem, tokenizer::SyntaxToken};
 use std::rc::Rc;
 use std::{cell::RefCell, slice};
 
 #[derive(Debug)]
-pub enum SyntaxToken {
-    Interpreted(Rc<Token>),
-    Missing(Rc<Token>),
-    /// A skipped token with the description of an expected node.
-    Skipped {
-        token: Rc<Token>,
-        expected: String,
-    },
-    Child,
-}
-
-impl SyntaxToken {
-    pub fn interpreted(token: Token) -> Self {
-        Self::Interpreted(Rc::new(token))
-    }
-
-    pub fn missing(token: Token) -> Self {
-        Self::Missing(Rc::new(token))
-    }
-
-    pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
-        Self::Skipped {
-            token: Rc::new(token),
-            expected: expected.into(),
-        }
-    }
+pub struct Program {
+    pub body: Vec<TopLevelKind>,
 }
 
 #[derive(Debug)]
-pub struct ModuleNode {
-    pub children: Vec<TopLevel>,
-}
-
-#[derive(Debug)]
-pub enum TopLevel {
-    Struct(StructNode),
-    Function(FunctionNode),
-    Statement(StatementNode),
+pub enum TopLevelKind {
+    StructDefinition(StructDefinition),
+    FunctionDefinition(FunctionDefinition),
+    Statement(Statement),
     Unknown(Token),
 }
 
@@ -58,23 +29,23 @@ pub enum TopLevel {
 ///
 /// tokens: ["struct", <Identifier>, "{", ...fields, "}"]
 #[derive(Debug)]
-pub struct StructNode {
+pub struct StructDefinition {
     pub name: String,
-    pub fields: Vec<TypeFieldNode>,
+    pub fields: Vec<TypeField>,
     pub tokens: Vec<SyntaxToken>,
 }
 
 #[derive(Debug)]
 /// tokens: [<Identifier>, ":", ...type_annotation]
-pub struct TypeFieldNode {
+pub struct TypeField {
     pub name: String,
-    pub type_annotation: TypeAnnotationNode,
+    pub type_annotation: TypeAnnotation,
     pub tokens: Vec<SyntaxToken>,
 }
 
 #[derive(Debug)]
 /// tokens: [<Identifier>]
-pub struct TypeAnnotationNode {
+pub struct TypeAnnotation {
     pub name: String,
     pub r#type: Option<Rc<RefCell<sem::Type>>>,
     pub tokens: Vec<SyntaxToken>,
@@ -82,136 +53,134 @@ pub struct TypeAnnotationNode {
 
 #[derive(Debug)]
 /// tokens: ["fun", <Identifier>, "(", ...params, ")", ...body, "end"]
-pub struct FunctionNode {
+pub struct FunctionDefinition {
     pub name: String,
-    pub params: Vec<ParamNode>,
-    pub body: Vec<StatementNode>,
+    pub params: Vec<FunctionParameter>,
+    pub body: Vec<Statement>,
     pub tokens: Vec<SyntaxToken>,
 }
 
 #[derive(Debug)]
-/// tokens: [<Identifier>]
-pub struct ParamNode {
+pub struct FunctionParameter {
     pub name: String,
     pub tokens: Vec<SyntaxToken>,
 }
 
 #[derive(Debug)]
-/// tokens: [...expr]
-pub struct StatementNode {
-    pub expr: ExprNode,
+pub struct Statement {
+    pub expression: Expression,
 }
 
 #[derive(Debug)]
-pub struct ExprNode {
-    pub kind: Expr,
+pub struct Expression {
+    pub kind: ExpressionKind,
     pub r#type: Rc<RefCell<sem::Type>>,
     pub tokens: Vec<SyntaxToken>,
 }
 
 #[derive(Debug)]
-pub enum Expr {
+pub enum ExpressionKind {
     Integer(i32),
     Identifier(String),
     String(Option<String>),
     Subscript {
-        operand: Box<ExprNode>,
-        index: Option<Box<ExprNode>>,
+        operand: Box<Expression>,
+        index: Option<Box<Expression>>,
     },
 
     // Binary Op
     // tokens: [...lhs, <operator>, ...rhs]
     Add(
-        Box<ExprNode>,
-        Option<Box<ExprNode>>,
+        Box<Expression>,
+        Option<Box<Expression>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ),
     Sub(
-        Box<ExprNode>,
-        Option<Box<ExprNode>>,
+        Box<Expression>,
+        Option<Box<Expression>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ),
     Rem(
-        Box<ExprNode>,
-        Option<Box<ExprNode>>,
+        Box<Expression>,
+        Option<Box<Expression>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ),
     Mul(
-        Box<ExprNode>,
-        Option<Box<ExprNode>>,
+        Box<Expression>,
+        Option<Box<Expression>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ),
     Div(
-        Box<ExprNode>,
-        Option<Box<ExprNode>>,
+        Box<Expression>,
+        Option<Box<Expression>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ),
 
     // Relational operator
     Lt(
-        Box<ExprNode>,
-        Option<Box<ExprNode>>,
+        Box<Expression>,
+        Option<Box<Expression>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ), // Less Than
     Gt(
-        Box<ExprNode>,
-        Option<Box<ExprNode>>,
+        Box<Expression>,
+        Option<Box<Expression>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ), // Greater Than
     Le(
-        Box<ExprNode>,
-        Option<Box<ExprNode>>,
+        Box<Expression>,
+        Option<Box<Expression>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ), // Less than Equal
     Ge(
-        Box<ExprNode>,
-        Option<Box<ExprNode>>,
+        Box<Expression>,
+        Option<Box<Expression>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ), // Greater than Equal
     Eq(
-        Box<ExprNode>,
-        Option<Box<ExprNode>>,
+        Box<Expression>,
+        Option<Box<Expression>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ), // Equal
     Ne(
-        Box<ExprNode>,
-        Option<Box<ExprNode>>,
+        Box<Expression>,
+        Option<Box<Expression>>,
         Option<Rc<RefCell<sem::Binding>>>,
     ), // Not Equal
 
     // Unary operator
-    Minus(Option<Box<ExprNode>>, Option<Rc<RefCell<sem::Binding>>>),
-    Plus(Option<Box<ExprNode>>, Option<Rc<RefCell<sem::Binding>>>),
+    Minus(Option<Box<Expression>>, Option<Rc<RefCell<sem::Binding>>>),
+    Plus(Option<Box<Expression>>, Option<Rc<RefCell<sem::Binding>>>),
 }
 
 // --- tokens
-impl StatementNode {
+impl Statement {
     pub fn tokens(&self) -> SyntaxTokens<'_> {
-        self.expr.tokens()
+        self.expression.tokens()
     }
 }
 
-impl ExprNode {
+impl Expression {
     pub fn tokens(&self) -> SyntaxTokens<'_> {
         match self.kind {
-            Expr::Integer(_) | Expr::Identifier(_) | Expr::String(_) => {
-                SyntaxTokens::new(self.tokens.iter(), vec![])
-            }
-            Expr::Subscript {
+            ExpressionKind::Integer(_)
+            | ExpressionKind::Identifier(_)
+            | ExpressionKind::String(_) => SyntaxTokens::new(self.tokens.iter(), vec![]),
+            ExpressionKind::Subscript {
                 operand: ref lhs,
                 index: ref rhs,
             }
-            | Expr::Add(ref lhs, ref rhs, ..)
-            | Expr::Sub(ref lhs, ref rhs, ..)
-            | Expr::Rem(ref lhs, ref rhs, ..)
-            | Expr::Mul(ref lhs, ref rhs, ..)
-            | Expr::Div(ref lhs, ref rhs, ..)
-            | Expr::Eq(ref lhs, ref rhs, ..)
-            | Expr::Ne(ref lhs, ref rhs, ..)
-            | Expr::Le(ref lhs, ref rhs, ..)
-            | Expr::Ge(ref lhs, ref rhs, ..)
-            | Expr::Lt(ref lhs, ref rhs, ..)
-            | Expr::Gt(ref lhs, ref rhs, ..) => {
+            | ExpressionKind::Add(ref lhs, ref rhs, ..)
+            | ExpressionKind::Sub(ref lhs, ref rhs, ..)
+            | ExpressionKind::Rem(ref lhs, ref rhs, ..)
+            | ExpressionKind::Mul(ref lhs, ref rhs, ..)
+            | ExpressionKind::Div(ref lhs, ref rhs, ..)
+            | ExpressionKind::Eq(ref lhs, ref rhs, ..)
+            | ExpressionKind::Ne(ref lhs, ref rhs, ..)
+            | ExpressionKind::Le(ref lhs, ref rhs, ..)
+            | ExpressionKind::Ge(ref lhs, ref rhs, ..)
+            | ExpressionKind::Lt(ref lhs, ref rhs, ..)
+            | ExpressionKind::Gt(ref lhs, ref rhs, ..) => {
                 let mut children = vec![lhs.tokens()];
 
                 if let Some(rhs) = rhs {
@@ -220,7 +189,7 @@ impl ExprNode {
 
                 SyntaxTokens::new(self.tokens.iter(), children)
             }
-            Expr::Plus(ref operand, ..) | Expr::Minus(ref operand, ..) => {
+            ExpressionKind::Plus(ref operand, ..) | ExpressionKind::Minus(ref operand, ..) => {
                 let mut children = vec![];
 
                 if let Some(operand) = operand {

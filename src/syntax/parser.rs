@@ -1,7 +1,7 @@
 use super::errors::ParseError;
 use super::tree::*;
 use crate::sem::{self, Binding};
-use crate::tokenizer::{TokenKind, Tokenizer};
+use crate::tokenizer::{SyntaxToken, TokenKind, Tokenizer};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use std::cell::RefCell;
@@ -9,10 +9,10 @@ use std::rc::Rc;
 
 const DEBUG: bool = false;
 
-pub type ParseResult = Result<Option<ExprNode>, ParseError>;
+pub type ParseResult = Result<Option<Expression>, ParseError>;
 
 type BinaryOpBuilder =
-    fn(Box<ExprNode>, Option<Box<ExprNode>>, Option<Rc<RefCell<Binding>>>) -> Expr;
+    fn(Box<Expression>, Option<Box<Expression>>, Option<Rc<RefCell<Binding>>>) -> ExpressionKind;
 
 #[derive(Debug)]
 pub struct Parser<'a> {
@@ -33,28 +33,28 @@ impl<'a> Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse_string<S: AsRef<str>>(src: S) -> Result<ModuleNode, ParseError> {
+    pub fn parse_string<S: AsRef<str>>(src: S) -> Result<Program, ParseError> {
         let tokenizer = Tokenizer::from_string(&src);
         let mut parser = Parser::new(tokenizer, "-");
 
         parser.parse()
     }
 
-    pub fn parse(&mut self) -> Result<ModuleNode, ParseError> {
-        let mut children = vec![];
+    pub fn parse(&mut self) -> Result<Program, ParseError> {
+        let mut body = vec![];
 
         loop {
             // Type declaration
             if let Some(node) = self.parse_struct_definition()? {
-                children.push(TopLevel::Struct(node));
+                body.push(TopLevelKind::StructDefinition(node));
             }
             // Function
             else if let Some(node) = self.parse_function()? {
-                children.push(TopLevel::Function(node));
+                body.push(TopLevelKind::FunctionDefinition(node));
             }
             // Body for main function
             else if let Some(node) = self.parse_stmt()? {
-                children.push(TopLevel::Statement(node));
+                body.push(TopLevelKind::Statement(node));
             }
             // No top level constructs can be consumed. It may be at the end of input or
             // parse error.
@@ -65,28 +65,28 @@ impl<'a> Parser<'a> {
                     TokenKind::Eos => break,
                     _ => {
                         let token = self.tokenizer.next_token();
-                        children.push(TopLevel::Unknown(token));
+                        body.push(TopLevelKind::Unknown(token));
                     }
                 }
             }
         }
 
-        Ok(ModuleNode { children })
+        Ok(Program { body })
     }
 
     #[allow(clippy::unnecessary_wraps)]
-    fn parse_struct_definition(&mut self) -> Result<Option<StructNode>, ParseError> {
+    fn parse_struct_definition(&mut self) -> Result<Option<StructDefinition>, ParseError> {
         self.debug_trace("parse_struct_definition");
         Ok(None)
     }
 
     #[allow(clippy::unnecessary_wraps)]
-    fn parse_function(&mut self) -> Result<Option<FunctionNode>, ParseError> {
+    fn parse_function(&mut self) -> Result<Option<FunctionDefinition>, ParseError> {
         self.debug_trace("parse_function");
         Ok(None)
     }
 
-    fn parse_stmt(&mut self) -> Result<Option<StatementNode>, ParseError> {
+    fn parse_stmt(&mut self) -> Result<Option<Statement>, ParseError> {
         self.debug_trace("parse_stmt");
 
         match self.tokenizer.peek_kind() {
@@ -100,11 +100,11 @@ impl<'a> Parser<'a> {
         Ok(None)
     }
 
-    fn parse_stmt_expr(&mut self) -> Result<Option<StatementNode>, ParseError> {
+    fn parse_stmt_expr(&mut self) -> Result<Option<Statement>, ParseError> {
         self.debug_trace("parse_stmt_expr");
 
-        if let Some(expr) = self.parse_expr()? {
-            Ok(Some(StatementNode { expr }))
+        if let Some(expression) = self.parse_expr()? {
+            Ok(Some(Statement { expression }))
         } else {
             Ok(None)
         }
@@ -119,7 +119,10 @@ impl<'a> Parser<'a> {
         self.debug_trace("parse_rel_op1");
         self._parse_binary_op(
             Parser::parse_rel_op2,
-            &[(TokenKind::Eq, Expr::Eq), (TokenKind::Ne, Expr::Ne)],
+            &[
+                (TokenKind::Eq, ExpressionKind::Eq),
+                (TokenKind::Ne, ExpressionKind::Ne),
+            ],
         )
     }
 
@@ -128,10 +131,10 @@ impl<'a> Parser<'a> {
         self._parse_binary_op(
             Parser::parse_binary_op1,
             &[
-                (TokenKind::Le, Expr::Le),
-                (TokenKind::Ge, Expr::Ge),
-                (TokenKind::Char('<'), Expr::Lt),
-                (TokenKind::Char('>'), Expr::Gt),
+                (TokenKind::Le, ExpressionKind::Le),
+                (TokenKind::Ge, ExpressionKind::Ge),
+                (TokenKind::Char('<'), ExpressionKind::Lt),
+                (TokenKind::Char('>'), ExpressionKind::Gt),
             ],
         )
     }
@@ -141,9 +144,9 @@ impl<'a> Parser<'a> {
         self._parse_binary_op(
             Parser::parse_binary_op2,
             &[
-                (TokenKind::Char('+'), Expr::Add),
-                (TokenKind::Char('-'), Expr::Sub),
-                (TokenKind::Char('%'), Expr::Rem),
+                (TokenKind::Char('+'), ExpressionKind::Add),
+                (TokenKind::Char('-'), ExpressionKind::Sub),
+                (TokenKind::Char('%'), ExpressionKind::Rem),
             ],
         )
     }
@@ -153,8 +156,8 @@ impl<'a> Parser<'a> {
         self._parse_binary_op(
             Parser::parse_unary_op,
             &[
-                (TokenKind::Char('*'), Expr::Mul),
-                (TokenKind::Char('/'), Expr::Div),
+                (TokenKind::Char('*'), ExpressionKind::Mul),
+                (TokenKind::Char('/'), ExpressionKind::Div),
             ],
         )
     }
@@ -163,8 +166,8 @@ impl<'a> Parser<'a> {
         self.debug_trace("parse_unary_op");
 
         let builder = match self.tokenizer.peek_kind() {
-            TokenKind::Char('+') => Expr::Plus,
-            TokenKind::Char('-') => Expr::Minus,
+            TokenKind::Char('+') => ExpressionKind::Plus,
+            TokenKind::Char('-') => ExpressionKind::Minus,
             _ => return self.parse_access(),
         };
 
@@ -197,7 +200,7 @@ impl<'a> Parser<'a> {
         let kind = builder(operand.map(Box::new), None);
         let r#type = self.new_type_var();
 
-        Ok(Some(ExprNode {
+        Ok(Some(Expression {
             kind,
             tokens,
             r#type,
@@ -267,13 +270,13 @@ impl<'a> Parser<'a> {
                     }
 
                     // node
-                    let kind = Expr::Subscript {
+                    let kind = ExpressionKind::Subscript {
                         operand: Box::new(operand),
                         index: index_node,
                     };
                     let r#type = self.new_type_var();
 
-                    operand = ExprNode {
+                    operand = Expression {
                         kind,
                         tokens,
                         r#type,
@@ -286,7 +289,7 @@ impl<'a> Parser<'a> {
         Ok(Some(operand))
     }
 
-    fn parse_primary(&mut self) -> Option<ExprNode> {
+    fn parse_primary(&mut self) -> Option<Expression> {
         self.debug_trace("parse_primary");
 
         let token = self.tokenizer.peek();
@@ -301,15 +304,15 @@ impl<'a> Parser<'a> {
     }
 
     // --- Generic implementations
-    fn read_integer(&mut self) -> ExprNode {
+    fn read_integer(&mut self) -> Expression {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
-            let kind = Expr::Integer(i);
+            let kind = ExpressionKind::Integer(i);
             let tokens = vec![SyntaxToken::interpreted(token)];
             let r#type = wrap(sem::Type::Int32);
 
-            ExprNode {
+            Expression {
                 kind,
                 tokens,
                 r#type,
@@ -319,15 +322,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn read_identifier(&mut self) -> ExprNode {
+    fn read_identifier(&mut self) -> Expression {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Identifier(ref id) = token.kind {
-            let kind = Expr::Identifier(id.clone());
+            let kind = ExpressionKind::Identifier(id.clone());
             let tokens = vec![SyntaxToken::interpreted(token)];
             let r#type = self.new_type_var();
 
-            ExprNode {
+            Expression {
                 kind,
                 tokens,
                 r#type,
@@ -337,7 +340,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn read_string(&mut self) -> ExprNode {
+    fn read_string(&mut self) -> Expression {
         let start_token = self.tokenizer.next_token(); // StringStart
         let mut tokens = vec![SyntaxToken::interpreted(start_token)];
         let mut string = String::new();
@@ -371,13 +374,13 @@ impl<'a> Parser<'a> {
         }
 
         let kind = if has_error {
-            Expr::String(None)
+            ExpressionKind::String(None)
         } else {
-            Expr::String(Some(string))
+            ExpressionKind::String(Some(string))
         };
         let r#type = wrap(sem::Type::String);
 
-        ExprNode {
+        Expression {
             kind,
             tokens,
             r#type,
@@ -440,7 +443,7 @@ impl<'a> Parser<'a> {
             let kind = builder(Box::new(lhs), rhs, None);
             let r#type = self.new_type_var();
 
-            lhs = ExprNode {
+            lhs = Expression {
                 kind,
                 tokens,
                 r#type,
@@ -471,7 +474,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        syntax::{Expr, StatementNode, TopLevel},
+        syntax::{ExpressionKind, Statement, TopLevelKind},
         tokenizer::Token,
     };
     use assert_matches::assert_matches;
@@ -479,11 +482,11 @@ mod tests {
     #[test]
     fn number_integer() {
         let module = Parser::parse_string("42").unwrap();
-        assert!(!module.children.is_empty());
-        assert_eq!(module.children.len(), 1);
+        assert!(!module.body.is_empty());
+        assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.children[0]);
-        assert_matches!(stmt.expr.kind, Expr::Integer(42));
+        let stmt = unwrap_statement(&module.body[0]);
+        assert_matches!(stmt.expression.kind, ExpressionKind::Integer(42));
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 1);
@@ -497,13 +500,13 @@ mod tests {
     #[test]
     fn add_integer() {
         let module = Parser::parse_string("1+2").unwrap();
-        assert!(!module.children.is_empty());
-        assert_eq!(module.children.len(), 1);
+        assert!(!module.body.is_empty());
+        assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.children[0]);
-        assert_matches!(&stmt.expr.kind, Expr::Add(lhs, Some(rhs), ..) => {
-            assert_matches!(lhs.kind, Expr::Integer(1));
-            assert_matches!(rhs.kind, Expr::Integer(2));
+        let stmt = unwrap_statement(&module.body[0]);
+        assert_matches!(&stmt.expression.kind, ExpressionKind::Add(lhs, Some(rhs), ..) => {
+            assert_matches!(lhs.kind, ExpressionKind::Integer(1));
+            assert_matches!(rhs.kind, ExpressionKind::Integer(2));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -522,12 +525,12 @@ mod tests {
     #[test]
     fn add_integer_missing_node() {
         let module = Parser::parse_string("1+").unwrap();
-        assert!(!module.children.is_empty());
-        assert_eq!(module.children.len(), 1);
+        assert!(!module.body.is_empty());
+        assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.children[0]);
-        assert_matches!(&stmt.expr.kind, Expr::Add(lhs, None, ..) => {
-            assert_matches!(lhs.kind, Expr::Integer(1));
+        let stmt = unwrap_statement(&module.body[0]);
+        assert_matches!(&stmt.expression.kind, ExpressionKind::Add(lhs, None, ..) => {
+            assert_matches!(lhs.kind, ExpressionKind::Integer(1));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -547,13 +550,13 @@ mod tests {
     #[test]
     fn add_integer_skipped_tokens() {
         let module = Parser::parse_string("1 + % ? 2").unwrap();
-        assert!(!module.children.is_empty());
-        assert_eq!(module.children.len(), 1);
+        assert!(!module.body.is_empty());
+        assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.children[0]);
-        assert_matches!(&stmt.expr.kind, Expr::Add(lhs, Some(rhs), ..) => {
-            assert_matches!(lhs.kind, Expr::Integer(1));
-            assert_matches!(rhs.kind, Expr::Integer(2));
+        let stmt = unwrap_statement(&module.body[0]);
+        assert_matches!(&stmt.expression.kind, ExpressionKind::Add(lhs, Some(rhs), ..) => {
+            assert_matches!(lhs.kind, ExpressionKind::Integer(1));
+            assert_matches!(rhs.kind, ExpressionKind::Integer(2));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -580,12 +583,12 @@ mod tests {
     #[test]
     fn unary_op() {
         let module = Parser::parse_string("-1").unwrap();
-        assert!(!module.children.is_empty());
-        assert_eq!(module.children.len(), 1);
+        assert!(!module.body.is_empty());
+        assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.children[0]);
-        assert_matches!(&stmt.expr.kind, Expr::Minus(Some(operand), ..) => {
-            assert_matches!(operand.kind, Expr::Integer(1));
+        let stmt = unwrap_statement(&module.body[0]);
+        assert_matches!(&stmt.expression.kind, ExpressionKind::Minus(Some(operand), ..) => {
+            assert_matches!(operand.kind, ExpressionKind::Integer(1));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -601,13 +604,13 @@ mod tests {
     #[test]
     fn unary_op_nested() {
         let module = Parser::parse_string("-+1").unwrap();
-        assert!(!module.children.is_empty());
-        assert_eq!(module.children.len(), 1);
+        assert!(!module.body.is_empty());
+        assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.children[0]);
-        assert_matches!(&stmt.expr.kind, Expr::Minus(Some(operand), ..) => {
-            assert_matches!(&operand.kind, Expr::Plus(Some(operand), ..) => {
-                assert_matches!(operand.kind, Expr::Integer(1));
+        let stmt = unwrap_statement(&module.body[0]);
+        assert_matches!(&stmt.expression.kind, ExpressionKind::Minus(Some(operand), ..) => {
+            assert_matches!(&operand.kind, ExpressionKind::Plus(Some(operand), ..) => {
+                assert_matches!(operand.kind, ExpressionKind::Integer(1));
             });
         });
 
@@ -627,15 +630,15 @@ mod tests {
     #[test]
     fn subscript_index() {
         let module = Parser::parse_string("a[0]").unwrap();
-        assert!(!module.children.is_empty());
-        assert_eq!(module.children.len(), 1);
+        assert!(!module.body.is_empty());
+        assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.children[0]);
-        assert_matches!(&stmt.expr.kind, Expr::Subscript{ operand, index: Some(index) } => {
-            assert_matches!(&operand.kind, Expr::Identifier(id) => {
+        let stmt = unwrap_statement(&module.body[0]);
+        assert_matches!(&stmt.expression.kind, ExpressionKind::Subscript{ operand, index: Some(index) } => {
+            assert_matches!(&operand.kind, ExpressionKind::Identifier(id) => {
                 assert_eq!(id, "a");
             });
-            assert_matches!(&index.kind, Expr::Integer(0));
+            assert_matches!(&index.kind, ExpressionKind::Integer(0));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -659,12 +662,12 @@ mod tests {
     #[test]
     fn subscript_skip_close() {
         let module = Parser::parse_string("a[]").unwrap();
-        assert!(!module.children.is_empty());
-        assert_eq!(module.children.len(), 1);
+        assert!(!module.body.is_empty());
+        assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.children[0]);
-        assert_matches!(&stmt.expr.kind, Expr::Subscript{ operand, index: None } => {
-            assert_matches!(&operand.kind, Expr::Identifier(id) => {
+        let stmt = unwrap_statement(&module.body[0]);
+        assert_matches!(&stmt.expression.kind, ExpressionKind::Subscript{ operand, index: None } => {
+            assert_matches!(&operand.kind, ExpressionKind::Identifier(id) => {
                 assert_eq!(id, "a");
             });
         });
@@ -688,15 +691,15 @@ mod tests {
     #[test]
     fn subscript_not_closed() {
         let module = Parser::parse_string("a[1\nb").unwrap();
-        assert_eq!(module.children.len(), 2);
+        assert_eq!(module.body.len(), 2);
 
         // subscript
-        let stmt = unwrap_statement(&module.children[0]);
-        assert_matches!(&stmt.expr.kind, Expr::Subscript{ operand, index: Some(index) } => {
-            assert_matches!(&operand.kind, Expr::Identifier(id) => {
+        let stmt = unwrap_statement(&module.body[0]);
+        assert_matches!(&stmt.expression.kind, ExpressionKind::Subscript{ operand, index: Some(index) } => {
+            assert_matches!(&operand.kind, ExpressionKind::Identifier(id) => {
                 assert_eq!(id, "a");
             });
-            assert_matches!(&index.kind, Expr::Integer(1));
+            assert_matches!(&index.kind, ExpressionKind::Integer(1));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -708,8 +711,8 @@ mod tests {
 
     // --- helpers
 
-    fn unwrap_statement(node: &TopLevel) -> &StatementNode {
-        if let TopLevel::Statement(node) = node {
+    fn unwrap_statement(node: &TopLevelKind) -> &Statement {
+        if let TopLevelKind::Statement(node) = node {
             node
         } else {
             panic!("expected statement")

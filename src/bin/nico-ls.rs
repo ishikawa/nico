@@ -6,7 +6,10 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-use nico::tokenizer::{TokenKind, Tokenizer, TriviaKind};
+use nico::{
+    syntax::Parser,
+    tokenizer::{TokenKind, Tokenizer, TriviaKind},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -214,6 +217,13 @@ impl Connection {
         info!("[on_text_document_semantic_tokens_full] {:?}", params);
 
         let doc = self.get_document(&params.text_document.uri)?.borrow();
+
+        // ---
+        let module = Parser::parse_string(&doc.text);
+
+        info!("module = {:?}", module);
+
+        // ---
 
         let mut tokenizer = Tokenizer::from_string(&doc.text);
 

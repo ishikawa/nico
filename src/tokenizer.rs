@@ -6,7 +6,7 @@
 //! sequences and EOF in the middle.
 //!
 //! It is responsibility of parsers to interpret these tokens and generate strings and other nodes.
-use std::fmt;
+use std::{fmt, rc::Rc};
 use std::{iter::Peekable, str::Chars};
 
 /// Position in a text document expressed as zero-based line and character offset.
@@ -108,6 +108,35 @@ pub enum TriviaKind {
 pub enum TokenizerMode {
     Code,
     String,
+}
+
+#[derive(Debug)]
+pub enum SyntaxToken {
+    Interpreted(Rc<Token>),
+    Missing(Rc<Token>),
+    /// A skipped token with the description of an expected node.
+    Skipped {
+        token: Rc<Token>,
+        expected: String,
+    },
+    Child,
+}
+
+impl SyntaxToken {
+    pub fn interpreted(token: Token) -> Self {
+        Self::Interpreted(Rc::new(token))
+    }
+
+    pub fn missing(token: Token) -> Self {
+        Self::Missing(Rc::new(token))
+    }
+
+    pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
+        Self::Skipped {
+            token: Rc::new(token),
+            expected: expected.into(),
+        }
+    }
 }
 
 #[derive(Debug)]
