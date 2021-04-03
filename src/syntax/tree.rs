@@ -122,12 +122,6 @@ pub struct StringLiteral(pub Option<String>);
 pub struct Identifier(pub String);
 
 #[derive(Debug)]
-pub struct SubscriptExpression {
-    pub operand: Box<Expression>,
-    pub index: Option<Box<Expression>>,
-}
-
-#[derive(Debug)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
     pub lhs: Box<Expression>,
@@ -135,9 +129,15 @@ pub struct BinaryExpression {
 }
 
 #[derive(Debug)]
+pub struct SubscriptExpression {
+    pub callee: Box<Expression>,
+    pub arguments: Vec<Expression>,
+}
+
+#[derive(Debug)]
 pub struct CallExpression {
     pub callee: Box<Expression>,
-    pub arguments: Vec<Option<Expression>>,
+    pub arguments: Vec<Expression>,
 }
 
 #[derive(Debug)]
@@ -172,9 +172,9 @@ pub enum ExpressionKind {
     IntegerLiteral(IntegerLiteral),
     StringLiteral(StringLiteral),
     Identifier(Identifier),
-    SubscriptExpression(SubscriptExpression),
     BinaryExpression(BinaryExpression),
     UnaryExpression(UnaryExpression),
+    SubscriptExpression(SubscriptExpression),
     CallExpression(CallExpression),
 }
 
@@ -193,11 +193,7 @@ impl Expression {
             ExpressionKind::IntegerLiteral(_)
             | ExpressionKind::Identifier(_)
             | ExpressionKind::StringLiteral(_) => {}
-            ExpressionKind::SubscriptExpression(SubscriptExpression {
-                operand: lhs,
-                index: rhs,
-            })
-            | ExpressionKind::BinaryExpression(BinaryExpression { lhs, rhs, .. }) => {
+            ExpressionKind::BinaryExpression(BinaryExpression { lhs, rhs, .. }) => {
                 children.push(&**lhs);
 
                 if let Some(rhs) = rhs {
@@ -209,13 +205,12 @@ impl Expression {
                     children.push(&**operand)
                 }
             }
-            ExpressionKind::CallExpression(CallExpression { callee, arguments }) => {
+            ExpressionKind::SubscriptExpression(SubscriptExpression { callee, arguments })
+            | ExpressionKind::CallExpression(CallExpression { callee, arguments }) => {
                 children.push(&**callee);
 
                 for arg in arguments {
-                    if let Some(arg) = arg {
-                        children.push(arg)
-                    }
+                    children.push(arg)
                 }
             }
         };

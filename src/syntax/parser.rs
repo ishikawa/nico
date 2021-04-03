@@ -227,8 +227,10 @@ impl<'a> Parser<'a> {
 
             match token.kind {
                 TokenKind::Char('[') => {
+                    //let (arguments, tokens) = self.read_arguments(']')?;
+
                     let open_token = self.tokenizer.next_token();
-                    let mut index_node;
+                    let mut arguments = vec![];
                     let mut tokens = vec![
                         SyntaxTokenItem::Child,
                         SyntaxTokenItem::interpreted(open_token),
@@ -236,9 +238,10 @@ impl<'a> Parser<'a> {
                     let mut closed = false;
 
                     loop {
-                        index_node = self.parse_expr()?.map(Box::new);
+                        let index_node = self.parse_expr()?;
 
-                        if index_node.is_some() {
+                        if let Some(index_node) = index_node {
+                            arguments.push(index_node);
                             tokens.push(SyntaxTokenItem::Child);
                             break;
                         } else {
@@ -271,8 +274,8 @@ impl<'a> Parser<'a> {
 
                     // node
                     let expr = SubscriptExpression {
-                        operand: Box::new(operand),
-                        index: index_node,
+                        callee: Box::new(operand),
+                        arguments,
                     };
 
                     operand = Expression {
@@ -706,12 +709,13 @@ mod tests {
         let stmt = unwrap_statement(&module.body[0]);
         let expr = stmt.expression.unwrap_subscript_expression();
 
-        assert_matches!(expr, SubscriptExpression{ operand, index: Some(index) } => {
-            let id = operand.unwrap_identifier();
+        assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
+            let id = callee.unwrap_identifier();
             assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
-            assert_matches!(index.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(0)));
+            assert_eq!(arguments.len(), 1);
+            assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(0)));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -741,11 +745,12 @@ mod tests {
         let stmt = unwrap_statement(&module.body[0]);
         let expr = stmt.expression.unwrap_subscript_expression();
 
-        assert_matches!(expr, SubscriptExpression{ operand, index: None } => {
-            let id = operand.unwrap_identifier();
+        assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
+            let id = callee.unwrap_identifier();
             assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
+            assert_eq!(arguments.len(), 0);
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();
@@ -773,12 +778,13 @@ mod tests {
         let stmt = unwrap_statement(&module.body[0]);
         let expr = stmt.expression.unwrap_subscript_expression();
 
-        assert_matches!(expr, SubscriptExpression{ operand, index: Some(index) } => {
-            let id = operand.unwrap_identifier();
+        assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
+            let id = callee.unwrap_identifier();
             assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
-            assert_matches!(index.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_eq!(arguments.len(), 1);
+            assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
         let tokens = stmt.tokens().collect::<Vec<_>>();

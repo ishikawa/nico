@@ -198,9 +198,7 @@ fn traverse_call_expression(visitor: &mut dyn Visitor, node: &Expression, expr: 
     if !path.skip_children {
         traverse_expression(visitor, &expr.callee);
         for arg in &expr.arguments {
-            if let Some(arg) = arg {
-                traverse_expression(visitor, arg);
-            }
+            traverse_expression(visitor, arg);
         }
     }
 
