@@ -241,6 +241,21 @@ impl<'a> Parser<'a> {
                         tokens,
                     };
                 }
+                TokenKind::Char('(') => {
+                    let (arguments, mut tokens) = self.read_arguments(')')?;
+                    tokens.insert(0, SyntaxTokenItem::Child);
+
+                    let expr = CallExpression {
+                        callee: Box::new(operand),
+                        arguments,
+                    };
+
+                    operand = Expression {
+                        kind: ExpressionKind::CallExpression(expr),
+                        r#type: self.new_type_var(),
+                        tokens,
+                    };
+                }
                 _ => break,
             }
         }
