@@ -254,7 +254,7 @@ impl<'a> Iterator for SyntaxTokens<'a> {
             None => None,
             Some(SyntaxTokenItem::Child) => {
                 self.in_child = true;
-                return self.next();
+                self.next()
             }
             Some(SyntaxTokenItem::Token(ref t)) => Some(t),
         }
