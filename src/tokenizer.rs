@@ -149,7 +149,7 @@ impl SyntaxTokenItem {
 
     pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
         Self::Token(SyntaxToken::Skipped {
-            token: token,
+            token,
             expected: expected.into(),
         })
     }
