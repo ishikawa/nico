@@ -1,7 +1,8 @@
-use crate::tokenizer::{SyntaxTokenItem, Token};
-use crate::{sem, tokenizer::SyntaxToken};
+use super::{SyntaxToken, SyntaxTokenItem, Token};
+use crate::sem;
+use std::cell::RefCell;
 use std::rc::Rc;
-use std::{cell::RefCell, slice};
+use std::slice;
 
 #[derive(Debug)]
 pub struct Program {

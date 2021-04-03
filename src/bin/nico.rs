@@ -2,7 +2,7 @@ use io::Read;
 use nico::asm::wasm::Printer as WasmPrinter;
 use nico::asm::AsmBuilder;
 use nico::parser::Parser;
-use nico::tokenizer::Tokenizer;
+use nico::syntax::Tokenizer;
 use nico::CompilerPasses;
 use std::env;
 use std::fs;

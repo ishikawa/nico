@@ -1,4 +1,4 @@
-use crate::tokenizer::{Position, Token};
+use super::{Position, Token};
 use std::fmt;
 use thiserror::Error;
 
