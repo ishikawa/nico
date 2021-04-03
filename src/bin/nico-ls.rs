@@ -6,13 +6,8 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-use nico::tokenizer::{SyntaxToken, TriviaKind};
-use nico::{syntax, tokenizer::TokenKind};
-use nico::{syntax::traverse, tokenizer::Token};
-use nico::{
-    syntax::{ParseError, Parser},
-    tokenizer::Trivia,
-};
+use nico::syntax::{traverse, Expression, ExpressionKind, ParseError, Parser};
+use nico::tokenizer::{Token, TokenKind, Trivia, TriviaKind};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -182,7 +177,7 @@ impl SemanticTokenizer {
     fn on_leading_trivia(&mut self, leading_trivia: &[Trivia]) {
         for trivia in leading_trivia {
             if let TriviaKind::LineComment(_) = trivia.kind {
-                self.add_absolute(SemanticTokenAbsolute {
+                self.add_semantic_token_absolute(SemanticTokenAbsolute {
                     token_type: SemanticTokenType::COMMENT,
                     line: trivia.range.start.line,
                     character: trivia.range.start.character,
@@ -211,7 +206,51 @@ impl SemanticTokenizer {
             _ => return,
         };
 
-        self.add_absolute(SemanticTokenAbsolute {
+        self.add_token(token_type, token);
+    }
+
+    fn add_expression(&mut self, node: &Expression) {
+        match node.kind {
+            ExpressionKind::StringLiteral(_) => {
+                self._add_expression_with_type(SemanticTokenType::STRING, node);
+            }
+            ExpressionKind::CallExpression(ref expr) => {
+                if let ExpressionKind::Identifier(_) = expr.callee.kind {
+                    self._add_expression_with_type(SemanticTokenType::FUNCTION, &expr.callee);
+                } else {
+                    self.add_expression(&expr.callee);
+                }
+
+                for arg in &expr.arguments {
+                    self.add_expression(arg);
+                }
+            }
+            _ => {
+                self._add_expression_without_type(node);
+            }
+        }
+    }
+
+    fn _add_expression_without_type(&mut self, node: &Expression) {
+        for token in node.tokens() {
+            let token = token.token();
+
+            self.on_leading_trivia(&token.leading_trivia);
+            self.on_token(token);
+        }
+    }
+
+    fn _add_expression_with_type(&mut self, token_type: SemanticTokenType, node: &Expression) {
+        for token in node.tokens() {
+            let token = token.token();
+
+            self.on_leading_trivia(&token.leading_trivia);
+            self.add_token(token_type.clone(), token);
+        }
+    }
+
+    fn add_token(&mut self, token_type: SemanticTokenType, token: &Token) {
+        self.add_semantic_token_absolute(SemanticTokenAbsolute {
             token_type,
             line: token.range.start.line,
             character: token.range.start.character,
@@ -219,7 +258,7 @@ impl SemanticTokenizer {
         })
     }
 
-    fn add_absolute(&mut self, abs_sem_token: SemanticTokenAbsolute) {
+    fn add_semantic_token_absolute(&mut self, abs_sem_token: SemanticTokenAbsolute) {
         let token_type = if let Some(ty) = self.legend.get(&abs_sem_token.token_type) {
             u32::try_from(*ty).unwrap()
         } else {
@@ -256,41 +295,10 @@ impl traverse::Visitor for SemanticTokenizer {
         self.on_token(path.node());
     }
 
-    fn enter_expression(&mut self, path: &mut traverse::Path<syntax::Expression>) {
+    fn enter_expression(&mut self, path: &mut traverse::Path<Expression>) {
         let node = path.node();
 
-        match node.kind {
-            syntax::ExpressionKind::StringLiteral(_) => {
-                for token in node.tokens() {
-                    match token {
-                        SyntaxToken::Interpreted(token)
-                        | SyntaxToken::Missing(token)
-                        | SyntaxToken::Skipped { token, .. } => {
-                            self.on_leading_trivia(&token.leading_trivia);
-                            self.add_absolute(SemanticTokenAbsolute {
-                                token_type: SemanticTokenType::STRING,
-                                line: token.range.start.line,
-                                character: token.range.start.character,
-                                length: token.range.length,
-                            })
-                        }
-                    };
-                }
-            }
-            _ => {
-                for token in node.tokens() {
-                    match token {
-                        SyntaxToken::Interpreted(token)
-                        | SyntaxToken::Missing(token)
-                        | SyntaxToken::Skipped { token, .. } => {
-                            self.on_leading_trivia(&token.leading_trivia);
-                            self.on_token(token);
-                        }
-                    };
-                }
-            }
-        }
-
+        self.add_expression(node);
         path.skip();
     }
 }

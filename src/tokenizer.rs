@@ -121,6 +121,16 @@ pub enum SyntaxToken {
     },
 }
 
+impl SyntaxToken {
+    pub fn token(&self) -> &Rc<Token> {
+        match self {
+            SyntaxToken::Interpreted(token)
+            | SyntaxToken::Missing(token)
+            | SyntaxToken::Skipped { token, .. } => token,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum SyntaxTokenItem {
     Token(SyntaxToken),
