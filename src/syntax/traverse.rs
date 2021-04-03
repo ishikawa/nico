@@ -53,6 +53,9 @@ pub trait Visitor {
 
     fn enter_integer_literal(&mut self, path: &mut Path<Expression>, literal: &IntegerLiteral) {}
     fn exit_integer_literal(&mut self, path: &mut Path<Expression>, literal: &IntegerLiteral) {}
+
+    fn enter_string_literal(&mut self, path: &mut Path<Expression>, literal: &StringLiteral) {}
+    fn exit_string_literal(&mut self, path: &mut Path<Expression>, literal: &StringLiteral) {}
 }
 
 pub fn traverse_program(visitor: &mut dyn Visitor, node: &Program) {
@@ -141,6 +144,9 @@ pub fn traverse_expression(visitor: &mut dyn Visitor, node: &Expression) {
             ExpressionKind::IntegerLiteral(ref literal) => {
                 traverse_integer_literal(visitor, node, literal);
             }
+            ExpressionKind::StringLiteral(ref literal) => {
+                traverse_string_literal(visitor, node, literal);
+            }
             _ => {}
         }
     }
@@ -162,6 +168,17 @@ fn traverse_integer_literal(
     }
     if !path.stopped {
         visitor.exit_integer_literal(&mut path, literal);
+    }
+}
+
+fn traverse_string_literal(visitor: &mut dyn Visitor, node: &Expression, literal: &StringLiteral) {
+    let mut path = Path::new(node);
+
+    if !path.stopped {
+        visitor.enter_string_literal(&mut path, literal);
+    }
+    if !path.stopped {
+        visitor.exit_string_literal(&mut path, literal);
     }
 }
 

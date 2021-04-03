@@ -257,18 +257,41 @@ impl traverse::Visitor for SemanticTokenizer {
     }
 
     fn enter_expression(&mut self, path: &mut traverse::Path<syntax::Expression>) {
-        info!("Expression - {:?}", path.node());
+        let node = path.node();
 
-        for token in path.node().tokens() {
-            match token {
-                SyntaxToken::Interpreted(token)
-                | SyntaxToken::Missing(token)
-                | SyntaxToken::Skipped { token, .. } => {
-                    self.on_leading_trivia(&token.leading_trivia);
-                    self.on_token(token);
+        match node.kind {
+            syntax::ExpressionKind::StringLiteral(_) => {
+                for token in node.tokens() {
+                    match token {
+                        SyntaxToken::Interpreted(token)
+                        | SyntaxToken::Missing(token)
+                        | SyntaxToken::Skipped { token, .. } => {
+                            self.on_leading_trivia(&token.leading_trivia);
+                            self.add_absolute(SemanticTokenAbsolute {
+                                token_type: SemanticTokenType::STRING,
+                                line: token.range.start.line,
+                                character: token.range.start.character,
+                                length: token.range.length,
+                            })
+                        }
+                    };
                 }
-            };
+            }
+            _ => {
+                for token in node.tokens() {
+                    match token {
+                        SyntaxToken::Interpreted(token)
+                        | SyntaxToken::Missing(token)
+                        | SyntaxToken::Skipped { token, .. } => {
+                            self.on_leading_trivia(&token.leading_trivia);
+                            self.on_token(token);
+                        }
+                    };
+                }
+            }
         }
+
+        path.skip();
     }
 }
 
