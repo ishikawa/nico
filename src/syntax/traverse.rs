@@ -72,7 +72,6 @@ pub fn traverse_program(visitor: &mut dyn Visitor, node: &Program) {
                     traverse_function_definition(visitor, child)
                 }
                 TopLevelKind::Statement(child) => traverse_statement(visitor, child),
-                TopLevelKind::Unknown(token) => traverse_unknown_token(visitor, token),
             }
         }
     }

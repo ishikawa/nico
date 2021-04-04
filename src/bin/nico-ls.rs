@@ -7,8 +7,8 @@ use lsp_types::{
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use nico::syntax::{
-    traverse, CallExpression, Expression, ExpressionKind, FunctionDefinition, ParseError, Parser,
-    StringLiteral, Token, TokenKind, Trivia, TriviaKind,
+    traverse, CallExpression, CodeIterable, Expression, ExpressionKind, FunctionDefinition,
+    ParseError, Parser, StringLiteral, Token, TokenKind, Trivia, TriviaKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -218,20 +218,30 @@ impl SemanticTokenizer {
     }
 
     fn _add_expression_generic(&mut self, node: &Expression) {
-        for token in node.tokens() {
-            let token = token.token();
+        for kind in node.code() {
+            match kind {
+                nico::syntax::CodeKind::NodeKind(_) => {}
+                nico::syntax::CodeKind::SyntaxToken(token) => {
+                    let token = token.token();
 
-            self.add_leading_trivia(&token.leading_trivia);
-            self.add_token(token);
+                    self.add_leading_trivia(&token.leading_trivia);
+                    self.add_token(token);
+                }
+            }
         }
     }
 
     fn _add_expression_with_type(&mut self, token_type: SemanticTokenType, node: &Expression) {
-        for token in node.tokens() {
-            let token = token.token();
+        for kind in node.code() {
+            match kind {
+                nico::syntax::CodeKind::NodeKind(_) => {}
+                nico::syntax::CodeKind::SyntaxToken(token) => {
+                    let token = token.token();
 
-            self.add_leading_trivia(&token.leading_trivia);
-            self._add_token_with_type(token_type.clone(), token);
+                    self.add_leading_trivia(&token.leading_trivia);
+                    self._add_token_with_type(token_type.clone(), token);
+                }
+            }
         }
     }
 
