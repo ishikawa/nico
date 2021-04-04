@@ -320,7 +320,7 @@ impl<'a> Parser<'a> {
             match token.kind {
                 TokenKind::Char('[') => {
                     let mut tokens = SyntaxTokensBuffer::with_child();
-                    let arguments = self.read_arguments(']', &mut tokens)?;
+                    let arguments = self.read_arguments('[', ']', &mut tokens)?;
 
                     let expr = SubscriptExpression {
                         callee: Box::new(operand),
@@ -335,7 +335,7 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::Char('(') => {
                     let mut tokens = SyntaxTokensBuffer::with_child();
-                    let arguments = self.read_arguments(')', &mut tokens)?;
+                    let arguments = self.read_arguments('(', ')', &mut tokens)?;
 
                     let expr = CallExpression {
                         callee: Box::new(operand),
@@ -450,26 +450,78 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Read comma-separated elements from the start character token specified by `open_char` to
+    /// the end character token or EOF specified by `close_char`.
     fn read_arguments(
         &mut self,
+        open_char: char,
         close_char: char,
         tokens: &mut SyntaxTokensBuffer,
     ) -> Result<Vec<Expression>, ParseError> {
-        tokens.interpret(self.tokenizer.next_token());
-
         let mut arguments = vec![];
-        let mut argument_read = true;
+        let mut consumed = false; // An argument already read.
+
+        // Read an opening token
+        loop {
+            match self.tokenizer.peek_kind() {
+                TokenKind::Char(c) if *c == open_char => {
+                    // Beginning of arguments.
+                    tokens.interpret(self.tokenizer.next_token());
+                    break;
+                }
+                TokenKind::Eos => {
+                    // Oh, is it over?
+                    tokens.missing(
+                        self.tokenizer
+                            .build_missing(TokenKind::Char(open_char), open_char.to_string()),
+                    );
+                    break;
+                }
+                TokenKind::Char(c) if *c == close_char => {
+                    // Umm, maybe user forgot opening token.
+                    //
+                    //     # (
+                    //     )
+                    tokens.missing(
+                        self.tokenizer
+                            .build_missing(TokenKind::Char(open_char), open_char.to_string()),
+                    );
+                    break;
+                }
+                _ => {
+                    if let Some(expr) = self.parse_expr()? {
+                        // Maybe user forgot opening token before a param.
+                        //     # (
+                        //         a ...
+                        //     )
+                        arguments.push(expr);
+                        consumed = true;
+
+                        tokens.missing(
+                            self.tokenizer
+                                .build_missing(TokenKind::Char(open_char), open_char.to_string()),
+                        );
+                        tokens.child();
+
+                        break;
+                    } else {
+                        // Continue until read an opening token.
+                        tokens.skip(self.tokenizer.next_token(), open_char.to_string());
+                    }
+                }
+            }
+        }
 
         loop {
-            if argument_read {
+            if !consumed {
                 let argument = self.parse_expr()?;
 
                 if let Some(argument) = argument {
-                    argument_read = true;
+                    consumed = true;
                     arguments.push(argument);
                     tokens.child();
                 } else {
-                    argument_read = false;
+                    consumed = false;
                 }
             }
 
@@ -482,17 +534,22 @@ impl<'a> Parser<'a> {
                 TokenKind::Char(',') => {
                     let t = self.tokenizer.next_token();
 
-                    if !argument_read {
-                        // Missing argument, so skip token.
+                    if !consumed {
+                        // missing argument, so skip token.
                         tokens.skip(t, "expression");
-                        argument_read = true;
                     } else {
                         tokens.interpret(t);
                     }
+
+                    // clear the flag before iterating the next.
+                    consumed = false;
                 }
                 _ => {
                     // Premature EOF or unknown token.
-                    tokens.missing(self.tokenizer.build_missing(TokenKind::Char(']'), "]"));
+                    tokens.missing(
+                        self.tokenizer
+                            .build_missing(TokenKind::Char(close_char), close_char.to_string()),
+                    );
                     break;
                 }
             }
