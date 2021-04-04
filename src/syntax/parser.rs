@@ -320,7 +320,8 @@ impl<'a> Parser<'a> {
             match token.kind {
                 TokenKind::Char('[') => {
                     let mut tokens = SyntaxTokensBuffer::with_child();
-                    let arguments = self.read_arguments('[', ']', &mut tokens)?;
+                    let arguments =
+                        self._parse_elements('[', ']', &mut tokens, Parser::parse_expr)?;
 
                     let expr = SubscriptExpression {
                         callee: Box::new(operand),
@@ -335,7 +336,8 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::Char('(') => {
                     let mut tokens = SyntaxTokensBuffer::with_child();
-                    let arguments = self.read_arguments('(', ')', &mut tokens)?;
+                    let arguments =
+                        self._parse_elements('(', ')', &mut tokens, Parser::parse_expr)?;
 
                     let expr = CallExpression {
                         callee: Box::new(operand),
@@ -452,12 +454,13 @@ impl<'a> Parser<'a> {
 
     /// Read comma-separated elements from the start character token specified by `open_char` to
     /// the end character token or EOF specified by `close_char`.
-    fn read_arguments(
+    fn _parse_elements<T>(
         &mut self,
         open_char: char,
         close_char: char,
         tokens: &mut SyntaxTokensBuffer,
-    ) -> Result<Vec<Expression>, ParseError> {
+        element_parser: fn(&mut Parser<'a>) -> Result<Option<T>, ParseError>,
+    ) -> Result<Vec<T>, ParseError> {
         let mut arguments = vec![];
         let mut consumed = false; // An argument already read.
 
@@ -489,7 +492,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 _ => {
-                    if let Some(expr) = self.parse_expr()? {
+                    if let Some(expr) = element_parser(self)? {
                         // Maybe user forgot opening token before a param.
                         //     # (
                         //         a ...
@@ -514,7 +517,7 @@ impl<'a> Parser<'a> {
 
         loop {
             if !consumed {
-                let argument = self.parse_expr()?;
+                let argument = element_parser(self)?;
 
                 if let Some(argument) = argument {
                     consumed = true;
