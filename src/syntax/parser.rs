@@ -79,7 +79,60 @@ impl<'a> Parser<'a> {
     fn parse_function(&mut self) -> Result<Option<FunctionDefinition>, ParseError> {
         self.debug_trace("parse_function");
 
+        let mut tokens = SyntaxTokensBuffer::new();
+
+        // TODO: In L(1) parser, if the `fun` keyword is not followed by an `export` keyword,
+        // the `export` keyword cannot be push backed, so we shouldn't stop reading export here.
+        let export = self.match_token(TokenKind::Export);
+
+        if export {
+            tokens.interpret(self.tokenizer.next_token());
+        }
+
+        // fun
+        if !self.match_token(TokenKind::Fun) {
+            return Ok(None);
+        }
+
+        tokens.interpret(self.tokenizer.next_token());
+
+        // name
+        loop {
+            match self.tokenizer.peek_kind() {
+                TokenKind::Identifier(_) => {
+                    // Okay, it's a function name.
+                    tokens.interpret(self.tokenizer.next_token());
+                    break;
+                }
+                TokenKind::Char('(') | TokenKind::Eos => {
+                    // Umm, maybe user forgot/omitted a function name?
+                    // I'm sorry, but this language is not JavaScript.
+                    tokens.missing(
+                        self.tokenizer
+                            .build_missing(TokenKind::Identifier("".to_string()), "function name"),
+                    );
+                    break;
+                }
+                _ => {
+                    // Continue until read identifier or over.
+                    tokens.skip(self.tokenizer.next_token(), "function name");
+                }
+            }
+        }
+
         Ok(None)
+    }
+
+    #[allow(clippy::unnecessary_wraps)]
+    fn parse_function_parameter(&mut self) -> Result<Option<FunctionParameter>, ParseError> {
+        if let TokenKind::Identifier(name) = self.tokenizer.peek_kind() {
+            let name = name.clone();
+            let tokens = SyntaxTokensBuffer::with_interpreted(self.tokenizer.next_token());
+
+            Ok(Some(FunctionParameter { name, tokens }))
+        } else {
+            Ok(None)
+        }
     }
 
     fn parse_stmt(&mut self) -> Result<Option<Statement>, ParseError> {
@@ -476,6 +529,9 @@ impl<'a> Parser<'a> {
     }
 
     // --- Helpers
+    fn match_token(&mut self, kind: TokenKind) -> bool {
+        *self.tokenizer.peek_kind() == kind
+    }
 
     /// Returns a new type variable.
     fn new_type_var(&mut self) -> Rc<RefCell<sem::Type>> {
