@@ -677,7 +677,7 @@ mod tests {
             ExpressionKind::IntegerLiteral(IntegerLiteral(42))
         );
 
-        let code = stmt.code().collect::<Vec<_>>();
+        let code = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(code.len(), 1);
 
         let token = unwrap_interpreted_token(code[0]);
@@ -700,7 +700,7 @@ mod tests {
             assert_matches!(rhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(2)));
         });
 
-        let tokens = stmt.code().collect::<Vec<_>>();
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 3);
 
         let node = unwrap_node(tokens[0]);
@@ -726,7 +726,7 @@ mod tests {
             assert_matches!(lhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
-        let tokens = stmt.code().collect::<Vec<_>>();
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 3);
 
         let node = unwrap_node(tokens[0]);
@@ -754,7 +754,7 @@ mod tests {
             assert_matches!(rhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(2)));
         });
 
-        let tokens = stmt.code().collect::<Vec<_>>();
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 5);
 
         let node = unwrap_node(tokens[0]);
@@ -788,7 +788,7 @@ mod tests {
             assert_matches!(operand.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
-        let tokens = stmt.code().collect::<Vec<_>>();
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 2);
 
         let token = unwrap_interpreted_token(tokens[0]);
@@ -815,7 +815,7 @@ mod tests {
             });
         });
 
-        let tokens = stmt.code().collect::<Vec<_>>();
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 2);
 
         let token = unwrap_interpreted_token(tokens[0]);
@@ -843,7 +843,7 @@ mod tests {
             assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(0)));
         });
 
-        let tokens = stmt.code().collect::<Vec<_>>();
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 4);
 
         let node = unwrap_node(tokens[0]);
@@ -876,7 +876,7 @@ mod tests {
             assert_eq!(arguments.len(), 0);
         });
 
-        let tokens = stmt.code().collect::<Vec<_>>();
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 3);
 
         let node = unwrap_node(tokens[0]);
@@ -907,7 +907,7 @@ mod tests {
             assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
-        let tokens = stmt.code().collect::<Vec<_>>();
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 4);
 
         let token = unwrap_missing_token(tokens[3]);

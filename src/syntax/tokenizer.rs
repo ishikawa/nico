@@ -106,7 +106,7 @@ pub enum TriviaKind {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum TokenizerMode {
+enum TokenizerMode {
     Code,
     String,
 }

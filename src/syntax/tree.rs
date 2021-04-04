@@ -102,11 +102,19 @@ impl TypeField {
 pub struct TypeAnnotation {
     pub name: Rc<Name>,
     pub r#type: Option<Rc<RefCell<sem::Type>>>,
+    code: Code,
 }
 
 impl TypeAnnotation {
     pub fn new(name: Rc<Name>) -> Self {
-        Self { name, r#type: None }
+        let mut code = Code::new();
+        code.name(&name);
+
+        Self {
+            name,
+            code,
+            r#type: None,
+        }
     }
 }
 
@@ -149,11 +157,15 @@ impl FunctionParameter {
 #[derive(Debug)]
 pub struct Statement {
     pub expression: Rc<Expression>,
+    code: Code,
 }
 
 impl Statement {
     pub fn new(expression: Rc<Expression>) -> Self {
-        Self { expression }
+        let mut code = Code::new();
+        code.expression(&expression);
+
+        Self { expression, code }
     }
 }
 
@@ -389,7 +401,7 @@ impl CodeIterable for TypeField {
 
 impl CodeIterable for TypeAnnotation {
     fn code(&self) -> slice::Iter<CodeKind> {
-        self.name.code()
+        self.code.code()
     }
 }
 
@@ -407,7 +419,7 @@ impl CodeIterable for FunctionParameter {
 
 impl CodeIterable for Statement {
     fn code(&self) -> slice::Iter<CodeKind> {
-        self.expression.code()
+        self.code.code()
     }
 }
 
