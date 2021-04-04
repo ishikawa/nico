@@ -138,6 +138,7 @@ impl<'a> Parser<'a> {
             match self.tokenizer.peek_kind() {
                 TokenKind::End => {
                     // Okay, it's done.
+                    tokens.interpret(self.tokenizer.next_token());
                     break;
                 }
                 TokenKind::Eos => {

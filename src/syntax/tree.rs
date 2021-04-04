@@ -78,6 +78,11 @@ pub enum TopLevelKind {
     Unknown(Token),
 }
 
+#[derive(Debug)]
+pub struct Name {
+    pub name: String,
+}
+
 /// Types
 /// -----
 /// ```ignore
@@ -237,6 +242,27 @@ pub enum ExpressionKind {
 }
 
 // --- tokens
+impl FunctionDefinition {
+    pub fn tokens(&self) -> SyntaxTokens<'_> {
+        let mut children = vec![];
+
+        for param in &self.parameters {
+            children.push(param.tokens());
+        }
+        for stmt in &self.body {
+            children.push(stmt.tokens());
+        }
+
+        SyntaxTokens::new(self.tokens.iter(), children)
+    }
+}
+
+impl FunctionParameter {
+    pub fn tokens(&self) -> SyntaxTokens<'_> {
+        SyntaxTokens::new(self.tokens.iter(), vec![])
+    }
+}
+
 impl Statement {
     pub fn tokens(&self) -> SyntaxTokens<'_> {
         self.expression.tokens()

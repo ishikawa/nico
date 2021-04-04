@@ -7,8 +7,8 @@ use lsp_types::{
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use nico::syntax::{
-    traverse, CallExpression, Expression, ExpressionKind, ParseError, Parser, StringLiteral, Token,
-    TokenKind, Trivia, TriviaKind,
+    traverse, CallExpression, Expression, ExpressionKind, FunctionDefinition, ParseError, Parser,
+    StringLiteral, Token, TokenKind, Trivia, TriviaKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -276,6 +276,14 @@ impl SemanticTokenizer {
 }
 
 impl traverse::Visitor for SemanticTokenizer {
+    fn enter_function_definition(&mut self, path: &mut traverse::Path<FunctionDefinition>) {
+        let node = path.node();
+
+        info!("Enter FUNCTION {:?}", node.name);
+
+        path.skip();
+    }
+
     fn enter_unknown_token(&mut self, path: &mut traverse::Path<Token>) {
         self.add_leading_trivia(&path.node().leading_trivia);
         self.add_token(path.node());

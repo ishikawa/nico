@@ -35,6 +35,9 @@ pub trait Visitor {
     fn enter_function_definition(&mut self, path: &mut Path<FunctionDefinition>) {}
     fn exit_function_definition(&mut self, path: &mut Path<FunctionDefinition>) {}
 
+    fn enter_function_parameter(&mut self, path: &mut Path<FunctionParameter>) {}
+    fn exit_function_parameter(&mut self, path: &mut Path<FunctionParameter>) {}
+
     fn enter_unknown_token(&mut self, path: &mut Path<Token>) {}
     fn exit_unknown_token(&mut self, path: &mut Path<Token>) {}
 
@@ -96,8 +99,32 @@ pub fn traverse_function_definition(visitor: &mut dyn Visitor, node: &FunctionDe
     if !path.skipped {
         visitor.enter_function_definition(&mut path);
     }
+
+    if !path.skipped {
+        for param in &node.parameters {
+            traverse_function_parameter(visitor, param);
+        }
+    }
+
+    if !path.skipped {
+        for stmt in &node.body {
+            traverse_statement(visitor, stmt);
+        }
+    }
+
     if !path.skipped {
         visitor.exit_function_definition(&mut path);
+    }
+}
+
+pub fn traverse_function_parameter(visitor: &mut dyn Visitor, node: &FunctionParameter) {
+    let mut path = Path::new(node);
+
+    if !path.skipped {
+        visitor.enter_function_parameter(&mut path);
+    }
+    if !path.skipped {
+        visitor.exit_function_parameter(&mut path);
     }
 }
 
