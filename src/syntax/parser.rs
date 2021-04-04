@@ -97,10 +97,13 @@ impl<'a> Parser<'a> {
         tokens.interpret(self.tokenizer.next_token());
 
         // name
+        let mut function_name = None;
+
         loop {
             match self.tokenizer.peek_kind() {
-                TokenKind::Identifier(_) => {
+                TokenKind::Identifier(name) => {
                     // Okay, it's a function name.
+                    function_name = Some(name.clone());
                     tokens.interpret(self.tokenizer.next_token());
                     break;
                 }
@@ -116,6 +119,46 @@ impl<'a> Parser<'a> {
                 _ => {
                     // Continue until read identifier or over.
                     tokens.skip(self.tokenizer.next_token(), "function name");
+                }
+            }
+        }
+
+        // parameters - begin
+        let mut parameters = vec![];
+        let mut param_read = false;
+
+        loop {
+            match self.tokenizer.peek_kind() {
+                TokenKind::Char('(') => {
+                    // Beginning of parameters.
+                    tokens.interpret(self.tokenizer.next_token());
+                    break;
+                }
+                TokenKind::Char(')') | TokenKind::Eos => {
+                    // Umm, maybe user forgot opening paren.
+                    //
+                    //     fun foo # (
+                    //     )
+                    tokens.missing(self.tokenizer.build_missing(TokenKind::Char('('), "("));
+                    break;
+                }
+                _ => {
+                    if let Some(param) = self.parse_function_parameter()? {
+                        // Maybe user forgot opening paren before a param.
+                        //     fun foo # (
+                        //         a, ...
+                        //     )
+                        parameters.push(param);
+
+                        tokens.missing(self.tokenizer.build_missing(TokenKind::Char('('), "("));
+                        tokens.child();
+
+                        param_read = true;
+                        break;
+                    } else {
+                        // Continue until read an open paren.
+                        tokens.skip(self.tokenizer.next_token(), "(");
+                    }
                 }
             }
         }
@@ -442,6 +485,7 @@ impl<'a> Parser<'a> {
                     if !argument_read {
                         // Missing argument, so skip token.
                         tokens.skip(t, "expression");
+                        argument_read = true;
                     } else {
                         tokens.interpret(t);
                     }

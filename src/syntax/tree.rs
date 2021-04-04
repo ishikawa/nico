@@ -113,7 +113,7 @@ pub struct TypeAnnotation {
 #[derive(Debug)]
 pub struct FunctionDefinition {
     pub name: Option<String>,
-    pub params: Vec<FunctionParameter>,
+    pub parameters: Vec<FunctionParameter>,
     pub body: Vec<Statement>,
     pub tokens: Vec<SyntaxTokenItem>,
 }
