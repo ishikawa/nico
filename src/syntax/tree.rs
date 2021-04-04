@@ -1,4 +1,4 @@
-use super::{SyntaxToken, Token, TokenKind};
+use super::{SyntaxToken, Token};
 use crate::sem;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -11,31 +11,26 @@ pub enum SyntaxTokenItem {
     Child,
 }
 
-impl SyntaxTokenItem {
-    pub fn interpreted(token: Token) -> Self {
-        Self::Token(SyntaxToken::Interpreted(token))
-    }
-
-    pub fn missing(token: Token) -> Self {
-        Self::Token(SyntaxToken::Missing(token))
-    }
-
-    pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
-        Self::Token(SyntaxToken::Skipped {
-            token,
-            expected: expected.into(),
-        })
-    }
-}
-
 #[derive(Debug, Default)]
-pub struct TokensBuilder {
+pub struct SyntaxTokensBuffer {
     tokens: Vec<SyntaxTokenItem>,
 }
 
-impl TokensBuilder {
+impl SyntaxTokensBuffer {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_interpreted(token: Token) -> Self {
+        Self {
+            tokens: vec![SyntaxTokenItem::Token(SyntaxToken::Interpreted(token))],
+        }
+    }
+
+    pub fn with_child() -> Self {
+        Self {
+            tokens: vec![SyntaxTokenItem::Child],
+        }
     }
 
     pub fn interpret(&mut self, token: Token) -> &mut Self {
@@ -57,6 +52,15 @@ impl TokensBuilder {
                 expected: expected.into(),
             }));
         self
+    }
+
+    pub fn child(&mut self) -> &mut Self {
+        self.tokens.push(SyntaxTokenItem::Child);
+        self
+    }
+
+    pub fn iter(&self) -> slice::Iter<SyntaxTokenItem> {
+        self.tokens.iter()
     }
 }
 
@@ -129,7 +133,7 @@ pub struct Statement {
 pub struct Expression {
     pub kind: ExpressionKind,
     pub r#type: Rc<RefCell<sem::Type>>,
-    pub tokens: Vec<SyntaxTokenItem>,
+    pub tokens: SyntaxTokensBuffer,
 }
 
 impl Expression {

@@ -1,5 +1,5 @@
+use super::errors::ParseError;
 use super::tree::*;
-use super::{errors::ParseError, Token};
 use super::{TokenKind, Tokenizer};
 use crate::sem;
 use crate::util::naming::PrefixNaming;
@@ -168,25 +168,20 @@ impl<'a> Parser<'a> {
         };
 
         // unary operators are right associative.
-        let op_token = self.tokenizer.next_token();
-        let mut tokens = vec![SyntaxTokenItem::interpreted(op_token)];
+        let mut tokens = SyntaxTokensBuffer::with_interpreted(self.tokenizer.next_token());
         let mut operand = None;
 
         loop {
-            match self.parse_unary_op()? {
-                None => {
-                    // If we couldn't parse the right hand expression, retry
-                    // parsing after consuming a token as skipped.
-                    let t = self.tokenizer.next_token();
-                    tokens.push(SyntaxTokenItem::skipped(t, "expression"));
+            if let Some(node) = self.parse_unary_op()? {
+                operand = Some(node);
+                tokens.child();
+                break;
+            } else {
+                // If we couldn't parse the right hand expression, retry
+                // parsing after consuming a token as skipped.
+                tokens.skip(self.tokenizer.next_token(), "expression");
 
-                    if self.tokenizer.is_at_end() {
-                        break;
-                    }
-                }
-                Some(node) => {
-                    operand = Some(node);
-                    tokens.push(SyntaxTokenItem::Child);
+                if self.tokenizer.is_at_end() {
                     break;
                 }
             }
@@ -228,8 +223,8 @@ impl<'a> Parser<'a> {
 
             match token.kind {
                 TokenKind::Char('[') => {
-                    let (arguments, mut tokens) = self.read_arguments(']')?;
-                    tokens.insert(0, SyntaxTokenItem::Child);
+                    let mut tokens = SyntaxTokensBuffer::with_child();
+                    let arguments = self.read_arguments(']', &mut tokens)?;
 
                     let expr = SubscriptExpression {
                         callee: Box::new(operand),
@@ -243,8 +238,8 @@ impl<'a> Parser<'a> {
                     };
                 }
                 TokenKind::Char('(') => {
-                    let (arguments, mut tokens) = self.read_arguments(')')?;
-                    tokens.insert(0, SyntaxTokenItem::Child);
+                    let mut tokens = SyntaxTokensBuffer::with_child();
+                    let arguments = self.read_arguments(')', &mut tokens)?;
 
                     let expr = CallExpression {
                         callee: Box::new(operand),
@@ -284,7 +279,7 @@ impl<'a> Parser<'a> {
 
         if let TokenKind::Integer(i) = token.kind {
             let literal = IntegerLiteral(i);
-            let tokens = vec![SyntaxTokenItem::interpreted(token)];
+            let tokens = SyntaxTokensBuffer::with_interpreted(token);
 
             Expression {
                 kind: ExpressionKind::IntegerLiteral(literal),
@@ -301,7 +296,7 @@ impl<'a> Parser<'a> {
 
         if let TokenKind::Identifier(ref id) = token.kind {
             let id = Identifier(id.clone());
-            let tokens = vec![SyntaxTokenItem::interpreted(token)];
+            let tokens = SyntaxTokensBuffer::with_interpreted(token);
 
             Expression {
                 kind: ExpressionKind::Identifier(id),
@@ -315,7 +310,7 @@ impl<'a> Parser<'a> {
 
     fn read_string(&mut self) -> Expression {
         let start_token = self.tokenizer.next_token(); // StringStart
-        let mut tokens = vec![SyntaxTokenItem::interpreted(start_token)];
+        let mut tokens = SyntaxTokensBuffer::with_interpreted(start_token);
         let mut string = String::new();
         let mut has_error = false;
 
@@ -327,19 +322,19 @@ impl<'a> Parser<'a> {
                     if !has_error {
                         string.push_str(s);
                     }
-                    tokens.push(SyntaxTokenItem::interpreted(token));
+                    tokens.interpret(token);
                 }
                 TokenKind::StringEnd => {
-                    tokens.push(SyntaxTokenItem::interpreted(token));
+                    tokens.interpret(token);
                     break;
                 }
                 TokenKind::UnrecognizedEscapeSequence(_) => {
-                    tokens.push(SyntaxTokenItem::skipped(token, "ESCAPE SEQUENCE"));
+                    tokens.skip(token, "ESCAPE SEQUENCE");
                     has_error = true;
                 }
                 _ => {
                     let missed = self.tokenizer.build_missing(TokenKind::StringEnd, "\"");
-                    tokens.push(SyntaxTokenItem::missing(missed));
+                    tokens.missing(missed);
                     has_error = true;
                     break;
                 }
@@ -362,10 +357,11 @@ impl<'a> Parser<'a> {
     fn read_arguments(
         &mut self,
         close_char: char,
-    ) -> Result<(Vec<Expression>, Vec<SyntaxTokenItem>), ParseError> {
-        let open_token = self.tokenizer.next_token();
+        tokens: &mut SyntaxTokensBuffer,
+    ) -> Result<Vec<Expression>, ParseError> {
+        tokens.interpret(self.tokenizer.next_token());
+
         let mut arguments = vec![];
-        let mut tokens = vec![SyntaxTokenItem::interpreted(open_token)];
         let mut argument_read = true;
 
         loop {
@@ -375,7 +371,7 @@ impl<'a> Parser<'a> {
                 if let Some(argument) = argument {
                     argument_read = true;
                     arguments.push(argument);
-                    tokens.push(SyntaxTokenItem::Child);
+                    tokens.child();
                 } else {
                     argument_read = false;
                 }
@@ -384,8 +380,7 @@ impl<'a> Parser<'a> {
             match self.tokenizer.peek_kind() {
                 TokenKind::Char(c) if *c == close_char => {
                     // arguments closed
-                    let t = self.tokenizer.next_token();
-                    tokens.push(SyntaxTokenItem::interpreted(t));
+                    tokens.interpret(self.tokenizer.next_token());
                     break;
                 }
                 TokenKind::Char(',') => {
@@ -393,21 +388,20 @@ impl<'a> Parser<'a> {
 
                     if !argument_read {
                         // Missing argument, so skip token.
-                        tokens.push(SyntaxTokenItem::skipped(t, "expression"));
+                        tokens.skip(t, "expression");
                     } else {
-                        tokens.push(SyntaxTokenItem::interpreted(t));
+                        tokens.interpret(t);
                     }
                 }
                 _ => {
                     // Premature EOF or unknown token.
-                    let missed = self.tokenizer.build_missing(TokenKind::Char(']'), "]");
-                    tokens.push(SyntaxTokenItem::missing(missed));
+                    tokens.missing(self.tokenizer.build_missing(TokenKind::Char(']'), "]"));
                     break;
                 }
             }
         }
 
-        Ok((arguments, tokens))
+        Ok(arguments)
     }
 
     fn _parse_binary_op(
@@ -442,22 +436,21 @@ impl<'a> Parser<'a> {
 
             let op_token = self.tokenizer.next_token();
             let mut rhs;
-            let mut tokens = vec![
-                SyntaxTokenItem::Child,
-                SyntaxTokenItem::interpreted(op_token),
-            ];
+            let mut tokens = SyntaxTokensBuffer::new();
+
+            tokens.child().interpret(op_token);
 
             loop {
                 rhs = next_parser(self)?.map(Box::new);
 
                 if rhs.is_some() {
-                    tokens.push(SyntaxTokenItem::Child);
+                    tokens.child();
                     break;
                 } else {
                     // If we couldn't parse the right hand expression, retry
                     // parsing after consuming a token as skipped.
                     let t = self.tokenizer.next_token();
-                    tokens.push(SyntaxTokenItem::skipped(t, "expression"));
+                    tokens.skip(t, "expression");
 
                     if self.tokenizer.is_at_end() {
                         break;
@@ -483,9 +476,6 @@ impl<'a> Parser<'a> {
     }
 
     // --- Helpers
-    fn match_token(&mut self, kind: TokenKind) -> bool {
-        *self.tokenizer.peek_kind() == kind
-    }
 
     /// Returns a new type variable.
     fn new_type_var(&mut self) -> Rc<RefCell<sem::Type>> {
