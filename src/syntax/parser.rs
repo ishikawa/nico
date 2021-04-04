@@ -123,47 +123,42 @@ impl<'a> Parser<'a> {
             }
         }
 
-        // parameters - begin
-        let mut parameters = vec![];
-        let mut param_read = false;
+        // parameters
+        let parameters =
+            self._parse_elements('(', ')', &mut tokens, Parser::parse_function_parameter)?;
+
+        // body
+        let mut body = vec![];
 
         loop {
+            if let Some(stmt) = self.parse_stmt()? {
+                body.push(stmt);
+            }
+
             match self.tokenizer.peek_kind() {
-                TokenKind::Char('(') => {
-                    // Beginning of parameters.
-                    tokens.interpret(self.tokenizer.next_token());
+                TokenKind::End => {
+                    // Okay, it's done.
                     break;
                 }
-                TokenKind::Char(')') | TokenKind::Eos => {
-                    // Umm, maybe user forgot opening paren.
-                    //
-                    //     fun foo # (
-                    //     )
-                    tokens.missing(self.tokenizer.build_missing(TokenKind::Char('('), "("));
+                TokenKind::Eos => {
+                    // Maybe user forgot `end`.
+                    // I'm sorry, but this language is like Ruby not Python.
+                    tokens.missing(self.tokenizer.build_missing(TokenKind::End, "end"));
                     break;
                 }
                 _ => {
-                    if let Some(param) = self.parse_function_parameter()? {
-                        // Maybe user forgot opening paren before a param.
-                        //     fun foo # (
-                        //         a, ...
-                        //     )
-                        parameters.push(param);
-
-                        tokens.missing(self.tokenizer.build_missing(TokenKind::Char('('), "("));
-                        tokens.child();
-
-                        param_read = true;
-                        break;
-                    } else {
-                        // Continue until read an open paren.
-                        tokens.skip(self.tokenizer.next_token(), "(");
-                    }
+                    // Continue until read identifier or over.
+                    tokens.skip(self.tokenizer.next_token(), "end");
                 }
             }
         }
 
-        Ok(None)
+        Ok(Some(FunctionDefinition {
+            name: function_name,
+            parameters,
+            body,
+            tokens,
+        }))
     }
 
     #[allow(clippy::unnecessary_wraps)]

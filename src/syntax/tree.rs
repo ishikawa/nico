@@ -115,7 +115,7 @@ pub struct FunctionDefinition {
     pub name: Option<String>,
     pub parameters: Vec<FunctionParameter>,
     pub body: Vec<Statement>,
-    pub tokens: Vec<SyntaxTokenItem>,
+    pub tokens: SyntaxTokensBuffer,
 }
 
 #[derive(Debug)]
