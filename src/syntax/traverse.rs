@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn number_integer() {
         let mut visitor = NodeCounter::default();
-        let program = Parser::parse_string("42").unwrap();
+        let program = Parser::parse_string("42");
 
         traverse_program(&mut visitor, &program);
 

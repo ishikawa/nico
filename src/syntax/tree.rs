@@ -72,10 +72,20 @@ pub struct Program {
 
 #[derive(Debug)]
 pub enum TopLevelKind {
-    StructDefinition(StructDefinition),
-    FunctionDefinition(FunctionDefinition),
-    Statement(Statement),
-    Unknown(Token),
+    StructDefinition(Rc<StructDefinition>),
+    FunctionDefinition(Rc<FunctionDefinition>),
+    Statement(Rc<Statement>),
+    Unknown(Rc<Token>),
+}
+
+pub enum Node {
+    Name(Rc<Name>),
+    StructDefinition(Rc<StructDefinition>),
+    FunctionDefinition(Rc<FunctionDefinition>),
+    TypeField(Rc<TypeField>),
+    TypeAnnotation(Rc<TypeAnnotation>),
+    FunctionParameter(Rc<FunctionParameter>),
+    Statement(Rc<Statement>),
 }
 
 #[derive(Debug)]
@@ -96,42 +106,42 @@ pub struct Name {
 ///
 #[derive(Debug)]
 pub struct StructDefinition {
-    pub name: String,
-    pub fields: Vec<TypeField>,
+    pub name: Option<Rc<Name>>,
+    pub fields: Vec<Rc<TypeField>>,
     pub tokens: Vec<SyntaxTokenItem>,
 }
 
 #[derive(Debug)]
 pub struct TypeField {
-    pub name: String,
-    pub type_annotation: TypeAnnotation,
+    pub name: Option<Rc<Name>>,
+    pub type_annotation: Option<Rc<TypeAnnotation>>,
     pub tokens: Vec<SyntaxTokenItem>,
 }
 
 #[derive(Debug)]
 pub struct TypeAnnotation {
-    pub name: String,
+    pub name: Rc<Name>,
     pub r#type: Option<Rc<RefCell<sem::Type>>>,
     pub tokens: Vec<SyntaxTokenItem>,
 }
 
 #[derive(Debug)]
 pub struct FunctionDefinition {
-    pub name: Option<String>,
-    pub parameters: Vec<FunctionParameter>,
-    pub body: Vec<Statement>,
+    pub name: Option<Rc<Name>>,
+    pub parameters: Vec<Rc<FunctionParameter>>,
+    pub body: Vec<Rc<Statement>>,
     pub tokens: SyntaxTokensBuffer,
 }
 
 #[derive(Debug)]
 pub struct FunctionParameter {
-    pub name: String,
+    pub name: Rc<Name>,
     pub tokens: SyntaxTokensBuffer,
 }
 
 #[derive(Debug)]
 pub struct Statement {
-    pub expression: Expression,
+    pub expression: Rc<Expression>,
 }
 
 #[derive(Debug)]
@@ -187,26 +197,26 @@ pub struct Identifier(pub String);
 #[derive(Debug)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
-    pub lhs: Box<Expression>,
-    pub rhs: Option<Box<Expression>>,
+    pub lhs: Rc<Expression>,
+    pub rhs: Option<Rc<Expression>>,
 }
 
 #[derive(Debug)]
 pub struct SubscriptExpression {
-    pub callee: Box<Expression>,
-    pub arguments: Vec<Expression>,
+    pub callee: Rc<Expression>,
+    pub arguments: Vec<Rc<Expression>>,
 }
 
 #[derive(Debug)]
 pub struct CallExpression {
-    pub callee: Box<Expression>,
-    pub arguments: Vec<Expression>,
+    pub callee: Rc<Expression>,
+    pub arguments: Vec<Rc<Expression>>,
 }
 
 #[derive(Debug)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
-    pub operand: Option<Box<Expression>>,
+    pub operand: Option<Rc<Expression>>,
 }
 
 #[derive(Debug, Copy, Clone)]

@@ -399,7 +399,7 @@ impl Connection {
 
         let doc = self.get_document(&params.text_document.uri)?.borrow();
         let mut tokenizer = SemanticTokenizer::new(Rc::clone(&self.token_type_legend));
-        let program = Parser::parse_string(&doc.text)?;
+        let program = Parser::parse_string(&doc.text);
 
         traverse::traverse_program(&mut tokenizer, &program);
 
