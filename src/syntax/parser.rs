@@ -3,8 +3,8 @@ use super::{TokenKind, Tokenizer};
 use crate::sem;
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
+use std::cell::RefCell;
 use std::rc::Rc;
-use std::{cell::RefCell, rc::Weak};
 
 const DEBUG: bool = false;
 
@@ -27,32 +27,32 @@ impl<'a> Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse_string<S: AsRef<str>>(src: S) -> Program {
+    pub fn parse_string<S: AsRef<str>>(src: S) -> Node {
         let tokenizer = Tokenizer::from_string(&src);
         let mut parser = Parser::new(tokenizer, "-");
 
         parser.parse()
     }
 
-    pub fn parse(&mut self) -> Program {
+    pub fn parse(&mut self) -> Node {
         let mut body = vec![];
         let mut code = Code::new();
 
         loop {
             // Type declaration
             if let Some(node) = self.parse_struct_definition() {
-                code.struct_definition(&node);
-                body.push(TopLevelKind::StructDefinition(node));
+                code.node(&node);
+                body.push(node);
             }
             // Function
             else if let Some(node) = self.parse_function() {
-                code.function_definition(&node);
-                body.push(TopLevelKind::FunctionDefinition(node));
+                code.node(&node);
+                body.push(node);
             }
             // Body for main function
             else if let Some(node) = self.parse_stmt() {
-                code.statement(&node);
-                body.push(TopLevelKind::Statement(node));
+                code.node(&node);
+                body.push(node);
             }
             // No top level constructs can be consumed. It may be at the end of input or
             // parse error.
@@ -69,15 +69,15 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Program::new(body, code)
+        Node::new(NodeKind::Program(Program::new(body)), code)
     }
 
-    fn parse_struct_definition(&mut self) -> Option<Rc<StructDefinition>> {
+    fn parse_struct_definition(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_struct_definition");
         None
     }
 
-    fn parse_function(&mut self) -> Option<Rc<FunctionDefinition>> {
+    fn parse_function(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_function");
 
         let mut code = Code::new();
@@ -106,7 +106,7 @@ impl<'a> Parser<'a> {
                     // Okay, it's a function name.
                     let name = self.parse_name().unwrap();
 
-                    code.name(&name);
+                    code.node(&name);
                     function_name = Some(name);
 
                     break;
@@ -128,20 +128,15 @@ impl<'a> Parser<'a> {
         }
 
         // parameters
-        let parameters = self._parse_elements(
-            '(',
-            ')',
-            &mut code,
-            Parser::parse_function_parameter,
-            NodeKind::FunctionParameter,
-        );
+        let parameters =
+            self._parse_elements('(', ')', &mut code, Parser::parse_function_parameter);
 
         // body
         let mut body = vec![];
 
         loop {
             if let Some(stmt) = self.parse_stmt() {
-                code.statement(&stmt);
+                code.node(&stmt);
                 body.push(stmt);
             }
 
@@ -164,37 +159,39 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Some(Rc::new(FunctionDefinition::new(
-            function_name,
-            parameters,
-            body,
+        Some(Rc::new(Node::new(
+            NodeKind::FunctionDefinition(FunctionDefinition::new(function_name, parameters, body)),
             code,
         )))
     }
 
-    fn parse_function_parameter(&mut self) -> Option<Rc<FunctionParameter>> {
+    fn parse_function_parameter(&mut self) -> Option<Rc<Node>> {
         if let Some(name) = self.parse_name() {
-            let mut code = Code::new();
-            code.name(&name);
+            let code = Code::with_node(&name);
+            let node = Node::new(
+                NodeKind::FunctionParameter(FunctionParameter::new(name)),
+                code,
+            );
 
-            Some(Rc::new(FunctionParameter::new(name, code)))
+            Some(Rc::new(node))
         } else {
             None
         }
     }
 
-    fn parse_name(&mut self) -> Option<Rc<Name>> {
+    fn parse_name(&mut self) -> Option<Rc<Node>> {
         if let TokenKind::Identifier(name) = self.tokenizer.peek_kind() {
             let name = name.clone();
             let code = Code::with_interpreted(self.tokenizer.next_token());
+            let node = Node::new(NodeKind::Name(Name::new(name)), code);
 
-            Some(Rc::new(Name::new(name, code)))
+            Some(Rc::new(node))
         } else {
             None
         }
     }
 
-    fn parse_stmt(&mut self) -> Option<Rc<Statement>> {
+    fn parse_stmt(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_stmt");
 
         match self.tokenizer.peek_kind() {
@@ -208,25 +205,27 @@ impl<'a> Parser<'a> {
         None
     }
 
-    fn parse_stmt_expr(&mut self) -> Option<Rc<Statement>> {
+    fn parse_stmt_expr(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_stmt_expr");
 
         if let Some(expr) = self.parse_expr() {
-            let mut code = Code::new();
-            code.expression(&expr);
+            let code = Code::with_node(&expr);
 
-            Some(Rc::new(Statement::new(expr)))
+            Some(Rc::new(Node::new(
+                NodeKind::Statement(Statement::new(expr)),
+                code,
+            )))
         } else {
             None
         }
     }
 
-    fn parse_expr(&mut self) -> Option<Rc<Expression>> {
+    fn parse_expr(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_expr");
         self.parse_rel_op1()
     }
 
-    fn parse_rel_op1(&mut self) -> Option<Rc<Expression>> {
+    fn parse_rel_op1(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_rel_op1");
         self._parse_binary_op(
             Parser::parse_rel_op2,
@@ -237,7 +236,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_rel_op2(&mut self) -> Option<Rc<Expression>> {
+    fn parse_rel_op2(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_rel_op2");
         self._parse_binary_op(
             Parser::parse_binary_op1,
@@ -250,7 +249,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_binary_op1(&mut self) -> Option<Rc<Expression>> {
+    fn parse_binary_op1(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_binary_op1");
         self._parse_binary_op(
             Parser::parse_binary_op2,
@@ -262,7 +261,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_binary_op2(&mut self) -> Option<Rc<Expression>> {
+    fn parse_binary_op2(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_binary_op2");
         self._parse_binary_op(
             Parser::parse_unary_op,
@@ -273,7 +272,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_unary_op(&mut self) -> Option<Rc<Expression>> {
+    fn parse_unary_op(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_unary_op");
 
         let operator = match self.tokenizer.peek_kind() {
@@ -288,7 +287,7 @@ impl<'a> Parser<'a> {
 
         loop {
             if let Some(node) = self.parse_unary_op() {
-                code.expression(&node);
+                code.node(&node);
                 operand = Some(node);
                 break;
             } else {
@@ -304,22 +303,21 @@ impl<'a> Parser<'a> {
 
         // node
         let expr = UnaryExpression { operand, operator };
+        let kind = ExpressionKind::UnaryExpression(expr);
 
-        Some(Rc::new(Expression::new(
-            ExpressionKind::UnaryExpression(expr),
-            self.new_type_var(),
+        Some(Rc::new(Node::new(
+            NodeKind::Expression(Expression::new(kind, self.new_type_var())),
             code,
         )))
     }
 
-    fn parse_access(&mut self) -> Option<Rc<Expression>> {
+    fn parse_access(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_access");
 
         let mut operand = self.parse_primary()?;
 
         loop {
-            let mut code = Code::new();
-            code.expression(&operand);
+            let mut code = Code::with_node(&operand);
 
             // To distinguish `x\n[...]` and `x[...]`, we have to capture
             // `tokenizer.is_newline_seen()`, so try to advance tokenizer.
@@ -333,42 +331,34 @@ impl<'a> Parser<'a> {
 
             match token.kind {
                 TokenKind::Char('[') => {
-                    let arguments = self._parse_elements(
-                        '[',
-                        ']',
-                        &mut code,
-                        Parser::parse_expr,
-                        NodeKind::Expression,
-                    );
+                    let arguments = self._parse_elements('[', ']', &mut code, Parser::parse_expr);
 
                     let expr = SubscriptExpression {
                         callee: operand,
                         arguments,
                     };
 
-                    operand = Rc::new(Expression::new(
-                        ExpressionKind::SubscriptExpression(expr),
-                        self.new_type_var(),
+                    operand = Rc::new(Node::new(
+                        NodeKind::Expression(Expression::new(
+                            ExpressionKind::SubscriptExpression(expr),
+                            self.new_type_var(),
+                        )),
                         code,
                     ));
                 }
                 TokenKind::Char('(') => {
-                    let arguments = self._parse_elements(
-                        '(',
-                        ')',
-                        &mut code,
-                        Parser::parse_expr,
-                        NodeKind::Expression,
-                    );
+                    let arguments = self._parse_elements('(', ')', &mut code, Parser::parse_expr);
 
                     let expr = CallExpression {
                         callee: operand,
                         arguments,
                     };
 
-                    operand = Rc::new(Expression::new(
-                        ExpressionKind::CallExpression(expr),
-                        self.new_type_var(),
+                    operand = Rc::new(Node::new(
+                        NodeKind::Expression(Expression::new(
+                            ExpressionKind::CallExpression(expr),
+                            self.new_type_var(),
+                        )),
                         code,
                     ));
                 }
@@ -379,7 +369,7 @@ impl<'a> Parser<'a> {
         Some(operand)
     }
 
-    fn parse_primary(&mut self) -> Option<Rc<Expression>> {
+    fn parse_primary(&mut self) -> Option<Rc<Node>> {
         self.debug_trace("parse_primary");
 
         let token = self.tokenizer.peek();
@@ -394,16 +384,18 @@ impl<'a> Parser<'a> {
     }
 
     // --- Generic implementations
-    fn read_integer(&mut self) -> Expression {
+    fn read_integer(&mut self) -> Node {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
             let literal = IntegerLiteral(i);
             let code = Code::with_interpreted(token);
 
-            Expression::new(
-                ExpressionKind::IntegerLiteral(literal),
-                wrap(sem::Type::Int32),
+            Node::new(
+                NodeKind::Expression(Expression::new(
+                    ExpressionKind::IntegerLiteral(literal),
+                    wrap(sem::Type::Int32),
+                )),
                 code,
             )
         } else {
@@ -411,20 +403,26 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn read_identifier(&mut self) -> Expression {
+    fn read_identifier(&mut self) -> Node {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Identifier(ref id) = token.kind {
             let id = Identifier(id.clone());
             let code = Code::with_interpreted(token);
 
-            Expression::new(ExpressionKind::Identifier(id), self.new_type_var(), code)
+            Node::new(
+                NodeKind::Expression(Expression::new(
+                    ExpressionKind::Identifier(id),
+                    self.new_type_var(),
+                )),
+                code,
+            )
         } else {
             unreachable!()
         }
     }
 
-    fn read_string(&mut self) -> Expression {
+    fn read_string(&mut self) -> Node {
         let start_token = self.tokenizer.next_token(); // StringStart
         let mut code = Code::with_interpreted(start_token);
         let mut string = String::new();
@@ -463,23 +461,24 @@ impl<'a> Parser<'a> {
             StringLiteral(Some(string))
         };
 
-        Expression::new(
-            ExpressionKind::StringLiteral(literal),
-            wrap(sem::Type::String),
+        Node::new(
+            NodeKind::Expression(Expression::new(
+                ExpressionKind::StringLiteral(literal),
+                wrap(sem::Type::String),
+            )),
             code,
         )
     }
 
     /// Read comma-separated elements from the start character token specified by `open_char` to
     /// the end character token or EOF specified by `close_char`.
-    fn _parse_elements<T>(
+    fn _parse_elements(
         &mut self,
         open_char: char,
         close_char: char,
         code: &mut Code,
-        element_parser: fn(&mut Parser<'a>) -> Option<Rc<T>>,
-        node_kind: fn(Weak<T>) -> NodeKind,
-    ) -> Vec<Rc<T>> {
+        element_parser: fn(&mut Parser<'a>) -> Option<Rc<Node>>,
+    ) -> Vec<Rc<Node>> {
         let mut arguments = vec![];
         let mut consumed = false; // An argument already read.
 
@@ -516,7 +515,7 @@ impl<'a> Parser<'a> {
                         //     # (
                         //         a ...
                         //     )
-                        arguments.push(expr.clone());
+                        arguments.push(Rc::clone(&expr));
                         consumed = true;
 
                         code.missing(
@@ -524,7 +523,7 @@ impl<'a> Parser<'a> {
                                 .build_missing(TokenKind::Char(open_char), open_char.to_string()),
                         );
 
-                        code.node(node_kind(Rc::downgrade(&expr)));
+                        code.node(&expr);
                         break;
                     } else {
                         // Continue until read an opening token.
@@ -540,8 +539,8 @@ impl<'a> Parser<'a> {
 
                 if let Some(argument) = argument {
                     consumed = true;
-                    arguments.push(argument.clone());
-                    code.node(node_kind(Rc::downgrade(&argument)));
+                    arguments.push(Rc::clone(&argument));
+                    code.node(&argument);
                 } else {
                     consumed = false;
                 }
@@ -582,9 +581,9 @@ impl<'a> Parser<'a> {
 
     fn _parse_binary_op(
         &mut self,
-        next_parser: fn(&mut Parser<'a>) -> Option<Rc<Expression>>,
+        next_parser: fn(&mut Parser<'a>) -> Option<Rc<Node>>,
         operators: &[(TokenKind, BinaryOperator)],
-    ) -> Option<Rc<Expression>> {
+    ) -> Option<Rc<Node>> {
         let mut lhs = next_parser(self)?;
 
         loop {
@@ -609,13 +608,13 @@ impl<'a> Parser<'a> {
             let mut rhs;
             let mut code = Code::new();
 
-            code.expression(&lhs).interpret(op_token);
+            code.node(&lhs).interpret(op_token);
 
             loop {
                 rhs = next_parser(self);
 
                 if let Some(ref rhs) = rhs {
-                    code.expression(rhs);
+                    code.node(rhs);
                     break;
                 } else {
                     // If we couldn't parse the right hand expression, retry
@@ -632,9 +631,11 @@ impl<'a> Parser<'a> {
             // node
             let expr = BinaryExpression { lhs, rhs, operator };
 
-            lhs = Rc::new(Expression::new(
-                ExpressionKind::BinaryExpression(expr),
-                self.new_type_var(),
+            lhs = Rc::new(Node::new(
+                NodeKind::Expression(Expression::new(
+                    ExpressionKind::BinaryExpression(expr),
+                    self.new_type_var(),
+                )),
                 code,
             ));
         }
@@ -663,18 +664,20 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::syntax::{ExpressionKind, Statement, SyntaxToken, Token, TopLevelKind};
+    use crate::syntax::{ExpressionKind, SyntaxToken, Token};
     use assert_matches::assert_matches;
 
     #[test]
     fn number_integer() {
         let module = Parser::parse_string("42");
+        let module = module.program().unwrap();
+
         assert!(!module.body.is_empty());
         assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.body[0]);
+        let stmt = module.body[0].statement().unwrap();
         assert_matches!(
-            stmt.expression.kind,
+            stmt.expression().kind,
             ExpressionKind::IntegerLiteral(IntegerLiteral(42))
         );
 
@@ -690,15 +693,16 @@ mod tests {
     #[test]
     fn add_integer() {
         let module = Parser::parse_string("1+2");
+        let module = module.program().unwrap();
         assert!(!module.body.is_empty());
         assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.body[0]);
-        let expr = stmt.expression.unwrap_binary_expression();
+        let stmt = module.body[0].statement().unwrap();
+        let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
-            assert_matches!(lhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
-            assert_matches!(rhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(2)));
+            assert_matches!(lhs.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(rhs.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(2)));
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -717,14 +721,15 @@ mod tests {
     #[test]
     fn add_integer_missing_node() {
         let module = Parser::parse_string("1+");
+        let module = module.program().unwrap();
         assert!(!module.body.is_empty());
         assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.body[0]);
-        let expr = stmt.expression.unwrap_binary_expression();
+        let stmt = module.body[0].statement().unwrap();
+        let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: None } => {
-            assert_matches!(lhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(lhs.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -744,15 +749,16 @@ mod tests {
     #[test]
     fn add_integer_skipped_tokens() {
         let module = Parser::parse_string("1 + % ? 2");
+        let module = module.program().unwrap();
         assert!(!module.body.is_empty());
         assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.body[0]);
-        let expr = stmt.expression.unwrap_binary_expression();
+        let stmt = module.body[0].statement().unwrap();
+        let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
-            assert_matches!(lhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
-            assert_matches!(rhs.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(2)));
+            assert_matches!(lhs.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(rhs.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(2)));
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -779,14 +785,15 @@ mod tests {
     #[test]
     fn unary_op() {
         let module = Parser::parse_string("-1");
+        let module = module.program().unwrap();
         assert!(!module.body.is_empty());
         assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.body[0]);
-        let expr = stmt.expression.unwrap_unary_expression();
+        let stmt = module.body[0].statement().unwrap();
+        let expr = stmt.expression().unary_expression().unwrap();
 
         assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
-            assert_matches!(operand.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(operand.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -802,17 +809,18 @@ mod tests {
     #[test]
     fn unary_op_nested() {
         let module = Parser::parse_string("-+1");
+        let module = module.program().unwrap();
         assert!(!module.body.is_empty());
         assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.body[0]);
-        let expr = stmt.expression.unwrap_unary_expression();
+        let stmt = module.body[0].statement().unwrap();
+        let expr = stmt.expression().unary_expression().unwrap();
 
         assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
-            let operand = operand.unwrap_unary_expression();
+            let operand = operand.unary_expression().unwrap();
 
             assert_matches!(operand, UnaryExpression { operator: UnaryOperator::Plus, operand: Some(operand) } => {
-                assert_matches!(operand.kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+                assert_matches!(operand.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
             });
         });
 
@@ -829,19 +837,20 @@ mod tests {
     #[test]
     fn subscript_index() {
         let module = Parser::parse_string("a[0]");
+        let module = module.program().unwrap();
         assert!(!module.body.is_empty());
         assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.body[0]);
-        let expr = stmt.expression.unwrap_subscript_expression();
+        let stmt = module.body[0].statement().unwrap();
+        let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.unwrap_identifier();
+            let id = callee.identifier().unwrap();
             assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
             assert_eq!(arguments.len(), 1);
-            assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(0)));
+            assert_matches!(arguments[0].expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(0)));
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -863,14 +872,15 @@ mod tests {
     #[test]
     fn subscript_empty() {
         let module = Parser::parse_string("a[]");
+        let module = module.program().unwrap();
         assert!(!module.body.is_empty());
         assert_eq!(module.body.len(), 1);
 
-        let stmt = unwrap_statement(&module.body[0]);
-        let expr = stmt.expression.unwrap_subscript_expression();
+        let stmt = module.body[0].statement().unwrap();
+        let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.unwrap_identifier();
+            let id = callee.identifier().unwrap();
             assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
@@ -893,19 +903,20 @@ mod tests {
     #[test]
     fn subscript_not_closed() {
         let module = Parser::parse_string("a[1\nb");
+        let module = module.program().unwrap();
         assert_eq!(module.body.len(), 2);
 
         // subscript
-        let stmt = unwrap_statement(&module.body[0]);
-        let expr = stmt.expression.unwrap_subscript_expression();
+        let stmt = module.body[0].statement().unwrap();
+        let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.unwrap_identifier();
+            let id = callee.identifier().unwrap();
             assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
             assert_eq!(arguments.len(), 1);
-            assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(arguments[0].expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -916,14 +927,6 @@ mod tests {
     }
 
     // --- helpers
-
-    fn unwrap_statement(node: &TopLevelKind) -> &Statement {
-        if let TopLevelKind::Statement(node) = node {
-            node
-        } else {
-            panic!("expected statement")
-        }
-    }
 
     fn unwrap_node(kind: &CodeKind) -> &Node {
         if let CodeKind::Node(node) = kind {

@@ -6,7 +6,7 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-use nico::syntax::{traverse, FunctionParameter, ParseError, Parser, Token, TokenKind, Trivia};
+use nico::syntax::{traverse, ParseError, Parser, Token, TokenKind, Trivia};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -247,17 +247,21 @@ impl SemanticTokenizer {
 }
 
 impl traverse::Visitor for SemanticTokenizer {
-    fn enter_function_parameter(&mut self, _path: &mut traverse::Path<FunctionParameter>) {
+    fn enter_function_parameter(&mut self, _path: &mut Rc<traverse::Path>) {
         self.in_function_parameter = true;
     }
 
-    fn exit_function_parameter(&mut self, _path: &mut traverse::Path<FunctionParameter>) {
+    fn exit_function_parameter(&mut self, _path: &mut Rc<traverse::Path>) {
         self.in_function_parameter = false;
     }
 
-    fn enter_line_comment(&mut self, path: &mut traverse::Path<Trivia>, _comment: &str) {
-        let trivia = path.node();
-
+    fn enter_line_comment(
+        &mut self,
+        _path: &mut Rc<traverse::Path>,
+        _token: &Token,
+        trivia: &Trivia,
+        _comment: &str,
+    ) {
         self.add_semantic_token_absolute(SemanticTokenAbsolute {
             token_type: SemanticTokenType::COMMENT,
             line: trivia.range.start.line,
@@ -266,12 +270,17 @@ impl traverse::Visitor for SemanticTokenizer {
         })
     }
 
-    fn enter_token(&mut self, path: &mut traverse::Path<Token>) {
-        self.add_token_generic(path.node());
+    fn enter_interpreted_token(&mut self, _path: &mut Rc<traverse::Path>, token: &Token) {
+        self.add_token_generic(token);
     }
 
-    fn enter_skipped_token(&mut self, path: &mut traverse::Path<Token>, _expected: &str) {
-        self.add_token_generic(path.node());
+    fn enter_skipped_token(
+        &mut self,
+        _path: &mut Rc<traverse::Path>,
+        token: &Token,
+        _expected: &str,
+    ) {
+        self.add_token_generic(token);
     }
 }
 
@@ -351,9 +360,9 @@ impl Connection {
 
         let doc = self.get_document(&params.text_document.uri)?.borrow();
         let mut tokenizer = SemanticTokenizer::new(Rc::clone(&self.token_type_legend));
-        let program = Parser::parse_string(&doc.text);
+        let node = Rc::new(Parser::parse_string(&doc.text));
 
-        traverse::traverse_program(&mut tokenizer, &program);
+        traverse::traverse(&mut tokenizer, &node, None);
 
         //info!("tokens = {:?}", tokenizer.tokens);
         Ok(SemanticTokens {
