@@ -141,6 +141,7 @@ impl<'a> Parser<'a> {
 
         loop {
             if let Some(stmt) = self.parse_stmt() {
+                code.statement(&stmt);
                 body.push(stmt);
             }
 

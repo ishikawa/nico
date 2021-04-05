@@ -1,7 +1,7 @@
 use crate::syntax::tree::*;
 use crate::syntax::Token;
 
-use super::Trivia;
+use super::{Trivia, TriviaKind};
 
 pub struct Path<'a, T> {
     skipped: bool,
@@ -122,7 +122,9 @@ fn traverse_children<T: CodeIterable>(visitor: &mut dyn Visitor, node: &T) {
                 NodeKind::Expression(node) => traverse_expression(visitor, node),
             },
             CodeKind::SyntaxToken(token) => match token {
-                super::SyntaxToken::Interpreted(token) => traverse_token(visitor, token),
+                super::SyntaxToken::Interpreted(token) => {
+                    traverse_interpreted_token(visitor, token)
+                }
                 super::SyntaxToken::Missing(token) => traverse_missing_token(visitor, token),
                 super::SyntaxToken::Skipped { token, expected } => {
                     traverse_skipped_token(visitor, token, expected)
@@ -132,9 +134,37 @@ fn traverse_children<T: CodeIterable>(visitor: &mut dyn Visitor, node: &T) {
     }
 }
 
-fn traverse_token(visitor: &mut dyn Visitor, token: &Token) {
+fn traverse_token_trivia(visitor: &mut dyn Visitor, token: &Token) {
+    for trivia in &token.leading_trivia {
+        let mut path = Path::new(trivia);
+
+        match &trivia.kind {
+            TriviaKind::LineComment(comment) => {
+                if !path.skipped {
+                    visitor.enter_line_comment(&mut path, comment);
+                }
+                if !path.skipped {
+                    visitor.exit_line_comment(&mut path, comment);
+                }
+            }
+            TriviaKind::Whitespace => {
+                if !path.skipped {
+                    visitor.enter_whitespace(&mut path);
+                }
+                if !path.skipped {
+                    visitor.exit_whitespace(&mut path);
+                }
+            }
+        }
+    }
+}
+
+fn traverse_interpreted_token(visitor: &mut dyn Visitor, token: &Token) {
     let mut path = Path::new(token);
 
+    if !path.skipped {
+        traverse_token_trivia(visitor, token);
+    }
     if !path.skipped {
         visitor.enter_token(&mut path);
     }
@@ -147,6 +177,9 @@ fn traverse_missing_token(visitor: &mut dyn Visitor, token: &Token) {
     let mut path = Path::new(token);
 
     if !path.skipped {
+        traverse_token_trivia(visitor, token);
+    }
+    if !path.skipped {
         visitor.enter_missing_token(&mut path);
     }
     if !path.skipped {
@@ -157,6 +190,9 @@ fn traverse_missing_token(visitor: &mut dyn Visitor, token: &Token) {
 fn traverse_skipped_token(visitor: &mut dyn Visitor, token: &Token, expected: &str) {
     let mut path = Path::new(token);
 
+    if !path.skipped {
+        traverse_token_trivia(visitor, token);
+    }
     if !path.skipped {
         visitor.enter_skipped_token(&mut path, expected);
     }
