@@ -250,10 +250,6 @@ impl SemanticTokenizer {
 }
 
 impl traverse::Visitor for SemanticTokenizer {
-    fn enter_function_parameter(&mut self, _path: &mut Rc<traverse::Path>) {}
-
-    fn exit_function_parameter(&mut self, _path: &mut Rc<traverse::Path>) {}
-
     fn enter_line_comment(
         &mut self,
         _path: &mut Rc<traverse::Path>,
