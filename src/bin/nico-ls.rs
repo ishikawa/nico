@@ -6,10 +6,7 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-use nico::syntax::{
-    traverse, CallExpression, Expression, ExpressionKind, ParseError, Parser, StringLiteral, Token,
-    TokenKind, Trivia, TriviaKind,
-};
+use nico::syntax::{traverse, ParseError, Parser, Token, TokenKind, Trivia};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -158,7 +155,7 @@ struct SemanticTokenAbsolute {
     token_type: SemanticTokenType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct SemanticTokenizer {
     legend: Rc<HashMap<SemanticTokenType, usize>>,
     previous_line: u32,
@@ -170,26 +167,20 @@ impl SemanticTokenizer {
     pub fn new(legend: Rc<HashMap<SemanticTokenType, usize>>) -> Self {
         Self {
             legend,
-            previous_line: 0,
-            previous_character: 0,
-            tokens: vec![],
+            ..Self::default()
         }
     }
 
-    fn add_leading_trivia(&mut self, leading_trivia: &[Trivia]) {
-        for trivia in leading_trivia {
-            if let TriviaKind::LineComment(_) = trivia.kind {
-                self.add_semantic_token_absolute(SemanticTokenAbsolute {
-                    token_type: SemanticTokenType::COMMENT,
-                    line: trivia.range.start.line,
-                    character: trivia.range.start.character,
-                    length: trivia.range.length,
-                })
-            }
-        }
+    fn add_token_with_type(&mut self, token: &Token, token_type: SemanticTokenType) {
+        self.add_semantic_token_absolute(SemanticTokenAbsolute {
+            token_type,
+            line: token.range.start.line,
+            character: token.range.start.character,
+            length: token.range.length,
+        })
     }
 
-    fn add_token(&mut self, token: &Token) {
+    fn add_token_generic(&mut self, path: &traverse::Path, token: &Token) {
         let token_type = match token.kind {
             TokenKind::If
             | TokenKind::Else
@@ -200,7 +191,17 @@ impl SemanticTokenizer {
             | TokenKind::Struct
             | TokenKind::When
             | TokenKind::Case => SemanticTokenType::KEYWORD,
-            TokenKind::Identifier(_) => SemanticTokenType::VARIABLE,
+            TokenKind::Identifier(_) => {
+                path.parent().map_or(SemanticTokenType::VARIABLE, |parent| {
+                    if parent.node().is_function_definition() {
+                        SemanticTokenType::FUNCTION
+                    } else if parent.node().is_function_parameter() {
+                        SemanticTokenType::PARAMETER
+                    } else {
+                        SemanticTokenType::VARIABLE
+                    }
+                })
+            }
             TokenKind::Integer(_) => SemanticTokenType::NUMBER,
             TokenKind::Eq
             | TokenKind::Ne
@@ -214,34 +215,7 @@ impl SemanticTokenizer {
             _ => return,
         };
 
-        self._add_token_with_type(token_type, token);
-    }
-
-    fn _add_expression_generic(&mut self, node: &Expression) {
-        for token in node.tokens() {
-            let token = token.token();
-
-            self.add_leading_trivia(&token.leading_trivia);
-            self.add_token(token);
-        }
-    }
-
-    fn _add_expression_with_type(&mut self, token_type: SemanticTokenType, node: &Expression) {
-        for token in node.tokens() {
-            let token = token.token();
-
-            self.add_leading_trivia(&token.leading_trivia);
-            self._add_token_with_type(token_type.clone(), token);
-        }
-    }
-
-    fn _add_token_with_type(&mut self, token_type: SemanticTokenType, token: &Token) {
-        self.add_semantic_token_absolute(SemanticTokenAbsolute {
-            token_type,
-            line: token.range.start.line,
-            character: token.range.start.character,
-            length: token.range.length,
-        })
+        self.add_token_with_type(token, token_type);
     }
 
     fn add_semantic_token_absolute(&mut self, abs_sem_token: SemanticTokenAbsolute) {
@@ -276,42 +250,32 @@ impl SemanticTokenizer {
 }
 
 impl traverse::Visitor for SemanticTokenizer {
-    fn enter_unknown_token(&mut self, path: &mut traverse::Path<Token>) {
-        self.add_leading_trivia(&path.node().leading_trivia);
-        self.add_token(path.node());
-    }
-
-    fn enter_string_literal(
+    fn enter_line_comment(
         &mut self,
-        path: &mut traverse::Path<Expression>,
-        _literal: &StringLiteral,
+        _path: &mut Rc<traverse::Path>,
+        _token: &Token,
+        trivia: &Trivia,
+        _comment: &str,
     ) {
-        self._add_expression_with_type(SemanticTokenType::STRING, path.node());
-        path.skip();
+        self.add_semantic_token_absolute(SemanticTokenAbsolute {
+            token_type: SemanticTokenType::COMMENT,
+            line: trivia.range.start.line,
+            character: trivia.range.start.character,
+            length: trivia.range.length,
+        })
     }
 
-    fn enter_call_expression(
+    fn enter_interpreted_token(&mut self, path: &mut Rc<traverse::Path>, token: &Token) {
+        self.add_token_generic(path, token);
+    }
+
+    fn enter_skipped_token(
         &mut self,
-        path: &mut traverse::Path<Expression>,
-        expr: &CallExpression,
+        path: &mut Rc<traverse::Path>,
+        token: &Token,
+        _expected: &str,
     ) {
-        if let ExpressionKind::Identifier(_) = expr.callee.kind {
-            self._add_expression_with_type(SemanticTokenType::FUNCTION, &expr.callee);
-        } else {
-            traverse::traverse_expression(self, &expr.callee);
-        }
-
-        for arg in &expr.arguments {
-            traverse::traverse_expression(self, arg);
-        }
-
-        path.skip();
-    }
-
-    // Fallback for other expressions.
-    fn exit_expression(&mut self, path: &mut traverse::Path<Expression>) {
-        self._add_expression_generic(path.node());
-        path.skip();
+        self.add_token_generic(path, token);
     }
 }
 
@@ -391,9 +355,9 @@ impl Connection {
 
         let doc = self.get_document(&params.text_document.uri)?.borrow();
         let mut tokenizer = SemanticTokenizer::new(Rc::clone(&self.token_type_legend));
-        let program = Parser::parse_string(&doc.text)?;
+        let node = Rc::new(Parser::parse_string(&doc.text));
 
-        traverse::traverse_program(&mut tokenizer, &program);
+        traverse::traverse(&mut tokenizer, &node, None);
 
         //info!("tokens = {:?}", tokenizer.tokens);
         Ok(SemanticTokens {

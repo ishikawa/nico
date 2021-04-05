@@ -4,42 +4,149 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::slice;
 
-// Token
 #[derive(Debug)]
-pub enum SyntaxTokenItem {
-    Token(SyntaxToken),
-    Child,
+pub struct Node {
+    kind: NodeKind,
+    code: Code,
 }
 
-impl SyntaxTokenItem {
-    pub fn interpreted(token: Token) -> Self {
-        Self::Token(SyntaxToken::Interpreted(token))
+impl Node {
+    pub fn new(kind: NodeKind, code: Code) -> Self {
+        Self { kind, code }
     }
 
-    pub fn missing(token: Token) -> Self {
-        Self::Token(SyntaxToken::Missing(token))
+    pub fn kind(&self) -> &NodeKind {
+        &self.kind
     }
 
-    pub fn skipped<S: Into<String>>(token: Token, expected: S) -> Self {
-        Self::Token(SyntaxToken::Skipped {
-            token,
-            expected: expected.into(),
-        })
+    pub fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
+    }
+
+    pub fn program(&self) -> Option<&Program> {
+        if let NodeKind::Program(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn statement(&self) -> Option<&Statement> {
+        if let NodeKind::Statement(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn name(&self) -> Option<&Name> {
+        if let NodeKind::Name(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
+        if let NodeKind::FunctionDefinition(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
+        if let NodeKind::FunctionParameter(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn expression(&self) -> Option<&Expression> {
+        if let NodeKind::Expression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn identifier(&self) -> Option<&Identifier> {
+        if let Some(expr) = self.expression() {
+            expr.identifier()
+        } else {
+            None
+        }
+    }
+
+    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
+        if let Some(expr) = self.expression() {
+            expr.unary_expression()
+        } else {
+            None
+        }
+    }
+
+    pub fn is_function_definition(&self) -> bool {
+        matches!(self.kind, NodeKind::FunctionDefinition(_))
+    }
+
+    pub fn is_function_parameter(&self) -> bool {
+        matches!(self.kind, NodeKind::FunctionParameter(_))
+    }
+
+    pub fn is_expression(&self) -> bool {
+        matches!(self.kind, NodeKind::Expression(_))
+    }
+
+    pub fn is_call_expression(&self) -> bool {
+        if let Some(expr) = self.expression() {
+            expr.is_call_expression()
+        } else {
+            false
+        }
     }
 }
 
-// Node
 #[derive(Debug)]
-pub struct Program {
-    pub body: Vec<TopLevelKind>,
-}
-
-#[derive(Debug)]
-pub enum TopLevelKind {
+pub enum NodeKind {
+    Program(Program),
+    Name(Name),
     StructDefinition(StructDefinition),
     FunctionDefinition(FunctionDefinition),
+    TypeField(TypeField),
+    TypeAnnotation(TypeAnnotation),
+    FunctionParameter(FunctionParameter),
     Statement(Statement),
-    Unknown(Token),
+    Expression(Expression),
+}
+
+#[derive(Debug)]
+pub enum CodeKind {
+    Node(Rc<Node>),
+    SyntaxToken(SyntaxToken),
+}
+
+#[derive(Debug)]
+pub struct Program {
+    pub body: Vec<Rc<Node>>,
+}
+
+impl Program {
+    pub fn new(body: Vec<Rc<Node>>) -> Self {
+        Self { body }
+    }
+}
+
+#[derive(Debug)]
+pub struct Name {
+    pub name: String,
+}
+
+impl Name {
+    pub fn new(name: String) -> Self {
+        Self { name }
+    }
 }
 
 /// Types
@@ -55,81 +162,140 @@ pub enum TopLevelKind {
 ///
 #[derive(Debug)]
 pub struct StructDefinition {
-    pub name: String,
-    pub fields: Vec<TypeField>,
-    pub tokens: Vec<SyntaxTokenItem>,
+    pub name: Option<Rc<Node>>,
+    pub fields: Vec<Rc<Node>>,
+}
+
+impl StructDefinition {
+    pub fn new(name: Option<Rc<Node>>, fields: Vec<Rc<Node>>) -> Self {
+        Self { name, fields }
+    }
 }
 
 #[derive(Debug)]
 pub struct TypeField {
-    pub name: String,
-    pub type_annotation: TypeAnnotation,
-    pub tokens: Vec<SyntaxTokenItem>,
+    pub name: Option<Rc<Node>>,
+    pub type_annotation: Option<Rc<Node>>,
+}
+
+impl TypeField {
+    pub fn new(name: Option<Rc<Node>>, type_annotation: Option<Rc<Node>>) -> Self {
+        Self {
+            name,
+            type_annotation,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct TypeAnnotation {
-    pub name: String,
+    pub name: Rc<Node>,
     pub r#type: Option<Rc<RefCell<sem::Type>>>,
-    pub tokens: Vec<SyntaxTokenItem>,
+}
+
+impl TypeAnnotation {
+    pub fn new(name: Rc<Node>) -> Self {
+        Self { name, r#type: None }
+    }
 }
 
 #[derive(Debug)]
 pub struct FunctionDefinition {
-    pub name: String,
-    pub params: Vec<FunctionParameter>,
-    pub body: Vec<Statement>,
-    pub tokens: Vec<SyntaxTokenItem>,
+    pub name: Option<Rc<Node>>,
+    pub parameters: Vec<Rc<Node>>,
+    pub body: Vec<Rc<Node>>,
+}
+
+impl FunctionDefinition {
+    pub fn new(name: Option<Rc<Node>>, parameters: Vec<Rc<Node>>, body: Vec<Rc<Node>>) -> Self {
+        Self {
+            name,
+            parameters,
+            body,
+        }
+    }
+
+    pub fn name(&self) -> Option<&Name> {
+        self.name.as_ref().map(|x| x.name().unwrap())
+    }
 }
 
 #[derive(Debug)]
 pub struct FunctionParameter {
-    pub name: String,
-    pub tokens: Vec<SyntaxTokenItem>,
+    pub name: Rc<Node>,
+}
+
+impl FunctionParameter {
+    pub fn new(name: Rc<Node>) -> Self {
+        Self { name }
+    }
+
+    pub fn name(&self) -> &Name {
+        self.name.name().unwrap()
+    }
 }
 
 #[derive(Debug)]
 pub struct Statement {
-    pub expression: Expression,
+    pub expression: Rc<Node>,
+}
+
+impl Statement {
+    pub fn new(expression: Rc<Node>) -> Self {
+        Self { expression }
+    }
+
+    pub fn expression(&self) -> &Expression {
+        self.expression.expression().unwrap()
+    }
 }
 
 #[derive(Debug)]
 pub struct Expression {
     pub kind: ExpressionKind,
     pub r#type: Rc<RefCell<sem::Type>>,
-    pub tokens: Vec<SyntaxTokenItem>,
 }
 
 impl Expression {
-    pub fn unwrap_identifier(&self) -> &Identifier {
+    pub fn new(kind: ExpressionKind, r#type: Rc<RefCell<sem::Type>>) -> Self {
+        Self { kind, r#type }
+    }
+
+    pub fn is_call_expression(&self) -> bool {
+        matches!(self.kind, ExpressionKind::CallExpression(_))
+    }
+}
+
+impl Expression {
+    pub fn identifier(&self) -> Option<&Identifier> {
         if let ExpressionKind::Identifier(ref expr) = self.kind {
-            expr
+            Some(expr)
         } else {
-            panic!("Expected identifier");
+            None
         }
     }
 
-    pub fn unwrap_subscript_expression(&self) -> &SubscriptExpression {
+    pub fn subscript_expression(&self) -> Option<&SubscriptExpression> {
         if let ExpressionKind::SubscriptExpression(ref expr) = self.kind {
-            expr
+            Some(expr)
         } else {
-            panic!("Expected subscript expression");
+            None
         }
     }
 
-    pub fn unwrap_binary_expression(&self) -> &BinaryExpression {
+    pub fn binary_expression(&self) -> Option<&BinaryExpression> {
         if let ExpressionKind::BinaryExpression(ref expr) = self.kind {
-            expr
+            Some(expr)
         } else {
-            panic!("Expected binary expression");
+            None
         }
     }
 
-    pub fn unwrap_unary_expression(&self) -> &UnaryExpression {
+    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
         if let ExpressionKind::UnaryExpression(ref expr) = self.kind {
-            expr
+            Some(expr)
         } else {
-            panic!("Expected unary expression");
+            None
         }
     }
 }
@@ -146,26 +312,26 @@ pub struct Identifier(pub String);
 #[derive(Debug)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
-    pub lhs: Box<Expression>,
-    pub rhs: Option<Box<Expression>>,
+    pub lhs: Rc<Node>,
+    pub rhs: Option<Rc<Node>>,
 }
 
 #[derive(Debug)]
 pub struct SubscriptExpression {
-    pub callee: Box<Expression>,
-    pub arguments: Vec<Expression>,
+    pub callee: Rc<Node>,
+    pub arguments: Vec<Rc<Node>>,
 }
 
 #[derive(Debug)]
 pub struct CallExpression {
-    pub callee: Box<Expression>,
-    pub arguments: Vec<Expression>,
+    pub callee: Rc<Node>,
+    pub arguments: Vec<Rc<Node>>,
 }
 
 #[derive(Debug)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
-    pub operand: Option<Box<Expression>>,
+    pub operand: Option<Rc<Node>>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -200,97 +366,56 @@ pub enum ExpressionKind {
     CallExpression(CallExpression),
 }
 
-// --- tokens
-impl Statement {
-    pub fn tokens(&self) -> SyntaxTokens<'_> {
-        self.expression.tokens()
-    }
+// Code
+#[derive(Debug, Default)]
+pub struct Code {
+    code: Vec<CodeKind>,
 }
 
-impl Expression {
-    pub fn children(&self) -> Vec<&Expression> {
-        let mut children = vec![];
-
-        match &self.kind {
-            ExpressionKind::IntegerLiteral(_)
-            | ExpressionKind::Identifier(_)
-            | ExpressionKind::StringLiteral(_) => {}
-            ExpressionKind::BinaryExpression(BinaryExpression { lhs, rhs, .. }) => {
-                children.push(&**lhs);
-
-                if let Some(rhs) = rhs {
-                    children.push(&**rhs)
-                }
-            }
-            ExpressionKind::UnaryExpression(UnaryExpression { operand, .. }) => {
-                if let Some(operand) = operand {
-                    children.push(&**operand)
-                }
-            }
-            ExpressionKind::SubscriptExpression(SubscriptExpression { callee, arguments })
-            | ExpressionKind::CallExpression(CallExpression { callee, arguments }) => {
-                children.push(&**callee);
-
-                for arg in arguments {
-                    children.push(arg)
-                }
-            }
-        };
-
-        children
+impl Code {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn tokens(&self) -> SyntaxTokens<'_> {
-        let children = self.children().iter().map(|x| x.tokens()).collect();
-        SyntaxTokens::new(self.tokens.iter(), children)
-    }
-}
-
-pub struct SyntaxTokens<'a> {
-    iterator: slice::Iter<'a, SyntaxTokenItem>,
-    children: Vec<SyntaxTokens<'a>>,
-    in_child: bool,
-}
-
-impl<'a> SyntaxTokens<'a> {
-    pub fn new(
-        iterator: slice::Iter<'a, SyntaxTokenItem>,
-        children: Vec<SyntaxTokens<'a>>,
-    ) -> Self {
+    pub fn with_interpreted(token: Token) -> Self {
         Self {
-            iterator,
-            children,
-            in_child: false,
+            code: vec![CodeKind::SyntaxToken(SyntaxToken::Interpreted(token))],
         }
     }
-}
 
-impl<'a> Iterator for SyntaxTokens<'a> {
-    type Item = &'a SyntaxToken;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.in_child {
-            if self.children.is_empty() {
-                panic!("children  overflow");
-            }
-
-            let token = self.children[0].next();
-
-            if token.is_none() {
-                self.children.remove(0);
-                self.in_child = false;
-            } else {
-                return token;
-            }
+    pub fn with_node(node: &Rc<Node>) -> Self {
+        Self {
+            code: vec![CodeKind::Node(Rc::clone(node))],
         }
+    }
 
-        match self.iterator.next() {
-            None => None,
-            Some(SyntaxTokenItem::Child) => {
-                self.in_child = true;
-                self.next()
-            }
-            Some(SyntaxTokenItem::Token(ref t)) => Some(t),
-        }
+    pub fn interpret(&mut self, token: Token) -> &mut Self {
+        self.code
+            .push(CodeKind::SyntaxToken(SyntaxToken::Interpreted(token)));
+        self
+    }
+
+    pub fn missing(&mut self, token: Token) -> &mut Self {
+        self.code
+            .push(CodeKind::SyntaxToken(SyntaxToken::Missing(token)));
+        self
+    }
+
+    pub fn skip<S: Into<String>>(&mut self, token: Token, expected: S) -> &mut Self {
+        self.code.push(CodeKind::SyntaxToken(SyntaxToken::Skipped {
+            token,
+            expected: expected.into(),
+        }));
+        self
+    }
+
+    pub fn iter(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
+    }
+
+    // children
+    pub fn node(&mut self, node: &Rc<Node>) -> &mut Self {
+        self.code.push(CodeKind::Node(Rc::clone(node)));
+        self
     }
 }
