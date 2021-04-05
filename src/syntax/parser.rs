@@ -3,8 +3,8 @@ use super::{TokenKind, Tokenizer};
 use crate::sem;
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
-use std::cell::RefCell;
 use std::rc::Rc;
+use std::{cell::RefCell, rc::Weak};
 
 const DEBUG: bool = false;
 
@@ -472,14 +472,14 @@ impl<'a> Parser<'a> {
 
     /// Read comma-separated elements from the start character token specified by `open_char` to
     /// the end character token or EOF specified by `close_char`.
-    fn _parse_elements<T: Clone>(
+    fn _parse_elements<T>(
         &mut self,
         open_char: char,
         close_char: char,
         code: &mut Code,
-        element_parser: fn(&mut Parser<'a>) -> Option<T>,
-        node_kind: fn(T) -> NodeKind,
-    ) -> Vec<T> {
+        element_parser: fn(&mut Parser<'a>) -> Option<Rc<T>>,
+        node_kind: fn(Weak<T>) -> NodeKind,
+    ) -> Vec<Rc<T>> {
         let mut arguments = vec![];
         let mut consumed = false; // An argument already read.
 
@@ -524,7 +524,7 @@ impl<'a> Parser<'a> {
                                 .build_missing(TokenKind::Char(open_char), open_char.to_string()),
                         );
 
-                        code.node(node_kind(expr));
+                        code.node(node_kind(Rc::downgrade(&expr)));
                         break;
                     } else {
                         // Continue until read an opening token.
@@ -541,7 +541,7 @@ impl<'a> Parser<'a> {
                 if let Some(argument) = argument {
                     consumed = true;
                     arguments.push(argument.clone());
-                    code.node(node_kind(argument.clone()));
+                    code.node(node_kind(Rc::downgrade(&argument)));
                 } else {
                     consumed = false;
                 }
@@ -705,13 +705,13 @@ mod tests {
         assert_eq!(tokens.len(), 3);
 
         let node = unwrap_node(tokens[0]);
-        assert_matches!(node, NodeKind::Expression(_));
+        assert!(node.is_expression());
 
         let token = unwrap_interpreted_token(tokens[1]);
         assert_matches!(token.kind, TokenKind::Char('+'));
 
         let node = unwrap_node(tokens[2]);
-        assert_matches!(node, NodeKind::Expression(_));
+        assert!(node.is_expression());
     }
 
     #[test]
@@ -731,7 +731,7 @@ mod tests {
         assert_eq!(tokens.len(), 3);
 
         let node = unwrap_node(tokens[0]);
-        assert_matches!(node, NodeKind::Expression(_));
+        assert!(node.is_expression());
 
         let token = unwrap_interpreted_token(tokens[1]);
         assert_matches!(token.kind, TokenKind::Char('+'));
@@ -759,7 +759,7 @@ mod tests {
         assert_eq!(tokens.len(), 5);
 
         let node = unwrap_node(tokens[0]);
-        assert_matches!(node, NodeKind::Expression(_));
+        assert!(node.is_expression());
 
         let token = unwrap_interpreted_token(tokens[1]);
         assert_matches!(token.kind, TokenKind::Char('+'));
@@ -773,7 +773,7 @@ mod tests {
         assert_eq!(expected, "expression");
 
         let node = unwrap_node(tokens[4]);
-        assert_matches!(node, NodeKind::Expression(_));
+        assert!(node.is_expression());
     }
 
     #[test]
@@ -796,7 +796,7 @@ mod tests {
         assert_matches!(token.kind, TokenKind::Char('-'));
 
         let node = unwrap_node(tokens[1]);
-        assert_matches!(node, NodeKind::Expression(_));
+        assert!(node.is_expression());
     }
 
     #[test]
@@ -823,7 +823,7 @@ mod tests {
         assert_matches!(token.kind, TokenKind::Char('-'));
 
         let node = unwrap_node(tokens[1]);
-        assert_matches!(node, NodeKind::Expression(_));
+        assert!(node.is_expression());
     }
 
     #[test]
@@ -848,13 +848,13 @@ mod tests {
         assert_eq!(tokens.len(), 4);
 
         let node = unwrap_node(tokens[0]);
-        assert_matches!(node, NodeKind::Expression(_));
+        assert!(node.is_expression());
 
         let token = unwrap_interpreted_token(tokens[1]);
         assert_matches!(token.kind, TokenKind::Char('['));
 
         let node = unwrap_node(tokens[2]);
-        assert_matches!(node, NodeKind::Expression(_));
+        assert!(node.is_expression());
 
         let token = unwrap_interpreted_token(tokens[3]);
         assert_matches!(token.kind, TokenKind::Char(']'));
@@ -881,7 +881,7 @@ mod tests {
         assert_eq!(tokens.len(), 3);
 
         let node = unwrap_node(tokens[0]);
-        assert_matches!(node, NodeKind::Expression(_));
+        assert!(node.is_expression());
 
         let token = unwrap_interpreted_token(tokens[1]);
         assert_matches!(token.kind, TokenKind::Char('['));
@@ -925,8 +925,8 @@ mod tests {
         }
     }
 
-    fn unwrap_node(kind: &CodeKind) -> &NodeKind {
-        if let CodeKind::NodeKind(node) = kind {
+    fn unwrap_node(kind: &CodeKind) -> &Node {
+        if let CodeKind::Node(node) = kind {
             return node;
         }
 

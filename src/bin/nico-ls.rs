@@ -6,10 +6,7 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-use nico::syntax::{
-    traverse, CallExpression, CodeIterable, Expression, ExpressionKind, FunctionDefinition,
-    FunctionParameter, ParseError, Parser, StringLiteral, Token, TokenKind, Trivia, TriviaKind,
-};
+use nico::syntax::{traverse, FunctionParameter, ParseError, Parser, Token, TokenKind, Trivia};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -164,8 +161,6 @@ struct SemanticTokenizer {
     previous_line: u32,
     previous_character: u32,
     pub tokens: Vec<SemanticToken>,
-
-    // state
     in_function_parameter: bool,
 }
 

@@ -1,7 +1,7 @@
 use super::{SyntaxToken, Token};
 use crate::sem;
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::slice;
 
 #[derive(Debug)]
@@ -11,21 +11,55 @@ pub enum TopLevelKind {
     Statement(Rc<Statement>),
 }
 
-#[derive(Debug)]
+/// Generic weak reference to any node.
+#[derive(Debug, Clone)]
+pub struct Node {
+    kind: NodeKind,
+}
+
+impl Node {
+    pub fn new(kind: NodeKind) -> Self {
+        Self { kind }
+    }
+
+    pub fn kind(&self) -> &NodeKind {
+        &self.kind
+    }
+
+    pub fn is_function_parameter(&self) -> bool {
+        matches!(self.kind, NodeKind::FunctionDefinition(_))
+    }
+
+    pub fn is_expression(&self) -> bool {
+        matches!(self.kind, NodeKind::Expression(_))
+    }
+
+    pub fn is_call_expression(&self) -> bool {
+        if let NodeKind::Expression(expr) = &self.kind {
+            if let Some(expr) = expr.upgrade() {
+                return expr.is_call_expression();
+            }
+        }
+
+        false
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum NodeKind {
-    Name(Rc<Name>),
-    StructDefinition(Rc<StructDefinition>),
-    FunctionDefinition(Rc<FunctionDefinition>),
-    TypeField(Rc<TypeField>),
-    TypeAnnotation(Rc<TypeAnnotation>),
-    FunctionParameter(Rc<FunctionParameter>),
-    Statement(Rc<Statement>),
-    Expression(Rc<Expression>),
+    Name(Weak<Name>),
+    StructDefinition(Weak<StructDefinition>),
+    FunctionDefinition(Weak<FunctionDefinition>),
+    TypeField(Weak<TypeField>),
+    TypeAnnotation(Weak<TypeAnnotation>),
+    FunctionParameter(Weak<FunctionParameter>),
+    Statement(Weak<Statement>),
+    Expression(Weak<Expression>),
 }
 
 #[derive(Debug)]
 pub enum CodeKind {
-    NodeKind(NodeKind),
+    Node(Node),
     SyntaxToken(SyntaxToken),
 }
 
@@ -180,6 +214,10 @@ impl Expression {
     pub fn new(kind: ExpressionKind, r#type: Rc<RefCell<sem::Type>>, code: Code) -> Self {
         Self { kind, r#type, code }
     }
+
+    pub fn is_call_expression(&self) -> bool {
+        matches!(self.kind, ExpressionKind::CallExpression(_))
+    }
 }
 
 impl Expression {
@@ -324,29 +362,29 @@ impl Code {
     }
 
     // children
-    pub fn node(&mut self, node: NodeKind) -> &mut Self {
-        self.code.push(CodeKind::NodeKind(node));
+    pub fn node(&mut self, kind: NodeKind) -> &mut Self {
+        self.code.push(CodeKind::Node(Node { kind }));
         self
     }
 
     pub fn name(&mut self, node: &Rc<Name>) -> &mut Self {
-        self.node(NodeKind::Name(Rc::clone(node)))
+        self.node(NodeKind::Name(Rc::downgrade(node)))
     }
 
     pub fn struct_definition(&mut self, node: &Rc<StructDefinition>) -> &mut Self {
-        self.node(NodeKind::StructDefinition(Rc::clone(node)))
+        self.node(NodeKind::StructDefinition(Rc::downgrade(node)))
     }
 
     pub fn function_definition(&mut self, node: &Rc<FunctionDefinition>) -> &mut Self {
-        self.node(NodeKind::FunctionDefinition(Rc::clone(node)))
+        self.node(NodeKind::FunctionDefinition(Rc::downgrade(node)))
     }
 
     pub fn statement(&mut self, node: &Rc<Statement>) -> &mut Self {
-        self.node(NodeKind::Statement(Rc::clone(node)))
+        self.node(NodeKind::Statement(Rc::downgrade(node)))
     }
 
     pub fn expression(&mut self, node: &Rc<Expression>) -> &mut Self {
-        self.node(NodeKind::Expression(Rc::clone(node)))
+        self.node(NodeKind::Expression(Rc::downgrade(node)))
     }
 }
 
@@ -357,21 +395,6 @@ pub trait CodeIterable {
 impl CodeIterable for Code {
     fn code(&self) -> slice::Iter<CodeKind> {
         self.iter()
-    }
-}
-
-impl CodeIterable for NodeKind {
-    fn code(&self) -> slice::Iter<CodeKind> {
-        match self {
-            NodeKind::Name(node) => node.code(),
-            NodeKind::StructDefinition(node) => node.code(),
-            NodeKind::FunctionDefinition(node) => node.code(),
-            NodeKind::TypeField(node) => node.code(),
-            NodeKind::TypeAnnotation(node) => node.code(),
-            NodeKind::FunctionParameter(node) => node.code(),
-            NodeKind::Statement(node) => node.code(),
-            NodeKind::Expression(node) => node.code(),
-        }
     }
 }
 

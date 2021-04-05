@@ -108,19 +108,55 @@ pub trait Visitor {
     }
 }
 
+pub fn traverse(visitor: &mut dyn Visitor, node: &Node) {
+    match node.kind() {
+        NodeKind::Name(node) => {
+            if let Some(node) = node.upgrade() {
+                traverse_name(visitor, &node);
+            }
+        }
+        NodeKind::StructDefinition(node) => {
+            if let Some(node) = node.upgrade() {
+                traverse_struct_definition(visitor, &node);
+            }
+        }
+        NodeKind::FunctionDefinition(node) => {
+            if let Some(node) = node.upgrade() {
+                traverse_function_definition(visitor, &node);
+            }
+        }
+        NodeKind::TypeField(node) => {
+            if let Some(node) = node.upgrade() {
+                traverse_type_field(visitor, &node);
+            }
+        }
+        NodeKind::TypeAnnotation(node) => {
+            if let Some(node) = node.upgrade() {
+                traverse_type_annotation(visitor, &node);
+            }
+        }
+        NodeKind::FunctionParameter(node) => {
+            if let Some(node) = node.upgrade() {
+                traverse_function_parameter(visitor, &node);
+            }
+        }
+        NodeKind::Statement(node) => {
+            if let Some(node) = node.upgrade() {
+                traverse_statement(visitor, &node);
+            }
+        }
+        NodeKind::Expression(node) => {
+            if let Some(node) = node.upgrade() {
+                traverse_expression(visitor, &node);
+            }
+        }
+    }
+}
+
 fn traverse_children<T: CodeIterable>(visitor: &mut dyn Visitor, node: &T) {
     for kind in node.code() {
         match kind {
-            CodeKind::NodeKind(node) => match node {
-                NodeKind::Name(node) => traverse_name(visitor, node),
-                NodeKind::StructDefinition(node) => traverse_struct_definition(visitor, node),
-                NodeKind::FunctionDefinition(node) => traverse_function_definition(visitor, node),
-                NodeKind::TypeField(node) => traverse_type_field(visitor, node),
-                NodeKind::TypeAnnotation(node) => traverse_type_annotation(visitor, node),
-                NodeKind::FunctionParameter(node) => traverse_function_parameter(visitor, node),
-                NodeKind::Statement(node) => traverse_statement(visitor, node),
-                NodeKind::Expression(node) => traverse_expression(visitor, node),
-            },
+            CodeKind::Node(node) => traverse(visitor, node),
             CodeKind::SyntaxToken(token) => match token {
                 super::SyntaxToken::Interpreted(token) => {
                     traverse_interpreted_token(visitor, token)
