@@ -191,6 +191,16 @@ impl SemanticTokenizer {
             | TokenKind::Struct
             | TokenKind::When
             | TokenKind::Case => SemanticTokenType::KEYWORD,
+            TokenKind::Integer(_) => SemanticTokenType::NUMBER,
+            TokenKind::Eq
+            | TokenKind::Ne
+            | TokenKind::Le
+            | TokenKind::Ge
+            | TokenKind::Char('+')
+            | TokenKind::Char('-')
+            | TokenKind::Char('*')
+            | TokenKind::Char('/')
+            | TokenKind::Char('%') => SemanticTokenType::OPERATOR,
             TokenKind::Identifier(_) => {
                 path.parent().map_or(SemanticTokenType::VARIABLE, |parent| {
                     if parent.node().is_function_definition() {
@@ -202,16 +212,6 @@ impl SemanticTokenizer {
                     }
                 })
             }
-            TokenKind::Integer(_) => SemanticTokenType::NUMBER,
-            TokenKind::Eq
-            | TokenKind::Ne
-            | TokenKind::Le
-            | TokenKind::Ge
-            | TokenKind::Char('+')
-            | TokenKind::Char('-')
-            | TokenKind::Char('*')
-            | TokenKind::Char('/')
-            | TokenKind::Char('%') => SemanticTokenType::OPERATOR,
             _ => return,
         };
 
