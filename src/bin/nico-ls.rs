@@ -161,7 +161,6 @@ struct SemanticTokenizer {
     previous_line: u32,
     previous_character: u32,
     pub tokens: Vec<SemanticToken>,
-    in_function_parameter: bool,
 }
 
 impl SemanticTokenizer {
@@ -181,7 +180,7 @@ impl SemanticTokenizer {
         })
     }
 
-    fn add_token_generic(&mut self, token: &Token) {
+    fn add_token_generic(&mut self, path: &traverse::Path, token: &Token) {
         let token_type = match token.kind {
             TokenKind::If
             | TokenKind::Else
@@ -193,11 +192,15 @@ impl SemanticTokenizer {
             | TokenKind::When
             | TokenKind::Case => SemanticTokenType::KEYWORD,
             TokenKind::Identifier(_) => {
-                if self.in_function_parameter {
-                    SemanticTokenType::PARAMETER
-                } else {
-                    SemanticTokenType::VARIABLE
-                }
+                path.parent().map_or(SemanticTokenType::VARIABLE, |parent| {
+                    if parent.node().is_function_definition() {
+                        SemanticTokenType::FUNCTION
+                    } else if parent.node().is_function_parameter() {
+                        SemanticTokenType::PARAMETER
+                    } else {
+                        SemanticTokenType::VARIABLE
+                    }
+                })
             }
             TokenKind::Integer(_) => SemanticTokenType::NUMBER,
             TokenKind::Eq
@@ -247,13 +250,9 @@ impl SemanticTokenizer {
 }
 
 impl traverse::Visitor for SemanticTokenizer {
-    fn enter_function_parameter(&mut self, _path: &mut Rc<traverse::Path>) {
-        self.in_function_parameter = true;
-    }
+    fn enter_function_parameter(&mut self, _path: &mut Rc<traverse::Path>) {}
 
-    fn exit_function_parameter(&mut self, _path: &mut Rc<traverse::Path>) {
-        self.in_function_parameter = false;
-    }
+    fn exit_function_parameter(&mut self, _path: &mut Rc<traverse::Path>) {}
 
     fn enter_line_comment(
         &mut self,
@@ -270,17 +269,17 @@ impl traverse::Visitor for SemanticTokenizer {
         })
     }
 
-    fn enter_interpreted_token(&mut self, _path: &mut Rc<traverse::Path>, token: &Token) {
-        self.add_token_generic(token);
+    fn enter_interpreted_token(&mut self, path: &mut Rc<traverse::Path>, token: &Token) {
+        self.add_token_generic(path, token);
     }
 
     fn enter_skipped_token(
         &mut self,
-        _path: &mut Rc<traverse::Path>,
+        path: &mut Rc<traverse::Path>,
         token: &Token,
         _expected: &str,
     ) {
-        self.add_token_generic(token);
+        self.add_token_generic(path, token);
     }
 }
 

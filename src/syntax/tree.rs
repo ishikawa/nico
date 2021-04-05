@@ -40,8 +40,24 @@ impl Node {
     }
 
     pub fn name(&self) -> Option<&Name> {
-        if let NodeKind::Name(ref expr) = self.kind {
-            Some(expr)
+        if let NodeKind::Name(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
+        if let NodeKind::FunctionDefinition(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
+        if let NodeKind::FunctionParameter(ref node) = self.kind {
+            Some(node)
         } else {
             None
         }
@@ -71,8 +87,12 @@ impl Node {
         }
     }
 
-    pub fn is_function_parameter(&self) -> bool {
+    pub fn is_function_definition(&self) -> bool {
         matches!(self.kind, NodeKind::FunctionDefinition(_))
+    }
+
+    pub fn is_function_parameter(&self) -> bool {
+        matches!(self.kind, NodeKind::FunctionParameter(_))
     }
 
     pub fn is_expression(&self) -> bool {
