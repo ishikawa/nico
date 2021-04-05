@@ -8,7 +8,7 @@ use lsp_types::{
 };
 use nico::syntax::{
     traverse, CallExpression, CodeIterable, Expression, ExpressionKind, FunctionDefinition,
-    ParseError, Parser, StringLiteral, Token, TokenKind, Trivia, TriviaKind,
+    FunctionParameter, ParseError, Parser, StringLiteral, Token, TokenKind, Trivia, TriviaKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -158,21 +158,22 @@ struct SemanticTokenAbsolute {
     token_type: SemanticTokenType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct SemanticTokenizer {
     legend: Rc<HashMap<SemanticTokenType, usize>>,
     previous_line: u32,
     previous_character: u32,
     pub tokens: Vec<SemanticToken>,
+
+    // state
+    in_function_parameter: bool,
 }
 
 impl SemanticTokenizer {
     pub fn new(legend: Rc<HashMap<SemanticTokenType, usize>>) -> Self {
         Self {
             legend,
-            previous_line: 0,
-            previous_character: 0,
-            tokens: vec![],
+            ..Self::default()
         }
     }
 
@@ -196,7 +197,13 @@ impl SemanticTokenizer {
             | TokenKind::Struct
             | TokenKind::When
             | TokenKind::Case => SemanticTokenType::KEYWORD,
-            TokenKind::Identifier(_) => SemanticTokenType::VARIABLE,
+            TokenKind::Identifier(_) => {
+                if self.in_function_parameter {
+                    SemanticTokenType::PARAMETER
+                } else {
+                    SemanticTokenType::VARIABLE
+                }
+            }
             TokenKind::Integer(_) => SemanticTokenType::NUMBER,
             TokenKind::Eq
             | TokenKind::Ne
@@ -245,6 +252,14 @@ impl SemanticTokenizer {
 }
 
 impl traverse::Visitor for SemanticTokenizer {
+    fn enter_function_parameter(&mut self, _path: &mut traverse::Path<FunctionParameter>) {
+        self.in_function_parameter = true;
+    }
+
+    fn exit_function_parameter(&mut self, _path: &mut traverse::Path<FunctionParameter>) {
+        self.in_function_parameter = false;
+    }
+
     fn enter_line_comment(&mut self, path: &mut traverse::Path<Trivia>, _comment: &str) {
         let trivia = path.node();
 
