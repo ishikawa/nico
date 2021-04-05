@@ -110,6 +110,11 @@ pub trait Visitor {
 
 pub fn traverse(visitor: &mut dyn Visitor, node: &Node) {
     match node.kind() {
+        NodeKind::Program(node) => {
+            if let Some(node) = node.upgrade() {
+                traverse_program(visitor, &node);
+            }
+        }
         NodeKind::Name(node) => {
             if let Some(node) = node.upgrade() {
                 traverse_name(visitor, &node);

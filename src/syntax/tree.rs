@@ -47,6 +47,7 @@ impl Node {
 
 #[derive(Debug, Clone)]
 pub enum NodeKind {
+    Program(Weak<Program>),
     Name(Weak<Name>),
     StructDefinition(Weak<StructDefinition>),
     FunctionDefinition(Weak<FunctionDefinition>),
