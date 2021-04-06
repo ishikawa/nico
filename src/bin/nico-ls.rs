@@ -330,7 +330,7 @@ impl Connection {
     }
 
     fn server_options(&self) -> Result<&ServerRegistrationOptions, HandlerError> {
-        self.server_options.as_ref().ok_or_else(|| HandlerError {
+        self.server_options.as_ref().ok_or(HandlerError {
             kind: HandlerErrorKind::ServerNotInitialized,
         })
     }
