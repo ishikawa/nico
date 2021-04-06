@@ -6,7 +6,10 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-use nico::syntax::{traverse, ParseError, Parser, Token, TokenKind, Trivia};
+use nico::syntax::{
+    traverse::{self, NodePath},
+    ParseError, Parser, Token, TokenKind, Trivia,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -196,7 +199,7 @@ impl SemanticTokenizer {
         }
     }
 
-    fn add_token_generic(&mut self, path: &traverse::Path, token: &Token) {
+    fn add_token_generic(&mut self, path: &NodePath, token: &Token) {
         let mut token_modifiers_bitset = 0;
 
         let token_type = match token.kind {
@@ -295,7 +298,7 @@ impl SemanticTokenizer {
 impl traverse::Visitor for SemanticTokenizer {
     fn enter_line_comment(
         &mut self,
-        _path: &mut Rc<traverse::Path>,
+        _path: &mut Rc<NodePath>,
         _token: &Token,
         trivia: &Trivia,
         _comment: &str,
@@ -309,16 +312,11 @@ impl traverse::Visitor for SemanticTokenizer {
         })
     }
 
-    fn enter_interpreted_token(&mut self, path: &mut Rc<traverse::Path>, token: &Token) {
+    fn enter_interpreted_token(&mut self, path: &mut Rc<NodePath>, token: &Token) {
         self.add_token_generic(path, token);
     }
 
-    fn enter_skipped_token(
-        &mut self,
-        path: &mut Rc<traverse::Path>,
-        token: &Token,
-        _expected: &str,
-    ) {
+    fn enter_skipped_token(&mut self, path: &mut Rc<NodePath>, token: &Token, _expected: &str) {
         self.add_token_generic(path, token);
     }
 }

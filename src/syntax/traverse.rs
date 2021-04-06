@@ -5,14 +5,14 @@ use crate::syntax::Token;
 
 use super::{Trivia, TriviaKind};
 
-pub struct Path {
+pub struct NodePath {
     skipped: bool,
     node: Rc<Node>,
-    parent: Option<Rc<Path>>,
+    parent: Option<Rc<NodePath>>,
 }
 
-impl Path {
-    pub fn child(node: &Rc<Node>, parent: Option<Rc<Path>>) -> Rc<Self> {
+impl NodePath {
+    pub fn child(node: &Rc<Node>, parent: Option<Rc<NodePath>>) -> Rc<Self> {
         Rc::new(Self {
             skipped: false,
             node: Rc::clone(node),
@@ -29,7 +29,7 @@ impl Path {
         self.skipped = true;
     }
 
-    pub fn parent(&self) -> Option<Rc<Path>> {
+    pub fn parent(&self) -> Option<Rc<NodePath>> {
         self.parent.as_ref().map(Rc::clone)
     }
 }
@@ -37,12 +37,12 @@ impl Path {
 #[allow(unused_variables, unused_mut)]
 pub trait Visitor {
     // Token
-    fn enter_whitespace(&mut self, path: &mut Rc<Path>, token: &Token, trivia: &Trivia) {}
-    fn exit_whitespace(&mut self, path: &mut Rc<Path>, token: &Token, trivia: &Trivia) {}
+    fn enter_whitespace(&mut self, path: &mut Rc<NodePath>, token: &Token, trivia: &Trivia) {}
+    fn exit_whitespace(&mut self, path: &mut Rc<NodePath>, token: &Token, trivia: &Trivia) {}
 
     fn enter_line_comment(
         &mut self,
-        path: &mut Rc<Path>,
+        path: &mut Rc<NodePath>,
         token: &Token,
         trivia: &Trivia,
         comment: &str,
@@ -50,78 +50,78 @@ pub trait Visitor {
     }
     fn exit_line_comment(
         &mut self,
-        path: &mut Rc<Path>,
+        path: &mut Rc<NodePath>,
         token: &Token,
         trivia: &Trivia,
         comment: &str,
     ) {
     }
 
-    fn enter_interpreted_token(&mut self, path: &mut Rc<Path>, token: &Token) {}
-    fn exit_interpreted_token(&mut self, path: &mut Rc<Path>, token: &Token) {}
+    fn enter_interpreted_token(&mut self, path: &mut Rc<NodePath>, token: &Token) {}
+    fn exit_interpreted_token(&mut self, path: &mut Rc<NodePath>, token: &Token) {}
 
-    fn enter_missing_token(&mut self, path: &mut Rc<Path>, token: &Token) {}
-    fn exit_missing_token(&mut self, path: &mut Rc<Path>, token: &Token) {}
+    fn enter_missing_token(&mut self, path: &mut Rc<NodePath>, token: &Token) {}
+    fn exit_missing_token(&mut self, path: &mut Rc<NodePath>, token: &Token) {}
 
-    fn enter_skipped_token(&mut self, path: &mut Rc<Path>, token: &Token, expected: &str) {}
-    fn exit_skipped_token(&mut self, path: &mut Rc<Path>, token: &Token, expected: &str) {}
+    fn enter_skipped_token(&mut self, path: &mut Rc<NodePath>, token: &Token, expected: &str) {}
+    fn exit_skipped_token(&mut self, path: &mut Rc<NodePath>, token: &Token, expected: &str) {}
 
     // Node
-    fn enter_program(&mut self, path: &mut Rc<Path>) {}
-    fn exit_program(&mut self, path: &mut Rc<Path>) {}
+    fn enter_program(&mut self, path: &mut Rc<NodePath>) {}
+    fn exit_program(&mut self, path: &mut Rc<NodePath>) {}
 
-    fn enter_name(&mut self, path: &mut Rc<Path>) {}
-    fn exit_name(&mut self, path: &mut Rc<Path>) {}
+    fn enter_name(&mut self, path: &mut Rc<NodePath>) {}
+    fn exit_name(&mut self, path: &mut Rc<NodePath>) {}
 
-    fn enter_struct_definition(&mut self, path: &mut Rc<Path>) {}
-    fn exit_struct_definition(&mut self, path: &mut Rc<Path>) {}
+    fn enter_struct_definition(&mut self, path: &mut Rc<NodePath>) {}
+    fn exit_struct_definition(&mut self, path: &mut Rc<NodePath>) {}
 
-    fn enter_function_definition(&mut self, path: &mut Rc<Path>) {}
-    fn exit_function_definition(&mut self, path: &mut Rc<Path>) {}
+    fn enter_function_definition(&mut self, path: &mut Rc<NodePath>) {}
+    fn exit_function_definition(&mut self, path: &mut Rc<NodePath>) {}
 
-    fn enter_function_parameter(&mut self, path: &mut Rc<Path>) {}
-    fn exit_function_parameter(&mut self, path: &mut Rc<Path>) {}
+    fn enter_function_parameter(&mut self, path: &mut Rc<NodePath>) {}
+    fn exit_function_parameter(&mut self, path: &mut Rc<NodePath>) {}
 
-    fn enter_type_field(&mut self, path: &mut Rc<Path>) {}
-    fn exit_type_field(&mut self, path: &mut Rc<Path>) {}
+    fn enter_type_field(&mut self, path: &mut Rc<NodePath>) {}
+    fn exit_type_field(&mut self, path: &mut Rc<NodePath>) {}
 
-    fn enter_type_annotation(&mut self, path: &mut Rc<Path>) {}
-    fn exit_type_annotation(&mut self, path: &mut Rc<Path>) {}
+    fn enter_type_annotation(&mut self, path: &mut Rc<NodePath>) {}
+    fn exit_type_annotation(&mut self, path: &mut Rc<NodePath>) {}
 
-    fn enter_unknown_token(&mut self, path: &mut Rc<Path>) {}
-    fn exit_unknown_token(&mut self, path: &mut Rc<Path>) {}
+    fn enter_unknown_token(&mut self, path: &mut Rc<NodePath>) {}
+    fn exit_unknown_token(&mut self, path: &mut Rc<NodePath>) {}
 
-    fn enter_statement(&mut self, path: &mut Rc<Path>) {}
-    fn exit_statement(&mut self, path: &mut Rc<Path>) {}
+    fn enter_statement(&mut self, path: &mut Rc<NodePath>) {}
+    fn exit_statement(&mut self, path: &mut Rc<NodePath>) {}
 
-    fn enter_expression(&mut self, path: &mut Rc<Path>) {}
-    fn exit_expression(&mut self, path: &mut Rc<Path>) {}
+    fn enter_expression(&mut self, path: &mut Rc<NodePath>) {}
+    fn exit_expression(&mut self, path: &mut Rc<NodePath>) {}
 
-    fn enter_integer_literal(&mut self, path: &mut Rc<Path>, literal: &IntegerLiteral) {}
-    fn exit_integer_literal(&mut self, path: &mut Rc<Path>, literal: &IntegerLiteral) {}
+    fn enter_integer_literal(&mut self, path: &mut Rc<NodePath>, literal: &IntegerLiteral) {}
+    fn exit_integer_literal(&mut self, path: &mut Rc<NodePath>, literal: &IntegerLiteral) {}
 
-    fn enter_string_literal(&mut self, path: &mut Rc<Path>, literal: &StringLiteral) {}
-    fn exit_string_literal(&mut self, path: &mut Rc<Path>, literal: &StringLiteral) {}
+    fn enter_string_literal(&mut self, path: &mut Rc<NodePath>, literal: &StringLiteral) {}
+    fn exit_string_literal(&mut self, path: &mut Rc<NodePath>, literal: &StringLiteral) {}
 
-    fn enter_identifier(&mut self, path: &mut Rc<Path>, expr: &Identifier) {}
-    fn exit_identifier(&mut self, path: &mut Rc<Path>, expr: &Identifier) {}
+    fn enter_identifier(&mut self, path: &mut Rc<NodePath>, expr: &Identifier) {}
+    fn exit_identifier(&mut self, path: &mut Rc<NodePath>, expr: &Identifier) {}
 
-    fn enter_call_expression(&mut self, path: &mut Rc<Path>, expr: &CallExpression) {}
-    fn exit_call_expression(&mut self, path: &mut Rc<Path>, expr: &CallExpression) {}
+    fn enter_call_expression(&mut self, path: &mut Rc<NodePath>, expr: &CallExpression) {}
+    fn exit_call_expression(&mut self, path: &mut Rc<NodePath>, expr: &CallExpression) {}
 
-    fn enter_binary_expression(&mut self, path: &mut Rc<Path>, expr: &BinaryExpression) {}
-    fn exit_binary_expression(&mut self, path: &mut Rc<Path>, expr: &BinaryExpression) {}
+    fn enter_binary_expression(&mut self, path: &mut Rc<NodePath>, expr: &BinaryExpression) {}
+    fn exit_binary_expression(&mut self, path: &mut Rc<NodePath>, expr: &BinaryExpression) {}
 
-    fn enter_unary_expression(&mut self, path: &mut Rc<Path>, expr: &UnaryExpression) {}
-    fn exit_unary_expression(&mut self, path: &mut Rc<Path>, expr: &UnaryExpression) {}
+    fn enter_unary_expression(&mut self, path: &mut Rc<NodePath>, expr: &UnaryExpression) {}
+    fn exit_unary_expression(&mut self, path: &mut Rc<NodePath>, expr: &UnaryExpression) {}
 
-    fn enter_subscript_expression(&mut self, path: &mut Rc<Path>, expr: &SubscriptExpression) {}
+    fn enter_subscript_expression(&mut self, path: &mut Rc<NodePath>, expr: &SubscriptExpression) {}
 
-    fn exit_subscript_expression(&mut self, path: &mut Rc<Path>, expr: &SubscriptExpression) {}
+    fn exit_subscript_expression(&mut self, path: &mut Rc<NodePath>, expr: &SubscriptExpression) {}
 }
 
-pub fn traverse(visitor: &mut dyn Visitor, node: &Rc<Node>, parent: Option<Rc<Path>>) {
-    let mut path = Path::child(node, parent);
+pub fn traverse(visitor: &mut dyn Visitor, node: &Rc<Node>, parent: Option<Rc<NodePath>>) {
+    let mut path = NodePath::child(node, parent);
 
     if !path.skipped {
         dispatch_enter(visitor, &mut path);
@@ -134,7 +134,7 @@ pub fn traverse(visitor: &mut dyn Visitor, node: &Rc<Node>, parent: Option<Rc<Pa
     }
 }
 
-fn dispatch_enter(visitor: &mut dyn Visitor, path: &mut Rc<Path>) {
+fn dispatch_enter(visitor: &mut dyn Visitor, path: &mut Rc<NodePath>) {
     let node = path.node();
 
     match node.kind() {
@@ -194,7 +194,7 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &mut Rc<Path>) {
     }
 }
 
-fn dispatch_exit(visitor: &mut dyn Visitor, path: &mut Rc<Path>) {
+fn dispatch_exit(visitor: &mut dyn Visitor, path: &mut Rc<NodePath>) {
     let node = path.node();
 
     match node.kind() {
@@ -254,7 +254,7 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &mut Rc<Path>) {
     }
 }
 
-fn traverse_children(visitor: &mut dyn Visitor, path: &mut Rc<Path>) {
+fn traverse_children(visitor: &mut dyn Visitor, path: &mut Rc<NodePath>) {
     let node = path.node();
 
     for kind in node.code() {
@@ -273,7 +273,7 @@ fn traverse_children(visitor: &mut dyn Visitor, path: &mut Rc<Path>) {
     }
 }
 
-fn traverse_token_trivia(visitor: &mut dyn Visitor, path: &mut Rc<Path>, token: &Token) {
+fn traverse_token_trivia(visitor: &mut dyn Visitor, path: &mut Rc<NodePath>, token: &Token) {
     for trivia in &token.leading_trivia {
         match &trivia.kind {
             TriviaKind::LineComment(comment) => {
@@ -296,7 +296,7 @@ fn traverse_token_trivia(visitor: &mut dyn Visitor, path: &mut Rc<Path>, token: 
     }
 }
 
-fn traverse_interpreted_token(visitor: &mut dyn Visitor, path: &mut Rc<Path>, token: &Token) {
+fn traverse_interpreted_token(visitor: &mut dyn Visitor, path: &mut Rc<NodePath>, token: &Token) {
     if !path.skipped {
         traverse_token_trivia(visitor, path, token);
     }
@@ -308,7 +308,7 @@ fn traverse_interpreted_token(visitor: &mut dyn Visitor, path: &mut Rc<Path>, to
     }
 }
 
-fn traverse_missing_token(visitor: &mut dyn Visitor, path: &mut Rc<Path>, token: &Token) {
+fn traverse_missing_token(visitor: &mut dyn Visitor, path: &mut Rc<NodePath>, token: &Token) {
     if !path.skipped {
         traverse_token_trivia(visitor, path, token);
     }
@@ -322,7 +322,7 @@ fn traverse_missing_token(visitor: &mut dyn Visitor, path: &mut Rc<Path>, token:
 
 fn traverse_skipped_token(
     visitor: &mut dyn Visitor,
-    path: &mut Rc<Path>,
+    path: &mut Rc<NodePath>,
     token: &Token,
     expected: &str,
 ) {
@@ -348,7 +348,7 @@ mod tests {
     }
 
     impl Visitor for NodeCounter {
-        fn enter_expression(&mut self, _path: &mut Rc<Path>) {
+        fn enter_expression(&mut self, _path: &mut Rc<NodePath>) {
             self.number_of_expressions += 1;
         }
     }
