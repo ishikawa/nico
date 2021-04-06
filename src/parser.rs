@@ -1339,6 +1339,7 @@ fn expect_string(tokenizer: &mut Tokenizer, node_kind: &str) -> Result<String, P
             match token.kind {
                 TokenKind::StringEnd => break,
                 TokenKind::StringContent(ref s) => string.push_str(s),
+                TokenKind::StringEscapeSequence(c) => string.push(c),
                 _ => return Err(ParseError::mismatch_token(&token, node_kind)),
             }
         }
