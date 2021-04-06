@@ -1,8 +1,8 @@
 use log::{info, warn};
 use lsp_types::{
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult,
-    InitializedParams, SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensFullOptions,
-    SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
+    InitializedParams, SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
+    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
@@ -139,6 +139,7 @@ impl Response {
 struct Connection {
     documents: HashMap<Url, Rc<RefCell<Document>>>,
     token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
+    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, usize>>,
 }
 
 #[derive(Debug)]
@@ -212,6 +213,10 @@ impl SemanticTokenizer {
                     }
                 })
             }
+            TokenKind::StringStart | TokenKind::StringEnd | TokenKind::StringContent(_) => {
+                SemanticTokenType::STRING
+            }
+            TokenKind::StringEscapeSequence(_) => SemanticTokenType::VARIABLE,
             _ => return,
         };
 
@@ -312,16 +317,36 @@ impl Connection {
             SemanticTokenType::PROPERTY,
         ];
 
+        let token_modifiers = vec![
+            SemanticTokenModifier::DECLARATION,
+            SemanticTokenModifier::DEFINITION,
+            SemanticTokenModifier::READONLY,
+            SemanticTokenModifier::STATIC,
+            SemanticTokenModifier::DEPRECATED,
+            SemanticTokenModifier::ABSTRACT,
+            SemanticTokenModifier::ASYNC,
+            SemanticTokenModifier::MODIFICATION,
+            SemanticTokenModifier::DOCUMENTATION,
+            SemanticTokenModifier::DEFAULT_LIBRARY,
+        ];
+
         // Register token type legend
-        let mut legend = HashMap::new();
+        let mut token_type_legend = HashMap::new();
+        let mut token_modifier_legend = HashMap::new();
+
         for (i, token_type) in token_types.iter().enumerate() {
-            legend.insert(token_type.clone(), i);
+            token_type_legend.insert(token_type.clone(), i);
         }
-        self.token_type_legend = Rc::new(legend);
+        for (i, token_modifier) in token_modifiers.iter().enumerate() {
+            token_modifier_legend.insert(token_modifier.clone(), i);
+        }
+
+        self.token_type_legend = Rc::new(token_type_legend);
+        self.token_modifier_legend = Rc::new(token_modifier_legend);
 
         let legend = SemanticTokensLegend {
             token_types,
-            token_modifiers: vec![],
+            token_modifiers,
         };
 
         Ok(InitializeResult {
