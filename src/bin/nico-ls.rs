@@ -59,6 +59,7 @@ struct HandlerError {
 #[derive(Debug)]
 enum HandlerErrorKind {
     // Errors
+    ServerNotInitialized,
     Utf8Error(string::FromUtf8Error),
     IoError(io::Error),
     JsonError(serde_json::Error),
@@ -138,6 +139,13 @@ impl Response {
 #[derive(Debug, Default)]
 struct Connection {
     documents: HashMap<Url, Rc<RefCell<Document>>>,
+    server_options: Option<ServerRegistrationOptions>,
+}
+
+/// These options are initialized in `on_initialize()` callback.
+#[derive(Debug, Clone)]
+struct ServerRegistrationOptions {
+    // Semantic tokens
     token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
     token_modifier_legend: Rc<HashMap<SemanticTokenModifier, usize>>,
 }
@@ -321,6 +329,12 @@ impl Connection {
         Self::default()
     }
 
+    fn server_options(&self) -> Result<&ServerRegistrationOptions, HandlerError> {
+        self.server_options.as_ref().ok_or_else(|| HandlerError {
+            kind: HandlerErrorKind::ServerNotInitialized,
+        })
+    }
+
     fn get_document(&self, uri: &Url) -> Result<&Rc<RefCell<Document>>, HandlerError> {
         self.documents.get(uri).ok_or_else(|| HandlerError {
             kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
@@ -372,13 +386,11 @@ impl Connection {
             token_modifier_legend.insert(token_modifier.clone(), i);
         }
 
-        self.token_type_legend = Rc::new(token_type_legend);
-        self.token_modifier_legend = Rc::new(token_modifier_legend);
-
-        let legend = SemanticTokensLegend {
-            token_types,
-            token_modifiers,
-        };
+        // Initialized
+        self.server_options = Some(ServerRegistrationOptions {
+            token_type_legend: Rc::new(token_type_legend),
+            token_modifier_legend: Rc::new(token_modifier_legend),
+        });
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
@@ -388,7 +400,10 @@ impl Connection {
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
                         SemanticTokensOptions {
-                            legend,
+                            legend: SemanticTokensLegend {
+                                token_types,
+                                token_modifiers,
+                            },
                             full: Some(SemanticTokensFullOptions::Bool(true)),
                             ..SemanticTokensOptions::default()
                         },
@@ -409,9 +424,12 @@ impl Connection {
     ) -> Result<SemanticTokens, HandlerError> {
         info!("[on_text_document_semantic_tokens_full] {:?}", params);
 
+        let server_options = self.server_options()?;
         let doc = self.get_document(&params.text_document.uri)?.borrow();
-        let mut tokenizer =
-            SemanticTokenizer::new(&self.token_type_legend, &self.token_modifier_legend);
+        let mut tokenizer = SemanticTokenizer::new(
+            &server_options.token_type_legend,
+            &server_options.token_modifier_legend,
+        );
         let node = Rc::new(Parser::parse_string(&doc.text));
 
         traverse::traverse(&mut tokenizer, &node, None);
