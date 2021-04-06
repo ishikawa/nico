@@ -149,39 +149,48 @@ struct Document {
 }
 
 #[derive(Debug)]
-struct SemanticTokenAbsolute {
+struct SemanticTokenAbsoluteParams {
     line: usize,
     character: usize,
     length: usize,
     token_type: SemanticTokenType,
+    token_modifiers_bitset: u32,
 }
 
 #[derive(Debug, Default)]
 struct SemanticTokenizer {
-    legend: Rc<HashMap<SemanticTokenType, usize>>,
+    token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
+    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, usize>>,
     previous_line: u32,
     previous_character: u32,
     pub tokens: Vec<SemanticToken>,
 }
 
 impl SemanticTokenizer {
-    pub fn new(legend: Rc<HashMap<SemanticTokenType, usize>>) -> Self {
+    pub fn new(
+        token_type_legend: &Rc<HashMap<SemanticTokenType, usize>>,
+        token_modifier_legend: &Rc<HashMap<SemanticTokenModifier, usize>>,
+    ) -> Self {
         Self {
-            legend,
+            token_type_legend: Rc::clone(token_type_legend),
+            token_modifier_legend: Rc::clone(token_modifier_legend),
             ..Self::default()
         }
     }
 
-    fn add_token_with_type(&mut self, token: &Token, token_type: SemanticTokenType) {
-        self.add_semantic_token_absolute(SemanticTokenAbsolute {
-            token_type,
-            line: token.range.start.line,
-            character: token.range.start.character,
-            length: token.range.length,
-        })
+    fn add_token_modifiers_bitset(&self, bitset: &mut u32, modifier: SemanticTokenModifier) {
+        let position = self.token_modifier_legend.get(&modifier);
+
+        if let Some(position) = position {
+            *bitset |= 1 << position;
+        } else {
+            warn!("SemanticTokenModifier ({:?}) not registered", modifier);
+        }
     }
 
     fn add_token_generic(&mut self, path: &traverse::Path, token: &Token) {
+        let mut token_modifiers_bitset = 0;
+
         let token_type = match token.kind {
             TokenKind::If
             | TokenKind::Else
@@ -216,15 +225,36 @@ impl SemanticTokenizer {
             TokenKind::StringStart | TokenKind::StringEnd | TokenKind::StringContent(_) => {
                 SemanticTokenType::STRING
             }
-            TokenKind::StringEscapeSequence(_) => SemanticTokenType::VARIABLE,
+            TokenKind::StringEscapeSequence(_) => {
+                self.add_token_modifiers_bitset(
+                    &mut token_modifiers_bitset,
+                    SemanticTokenModifier::READONLY,
+                );
+                SemanticTokenType::VARIABLE
+            }
             _ => return,
         };
 
-        self.add_token_with_type(token, token_type);
+        self.add_token_with_type(token, token_type, token_modifiers_bitset);
     }
 
-    fn add_semantic_token_absolute(&mut self, abs_sem_token: SemanticTokenAbsolute) {
-        let token_type = if let Some(ty) = self.legend.get(&abs_sem_token.token_type) {
+    fn add_token_with_type(
+        &mut self,
+        token: &Token,
+        token_type: SemanticTokenType,
+        token_modifiers_bitset: u32,
+    ) {
+        self.add_semantic_token_absolute(SemanticTokenAbsoluteParams {
+            token_type,
+            line: token.range.start.line,
+            character: token.range.start.character,
+            length: token.range.length,
+            token_modifiers_bitset,
+        })
+    }
+
+    fn add_semantic_token_absolute(&mut self, abs_sem_token: SemanticTokenAbsoluteParams) {
+        let token_type = if let Some(ty) = self.token_type_legend.get(&abs_sem_token.token_type) {
             u32::try_from(*ty).unwrap()
         } else {
             return;
@@ -246,7 +276,7 @@ impl SemanticTokenizer {
             delta_start,
             length,
             token_type,
-            token_modifiers_bitset: 0,
+            token_modifiers_bitset: abs_sem_token.token_modifiers_bitset,
         });
 
         self.previous_line = line;
@@ -262,11 +292,12 @@ impl traverse::Visitor for SemanticTokenizer {
         trivia: &Trivia,
         _comment: &str,
     ) {
-        self.add_semantic_token_absolute(SemanticTokenAbsolute {
+        self.add_semantic_token_absolute(SemanticTokenAbsoluteParams {
             token_type: SemanticTokenType::COMMENT,
             line: trivia.range.start.line,
             character: trivia.range.start.character,
             length: trivia.range.length,
+            token_modifiers_bitset: 0,
         })
     }
 
@@ -379,7 +410,8 @@ impl Connection {
         info!("[on_text_document_semantic_tokens_full] {:?}", params);
 
         let doc = self.get_document(&params.text_document.uri)?.borrow();
-        let mut tokenizer = SemanticTokenizer::new(Rc::clone(&self.token_type_legend));
+        let mut tokenizer =
+            SemanticTokenizer::new(&self.token_type_legend, &self.token_modifier_legend);
         let node = Rc::new(Parser::parse_string(&doc.text));
 
         traverse::traverse(&mut tokenizer, &node, None);
