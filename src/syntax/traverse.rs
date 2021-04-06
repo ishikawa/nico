@@ -70,8 +70,8 @@ pub trait Visitor {
     fn enter_program(&mut self, path: &mut Rc<NodePath>) {}
     fn exit_program(&mut self, path: &mut Rc<NodePath>) {}
 
-    fn enter_name(&mut self, path: &mut Rc<NodePath>) {}
-    fn exit_name(&mut self, path: &mut Rc<NodePath>) {}
+    fn enter_identifier(&mut self, path: &mut Rc<NodePath>) {}
+    fn exit_identifier(&mut self, path: &mut Rc<NodePath>) {}
 
     fn enter_struct_definition(&mut self, path: &mut Rc<NodePath>) {}
     fn exit_struct_definition(&mut self, path: &mut Rc<NodePath>) {}
@@ -103,8 +103,8 @@ pub trait Visitor {
     fn enter_string_literal(&mut self, path: &mut Rc<NodePath>, literal: &StringLiteral) {}
     fn exit_string_literal(&mut self, path: &mut Rc<NodePath>, literal: &StringLiteral) {}
 
-    fn enter_identifier(&mut self, path: &mut Rc<NodePath>, expr: &Identifier) {}
-    fn exit_identifier(&mut self, path: &mut Rc<NodePath>, expr: &Identifier) {}
+    fn enter_variable(&mut self, path: &mut Rc<NodePath>, expr: &Identifier) {}
+    fn exit_variable(&mut self, path: &mut Rc<NodePath>, expr: &Identifier) {}
 
     fn enter_call_expression(&mut self, path: &mut Rc<NodePath>, expr: &CallExpression) {}
     fn exit_call_expression(&mut self, path: &mut Rc<NodePath>, expr: &CallExpression) {}
@@ -141,8 +141,8 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &mut Rc<NodePath>) {
         NodeKind::Program(_) => {
             visitor.enter_program(path);
         }
-        NodeKind::Name(_) => {
-            visitor.enter_name(path);
+        NodeKind::Identifier(_) => {
+            visitor.enter_identifier(path);
         }
         NodeKind::StructDefinition(_) => {
             visitor.enter_struct_definition(path);
@@ -173,8 +173,8 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &mut Rc<NodePath>) {
                     ExpressionKind::StringLiteral(expr) => {
                         visitor.enter_string_literal(path, expr);
                     }
-                    ExpressionKind::Identifier(expr) => {
-                        visitor.enter_identifier(path, expr);
+                    ExpressionKind::VariableExpression(expr) => {
+                        visitor.enter_variable(path, expr);
                     }
                     ExpressionKind::CallExpression(expr) => {
                         visitor.enter_call_expression(path, expr);
@@ -201,8 +201,8 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &mut Rc<NodePath>) {
         NodeKind::Program(_) => {
             visitor.exit_program(path);
         }
-        NodeKind::Name(_) => {
-            visitor.exit_name(path);
+        NodeKind::Identifier(_) => {
+            visitor.exit_identifier(path);
         }
         NodeKind::StructDefinition(_) => {
             visitor.exit_struct_definition(path);
@@ -233,8 +233,8 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &mut Rc<NodePath>) {
                     ExpressionKind::StringLiteral(expr) => {
                         visitor.exit_string_literal(path, expr);
                     }
-                    ExpressionKind::Identifier(expr) => {
-                        visitor.exit_identifier(path, expr);
+                    ExpressionKind::VariableExpression(expr) => {
+                        visitor.exit_variable(path, expr);
                     }
                     ExpressionKind::CallExpression(expr) => {
                         visitor.exit_call_expression(path, expr);

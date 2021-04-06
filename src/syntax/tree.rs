@@ -13,7 +13,7 @@ pub struct Node {
 #[derive(Debug)]
 pub enum NodeKind {
     Program(Program),
-    Name(Name),
+    Identifier(Identifier),
     StructDefinition(StructDefinition),
     FunctionDefinition(FunctionDefinition),
     TypeField(TypeField),
@@ -46,13 +46,11 @@ impl Program {
 }
 
 #[derive(Debug)]
-pub struct Name {
-    pub name: String,
-}
+pub struct Identifier(pub String);
 
-impl Name {
+impl Identifier {
     pub fn new(name: String) -> Self {
-        Self { name }
+        Self(name)
     }
 }
 
@@ -122,8 +120,8 @@ impl FunctionDefinition {
         }
     }
 
-    pub fn name(&self) -> Option<&Name> {
-        self.name.as_ref().map(|x| x.name().unwrap())
+    pub fn name(&self) -> Option<&Identifier> {
+        self.name.as_ref().map(|x| x.identifier().unwrap())
     }
 }
 
@@ -137,8 +135,8 @@ impl FunctionParameter {
         Self { name }
     }
 
-    pub fn name(&self) -> &Name {
-        self.name.name().unwrap()
+    pub fn name(&self) -> &Identifier {
+        self.name.identifier().unwrap()
     }
 }
 
@@ -163,58 +161,11 @@ pub struct Expression {
     pub r#type: Rc<RefCell<sem::Type>>,
 }
 
-impl Expression {
-    pub fn new(kind: ExpressionKind, r#type: Rc<RefCell<sem::Type>>) -> Self {
-        Self { kind, r#type }
-    }
-
-    pub fn is_call_expression(&self) -> bool {
-        matches!(self.kind, ExpressionKind::CallExpression(_))
-    }
-}
-
-impl Expression {
-    pub fn identifier(&self) -> Option<&Identifier> {
-        if let ExpressionKind::Identifier(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn subscript_expression(&self) -> Option<&SubscriptExpression> {
-        if let ExpressionKind::SubscriptExpression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn binary_expression(&self) -> Option<&BinaryExpression> {
-        if let ExpressionKind::BinaryExpression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
-        if let ExpressionKind::UnaryExpression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct IntegerLiteral(pub i32);
 
 #[derive(Debug)]
 pub struct StringLiteral(pub Option<String>);
-
-#[derive(Debug)]
-pub struct Identifier(pub String);
 
 #[derive(Debug)]
 pub struct BinaryExpression {
@@ -266,7 +217,7 @@ pub enum UnaryOperator {
 pub enum ExpressionKind {
     IntegerLiteral(IntegerLiteral),
     StringLiteral(StringLiteral),
-    Identifier(Identifier),
+    VariableExpression(Identifier),
     BinaryExpression(BinaryExpression),
     UnaryExpression(UnaryExpression),
     SubscriptExpression(SubscriptExpression),
@@ -350,8 +301,8 @@ impl Node {
         }
     }
 
-    pub fn name(&self) -> Option<&Name> {
-        if let NodeKind::Name(ref node) = self.kind {
+    pub fn identifier(&self) -> Option<&Identifier> {
+        if let NodeKind::Identifier(ref node) = self.kind {
             Some(node)
         } else {
             None
@@ -382,9 +333,9 @@ impl Node {
         }
     }
 
-    pub fn identifier(&self) -> Option<&Identifier> {
+    pub fn variable(&self) -> Option<&Identifier> {
         if let Some(expr) = self.expression() {
-            expr.identifier()
+            expr.variable_expression()
         } else {
             None
         }
@@ -415,6 +366,48 @@ impl Node {
             expr.is_call_expression()
         } else {
             false
+        }
+    }
+}
+
+impl Expression {
+    pub fn new(kind: ExpressionKind, r#type: Rc<RefCell<sem::Type>>) -> Self {
+        Self { kind, r#type }
+    }
+
+    pub fn is_call_expression(&self) -> bool {
+        matches!(self.kind, ExpressionKind::CallExpression(_))
+    }
+
+    pub fn variable_expression(&self) -> Option<&Identifier> {
+        if let ExpressionKind::VariableExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn subscript_expression(&self) -> Option<&SubscriptExpression> {
+        if let ExpressionKind::SubscriptExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn binary_expression(&self) -> Option<&BinaryExpression> {
+        if let ExpressionKind::BinaryExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
+        if let ExpressionKind::UnaryExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
         }
     }
 }

@@ -183,7 +183,7 @@ impl<'a> Parser<'a> {
         if let TokenKind::Identifier(name) = self.tokenizer.peek_kind() {
             let name = name.clone();
             let code = Code::with_interpreted(self.tokenizer.next_token());
-            let node = Node::new(NodeKind::Name(Name::new(name)), code);
+            let node = Node::new(NodeKind::Identifier(Identifier::new(name)), code);
 
             Some(Rc::new(node))
         } else {
@@ -407,12 +407,12 @@ impl<'a> Parser<'a> {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Identifier(ref id) = token.kind {
-            let id = Identifier(id.clone());
+            let id = Identifier::new(id.clone());
             let code = Code::with_interpreted(token);
 
             Node::new(
                 NodeKind::Expression(Expression::new(
-                    ExpressionKind::Identifier(id),
+                    ExpressionKind::VariableExpression(id),
                     self.new_type_var(),
                 )),
                 code,
@@ -851,7 +851,7 @@ mod tests {
         let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.identifier().unwrap();
+            let id = callee.variable().unwrap();
             assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
@@ -886,7 +886,7 @@ mod tests {
         let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.identifier().unwrap();
+            let id = callee.variable().unwrap();
             assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
@@ -917,7 +917,7 @@ mod tests {
         let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.identifier().unwrap();
+            let id = callee.variable().unwrap();
             assert_matches!(id, Identifier(id) => {
                 assert_eq!(id, "a");
             });
