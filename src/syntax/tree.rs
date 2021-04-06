@@ -10,104 +10,6 @@ pub struct Node {
     code: Code,
 }
 
-impl Node {
-    pub fn new(kind: NodeKind, code: Code) -> Self {
-        Self { kind, code }
-    }
-
-    pub fn kind(&self) -> &NodeKind {
-        &self.kind
-    }
-
-    pub fn code(&self) -> slice::Iter<CodeKind> {
-        self.code.iter()
-    }
-
-    pub fn program(&self) -> Option<&Program> {
-        if let NodeKind::Program(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn statement(&self) -> Option<&Statement> {
-        if let NodeKind::Statement(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn name(&self) -> Option<&Name> {
-        if let NodeKind::Name(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
-        if let NodeKind::FunctionDefinition(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
-        if let NodeKind::FunctionParameter(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn expression(&self) -> Option<&Expression> {
-        if let NodeKind::Expression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn identifier(&self) -> Option<&Identifier> {
-        if let Some(expr) = self.expression() {
-            expr.identifier()
-        } else {
-            None
-        }
-    }
-
-    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
-        if let Some(expr) = self.expression() {
-            expr.unary_expression()
-        } else {
-            None
-        }
-    }
-
-    pub fn is_function_definition(&self) -> bool {
-        matches!(self.kind, NodeKind::FunctionDefinition(_))
-    }
-
-    pub fn is_function_parameter(&self) -> bool {
-        matches!(self.kind, NodeKind::FunctionParameter(_))
-    }
-
-    pub fn is_expression(&self) -> bool {
-        matches!(self.kind, NodeKind::Expression(_))
-    }
-
-    pub fn is_call_expression(&self) -> bool {
-        if let Some(expr) = self.expression() {
-            expr.is_call_expression()
-        } else {
-            false
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum NodeKind {
     Program(Program),
@@ -119,6 +21,11 @@ pub enum NodeKind {
     FunctionParameter(FunctionParameter),
     Statement(Statement),
     Expression(Expression),
+}
+
+#[derive(Debug, Default)]
+pub struct Code {
+    code: Vec<CodeKind>,
 }
 
 #[derive(Debug)]
@@ -366,12 +273,6 @@ pub enum ExpressionKind {
     CallExpression(CallExpression),
 }
 
-// Code
-#[derive(Debug, Default)]
-pub struct Code {
-    code: Vec<CodeKind>,
-}
-
 impl Code {
     pub fn new() -> Self {
         Self::default()
@@ -417,5 +318,103 @@ impl Code {
     pub fn node(&mut self, node: &Rc<Node>) -> &mut Self {
         self.code.push(CodeKind::Node(Rc::clone(node)));
         self
+    }
+}
+
+impl Node {
+    pub fn new(kind: NodeKind, code: Code) -> Self {
+        Self { kind, code }
+    }
+
+    pub fn kind(&self) -> &NodeKind {
+        &self.kind
+    }
+
+    pub fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
+    }
+
+    pub fn program(&self) -> Option<&Program> {
+        if let NodeKind::Program(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn statement(&self) -> Option<&Statement> {
+        if let NodeKind::Statement(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn name(&self) -> Option<&Name> {
+        if let NodeKind::Name(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
+        if let NodeKind::FunctionDefinition(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
+        if let NodeKind::FunctionParameter(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn expression(&self) -> Option<&Expression> {
+        if let NodeKind::Expression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn identifier(&self) -> Option<&Identifier> {
+        if let Some(expr) = self.expression() {
+            expr.identifier()
+        } else {
+            None
+        }
+    }
+
+    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
+        if let Some(expr) = self.expression() {
+            expr.unary_expression()
+        } else {
+            None
+        }
+    }
+
+    pub fn is_function_definition(&self) -> bool {
+        matches!(self.kind, NodeKind::FunctionDefinition(_))
+    }
+
+    pub fn is_function_parameter(&self) -> bool {
+        matches!(self.kind, NodeKind::FunctionParameter(_))
+    }
+
+    pub fn is_expression(&self) -> bool {
+        matches!(self.kind, NodeKind::Expression(_))
+    }
+
+    pub fn is_call_expression(&self) -> bool {
+        if let Some(expr) = self.expression() {
+            expr.is_call_expression()
+        } else {
+            false
+        }
     }
 }
