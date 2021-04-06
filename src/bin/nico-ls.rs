@@ -1,8 +1,8 @@
 use log::{info, warn};
 use lsp_types::{
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult,
-    InitializedParams, SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensFullOptions,
-    SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
+    InitializedParams, SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
+    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
@@ -59,6 +59,7 @@ struct HandlerError {
 #[derive(Debug)]
 enum HandlerErrorKind {
     // Errors
+    ServerNotInitialized,
     Utf8Error(string::FromUtf8Error),
     IoError(io::Error),
     JsonError(serde_json::Error),
@@ -138,7 +139,15 @@ impl Response {
 #[derive(Debug, Default)]
 struct Connection {
     documents: HashMap<Url, Rc<RefCell<Document>>>,
+    server_options: Option<ServerRegistrationOptions>,
+}
+
+/// These options are initialized in `on_initialize()` callback.
+#[derive(Debug, Clone)]
+struct ServerRegistrationOptions {
+    // Semantic tokens
     token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
+    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, usize>>,
 }
 
 #[derive(Debug)]
@@ -148,39 +157,48 @@ struct Document {
 }
 
 #[derive(Debug)]
-struct SemanticTokenAbsolute {
+struct SemanticTokenAbsoluteParams {
     line: usize,
     character: usize,
     length: usize,
     token_type: SemanticTokenType,
+    token_modifiers_bitset: u32,
 }
 
 #[derive(Debug, Default)]
 struct SemanticTokenizer {
-    legend: Rc<HashMap<SemanticTokenType, usize>>,
+    token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
+    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, usize>>,
     previous_line: u32,
     previous_character: u32,
     pub tokens: Vec<SemanticToken>,
 }
 
 impl SemanticTokenizer {
-    pub fn new(legend: Rc<HashMap<SemanticTokenType, usize>>) -> Self {
+    pub fn new(
+        token_type_legend: &Rc<HashMap<SemanticTokenType, usize>>,
+        token_modifier_legend: &Rc<HashMap<SemanticTokenModifier, usize>>,
+    ) -> Self {
         Self {
-            legend,
+            token_type_legend: Rc::clone(token_type_legend),
+            token_modifier_legend: Rc::clone(token_modifier_legend),
             ..Self::default()
         }
     }
 
-    fn add_token_with_type(&mut self, token: &Token, token_type: SemanticTokenType) {
-        self.add_semantic_token_absolute(SemanticTokenAbsolute {
-            token_type,
-            line: token.range.start.line,
-            character: token.range.start.character,
-            length: token.range.length,
-        })
+    fn add_token_modifiers_bitset(&self, bitset: &mut u32, modifier: SemanticTokenModifier) {
+        let position = self.token_modifier_legend.get(&modifier);
+
+        if let Some(position) = position {
+            *bitset |= 1 << position;
+        } else {
+            warn!("SemanticTokenModifier ({:?}) not registered", modifier);
+        }
     }
 
     fn add_token_generic(&mut self, path: &traverse::Path, token: &Token) {
+        let mut token_modifiers_bitset = 0;
+
         let token_type = match token.kind {
             TokenKind::If
             | TokenKind::Else
@@ -191,6 +209,16 @@ impl SemanticTokenizer {
             | TokenKind::Struct
             | TokenKind::When
             | TokenKind::Case => SemanticTokenType::KEYWORD,
+            TokenKind::Integer(_) => SemanticTokenType::NUMBER,
+            TokenKind::Eq
+            | TokenKind::Ne
+            | TokenKind::Le
+            | TokenKind::Ge
+            | TokenKind::Char('+')
+            | TokenKind::Char('-')
+            | TokenKind::Char('*')
+            | TokenKind::Char('/')
+            | TokenKind::Char('%') => SemanticTokenType::OPERATOR,
             TokenKind::Identifier(_) => {
                 path.parent().map_or(SemanticTokenType::VARIABLE, |parent| {
                     if parent.node().is_function_definition() {
@@ -202,24 +230,39 @@ impl SemanticTokenizer {
                     }
                 })
             }
-            TokenKind::Integer(_) => SemanticTokenType::NUMBER,
-            TokenKind::Eq
-            | TokenKind::Ne
-            | TokenKind::Le
-            | TokenKind::Ge
-            | TokenKind::Char('+')
-            | TokenKind::Char('-')
-            | TokenKind::Char('*')
-            | TokenKind::Char('/')
-            | TokenKind::Char('%') => SemanticTokenType::OPERATOR,
+            TokenKind::StringStart | TokenKind::StringEnd | TokenKind::StringContent(_) => {
+                SemanticTokenType::STRING
+            }
+            TokenKind::StringEscapeSequence(_) => {
+                self.add_token_modifiers_bitset(
+                    &mut token_modifiers_bitset,
+                    SemanticTokenModifier::READONLY,
+                );
+                SemanticTokenType::VARIABLE
+            }
             _ => return,
         };
 
-        self.add_token_with_type(token, token_type);
+        self.add_token_with_type(token, token_type, token_modifiers_bitset);
     }
 
-    fn add_semantic_token_absolute(&mut self, abs_sem_token: SemanticTokenAbsolute) {
-        let token_type = if let Some(ty) = self.legend.get(&abs_sem_token.token_type) {
+    fn add_token_with_type(
+        &mut self,
+        token: &Token,
+        token_type: SemanticTokenType,
+        token_modifiers_bitset: u32,
+    ) {
+        self.add_semantic_token_absolute(SemanticTokenAbsoluteParams {
+            token_type,
+            line: token.range.start.line,
+            character: token.range.start.character,
+            length: token.range.length,
+            token_modifiers_bitset,
+        })
+    }
+
+    fn add_semantic_token_absolute(&mut self, abs_sem_token: SemanticTokenAbsoluteParams) {
+        let token_type = if let Some(ty) = self.token_type_legend.get(&abs_sem_token.token_type) {
             u32::try_from(*ty).unwrap()
         } else {
             return;
@@ -241,7 +284,7 @@ impl SemanticTokenizer {
             delta_start,
             length,
             token_type,
-            token_modifiers_bitset: 0,
+            token_modifiers_bitset: abs_sem_token.token_modifiers_bitset,
         });
 
         self.previous_line = line;
@@ -257,11 +300,12 @@ impl traverse::Visitor for SemanticTokenizer {
         trivia: &Trivia,
         _comment: &str,
     ) {
-        self.add_semantic_token_absolute(SemanticTokenAbsolute {
+        self.add_semantic_token_absolute(SemanticTokenAbsoluteParams {
             token_type: SemanticTokenType::COMMENT,
             line: trivia.range.start.line,
             character: trivia.range.start.character,
             length: trivia.range.length,
+            token_modifiers_bitset: 0,
         })
     }
 
@@ -283,6 +327,12 @@ impl traverse::Visitor for SemanticTokenizer {
 impl Connection {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    fn server_options(&self) -> Result<&ServerRegistrationOptions, HandlerError> {
+        self.server_options.as_ref().ok_or(HandlerError {
+            kind: HandlerErrorKind::ServerNotInitialized,
+        })
     }
 
     fn get_document(&self, uri: &Url) -> Result<&Rc<RefCell<Document>>, HandlerError> {
@@ -312,17 +362,35 @@ impl Connection {
             SemanticTokenType::PROPERTY,
         ];
 
-        // Register token type legend
-        let mut legend = HashMap::new();
-        for (i, token_type) in token_types.iter().enumerate() {
-            legend.insert(token_type.clone(), i);
-        }
-        self.token_type_legend = Rc::new(legend);
+        let token_modifiers = vec![
+            SemanticTokenModifier::DECLARATION,
+            SemanticTokenModifier::DEFINITION,
+            SemanticTokenModifier::READONLY,
+            SemanticTokenModifier::STATIC,
+            SemanticTokenModifier::DEPRECATED,
+            SemanticTokenModifier::ABSTRACT,
+            SemanticTokenModifier::ASYNC,
+            SemanticTokenModifier::MODIFICATION,
+            SemanticTokenModifier::DOCUMENTATION,
+            SemanticTokenModifier::DEFAULT_LIBRARY,
+        ];
 
-        let legend = SemanticTokensLegend {
-            token_types,
-            token_modifiers: vec![],
-        };
+        // Register token type legend
+        let mut token_type_legend = HashMap::new();
+        let mut token_modifier_legend = HashMap::new();
+
+        for (i, token_type) in token_types.iter().enumerate() {
+            token_type_legend.insert(token_type.clone(), i);
+        }
+        for (i, token_modifier) in token_modifiers.iter().enumerate() {
+            token_modifier_legend.insert(token_modifier.clone(), i);
+        }
+
+        // Initialized
+        self.server_options = Some(ServerRegistrationOptions {
+            token_type_legend: Rc::new(token_type_legend),
+            token_modifier_legend: Rc::new(token_modifier_legend),
+        });
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
@@ -332,7 +400,10 @@ impl Connection {
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
                         SemanticTokensOptions {
-                            legend,
+                            legend: SemanticTokensLegend {
+                                token_types,
+                                token_modifiers,
+                            },
                             full: Some(SemanticTokensFullOptions::Bool(true)),
                             ..SemanticTokensOptions::default()
                         },
@@ -353,8 +424,12 @@ impl Connection {
     ) -> Result<SemanticTokens, HandlerError> {
         info!("[on_text_document_semantic_tokens_full] {:?}", params);
 
+        let server_options = self.server_options()?;
         let doc = self.get_document(&params.text_document.uri)?.borrow();
-        let mut tokenizer = SemanticTokenizer::new(Rc::clone(&self.token_type_legend));
+        let mut tokenizer = SemanticTokenizer::new(
+            &server_options.token_type_legend,
+            &server_options.token_modifier_legend,
+        );
         let node = Rc::new(Parser::parse_string(&doc.text));
 
         traverse::traverse(&mut tokenizer, &node, None);

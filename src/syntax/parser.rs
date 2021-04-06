@@ -438,11 +438,17 @@ impl<'a> Parser<'a> {
                     }
                     code.interpret(token);
                 }
+                TokenKind::StringEscapeSequence(c) => {
+                    if !has_error {
+                        string.push(c);
+                    }
+                    code.interpret(token);
+                }
                 TokenKind::StringEnd => {
                     code.interpret(token);
                     break;
                 }
-                TokenKind::UnrecognizedEscapeSequence(_) => {
+                TokenKind::StringUnrecognizedEscapeSequence(_) => {
                     code.skip(token, "ESCAPE SEQUENCE");
                     has_error = true;
                 }

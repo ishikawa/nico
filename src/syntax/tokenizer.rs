@@ -94,7 +94,8 @@ pub enum TokenKind {
     // String and interpretation errors
     StringStart,
     StringContent(String),
-    UnrecognizedEscapeSequence(char),
+    StringEscapeSequence(char),
+    StringUnrecognizedEscapeSequence(char),
     StringEnd,
 }
 
@@ -319,7 +320,6 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn read_escape_sequence(&mut self) -> TokenKind {
-        let mut string = String::new();
         self.next_char();
 
         let c = match self.next_char() {
@@ -327,20 +327,20 @@ impl<'a> Tokenizer<'a> {
             None => return TokenKind::Char('\\'),
         };
 
-        match c {
-            'n' => string.push('\n'),
-            'r' => string.push('\r'),
-            't' => string.push('\t'),
-            '"' => string.push('"'),
-            '\\' => string.push('\\'),
+        let c = match c {
+            'n' => '\n',
+            'r' => '\r',
+            't' => '\t',
+            '"' => '"',
+            '\\' => '\\',
             c => {
                 // If an uninterpretable escape sequence is encountered,
                 // ignore it for the time being and continue interpreting the string.
-                return TokenKind::UnrecognizedEscapeSequence(c);
+                return TokenKind::StringUnrecognizedEscapeSequence(c);
             }
         };
 
-        TokenKind::StringContent(string)
+        TokenKind::StringEscapeSequence(c)
     }
 
     fn read_string_content(&mut self) -> TokenKind {
@@ -543,7 +543,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Eos => write!(f, "(EOF)"),
             TokenKind::StringStart => write!(f, "\"..."),
             TokenKind::StringContent(s) => write!(f, "\"{}\"", s),
-            TokenKind::UnrecognizedEscapeSequence(c) => write!(f, "\\{}", c),
+            TokenKind::StringEscapeSequence(c) => write!(f, "\\{}", c),
+            TokenKind::StringUnrecognizedEscapeSequence(c) => write!(f, "\\{}", c),
             TokenKind::StringEnd => write!(f, "...\""),
         }
     }
@@ -778,9 +779,7 @@ mod tests {
         );
 
         let token = tokenizer.next_token();
-        assert_matches!(token.kind, TokenKind::StringContent(s) => {
-            assert_eq!(s, "\n");
-        });
+        assert_eq!(token.kind, TokenKind::StringEscapeSequence('\n'));
         assert_eq!(
             token.range,
             EffectiveRange {
@@ -832,9 +831,7 @@ mod tests {
         );
 
         let token = tokenizer.next_token();
-        assert_matches!(token.kind, TokenKind::StringContent(s) => {
-            assert_eq!(s, "\"");
-        });
+        assert_eq!(token.kind, TokenKind::StringEscapeSequence('\"'));
         assert_eq!(
             token.range,
             EffectiveRange {
@@ -905,9 +902,7 @@ mod tests {
         );
 
         let token = tokenizer.next_token();
-        assert_matches!(token.kind, TokenKind::StringContent(s) => {
-            assert_eq!(s, "\n");
-        });
+        assert_eq!(token.kind, TokenKind::StringEscapeSequence('\n'));
         assert_eq!(
             token.range,
             EffectiveRange {
