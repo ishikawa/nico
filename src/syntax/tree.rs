@@ -180,6 +180,43 @@ pub struct SubscriptExpression {
     pub arguments: Vec<Rc<Node>>,
 }
 
+impl SubscriptExpression {
+    pub fn callee(&self) -> &Expression {
+        self.callee.expression().unwrap()
+    }
+
+    pub fn arguments(&self) -> Arguments {
+        Arguments {
+            iter: self.arguments.iter(),
+            len: self.arguments.len(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Arguments<'a> {
+    iter: slice::Iter<'a, Rc<Node>>,
+    len: usize,
+}
+
+impl<'a> Arguments<'a> {
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl<'a> Iterator for Arguments<'a> {
+    type Item = &'a Expression;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().as_ref().map(|x| x.expression().unwrap())
+    }
+}
+
 #[derive(Debug)]
 pub struct CallExpression {
     pub callee: Rc<Node>,
@@ -333,7 +370,7 @@ impl Node {
         }
     }
 
-    pub fn variable(&self) -> Option<&Identifier> {
+    pub fn variable_expression(&self) -> Option<&Identifier> {
         if let Some(expr) = self.expression() {
             expr.variable_expression()
         } else {

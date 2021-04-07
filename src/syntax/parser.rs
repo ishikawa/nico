@@ -850,13 +850,17 @@ mod tests {
         let stmt = module.body[0].statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
-        assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.variable().unwrap();
-            assert_matches!(id, Identifier(id) => {
+        assert_matches!(expr, SubscriptExpression{ .. } => {
+            let id = expr.callee().variable_expression();
+            assert!(id.is_some());
+
+            assert_matches!(id.unwrap(), Identifier(id) => {
                 assert_eq!(id, "a");
             });
+
+            let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
-            assert_matches!(arguments[0].expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(0)));
+            assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(0)));
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -885,11 +889,15 @@ mod tests {
         let stmt = module.body[0].statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
-        assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.variable().unwrap();
-            assert_matches!(id, Identifier(id) => {
+        assert_matches!(expr, SubscriptExpression{ .. } => {
+            let id = expr.callee().variable_expression();
+            assert!(id.is_some());
+
+            assert_matches!(id.unwrap(), Identifier(id) => {
                 assert_eq!(id, "a");
             });
+
+            let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 0);
         });
 
@@ -916,13 +924,17 @@ mod tests {
         let stmt = module.body[0].statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
-        assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.variable().unwrap();
-            assert_matches!(id, Identifier(id) => {
+        assert_matches!(expr, SubscriptExpression{ .. } => {
+            let id = expr.callee().variable_expression();
+            assert!(id.is_some());
+
+            assert_matches!(id.unwrap(), Identifier(id) => {
                 assert_eq!(id, "a");
             });
+
+            let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
-            assert_matches!(arguments[0].expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
