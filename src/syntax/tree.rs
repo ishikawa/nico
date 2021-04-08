@@ -1,8 +1,8 @@
 use super::{SyntaxToken, Token};
 use crate::sem;
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::slice;
+use std::{cell::RefCell, fmt};
 
 #[derive(Debug)]
 pub struct Node {
@@ -46,11 +46,21 @@ impl Program {
 }
 
 #[derive(Debug)]
-pub struct Identifier(pub String);
+pub struct Identifier(String);
 
 impl Identifier {
     pub fn new(name: String) -> Self {
         Self(name)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for Identifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -181,6 +191,10 @@ pub struct SubscriptExpression {
 }
 
 impl SubscriptExpression {
+    pub fn new(callee: Rc<Node>, arguments: Vec<Rc<Node>>) -> Self {
+        Self { callee, arguments }
+    }
+
     pub fn callee(&self) -> &Expression {
         self.callee.expression().unwrap()
     }

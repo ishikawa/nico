@@ -332,11 +332,7 @@ impl<'a> Parser<'a> {
             match token.kind {
                 TokenKind::Char('[') => {
                     let arguments = self._parse_elements('[', ']', &mut code, Parser::parse_expr);
-
-                    let expr = SubscriptExpression {
-                        callee: operand,
-                        arguments,
-                    };
+                    let expr = SubscriptExpression::new(operand, arguments);
 
                     operand = Rc::new(Node::new(
                         NodeKind::Expression(Expression::new(
@@ -854,9 +850,8 @@ mod tests {
             let id = expr.callee().variable_expression();
             assert!(id.is_some());
 
-            assert_matches!(id.unwrap(), Identifier(id) => {
-                assert_eq!(id, "a");
-            });
+            let id = id.unwrap();
+            assert_eq!(id.to_string(), "a");
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
@@ -893,9 +888,8 @@ mod tests {
             let id = expr.callee().variable_expression();
             assert!(id.is_some());
 
-            assert_matches!(id.unwrap(), Identifier(id) => {
-                assert_eq!(id, "a");
-            });
+            let id = id.unwrap();
+            assert_eq!(id.to_string(), "a");
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 0);
@@ -928,9 +922,8 @@ mod tests {
             let id = expr.callee().variable_expression();
             assert!(id.is_some());
 
-            assert_matches!(id.unwrap(), Identifier(id) => {
-                assert_eq!(id, "a");
-            });
+            let id = id.unwrap();
+            assert_eq!(id.to_string(), "a");
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
