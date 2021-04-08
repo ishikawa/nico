@@ -118,11 +118,11 @@ impl TypeAnnotation {
 pub struct FunctionDefinition {
     pub name: Option<Rc<Node>>,
     pub parameters: Vec<Rc<Node>>,
-    pub body: Vec<Rc<Node>>,
+    pub body: Block,
 }
 
 impl FunctionDefinition {
-    pub fn new(name: Option<Rc<Node>>, parameters: Vec<Rc<Node>>, body: Vec<Rc<Node>>) -> Self {
+    pub fn new(name: Option<Rc<Node>>, parameters: Vec<Rc<Node>>, body: Block) -> Self {
         Self {
             name,
             parameters,
@@ -132,6 +132,13 @@ impl FunctionDefinition {
 
     pub fn name(&self) -> Option<&Identifier> {
         self.name.as_ref().map(|x| x.identifier().unwrap())
+    }
+
+    pub fn parameters(&self) -> FunctionParameters {
+        FunctionParameters {
+            iter: self.parameters.iter(),
+            len: self.parameters.len(),
+        }
     }
 }
 
@@ -162,6 +169,24 @@ impl Statement {
 
     pub fn expression(&self) -> &Expression {
         self.expression.expression().unwrap()
+    }
+}
+
+#[derive(Debug)]
+pub struct Block {
+    pub statements: Vec<Rc<Node>>,
+}
+
+impl Block {
+    pub fn new(statements: Vec<Rc<Node>>) -> Self {
+        Self { statements }
+    }
+
+    pub fn statements(&self) -> Statements {
+        Statements {
+            iter: self.statements.iter(),
+            len: self.statements.len(),
+        }
     }
 }
 
@@ -207,34 +232,27 @@ impl SubscriptExpression {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Arguments<'a> {
-    iter: slice::Iter<'a, Rc<Node>>,
-    len: usize,
-}
-
-impl<'a> Arguments<'a> {
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-}
-
-impl<'a> Iterator for Arguments<'a> {
-    type Item = &'a Expression;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().as_ref().map(|x| x.expression().unwrap())
-    }
-}
-
 #[derive(Debug)]
 pub struct CallExpression {
     pub callee: Rc<Node>,
     pub arguments: Vec<Rc<Node>>,
+}
+
+impl CallExpression {
+    pub fn new(callee: Rc<Node>, arguments: Vec<Rc<Node>>) -> Self {
+        Self { callee, arguments }
+    }
+
+    pub fn callee(&self) -> &Expression {
+        self.callee.expression().unwrap()
+    }
+
+    pub fn arguments(&self) -> Arguments {
+        Arguments {
+            iter: self.arguments.iter(),
+            len: self.arguments.len(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -460,5 +478,81 @@ impl Expression {
         } else {
             None
         }
+    }
+}
+
+// -- Iterators
+#[derive(Debug, Clone)]
+pub struct Arguments<'a> {
+    iter: slice::Iter<'a, Rc<Node>>,
+    len: usize,
+}
+
+impl<'a> Arguments<'a> {
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl<'a> Iterator for Arguments<'a> {
+    type Item = &'a Expression;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().as_ref().map(|x| x.expression().unwrap())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Statements<'a> {
+    iter: slice::Iter<'a, Rc<Node>>,
+    len: usize,
+}
+
+impl<'a> Statements<'a> {
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl<'a> Iterator for Statements<'a> {
+    type Item = &'a Statement;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().as_ref().map(|x| x.statement().unwrap())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionParameters<'a> {
+    iter: slice::Iter<'a, Rc<Node>>,
+    len: usize,
+}
+
+impl<'a> FunctionParameters<'a> {
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl<'a> Iterator for FunctionParameters<'a> {
+    type Item = &'a FunctionParameter;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter
+            .next()
+            .as_ref()
+            .map(|x| x.function_parameter().unwrap())
     }
 }

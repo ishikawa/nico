@@ -160,7 +160,11 @@ impl<'a> Parser<'a> {
         }
 
         Some(Rc::new(Node::new(
-            NodeKind::FunctionDefinition(FunctionDefinition::new(function_name, parameters, body)),
+            NodeKind::FunctionDefinition(FunctionDefinition::new(
+                function_name,
+                parameters,
+                Block::new(body),
+            )),
             code,
         )))
     }
@@ -345,10 +349,7 @@ impl<'a> Parser<'a> {
                 TokenKind::Char('(') => {
                     let arguments = self._parse_elements('(', ')', &mut code, Parser::parse_expr);
 
-                    let expr = CallExpression {
-                        callee: operand,
-                        arguments,
-                    };
+                    let expr = CallExpression::new(operand, arguments);
 
                     operand = Rc::new(Node::new(
                         NodeKind::Expression(Expression::new(
