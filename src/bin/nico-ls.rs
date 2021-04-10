@@ -6,10 +6,7 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-use nico::syntax::{
-    traverse::{self, NodePath},
-    ParseError, Parser, Token, TokenKind, Trivia,
-};
+use nico::syntax::{self, NodePath, ParseError, Parser, Token, TokenKind, Trivia};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -295,7 +292,7 @@ impl SemanticTokenizer {
     }
 }
 
-impl traverse::Visitor for SemanticTokenizer {
+impl syntax::Visitor for SemanticTokenizer {
     fn enter_line_comment(
         &mut self,
         _path: &mut Rc<NodePath>,
@@ -430,7 +427,7 @@ impl Connection {
         );
         let node = Rc::new(Parser::parse_string(&doc.text));
 
-        traverse::traverse(&mut tokenizer, &node, None);
+        syntax::traverse(&mut tokenizer, &node, None);
 
         //info!("tokens = {:?}", tokenizer.tokens);
         Ok(SemanticTokens {

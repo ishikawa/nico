@@ -3,7 +3,7 @@ use std::rc::Rc;
 use crate::syntax::tree::*;
 use crate::syntax::Token;
 
-use super::{Trivia, TriviaKind};
+use super::{SyntaxToken, Trivia, TriviaKind};
 
 pub struct NodePath {
     skipped: bool,
@@ -261,11 +261,9 @@ fn traverse_children(visitor: &mut dyn Visitor, path: &mut Rc<NodePath>) {
         match kind {
             CodeKind::Node(node) => traverse(visitor, node, Some(Rc::clone(path))),
             CodeKind::SyntaxToken(token) => match token {
-                super::SyntaxToken::Interpreted(token) => {
-                    traverse_interpreted_token(visitor, path, token)
-                }
-                super::SyntaxToken::Missing(token) => traverse_missing_token(visitor, path, token),
-                super::SyntaxToken::Skipped { token, expected } => {
+                SyntaxToken::Interpreted(token) => traverse_interpreted_token(visitor, path, token),
+                SyntaxToken::Missing(token) => traverse_missing_token(visitor, path, token),
+                SyntaxToken::Skipped { token, expected } => {
                     traverse_skipped_token(visitor, path, token, expected)
                 }
             },
