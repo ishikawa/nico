@@ -132,6 +132,22 @@ impl<'a> Parser<'a> {
             self._parse_elements('(', ')', &mut code, Parser::parse_function_parameter);
 
         // body
+        let body = Rc::new(self.read_function_body());
+
+        code.node(&body);
+
+        Some(Rc::new(Node::new(
+            NodeKind::FunctionDefinition(FunctionDefinition::new(function_name, parameters, body)),
+            code,
+        )))
+    }
+
+    fn read_function_body(&mut self) -> Node {
+        self.debug_trace("read_function_body");
+
+        let mut code = Code::new();
+
+        // body
         let mut body = vec![];
 
         loop {
@@ -159,10 +175,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Some(Rc::new(Node::new(
-            NodeKind::FunctionDefinition(FunctionDefinition::new(function_name, parameters, body)),
-            code,
-        )))
+        Node::new(NodeKind::Block(Block::new(body)), code)
     }
 
     fn parse_function_parameter(&mut self) -> Option<Rc<Node>> {
@@ -183,7 +196,7 @@ impl<'a> Parser<'a> {
         if let TokenKind::Identifier(name) = self.tokenizer.peek_kind() {
             let name = name.clone();
             let code = Code::with_interpreted(self.tokenizer.next_token());
-            let node = Node::new(NodeKind::Name(Name::new(name)), code);
+            let node = Node::new(NodeKind::Identifier(Identifier::new(name)), code);
 
             Some(Rc::new(node))
         } else {
@@ -332,11 +345,7 @@ impl<'a> Parser<'a> {
             match token.kind {
                 TokenKind::Char('[') => {
                     let arguments = self._parse_elements('[', ']', &mut code, Parser::parse_expr);
-
-                    let expr = SubscriptExpression {
-                        callee: operand,
-                        arguments,
-                    };
+                    let expr = SubscriptExpression::new(operand, arguments);
 
                     operand = Rc::new(Node::new(
                         NodeKind::Expression(Expression::new(
@@ -349,10 +358,7 @@ impl<'a> Parser<'a> {
                 TokenKind::Char('(') => {
                     let arguments = self._parse_elements('(', ')', &mut code, Parser::parse_expr);
 
-                    let expr = CallExpression {
-                        callee: operand,
-                        arguments,
-                    };
+                    let expr = CallExpression::new(operand, arguments);
 
                     operand = Rc::new(Node::new(
                         NodeKind::Expression(Expression::new(
@@ -407,12 +413,12 @@ impl<'a> Parser<'a> {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Identifier(ref id) = token.kind {
-            let id = Identifier(id.clone());
+            let id = Identifier::new(id.clone());
             let code = Code::with_interpreted(token);
 
             Node::new(
                 NodeKind::Expression(Expression::new(
-                    ExpressionKind::Identifier(id),
+                    ExpressionKind::VariableExpression(id),
                     self.new_type_var(),
                 )),
                 code,
@@ -850,13 +856,16 @@ mod tests {
         let stmt = module.body[0].statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
-        assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.identifier().unwrap();
-            assert_matches!(id, Identifier(id) => {
-                assert_eq!(id, "a");
-            });
+        assert_matches!(expr, SubscriptExpression{ .. } => {
+            let id = expr.callee().variable_expression();
+            assert!(id.is_some());
+
+            let id = id.unwrap();
+            assert_eq!(id.to_string(), "a");
+
+            let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
-            assert_matches!(arguments[0].expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(0)));
+            assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(0)));
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -885,11 +894,14 @@ mod tests {
         let stmt = module.body[0].statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
-        assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.identifier().unwrap();
-            assert_matches!(id, Identifier(id) => {
-                assert_eq!(id, "a");
-            });
+        assert_matches!(expr, SubscriptExpression{ .. } => {
+            let id = expr.callee().variable_expression();
+            assert!(id.is_some());
+
+            let id = id.unwrap();
+            assert_eq!(id.to_string(), "a");
+
+            let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 0);
         });
 
@@ -916,13 +928,16 @@ mod tests {
         let stmt = module.body[0].statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
-        assert_matches!(expr, SubscriptExpression{ callee, arguments } => {
-            let id = callee.identifier().unwrap();
-            assert_matches!(id, Identifier(id) => {
-                assert_eq!(id, "a");
-            });
+        assert_matches!(expr, SubscriptExpression{ .. } => {
+            let id = expr.callee().variable_expression();
+            assert!(id.is_some());
+
+            let id = id.unwrap();
+            assert_eq!(id.to_string(), "a");
+
+            let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
-            assert_matches!(arguments[0].expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
