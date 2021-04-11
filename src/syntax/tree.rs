@@ -22,6 +22,7 @@ pub enum NodeKind {
     FunctionParameter(FunctionParameter),
     Statement(Statement),
     Expression(Expression),
+    Unit, // ()
 }
 
 #[derive(Debug, Default)]
@@ -616,6 +617,7 @@ impl fmt::Display for NodeKind {
             NodeKind::FunctionParameter(_) => write!(f, "FunctionParameter"),
             NodeKind::Statement(_) => write!(f, "Statement"),
             NodeKind::Expression(Expression { kind, .. }) => write!(f, "{}", kind),
+            NodeKind::Unit => write!(f, "()"),
         }
     }
 }

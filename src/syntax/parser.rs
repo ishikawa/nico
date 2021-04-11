@@ -1,5 +1,4 @@
-use super::{tree::*, MissingTokenKind};
-use super::{TokenKind, Tokenizer};
+use super::{tree::*, MissingTokenKind, TokenKind, Tokenizer};
 use crate::sem;
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
@@ -389,7 +388,6 @@ impl<'a> Parser<'a> {
         Some(Rc::new(node))
     }
 
-    // --- Generic implementations
     fn read_integer(&mut self) -> Node {
         let token = self.tokenizer.next_token();
 

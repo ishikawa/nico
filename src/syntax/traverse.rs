@@ -78,11 +78,7 @@ impl NodePath {
             NodeKind::FunctionDefinition(_) => {
                 self.scope = Weak::clone(&self.declarations);
             }
-            NodeKind::TypeField(_) => {}
-            NodeKind::TypeAnnotation(_) => {}
-            NodeKind::FunctionParameter(_) => {}
-            NodeKind::Statement(_) => {}
-            NodeKind::Expression(_) => {}
+            _ => {}
         }
     }
 
@@ -102,11 +98,7 @@ impl NodePath {
             NodeKind::FunctionDefinition(_) => {
                 self.scope = Weak::clone(&self.main_scope);
             }
-            NodeKind::TypeField(_) => {}
-            NodeKind::TypeAnnotation(_) => {}
-            NodeKind::FunctionParameter(_) => {}
-            NodeKind::Statement(_) => {}
-            NodeKind::Expression(_) => {}
+            _ => {}
         }
     }
 }
@@ -198,6 +190,9 @@ pub trait Visitor {
     fn enter_statement(&mut self, path: &Rc<RefCell<NodePath>>) {}
     fn exit_statement(&mut self, path: &Rc<RefCell<NodePath>>) {}
 
+    fn enter_unit(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn exit_unit(&mut self, path: &Rc<RefCell<NodePath>>) {}
+
     fn enter_expression(&mut self, path: &Rc<RefCell<NodePath>>) {}
     fn exit_expression(&mut self, path: &Rc<RefCell<NodePath>>) {}
 
@@ -284,6 +279,9 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         NodeKind::Statement(_) => {
             visitor.enter_statement(path);
         }
+        NodeKind::Unit => {
+            visitor.enter_unit(path);
+        }
         NodeKind::Expression(Expression { kind, .. }) => {
             visitor.enter_expression(path);
 
@@ -346,6 +344,9 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         }
         NodeKind::Statement(_) => {
             visitor.exit_statement(path);
+        }
+        NodeKind::Unit => {
+            visitor.exit_unit(path);
         }
         NodeKind::Expression(Expression { kind, .. }) => {
             visitor.exit_expression(path);
