@@ -332,7 +332,7 @@ impl SemanticTokenizer {
 impl syntax::Visitor for SemanticTokenizer {
     fn enter_line_comment(
         &mut self,
-        _path: &Rc<RefCell<NodePath>>,
+        _path: &mut NodePath,
         _token: &Token,
         trivia: &Trivia,
         _comment: &str,
@@ -346,17 +346,17 @@ impl syntax::Visitor for SemanticTokenizer {
         })
     }
 
-    fn enter_interpreted_token(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token) {
-        self.add_token_generic(&path.borrow(), token);
+    fn enter_interpreted_token(&mut self, path: &mut NodePath, token: &Token) {
+        self.add_token_generic(path, token);
     }
 
     fn enter_skipped_token(
         &mut self,
-        path: &Rc<RefCell<NodePath>>,
+        path: &mut NodePath,
         token: &Token,
         _expected: MissingTokenKind,
     ) {
-        self.add_token_generic(&path.borrow(), token);
+        self.add_token_generic(path, token);
     }
 }
 
