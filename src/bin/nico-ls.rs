@@ -196,7 +196,11 @@ impl SemanticTokenizer {
         }
     }
 
-    fn add_token_generic(&mut self, path: &NodePath, token: &Token) {
+    fn token_type_and_modifiers(
+        &self,
+        path: &NodePath,
+        token: &Token,
+    ) -> Option<(SemanticTokenType, u32)> {
         let mut token_modifiers_bitset = 0;
 
         let token_type = match token.kind {
@@ -220,10 +224,33 @@ impl SemanticTokenizer {
             | TokenKind::Char('/')
             | TokenKind::Char('%') => SemanticTokenType::OPERATOR,
             TokenKind::Identifier(_) => {
+                let node = path.node();
+
+                if let Some(id) = node.variable_expression() {
+                    if let Some(scope) = path.scope() {
+                        if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
+                            let binding = binding.borrow();
+                            let declaration = binding.node();
+
+                            if declaration.is_function_parameter() {
+                                return Some((
+                                    SemanticTokenType::PARAMETER,
+                                    token_modifiers_bitset,
+                                ));
+                            } else if declaration.is_function_definition() {
+                                return Some((SemanticTokenType::FUNCTION, token_modifiers_bitset));
+                            }
+                        }
+                    }
+                }
+
                 path.parent().map_or(SemanticTokenType::VARIABLE, |parent| {
-                    if parent.node().is_function_definition() {
+                    let parent = parent.borrow();
+                    let node = parent.node();
+
+                    if node.is_function_definition() {
                         SemanticTokenType::FUNCTION
-                    } else if parent.node().is_function_parameter() {
+                    } else if node.is_function_parameter() {
                         SemanticTokenType::PARAMETER
                     } else {
                         SemanticTokenType::VARIABLE
@@ -240,10 +267,18 @@ impl SemanticTokenizer {
                 );
                 SemanticTokenType::VARIABLE
             }
-            _ => return,
+            _ => return None,
         };
 
-        self.add_token_with_type(token, token_type, token_modifiers_bitset);
+        Some((token_type, token_modifiers_bitset))
+    }
+
+    fn add_token_generic(&mut self, path: &NodePath, token: &Token) {
+        if let Some((token_type, token_modifiers_bitset)) =
+            self.token_type_and_modifiers(path, token)
+        {
+            self.add_token_with_type(token, token_type, token_modifiers_bitset);
+        }
     }
 
     fn add_token_with_type(
@@ -295,7 +330,7 @@ impl SemanticTokenizer {
 impl syntax::Visitor for SemanticTokenizer {
     fn enter_line_comment(
         &mut self,
-        _path: &mut Rc<NodePath>,
+        _path: &Rc<RefCell<NodePath>>,
         _token: &Token,
         trivia: &Trivia,
         _comment: &str,
@@ -309,12 +344,17 @@ impl syntax::Visitor for SemanticTokenizer {
         })
     }
 
-    fn enter_interpreted_token(&mut self, path: &mut Rc<NodePath>, token: &Token) {
-        self.add_token_generic(path, token);
+    fn enter_interpreted_token(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token) {
+        self.add_token_generic(&path.borrow(), token);
     }
 
-    fn enter_skipped_token(&mut self, path: &mut Rc<NodePath>, token: &Token, _expected: &str) {
-        self.add_token_generic(path, token);
+    fn enter_skipped_token(
+        &mut self,
+        path: &Rc<RefCell<NodePath>>,
+        token: &Token,
+        _expected: &str,
+    ) {
+        self.add_token_generic(&path.borrow(), token);
     }
 }
 
@@ -421,12 +461,14 @@ impl Connection {
 
         let server_options = self.server_options()?;
         let doc = self.get_document(&params.text_document.uri)?.borrow();
+
         let mut tokenizer = SemanticTokenizer::new(
             &server_options.token_type_legend,
             &server_options.token_modifier_legend,
         );
         let node = Rc::new(Parser::parse_string(&doc.text));
 
+        syntax::bind_scopes(&node);
         syntax::traverse(&mut tokenizer, &node, None);
 
         //info!("tokens = {:?}", tokenizer.tokens);

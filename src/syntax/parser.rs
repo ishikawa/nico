@@ -132,6 +132,22 @@ impl<'a> Parser<'a> {
             self._parse_elements('(', ')', &mut code, Parser::parse_function_parameter);
 
         // body
+        let body = Rc::new(self.read_function_body());
+
+        code.node(&body);
+
+        Some(Rc::new(Node::new(
+            NodeKind::FunctionDefinition(FunctionDefinition::new(function_name, parameters, body)),
+            code,
+        )))
+    }
+
+    fn read_function_body(&mut self) -> Node {
+        self.debug_trace("read_function_body");
+
+        let mut code = Code::new();
+
+        // body
         let mut body = vec![];
 
         loop {
@@ -159,14 +175,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Some(Rc::new(Node::new(
-            NodeKind::FunctionDefinition(FunctionDefinition::new(
-                function_name,
-                parameters,
-                Block::new(body),
-            )),
-            code,
-        )))
+        Node::new(NodeKind::Block(Block::new(body)), code)
     }
 
     fn parse_function_parameter(&mut self) -> Option<Rc<Node>> {
