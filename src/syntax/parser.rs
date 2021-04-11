@@ -382,6 +382,7 @@ impl<'a> Parser<'a> {
             TokenKind::Integer(_) => self.read_integer(),
             TokenKind::Identifier(_) => self.read_identifier(),
             TokenKind::StringStart => self.read_string(),
+            TokenKind::Char('(') => self.read_paren(),
             _ => return None,
         };
 
@@ -480,6 +481,42 @@ impl<'a> Parser<'a> {
             )),
             code,
         )
+    }
+
+    fn read_paren(&mut self) -> Node {
+        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "("
+        let node = self.parse_expr();
+
+        while !self.tokenizer.is_at_end() {
+            let token = self.tokenizer.next_token();
+
+            if let TokenKind::Char(')') = token.kind {
+                if let Some(ref node) = node {
+                    code.node(node);
+                }
+
+                code.interpret(token);
+                break;
+            } else {
+                code.skip(token, MissingTokenKind::Char(')'));
+            }
+        }
+
+        if let Some(ref node) = node {
+            let expr = node.expression().unwrap();
+
+            // Because parentheses which groups an expression is not part of
+            // AST, we have to incorporate it into another node.
+            Node::new(
+                NodeKind::Expression(Expression::new(
+                    ExpressionKind::Expression(Rc::clone(&node)),
+                    Rc::clone(&expr.r#type),
+                )),
+                code,
+            )
+        } else {
+            Node::new(NodeKind::Unit, code)
+        }
     }
 
     /// Read comma-separated elements from the start character token specified by `open_char` to

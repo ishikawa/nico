@@ -230,19 +230,21 @@ pub trait Visitor {
 }
 
 pub fn traverse(visitor: &mut dyn Visitor, node: &Rc<Node>, parent: Option<Rc<RefCell<NodePath>>>) {
-    let path = NodePath::child(node, parent);
-    let path = wrap(path);
+    let path = wrap(NodePath::child(node, parent));
+    traverse_path(visitor, &path);
+}
 
+fn traverse_path(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     path.borrow_mut().on_enter();
 
     if !path.borrow().skipped {
-        dispatch_enter(visitor, &path);
+        dispatch_enter(visitor, path);
     }
     if !path.borrow().skipped {
-        traverse_children(visitor, &path);
+        traverse_children(visitor, path);
     }
     if !path.borrow().skipped {
-        dispatch_exit(visitor, &path);
+        dispatch_exit(visitor, path);
     }
 
     path.borrow_mut().on_exit();
@@ -308,6 +310,7 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     ExpressionKind::SubscriptExpression(expr) => {
                         visitor.enter_subscript_expression(path, expr);
                     }
+                    ExpressionKind::Expression(_) => {}
                 }
             }
         }
@@ -374,6 +377,7 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     ExpressionKind::SubscriptExpression(expr) => {
                         visitor.exit_subscript_expression(path, expr);
                     }
+                    ExpressionKind::Expression(_) => {}
                 }
             }
         }

@@ -316,6 +316,7 @@ pub enum ExpressionKind {
     UnaryExpression(UnaryExpression),
     SubscriptExpression(SubscriptExpression),
     CallExpression(CallExpression),
+    Expression(Rc<Node>),
 }
 
 impl Code {
@@ -632,6 +633,7 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::UnaryExpression(_) => write!(f, "UnaryExpression"),
             ExpressionKind::SubscriptExpression(_) => write!(f, "SubscriptExpression"),
             ExpressionKind::CallExpression(_) => write!(f, "CallExpression"),
+            ExpressionKind::Expression(expr) => write!(f, "({})", expr.kind()),
         }
     }
 }
