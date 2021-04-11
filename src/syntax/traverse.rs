@@ -241,7 +241,7 @@ fn traverse_path(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
 }
 
 fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
-    let node = Rc::clone(&mut path.borrow().node());
+    let node = Rc::clone(path.borrow().node());
     let mut path = &mut path.borrow_mut();
 
     match node.kind() {
