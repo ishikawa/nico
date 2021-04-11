@@ -6,7 +6,7 @@ use std::{
 use crate::syntax::Token;
 use crate::{syntax::tree::*, util::wrap};
 
-use super::{Scope, SyntaxToken, Trivia, TriviaKind};
+use super::{MissingTokenKind, Position, Scope, SyntaxToken, Trivia, TriviaKind};
 
 pub struct NodePath {
     skipped: bool,
@@ -78,11 +78,7 @@ impl NodePath {
             NodeKind::FunctionDefinition(_) => {
                 self.scope = Weak::clone(&self.declarations);
             }
-            NodeKind::TypeField(_) => {}
-            NodeKind::TypeAnnotation(_) => {}
-            NodeKind::FunctionParameter(_) => {}
-            NodeKind::Statement(_) => {}
-            NodeKind::Expression(_) => {}
+            _ => {}
         }
     }
 
@@ -102,11 +98,7 @@ impl NodePath {
             NodeKind::FunctionDefinition(_) => {
                 self.scope = Weak::clone(&self.main_scope);
             }
-            NodeKind::TypeField(_) => {}
-            NodeKind::TypeAnnotation(_) => {}
-            NodeKind::FunctionParameter(_) => {}
-            NodeKind::Statement(_) => {}
-            NodeKind::Expression(_) => {}
+            _ => {}
         }
     }
 }
@@ -137,12 +129,35 @@ pub trait Visitor {
     fn enter_interpreted_token(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token) {}
     fn exit_interpreted_token(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token) {}
 
-    fn enter_missing_token(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token) {}
-    fn exit_missing_token(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token) {}
-
-    fn enter_skipped_token(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token, expected: &str) {
+    fn enter_missing_token(
+        &mut self,
+        path: &Rc<RefCell<NodePath>>,
+        position: Position,
+        item: MissingTokenKind,
+    ) {
     }
-    fn exit_skipped_token(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token, expected: &str) {}
+    fn exit_missing_token(
+        &mut self,
+        path: &Rc<RefCell<NodePath>>,
+        position: Position,
+        item: MissingTokenKind,
+    ) {
+    }
+
+    fn enter_skipped_token(
+        &mut self,
+        path: &Rc<RefCell<NodePath>>,
+        token: &Token,
+        expected: MissingTokenKind,
+    ) {
+    }
+    fn exit_skipped_token(
+        &mut self,
+        path: &Rc<RefCell<NodePath>>,
+        token: &Token,
+        expected: MissingTokenKind,
+    ) {
+    }
 
     // Node
     fn enter_program(&mut self, path: &Rc<RefCell<NodePath>>) {}
@@ -174,6 +189,9 @@ pub trait Visitor {
 
     fn enter_statement(&mut self, path: &Rc<RefCell<NodePath>>) {}
     fn exit_statement(&mut self, path: &Rc<RefCell<NodePath>>) {}
+
+    fn enter_unit(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn exit_unit(&mut self, path: &Rc<RefCell<NodePath>>) {}
 
     fn enter_expression(&mut self, path: &Rc<RefCell<NodePath>>) {}
     fn exit_expression(&mut self, path: &Rc<RefCell<NodePath>>) {}
@@ -212,19 +230,21 @@ pub trait Visitor {
 }
 
 pub fn traverse(visitor: &mut dyn Visitor, node: &Rc<Node>, parent: Option<Rc<RefCell<NodePath>>>) {
-    let path = NodePath::child(node, parent);
-    let path = wrap(path);
+    let path = wrap(NodePath::child(node, parent));
+    traverse_path(visitor, &path);
+}
 
+fn traverse_path(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     path.borrow_mut().on_enter();
 
     if !path.borrow().skipped {
-        dispatch_enter(visitor, &path);
+        dispatch_enter(visitor, path);
     }
     if !path.borrow().skipped {
-        traverse_children(visitor, &path);
+        traverse_children(visitor, path);
     }
     if !path.borrow().skipped {
-        dispatch_exit(visitor, &path);
+        dispatch_exit(visitor, path);
     }
 
     path.borrow_mut().on_exit();
@@ -261,6 +281,9 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         NodeKind::Statement(_) => {
             visitor.enter_statement(path);
         }
+        NodeKind::Unit => {
+            visitor.enter_unit(path);
+        }
         NodeKind::Expression(Expression { kind, .. }) => {
             visitor.enter_expression(path);
 
@@ -287,6 +310,7 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     ExpressionKind::SubscriptExpression(expr) => {
                         visitor.enter_subscript_expression(path, expr);
                     }
+                    ExpressionKind::Expression(_) => {}
                 }
             }
         }
@@ -324,6 +348,9 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         NodeKind::Statement(_) => {
             visitor.exit_statement(path);
         }
+        NodeKind::Unit => {
+            visitor.exit_unit(path);
+        }
         NodeKind::Expression(Expression { kind, .. }) => {
             visitor.exit_expression(path);
 
@@ -350,6 +377,7 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     ExpressionKind::SubscriptExpression(expr) => {
                         visitor.exit_subscript_expression(path, expr);
                     }
+                    ExpressionKind::Expression(_) => {}
                 }
             }
         }
@@ -364,9 +392,11 @@ fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
             CodeKind::Node(node) => traverse(visitor, node, Some(Rc::clone(path))),
             CodeKind::SyntaxToken(token) => match token {
                 SyntaxToken::Interpreted(token) => traverse_interpreted_token(visitor, path, token),
-                SyntaxToken::Missing(token) => traverse_missing_token(visitor, path, token),
+                SyntaxToken::Missing { position, item } => {
+                    traverse_missing_token(visitor, path, *position, *item)
+                }
                 SyntaxToken::Skipped { token, expected } => {
-                    traverse_skipped_token(visitor, path, token, expected)
+                    traverse_skipped_token(visitor, path, token, *expected)
                 }
             },
         }
@@ -412,15 +442,17 @@ fn traverse_interpreted_token(
     }
 }
 
-fn traverse_missing_token(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>, token: &Token) {
+fn traverse_missing_token(
+    visitor: &mut dyn Visitor,
+    path: &Rc<RefCell<NodePath>>,
+    position: Position,
+    item: MissingTokenKind,
+) {
     if !path.borrow().skipped {
-        traverse_token_trivia(visitor, path, token);
+        visitor.enter_missing_token(path, position, item);
     }
     if !path.borrow().skipped {
-        visitor.enter_missing_token(path, token);
-    }
-    if !path.borrow().skipped {
-        visitor.exit_missing_token(path, token);
+        visitor.exit_missing_token(path, position, item);
     }
 }
 
@@ -428,7 +460,7 @@ fn traverse_skipped_token(
     visitor: &mut dyn Visitor,
     path: &Rc<RefCell<NodePath>>,
     token: &Token,
-    expected: &str,
+    expected: MissingTokenKind,
 ) {
     if !path.borrow().skipped {
         traverse_token_trivia(visitor, path, token);

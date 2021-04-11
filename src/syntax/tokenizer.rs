@@ -115,22 +115,26 @@ enum TokenizerMode {
 #[derive(Debug)]
 pub enum SyntaxToken {
     Interpreted(Token),
-    Missing(Token),
+    Missing {
+        position: Position,
+        item: MissingTokenKind,
+    },
     /// A skipped token with the description of an expected node.
     Skipped {
         token: Token,
-        expected: String,
+        expected: MissingTokenKind,
     },
 }
 
-impl SyntaxToken {
-    pub fn token(&self) -> &Token {
-        match self {
-            SyntaxToken::Interpreted(token)
-            | SyntaxToken::Missing(token)
-            | SyntaxToken::Skipped { token, .. } => token,
-        }
-    }
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MissingTokenKind {
+    TopLevel,
+    FunctionName,
+    Expression,
+    End,
+    EscapeSequence,
+    StringEnd,
+    Char(char),
 }
 
 #[derive(Debug)]

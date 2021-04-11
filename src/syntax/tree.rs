@@ -1,4 +1,4 @@
-use super::{Scope, SyntaxToken, Token};
+use super::{MissingTokenKind, Position, Scope, SyntaxToken, Token};
 use crate::{sem, util::wrap};
 use std::rc::Rc;
 use std::slice;
@@ -22,6 +22,7 @@ pub enum NodeKind {
     FunctionParameter(FunctionParameter),
     Statement(Statement),
     Expression(Expression),
+    Unit, // ()
 }
 
 #[derive(Debug, Default)]
@@ -315,6 +316,7 @@ pub enum ExpressionKind {
     UnaryExpression(UnaryExpression),
     SubscriptExpression(SubscriptExpression),
     CallExpression(CallExpression),
+    Expression(Rc<Node>),
 }
 
 impl Code {
@@ -340,16 +342,18 @@ impl Code {
         self
     }
 
-    pub fn missing(&mut self, token: Token) -> &mut Self {
-        self.code
-            .push(CodeKind::SyntaxToken(SyntaxToken::Missing(token)));
+    pub fn missing(&mut self, position: Position, item: MissingTokenKind) -> &mut Self {
+        self.code.push(CodeKind::SyntaxToken(SyntaxToken::Missing {
+            position,
+            item,
+        }));
         self
     }
 
-    pub fn skip<S: Into<String>>(&mut self, token: Token, expected: S) -> &mut Self {
+    pub fn skip(&mut self, token: Token, expected: MissingTokenKind) -> &mut Self {
         self.code.push(CodeKind::SyntaxToken(SyntaxToken::Skipped {
             token,
-            expected: expected.into(),
+            expected,
         }));
         self
     }
@@ -614,6 +618,7 @@ impl fmt::Display for NodeKind {
             NodeKind::FunctionParameter(_) => write!(f, "FunctionParameter"),
             NodeKind::Statement(_) => write!(f, "Statement"),
             NodeKind::Expression(Expression { kind, .. }) => write!(f, "{}", kind),
+            NodeKind::Unit => write!(f, "()"),
         }
     }
 }
@@ -628,6 +633,7 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::UnaryExpression(_) => write!(f, "UnaryExpression"),
             ExpressionKind::SubscriptExpression(_) => write!(f, "SubscriptExpression"),
             ExpressionKind::CallExpression(_) => write!(f, "CallExpression"),
+            ExpressionKind::Expression(expr) => write!(f, "({})", expr.kind()),
         }
     }
 }

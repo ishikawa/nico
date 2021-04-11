@@ -1,5 +1,4 @@
-use super::tree::*;
-use super::{TokenKind, Tokenizer};
+use super::{tree::*, MissingTokenKind, TokenKind, Tokenizer};
 use crate::sem;
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
@@ -63,7 +62,7 @@ impl<'a> Parser<'a> {
                     TokenKind::Eos => break,
                     _ => {
                         let token = self.tokenizer.next_token();
-                        code.skip(token, "TopLevel");
+                        code.skip(token, MissingTokenKind::TopLevel);
                     }
                 }
             }
@@ -115,14 +114,14 @@ impl<'a> Parser<'a> {
                     // Umm, maybe user forgot/omitted a function name?
                     // I'm sorry, but this language is not JavaScript.
                     code.missing(
-                        self.tokenizer
-                            .build_missing(TokenKind::Identifier("".to_string()), "function name"),
+                        self.tokenizer.current_position(),
+                        MissingTokenKind::FunctionName,
                     );
                     break;
                 }
                 _ => {
                     // Continue until read identifier or over.
-                    code.skip(self.tokenizer.next_token(), "function name");
+                    code.skip(self.tokenizer.next_token(), MissingTokenKind::FunctionName);
                 }
             }
         }
@@ -165,12 +164,12 @@ impl<'a> Parser<'a> {
                 TokenKind::Eos => {
                     // Maybe user forgot `end`.
                     // I'm sorry, but this language is like Ruby not Python.
-                    code.missing(self.tokenizer.build_missing(TokenKind::End, "end"));
+                    code.missing(self.tokenizer.current_position(), MissingTokenKind::End);
                     break;
                 }
                 _ => {
                     // Continue until read identifier or over.
-                    code.skip(self.tokenizer.next_token(), "end");
+                    code.skip(self.tokenizer.next_token(), MissingTokenKind::End);
                 }
             }
         }
@@ -306,7 +305,7 @@ impl<'a> Parser<'a> {
             } else {
                 // If we couldn't parse the right hand expression, retry
                 // parsing after consuming a token as skipped.
-                code.skip(self.tokenizer.next_token(), "expression");
+                code.skip(self.tokenizer.next_token(), MissingTokenKind::Expression);
 
                 if self.tokenizer.is_at_end() {
                     break;
@@ -383,13 +382,13 @@ impl<'a> Parser<'a> {
             TokenKind::Integer(_) => self.read_integer(),
             TokenKind::Identifier(_) => self.read_identifier(),
             TokenKind::StringStart => self.read_string(),
+            TokenKind::Char('(') => self.read_paren(),
             _ => return None,
         };
 
         Some(Rc::new(node))
     }
 
-    // --- Generic implementations
     fn read_integer(&mut self) -> Node {
         let token = self.tokenizer.next_token();
 
@@ -455,12 +454,14 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 TokenKind::StringUnrecognizedEscapeSequence(_) => {
-                    code.skip(token, "ESCAPE SEQUENCE");
+                    code.skip(token, MissingTokenKind::EscapeSequence);
                     has_error = true;
                 }
                 _ => {
-                    let missed = self.tokenizer.build_missing(TokenKind::StringEnd, "\"");
-                    code.missing(missed);
+                    code.missing(
+                        self.tokenizer.current_position(),
+                        MissingTokenKind::StringEnd,
+                    );
                     has_error = true;
                     break;
                 }
@@ -480,6 +481,42 @@ impl<'a> Parser<'a> {
             )),
             code,
         )
+    }
+
+    fn read_paren(&mut self) -> Node {
+        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "("
+        let node = self.parse_expr();
+
+        while !self.tokenizer.is_at_end() {
+            let token = self.tokenizer.next_token();
+
+            if let TokenKind::Char(')') = token.kind {
+                if let Some(ref node) = node {
+                    code.node(node);
+                }
+
+                code.interpret(token);
+                break;
+            } else {
+                code.skip(token, MissingTokenKind::Char(')'));
+            }
+        }
+
+        if let Some(ref node) = node {
+            let expr = node.expression().unwrap();
+
+            // Because parentheses which groups an expression is not part of
+            // AST, we have to incorporate it into another node.
+            Node::new(
+                NodeKind::Expression(Expression::new(
+                    ExpressionKind::Expression(Rc::clone(&node)),
+                    Rc::clone(&expr.r#type),
+                )),
+                code,
+            )
+        } else {
+            Node::new(NodeKind::Unit, code)
+        }
     }
 
     /// Read comma-separated elements from the start character token specified by `open_char` to
@@ -505,8 +542,8 @@ impl<'a> Parser<'a> {
                 TokenKind::Eos => {
                     // Oh, is it over?
                     code.missing(
-                        self.tokenizer
-                            .build_missing(TokenKind::Char(open_char), open_char.to_string()),
+                        self.tokenizer.current_position(),
+                        MissingTokenKind::Char(open_char),
                     );
                     break;
                 }
@@ -516,8 +553,8 @@ impl<'a> Parser<'a> {
                     //     # (
                     //     )
                     code.missing(
-                        self.tokenizer
-                            .build_missing(TokenKind::Char(open_char), open_char.to_string()),
+                        self.tokenizer.current_position(),
+                        MissingTokenKind::Char(open_char),
                     );
                     break;
                 }
@@ -531,15 +568,17 @@ impl<'a> Parser<'a> {
                         consumed = true;
 
                         code.missing(
-                            self.tokenizer
-                                .build_missing(TokenKind::Char(open_char), open_char.to_string()),
+                            self.tokenizer.current_position(),
+                            MissingTokenKind::Char(open_char),
                         );
-
                         code.node(&expr);
                         break;
                     } else {
                         // Continue until read an opening token.
-                        code.skip(self.tokenizer.next_token(), open_char.to_string());
+                        code.skip(
+                            self.tokenizer.next_token(),
+                            MissingTokenKind::Char(open_char),
+                        );
                     }
                 }
             }
@@ -569,7 +608,7 @@ impl<'a> Parser<'a> {
 
                     if !consumed {
                         // missing argument, so skip token.
-                        code.skip(t, "expression");
+                        code.skip(t, MissingTokenKind::Expression);
                     } else {
                         code.interpret(t);
                     }
@@ -580,8 +619,8 @@ impl<'a> Parser<'a> {
                 _ => {
                     // Premature EOF or unknown token.
                     code.missing(
-                        self.tokenizer
-                            .build_missing(TokenKind::Char(close_char), close_char.to_string()),
+                        self.tokenizer.current_position(),
+                        MissingTokenKind::Char(close_char),
                     );
                     break;
                 }
@@ -632,7 +671,7 @@ impl<'a> Parser<'a> {
                     // If we couldn't parse the right hand expression, retry
                     // parsing after consuming a token as skipped.
                     let t = self.tokenizer.next_token();
-                    code.skip(t, "expression");
+                    code.skip(t, MissingTokenKind::Expression);
 
                     if self.tokenizer.is_at_end() {
                         break;
@@ -676,7 +715,7 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::syntax::{ExpressionKind, SyntaxToken, Token};
+    use crate::syntax::{ExpressionKind, Position, SyntaxToken, Token};
     use assert_matches::assert_matches;
 
     #[test]
@@ -755,7 +794,7 @@ mod tests {
 
         let (token, expected) = unwrap_skipped_token(tokens[2]);
         assert_eq!(token.kind, TokenKind::Eos);
-        assert_eq!(expected, "expression");
+        assert_eq!(expected, MissingTokenKind::Expression);
     }
 
     #[test]
@@ -784,11 +823,11 @@ mod tests {
 
         let (token, expected) = unwrap_skipped_token(tokens[2]);
         assert_eq!(token.kind, TokenKind::Char('%'));
-        assert_eq!(expected, "expression");
+        assert_eq!(expected, MissingTokenKind::Expression);
 
         let (token, expected) = unwrap_skipped_token(tokens[3]);
         assert_eq!(token.kind, TokenKind::Char('?'));
-        assert_eq!(expected, "expression");
+        assert_eq!(expected, MissingTokenKind::Expression);
 
         let node = unwrap_node(tokens[4]);
         assert!(node.is_expression());
@@ -943,8 +982,10 @@ mod tests {
         let tokens = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 4);
 
-        let token = unwrap_missing_token(tokens[3]);
-        assert_matches!(token.kind, TokenKind::Char(']'));
+        let (position, item) = unwrap_missing_token(tokens[3]);
+        assert_eq!(item, MissingTokenKind::Char(']'));
+        assert_eq!(position.line, 1);
+        assert_eq!(position.character, 1);
     }
 
     // --- helpers
@@ -967,20 +1008,20 @@ mod tests {
         panic!("expected interpreted token");
     }
 
-    fn unwrap_missing_token(kind: &CodeKind) -> &Token {
+    fn unwrap_missing_token(kind: &CodeKind) -> (Position, MissingTokenKind) {
         if let CodeKind::SyntaxToken(token) = kind {
-            if let SyntaxToken::Missing(token) = token {
-                return token;
+            if let SyntaxToken::Missing { position, item } = token {
+                return (position.clone(), item.clone());
             }
         }
 
         panic!("expected missing token");
     }
 
-    fn unwrap_skipped_token(kind: &CodeKind) -> (&Token, String) {
+    fn unwrap_skipped_token(kind: &CodeKind) -> (&Token, MissingTokenKind) {
         if let CodeKind::SyntaxToken(token) = kind {
             if let SyntaxToken::Skipped { token, expected } = token {
-                return (token, expected.clone());
+                return (token, *expected);
             }
         }
 

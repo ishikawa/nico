@@ -6,7 +6,9 @@ use lsp_types::{
     SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
     TextDocumentSyncCapability, TextDocumentSyncKind,
 };
-use nico::syntax::{self, NodePath, ParseError, Parser, Token, TokenKind, Trivia};
+use nico::syntax::{
+    self, MissingTokenKind, NodePath, ParseError, Parser, Token, TokenKind, Trivia,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -352,7 +354,7 @@ impl syntax::Visitor for SemanticTokenizer {
         &mut self,
         path: &Rc<RefCell<NodePath>>,
         token: &Token,
-        _expected: &str,
+        _expected: MissingTokenKind,
     ) {
         self.add_token_generic(&path.borrow(), token);
     }
