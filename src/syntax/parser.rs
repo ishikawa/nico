@@ -434,27 +434,28 @@ impl<'a> Parser<'a> {
         let mut has_error = false;
 
         loop {
-            let token = self.tokenizer.next_token();
-
-            match token.kind {
-                TokenKind::StringContent(ref s) => {
+            match self.tokenizer.peek_kind() {
+                TokenKind::StringContent(s) => {
                     if !has_error {
                         string.push_str(s);
                     }
-                    code.interpret(token);
+                    code.interpret(self.tokenizer.next_token());
                 }
                 TokenKind::StringEscapeSequence(c) => {
                     if !has_error {
-                        string.push(c);
+                        string.push(*c);
                     }
-                    code.interpret(token);
+                    code.interpret(self.tokenizer.next_token());
                 }
                 TokenKind::StringEnd => {
-                    code.interpret(token);
+                    code.interpret(self.tokenizer.next_token());
                     break;
                 }
                 TokenKind::StringUnrecognizedEscapeSequence(_) => {
-                    code.skip(token, MissingTokenKind::EscapeSequence);
+                    code.skip(
+                        self.tokenizer.next_token(),
+                        MissingTokenKind::EscapeSequence,
+                    );
                     has_error = true;
                 }
                 _ => {
@@ -988,6 +989,10 @@ mod tests {
         assert_eq!(position.character, 1);
     }
 
+    #[test]
+    fn test_1() {
+        dbg!(Parser::parse_string("println_str(\"\\\")\nwhen"));
+    }
     // --- helpers
 
     fn unwrap_node(kind: &CodeKind) -> &Node {

@@ -106,12 +106,12 @@ impl NodePath {
 #[allow(unused_variables, unused_mut)]
 pub trait Visitor {
     // Token
-    fn enter_whitespace(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token, trivia: &Trivia) {}
-    fn exit_whitespace(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token, trivia: &Trivia) {}
+    fn enter_whitespace(&mut self, path: &mut NodePath, token: &Token, trivia: &Trivia) {}
+    fn exit_whitespace(&mut self, path: &mut NodePath, token: &Token, trivia: &Trivia) {}
 
     fn enter_line_comment(
         &mut self,
-        path: &Rc<RefCell<NodePath>>,
+        path: &mut NodePath,
         token: &Token,
         trivia: &Trivia,
         comment: &str,
@@ -119,26 +119,26 @@ pub trait Visitor {
     }
     fn exit_line_comment(
         &mut self,
-        path: &Rc<RefCell<NodePath>>,
+        path: &mut NodePath,
         token: &Token,
         trivia: &Trivia,
         comment: &str,
     ) {
     }
 
-    fn enter_interpreted_token(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token) {}
-    fn exit_interpreted_token(&mut self, path: &Rc<RefCell<NodePath>>, token: &Token) {}
+    fn enter_interpreted_token(&mut self, path: &mut NodePath, token: &Token) {}
+    fn exit_interpreted_token(&mut self, path: &mut NodePath, token: &Token) {}
 
     fn enter_missing_token(
         &mut self,
-        path: &Rc<RefCell<NodePath>>,
+        path: &mut NodePath,
         position: Position,
         item: MissingTokenKind,
     ) {
     }
     fn exit_missing_token(
         &mut self,
-        path: &Rc<RefCell<NodePath>>,
+        path: &mut NodePath,
         position: Position,
         item: MissingTokenKind,
     ) {
@@ -146,87 +146,77 @@ pub trait Visitor {
 
     fn enter_skipped_token(
         &mut self,
-        path: &Rc<RefCell<NodePath>>,
+        path: &mut NodePath,
         token: &Token,
         expected: MissingTokenKind,
     ) {
     }
     fn exit_skipped_token(
         &mut self,
-        path: &Rc<RefCell<NodePath>>,
+        path: &mut NodePath,
         token: &Token,
         expected: MissingTokenKind,
     ) {
     }
 
     // Node
-    fn enter_program(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_program(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_program(&mut self, path: &mut NodePath) {}
+    fn exit_program(&mut self, path: &mut NodePath) {}
 
-    fn enter_block(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_block(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_block(&mut self, path: &mut NodePath) {}
+    fn exit_block(&mut self, path: &mut NodePath) {}
 
-    fn enter_identifier(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_identifier(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_identifier(&mut self, path: &mut NodePath) {}
+    fn exit_identifier(&mut self, path: &mut NodePath) {}
 
-    fn enter_struct_definition(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_struct_definition(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_struct_definition(&mut self, path: &mut NodePath) {}
+    fn exit_struct_definition(&mut self, path: &mut NodePath) {}
 
-    fn enter_function_definition(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_function_definition(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_function_definition(&mut self, path: &mut NodePath) {}
+    fn exit_function_definition(&mut self, path: &mut NodePath) {}
 
-    fn enter_function_parameter(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_function_parameter(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_function_parameter(&mut self, path: &mut NodePath) {}
+    fn exit_function_parameter(&mut self, path: &mut NodePath) {}
 
-    fn enter_type_field(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_type_field(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_type_field(&mut self, path: &mut NodePath) {}
+    fn exit_type_field(&mut self, path: &mut NodePath) {}
 
-    fn enter_type_annotation(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_type_annotation(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_type_annotation(&mut self, path: &mut NodePath) {}
+    fn exit_type_annotation(&mut self, path: &mut NodePath) {}
 
-    fn enter_unknown_token(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_unknown_token(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_unknown_token(&mut self, path: &mut NodePath) {}
+    fn exit_unknown_token(&mut self, path: &mut NodePath) {}
 
-    fn enter_statement(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_statement(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_statement(&mut self, path: &mut NodePath) {}
+    fn exit_statement(&mut self, path: &mut NodePath) {}
 
-    fn enter_unit(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_unit(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_unit(&mut self, path: &mut NodePath) {}
+    fn exit_unit(&mut self, path: &mut NodePath) {}
 
-    fn enter_expression(&mut self, path: &Rc<RefCell<NodePath>>) {}
-    fn exit_expression(&mut self, path: &Rc<RefCell<NodePath>>) {}
+    fn enter_expression(&mut self, path: &mut NodePath) {}
+    fn exit_expression(&mut self, path: &mut NodePath) {}
 
-    fn enter_integer_literal(&mut self, path: &Rc<RefCell<NodePath>>, literal: &IntegerLiteral) {}
-    fn exit_integer_literal(&mut self, path: &Rc<RefCell<NodePath>>, literal: &IntegerLiteral) {}
+    fn enter_integer_literal(&mut self, path: &mut NodePath, literal: &IntegerLiteral) {}
+    fn exit_integer_literal(&mut self, path: &mut NodePath, literal: &IntegerLiteral) {}
 
-    fn enter_string_literal(&mut self, path: &Rc<RefCell<NodePath>>, literal: &StringLiteral) {}
-    fn exit_string_literal(&mut self, path: &Rc<RefCell<NodePath>>, literal: &StringLiteral) {}
+    fn enter_string_literal(&mut self, path: &mut NodePath, literal: &StringLiteral) {}
+    fn exit_string_literal(&mut self, path: &mut NodePath, literal: &StringLiteral) {}
 
-    fn enter_variable(&mut self, path: &Rc<RefCell<NodePath>>, expr: &Identifier) {}
-    fn exit_variable(&mut self, path: &Rc<RefCell<NodePath>>, expr: &Identifier) {}
+    fn enter_variable(&mut self, path: &mut NodePath, expr: &Identifier) {}
+    fn exit_variable(&mut self, path: &mut NodePath, expr: &Identifier) {}
 
-    fn enter_call_expression(&mut self, path: &Rc<RefCell<NodePath>>, expr: &CallExpression) {}
-    fn exit_call_expression(&mut self, path: &Rc<RefCell<NodePath>>, expr: &CallExpression) {}
+    fn enter_call_expression(&mut self, path: &mut NodePath, expr: &CallExpression) {}
+    fn exit_call_expression(&mut self, path: &mut NodePath, expr: &CallExpression) {}
 
-    fn enter_binary_expression(&mut self, path: &Rc<RefCell<NodePath>>, expr: &BinaryExpression) {}
-    fn exit_binary_expression(&mut self, path: &Rc<RefCell<NodePath>>, expr: &BinaryExpression) {}
+    fn enter_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
+    fn exit_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
 
-    fn enter_unary_expression(&mut self, path: &Rc<RefCell<NodePath>>, expr: &UnaryExpression) {}
-    fn exit_unary_expression(&mut self, path: &Rc<RefCell<NodePath>>, expr: &UnaryExpression) {}
+    fn enter_unary_expression(&mut self, path: &mut NodePath, expr: &UnaryExpression) {}
+    fn exit_unary_expression(&mut self, path: &mut NodePath, expr: &UnaryExpression) {}
 
-    fn enter_subscript_expression(
-        &mut self,
-        path: &Rc<RefCell<NodePath>>,
-        expr: &SubscriptExpression,
-    ) {
-    }
+    fn enter_subscript_expression(&mut self, path: &mut NodePath, expr: &SubscriptExpression) {}
 
-    fn exit_subscript_expression(
-        &mut self,
-        path: &Rc<RefCell<NodePath>>,
-        expr: &SubscriptExpression,
-    ) {
-    }
+    fn exit_subscript_expression(&mut self, path: &mut NodePath, expr: &SubscriptExpression) {}
 }
 
 pub fn traverse(visitor: &mut dyn Visitor, node: &Rc<Node>, parent: Option<Rc<RefCell<NodePath>>>) {
@@ -252,63 +242,64 @@ fn traverse_path(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
 
 fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     let node = Rc::clone(path.borrow().node());
+    let mut path = &mut path.borrow_mut();
 
     match node.kind() {
         NodeKind::Program(_) => {
-            visitor.enter_program(path);
+            visitor.enter_program(&mut path);
         }
         NodeKind::Block(_) => {
-            visitor.enter_block(path);
+            visitor.enter_block(&mut path);
         }
         NodeKind::Identifier(_) => {
-            visitor.enter_identifier(path);
+            visitor.enter_identifier(&mut path);
         }
         NodeKind::StructDefinition(_) => {
-            visitor.enter_struct_definition(path);
+            visitor.enter_struct_definition(&mut path);
         }
         NodeKind::FunctionDefinition(_) => {
-            visitor.enter_function_definition(path);
+            visitor.enter_function_definition(&mut path);
         }
         NodeKind::TypeField(_) => {
-            visitor.enter_type_field(path);
+            visitor.enter_type_field(&mut path);
         }
         NodeKind::TypeAnnotation(_) => {
-            visitor.enter_type_annotation(path);
+            visitor.enter_type_annotation(&mut path);
         }
         NodeKind::FunctionParameter(_) => {
-            visitor.enter_function_parameter(path);
+            visitor.enter_function_parameter(&mut path);
         }
         NodeKind::Statement(_) => {
-            visitor.enter_statement(path);
+            visitor.enter_statement(&mut path);
         }
         NodeKind::Unit => {
-            visitor.enter_unit(path);
+            visitor.enter_unit(&mut path);
         }
         NodeKind::Expression(Expression { kind, .. }) => {
-            visitor.enter_expression(path);
+            visitor.enter_expression(&mut path);
 
-            if !path.borrow().skipped {
+            if !path.skipped {
                 match kind {
                     ExpressionKind::IntegerLiteral(expr) => {
-                        visitor.enter_integer_literal(path, expr);
+                        visitor.enter_integer_literal(&mut path, expr);
                     }
                     ExpressionKind::StringLiteral(expr) => {
-                        visitor.enter_string_literal(path, expr);
+                        visitor.enter_string_literal(&mut path, expr);
                     }
                     ExpressionKind::VariableExpression(expr) => {
-                        visitor.enter_variable(path, expr);
+                        visitor.enter_variable(&mut path, expr);
                     }
                     ExpressionKind::CallExpression(expr) => {
-                        visitor.enter_call_expression(path, expr);
+                        visitor.enter_call_expression(&mut path, expr);
                     }
                     ExpressionKind::BinaryExpression(expr) => {
-                        visitor.enter_binary_expression(path, expr);
+                        visitor.enter_binary_expression(&mut path, expr);
                     }
                     ExpressionKind::UnaryExpression(expr) => {
-                        visitor.enter_unary_expression(path, expr);
+                        visitor.enter_unary_expression(&mut path, expr);
                     }
                     ExpressionKind::SubscriptExpression(expr) => {
-                        visitor.enter_subscript_expression(path, expr);
+                        visitor.enter_subscript_expression(&mut path, expr);
                     }
                     ExpressionKind::Expression(_) => {}
                 }
@@ -319,63 +310,64 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
 
 fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     let node = Rc::clone(path.borrow().node());
+    let mut path = &mut path.borrow_mut();
 
     match node.kind() {
         NodeKind::Program(_) => {
-            visitor.exit_program(path);
+            visitor.exit_program(&mut path);
         }
         NodeKind::Block(_) => {
-            visitor.exit_block(path);
+            visitor.exit_block(&mut path);
         }
         NodeKind::Identifier(_) => {
-            visitor.exit_identifier(path);
+            visitor.exit_identifier(&mut path);
         }
         NodeKind::StructDefinition(_) => {
-            visitor.exit_struct_definition(path);
+            visitor.exit_struct_definition(&mut path);
         }
         NodeKind::FunctionDefinition(_) => {
-            visitor.exit_function_definition(path);
+            visitor.exit_function_definition(&mut path);
         }
         NodeKind::TypeField(_) => {
-            visitor.exit_type_field(path);
+            visitor.exit_type_field(&mut path);
         }
         NodeKind::TypeAnnotation(_) => {
-            visitor.exit_type_annotation(path);
+            visitor.exit_type_annotation(&mut path);
         }
         NodeKind::FunctionParameter(_) => {
-            visitor.exit_function_parameter(path);
+            visitor.exit_function_parameter(&mut path);
         }
         NodeKind::Statement(_) => {
-            visitor.exit_statement(path);
+            visitor.exit_statement(&mut path);
         }
         NodeKind::Unit => {
-            visitor.exit_unit(path);
+            visitor.exit_unit(&mut path);
         }
         NodeKind::Expression(Expression { kind, .. }) => {
-            visitor.exit_expression(path);
+            visitor.exit_expression(&mut path);
 
-            if !path.borrow().skipped {
+            if !path.skipped {
                 match kind {
                     ExpressionKind::IntegerLiteral(expr) => {
-                        visitor.exit_integer_literal(path, expr);
+                        visitor.exit_integer_literal(&mut path, expr);
                     }
                     ExpressionKind::StringLiteral(expr) => {
-                        visitor.exit_string_literal(path, expr);
+                        visitor.exit_string_literal(&mut path, expr);
                     }
                     ExpressionKind::VariableExpression(expr) => {
-                        visitor.exit_variable(path, expr);
+                        visitor.exit_variable(&mut path, expr);
                     }
                     ExpressionKind::CallExpression(expr) => {
-                        visitor.exit_call_expression(path, expr);
+                        visitor.exit_call_expression(&mut path, expr);
                     }
                     ExpressionKind::BinaryExpression(expr) => {
-                        visitor.exit_binary_expression(path, expr);
+                        visitor.exit_binary_expression(&mut path, expr);
                     }
                     ExpressionKind::UnaryExpression(expr) => {
-                        visitor.exit_unary_expression(path, expr);
+                        visitor.exit_unary_expression(&mut path, expr);
                     }
                     ExpressionKind::SubscriptExpression(expr) => {
-                        visitor.exit_subscript_expression(path, expr);
+                        visitor.exit_subscript_expression(&mut path, expr);
                     }
                     ExpressionKind::Expression(_) => {}
                 }
@@ -390,35 +382,41 @@ fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     for kind in node.code() {
         match kind {
             CodeKind::Node(node) => traverse(visitor, node, Some(Rc::clone(path))),
-            CodeKind::SyntaxToken(token) => match token {
-                SyntaxToken::Interpreted(token) => traverse_interpreted_token(visitor, path, token),
-                SyntaxToken::Missing { position, item } => {
-                    traverse_missing_token(visitor, path, *position, *item)
+            CodeKind::SyntaxToken(token) => {
+                let mut path = path.borrow_mut();
+
+                match token {
+                    SyntaxToken::Interpreted(token) => {
+                        traverse_interpreted_token(visitor, &mut path, token)
+                    }
+                    SyntaxToken::Missing { position, item } => {
+                        traverse_missing_token(visitor, &mut path, *position, *item)
+                    }
+                    SyntaxToken::Skipped { token, expected } => {
+                        traverse_skipped_token(visitor, &mut path, token, *expected)
+                    }
                 }
-                SyntaxToken::Skipped { token, expected } => {
-                    traverse_skipped_token(visitor, path, token, *expected)
-                }
-            },
+            }
         }
     }
 }
 
-fn traverse_token_trivia(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>, token: &Token) {
+fn traverse_token_trivia(visitor: &mut dyn Visitor, path: &mut NodePath, token: &Token) {
     for trivia in &token.leading_trivia {
         match &trivia.kind {
             TriviaKind::LineComment(comment) => {
-                if !path.borrow().skipped {
+                if !path.skipped {
                     visitor.enter_line_comment(path, token, trivia, comment);
                 }
-                if !path.borrow().skipped {
+                if !path.skipped {
                     visitor.exit_line_comment(path, token, trivia, comment);
                 }
             }
             TriviaKind::Whitespace => {
-                if !path.borrow().skipped {
+                if !path.skipped {
                     visitor.enter_whitespace(path, token, trivia);
                 }
-                if !path.borrow().skipped {
+                if !path.skipped {
                     visitor.exit_whitespace(path, token, trivia);
                 }
             }
@@ -426,49 +424,45 @@ fn traverse_token_trivia(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>
     }
 }
 
-fn traverse_interpreted_token(
-    visitor: &mut dyn Visitor,
-    path: &Rc<RefCell<NodePath>>,
-    token: &Token,
-) {
-    if !path.borrow().skipped {
+fn traverse_interpreted_token(visitor: &mut dyn Visitor, path: &mut NodePath, token: &Token) {
+    if !path.skipped {
         traverse_token_trivia(visitor, path, token);
     }
-    if !path.borrow().skipped {
+    if !path.skipped {
         visitor.enter_interpreted_token(path, token);
     }
-    if !path.borrow().skipped {
+    if !path.skipped {
         visitor.exit_interpreted_token(path, token);
     }
 }
 
 fn traverse_missing_token(
     visitor: &mut dyn Visitor,
-    path: &Rc<RefCell<NodePath>>,
+    path: &mut NodePath,
     position: Position,
     item: MissingTokenKind,
 ) {
-    if !path.borrow().skipped {
+    if !path.skipped {
         visitor.enter_missing_token(path, position, item);
     }
-    if !path.borrow().skipped {
+    if !path.skipped {
         visitor.exit_missing_token(path, position, item);
     }
 }
 
 fn traverse_skipped_token(
     visitor: &mut dyn Visitor,
-    path: &Rc<RefCell<NodePath>>,
+    path: &mut NodePath,
     token: &Token,
     expected: MissingTokenKind,
 ) {
-    if !path.borrow().skipped {
+    if !path.skipped {
         traverse_token_trivia(visitor, path, token);
     }
-    if !path.borrow().skipped {
+    if !path.skipped {
         visitor.enter_skipped_token(path, token, expected);
     }
-    if !path.borrow().skipped {
+    if !path.skipped {
         visitor.exit_skipped_token(path, token, expected);
     }
 }
@@ -484,7 +478,7 @@ mod tests {
     }
 
     impl Visitor for NodeCounter {
-        fn enter_expression(&mut self, _path: &Rc<RefCell<NodePath>>) {
+        fn enter_expression(&mut self, _path: &mut NodePath) {
             self.number_of_expressions += 1;
         }
     }

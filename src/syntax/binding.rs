@@ -116,18 +116,17 @@ impl DeclarationBinder {
 }
 
 impl Visitor for DeclarationBinder {
-    fn enter_program(&mut self, path: &Rc<RefCell<NodePath>>) {
-        let path = path.borrow();
+    fn enter_program(&mut self, path: &mut NodePath) {
         let node = path.node();
         self.declarations = Some(Rc::clone(&node.program().unwrap().declarations));
     }
 
-    fn enter_struct_definition(&mut self, path: &Rc<RefCell<NodePath>>) {
-        self.register_declaration(path.borrow().node());
+    fn enter_struct_definition(&mut self, path: &mut NodePath) {
+        self.register_declaration(path.node());
     }
 
-    fn enter_function_definition(&mut self, path: &Rc<RefCell<NodePath>>) {
-        self.register_declaration(path.borrow().node());
+    fn enter_function_definition(&mut self, path: &mut NodePath) {
+        self.register_declaration(path.node());
     }
 }
 
@@ -143,15 +142,13 @@ impl BlockBinder {
 }
 
 impl Visitor for BlockBinder {
-    fn enter_program(&mut self, path: &Rc<RefCell<NodePath>>) {
-        let path = path.borrow();
+    fn enter_program(&mut self, path: &mut NodePath) {
         let program = path.node().program().unwrap();
 
         self.scope = Rc::downgrade(&program.main_scope);
     }
 
-    fn enter_block(&mut self, path: &Rc<RefCell<NodePath>>) {
-        let path = path.borrow();
+    fn enter_block(&mut self, path: &mut NodePath) {
         let node = path.node();
         let block = node.block().unwrap();
 
@@ -159,8 +156,7 @@ impl Visitor for BlockBinder {
         self.scope = Rc::downgrade(&block.scope);
     }
 
-    fn enter_function_parameter(&mut self, path: &Rc<RefCell<NodePath>>) {
-        let path = path.borrow();
+    fn enter_function_parameter(&mut self, path: &mut NodePath) {
         let node = path.node();
 
         let parent_path = path.parent().unwrap();
