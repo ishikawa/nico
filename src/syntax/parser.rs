@@ -989,10 +989,6 @@ mod tests {
         assert_eq!(position.character, 1);
     }
 
-    #[test]
-    fn test_1() {
-        dbg!(Parser::parse_string("println_str(\"\\\")\nwhen"));
-    }
     // --- helpers
 
     fn unwrap_node(kind: &CodeKind) -> &Node {
