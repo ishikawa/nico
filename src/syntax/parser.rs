@@ -739,6 +739,36 @@ mod tests {
     }
 
     #[test]
+    fn incomplete_string() {
+        for src in vec!["\"Fizz\\\"", "\"Fizz\\\"\n"] {
+            let stmt = parse_statement(src);
+            let stmt = stmt.statement().unwrap();
+            let expr = stmt.expression();
+
+            assert_matches!(expr.kind, ExpressionKind::StringLiteral(..));
+
+            let tokens = stmt.expression.code().collect::<Vec<_>>();
+            assert_eq!(tokens.len(), 4);
+
+            let token = unwrap_interpreted_token(tokens[0]);
+            assert_matches!(token.kind, TokenKind::StringStart);
+
+            let token = unwrap_interpreted_token(tokens[1]);
+            assert_matches!(&token.kind, TokenKind::StringContent(s) => {
+                assert_eq!(s, "Fizz")
+            });
+
+            let token = unwrap_interpreted_token(tokens[2]);
+            assert_matches!(token.kind, TokenKind::StringEscapeSequence(c) => {
+                assert_eq!(c, '\"')
+            });
+
+            let (_, item) = unwrap_missing_token(tokens[3]);
+            assert_eq!(item, MissingTokenKind::StringEnd);
+        }
+    }
+
+    #[test]
     fn add_integer() {
         let stmt = parse_statement("1+2");
         let stmt = stmt.statement().unwrap();
