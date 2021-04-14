@@ -488,18 +488,26 @@ impl<'a> Parser<'a> {
         let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "("
         let node = self.parse_expr();
 
-        while !self.tokenizer.is_at_end() {
-            let token = self.tokenizer.next_token();
+        if let Some(ref node) = node {
+            code.node(node);
+        }
 
-            if let TokenKind::Char(')') = token.kind {
-                if let Some(ref node) = node {
-                    code.node(node);
+        loop {
+            match self.tokenizer.peek_kind() {
+                TokenKind::Char(')') => {
+                    code.interpret(self.tokenizer.next_token());
+                    break;
                 }
-
-                code.interpret(token);
-                break;
-            } else {
-                code.skip(token, MissingTokenKind::Char(')'));
+                TokenKind::Eos | TokenKind::Char('\n') => {
+                    code.missing(
+                        self.tokenizer.current_position(),
+                        MissingTokenKind::Char(')'),
+                    );
+                    break;
+                }
+                _ => {
+                    code.skip(self.tokenizer.next_token(), MissingTokenKind::Char(')'));
+                }
             }
         }
 
@@ -721,13 +729,9 @@ mod tests {
 
     #[test]
     fn number_integer() {
-        let module = Parser::parse_string("42");
-        let module = module.program().unwrap();
+        let stmt = parse_statement("42");
+        let stmt = stmt.statement().unwrap();
 
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
         assert_matches!(
             stmt.expression().kind,
             ExpressionKind::IntegerLiteral(IntegerLiteral(42))
@@ -743,13 +747,64 @@ mod tests {
     }
 
     #[test]
-    fn add_integer() {
-        let module = Parser::parse_string("1+2");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
+    fn incomplete_string() {
+        for src in vec!["\"Fizz\\\"", "\"Fizz\\\"\n"] {
+            let stmt = parse_statement(src);
+            let stmt = stmt.statement().unwrap();
+            let expr = stmt.expression();
 
-        let stmt = module.body[0].statement().unwrap();
+            assert_matches!(expr.kind, ExpressionKind::StringLiteral(..));
+
+            let tokens = stmt.expression.code().collect::<Vec<_>>();
+            assert_eq!(tokens.len(), 4);
+
+            let token = unwrap_interpreted_token(tokens[0]);
+            assert_matches!(token.kind, TokenKind::StringStart);
+
+            let token = unwrap_interpreted_token(tokens[1]);
+            assert_matches!(&token.kind, TokenKind::StringContent(s) => {
+                assert_eq!(s, "Fizz")
+            });
+
+            let token = unwrap_interpreted_token(tokens[2]);
+            assert_matches!(token.kind, TokenKind::StringEscapeSequence(c) => {
+                assert_eq!(c, '\"')
+            });
+
+            let (_, item) = unwrap_missing_token(tokens[3]);
+            assert_eq!(item, MissingTokenKind::StringEnd);
+        }
+    }
+
+    #[test]
+    fn incomplete_string_in_paren() {
+        for src in vec!["(\"Fizz\\\")", "(\"Fizz\\\")\n"] {
+            let stmt = parse_statement(src);
+            let stmt = stmt.statement().unwrap();
+            let expr = stmt.expression();
+
+            assert_matches!(expr.kind, ExpressionKind::Expression(ref expr) => {
+                assert_matches!(expr.expression().unwrap().kind, ExpressionKind::StringLiteral(..));
+            });
+
+            let tokens = stmt.expression.code().collect::<Vec<_>>();
+            assert_eq!(tokens.len(), 3);
+
+            let token = unwrap_interpreted_token(tokens[0]);
+            assert_matches!(token.kind, TokenKind::Char('('));
+
+            let node = unwrap_node(tokens[1]);
+            assert_matches!(node.kind(), NodeKind::Expression(..));
+
+            let (_, item) = unwrap_missing_token(tokens[2]);
+            assert_eq!(item, MissingTokenKind::Char(')'));
+        }
+    }
+
+    #[test]
+    fn add_integer() {
+        let stmt = parse_statement("1+2");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
@@ -772,12 +827,8 @@ mod tests {
 
     #[test]
     fn add_integer_missing_node() {
-        let module = Parser::parse_string("1+");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("1+");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: None } => {
@@ -800,12 +851,8 @@ mod tests {
 
     #[test]
     fn add_integer_skipped_tokens() {
-        let module = Parser::parse_string("1 + % ? 2");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("1 + % ? 2");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
@@ -836,12 +883,8 @@ mod tests {
 
     #[test]
     fn unary_op() {
-        let module = Parser::parse_string("-1");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("-1");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().unary_expression().unwrap();
 
         assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
@@ -860,12 +903,8 @@ mod tests {
 
     #[test]
     fn unary_op_nested() {
-        let module = Parser::parse_string("-+1");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("-+1");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().unary_expression().unwrap();
 
         assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
@@ -888,12 +927,8 @@ mod tests {
 
     #[test]
     fn subscript_index() {
-        let module = Parser::parse_string("a[0]");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("a[0]");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -926,12 +961,8 @@ mod tests {
 
     #[test]
     fn subscript_empty() {
-        let module = Parser::parse_string("a[]");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("a[]");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -960,12 +991,8 @@ mod tests {
 
     #[test]
     fn subscript_not_closed() {
-        let module = Parser::parse_string("a[1\nb");
-        let module = module.program().unwrap();
-        assert_eq!(module.body.len(), 2);
-
-        // subscript
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("a[1\nb");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -990,6 +1017,14 @@ mod tests {
     }
 
     // --- helpers
+
+    fn parse_statement(src: &str) -> Rc<Node> {
+        let module = Parser::parse_string(src);
+        let module = module.program().unwrap();
+
+        assert!(!module.body.is_empty());
+        Rc::clone(&module.body[0])
+    }
 
     fn unwrap_node(kind: &CodeKind) -> &Node {
         if let CodeKind::Node(node) = kind {
