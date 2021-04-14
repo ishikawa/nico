@@ -488,18 +488,26 @@ impl<'a> Parser<'a> {
         let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "("
         let node = self.parse_expr();
 
-        while !self.tokenizer.is_at_end() {
-            let token = self.tokenizer.next_token();
+        if let Some(ref node) = node {
+            code.node(node);
+        }
 
-            if let TokenKind::Char(')') = token.kind {
-                if let Some(ref node) = node {
-                    code.node(node);
+        loop {
+            match self.tokenizer.peek_kind() {
+                TokenKind::Char(')') => {
+                    code.interpret(self.tokenizer.next_token());
+                    break;
                 }
-
-                code.interpret(token);
-                break;
-            } else {
-                code.skip(token, MissingTokenKind::Char(')'));
+                TokenKind::Eos | TokenKind::Char('\n') => {
+                    code.missing(
+                        self.tokenizer.current_position(),
+                        MissingTokenKind::Char(')'),
+                    );
+                    break;
+                }
+                _ => {
+                    code.skip(self.tokenizer.next_token(), MissingTokenKind::Char(')'));
+                }
             }
         }
 
@@ -765,6 +773,31 @@ mod tests {
 
             let (_, item) = unwrap_missing_token(tokens[3]);
             assert_eq!(item, MissingTokenKind::StringEnd);
+        }
+    }
+
+    #[test]
+    fn incomplete_string_in_paren() {
+        for src in vec!["(\"Fizz\\\")", "(\"Fizz\\\")\n"] {
+            let stmt = parse_statement(src);
+            let stmt = stmt.statement().unwrap();
+            let expr = stmt.expression();
+
+            assert_matches!(expr.kind, ExpressionKind::Expression(ref expr) => {
+                assert_matches!(expr.expression().unwrap().kind, ExpressionKind::StringLiteral(..));
+            });
+
+            let tokens = stmt.expression.code().collect::<Vec<_>>();
+            assert_eq!(tokens.len(), 3);
+
+            let token = unwrap_interpreted_token(tokens[0]);
+            assert_matches!(token.kind, TokenKind::Char('('));
+
+            let node = unwrap_node(tokens[1]);
+            assert_matches!(node.kind(), NodeKind::Expression(..));
+
+            let (_, item) = unwrap_missing_token(tokens[2]);
+            assert_eq!(item, MissingTokenKind::Char(')'));
         }
     }
 
