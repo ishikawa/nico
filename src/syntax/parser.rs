@@ -721,13 +721,9 @@ mod tests {
 
     #[test]
     fn number_integer() {
-        let module = Parser::parse_string("42");
-        let module = module.program().unwrap();
+        let stmt = parse_statement("42");
+        let stmt = stmt.statement().unwrap();
 
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
         assert_matches!(
             stmt.expression().kind,
             ExpressionKind::IntegerLiteral(IntegerLiteral(42))
@@ -744,12 +740,8 @@ mod tests {
 
     #[test]
     fn add_integer() {
-        let module = Parser::parse_string("1+2");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("1+2");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
@@ -772,12 +764,8 @@ mod tests {
 
     #[test]
     fn add_integer_missing_node() {
-        let module = Parser::parse_string("1+");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("1+");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: None } => {
@@ -800,12 +788,8 @@ mod tests {
 
     #[test]
     fn add_integer_skipped_tokens() {
-        let module = Parser::parse_string("1 + % ? 2");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("1 + % ? 2");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
@@ -836,12 +820,8 @@ mod tests {
 
     #[test]
     fn unary_op() {
-        let module = Parser::parse_string("-1");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("-1");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().unary_expression().unwrap();
 
         assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
@@ -860,12 +840,8 @@ mod tests {
 
     #[test]
     fn unary_op_nested() {
-        let module = Parser::parse_string("-+1");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("-+1");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().unary_expression().unwrap();
 
         assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
@@ -888,12 +864,8 @@ mod tests {
 
     #[test]
     fn subscript_index() {
-        let module = Parser::parse_string("a[0]");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("a[0]");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -926,12 +898,8 @@ mod tests {
 
     #[test]
     fn subscript_empty() {
-        let module = Parser::parse_string("a[]");
-        let module = module.program().unwrap();
-        assert!(!module.body.is_empty());
-        assert_eq!(module.body.len(), 1);
-
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("a[]");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -960,12 +928,8 @@ mod tests {
 
     #[test]
     fn subscript_not_closed() {
-        let module = Parser::parse_string("a[1\nb");
-        let module = module.program().unwrap();
-        assert_eq!(module.body.len(), 2);
-
-        // subscript
-        let stmt = module.body[0].statement().unwrap();
+        let stmt = parse_statement("a[1\nb");
+        let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -990,6 +954,14 @@ mod tests {
     }
 
     // --- helpers
+
+    fn parse_statement(src: &str) -> Rc<Node> {
+        let module = Parser::parse_string(src);
+        let module = module.program().unwrap();
+
+        assert!(!module.body.is_empty());
+        Rc::clone(&module.body[0])
+    }
 
     fn unwrap_node(kind: &CodeKind) -> &Node {
         if let CodeKind::Node(node) = kind {
