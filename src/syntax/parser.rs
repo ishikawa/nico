@@ -1016,6 +1016,27 @@ mod tests {
         assert_eq!(position.character, 1);
     }
 
+    #[test]
+    fn subscript_incomplete_string() {
+        for src in vec!["a[\"", "a[\"\n"] {
+            let stmt = parse_statement(src);
+            let stmt = stmt.statement().unwrap();
+            let expr = stmt.expression().subscript_expression().unwrap();
+
+            assert_matches!(expr, SubscriptExpression{ .. } => {
+                let arguments = expr.arguments().collect::<Vec<_>>();
+                assert_eq!(arguments.len(), 1);
+                assert_matches!(arguments[0].kind, ExpressionKind::StringLiteral(..));
+            });
+
+            let tokens = stmt.expression.code().collect::<Vec<_>>();
+            assert_eq!(tokens.len(), 4);
+
+            let (_, item) = unwrap_missing_token(tokens[3]);
+            assert_eq!(item, MissingTokenKind::Char(']'));
+        }
+    }
+
     // --- helpers
 
     fn parse_statement(src: &str) -> Rc<Node> {
