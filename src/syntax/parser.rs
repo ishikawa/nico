@@ -383,6 +383,7 @@ impl<'a> Parser<'a> {
             TokenKind::Identifier(_) => self.read_identifier(),
             TokenKind::StringStart => self.read_string(),
             TokenKind::Char('(') => self.read_paren(),
+            TokenKind::Char('[') => self.read_array(),
             _ => return None,
         };
 
@@ -526,6 +527,21 @@ impl<'a> Parser<'a> {
         } else {
             Node::new(NodeKind::Unit, code)
         }
+    }
+
+    fn read_array(&mut self) -> Node {
+        let mut code = Code::new();
+        let elements = self._parse_elements('[', ']', &mut code, Parser::parse_expr);
+
+        let expr = ArrayExpression::new(elements);
+
+        Node::new(
+            NodeKind::Expression(Expression::new(
+                ExpressionKind::ArrayExpression(expr),
+                self.new_type_var(),
+            )),
+            code,
+        )
     }
 
     /// Read comma-separated elements from the start character token specified by `open_char` to
@@ -1014,6 +1030,78 @@ mod tests {
         assert_eq!(item, MissingTokenKind::Char(']'));
         assert_eq!(position.line, 1);
         assert_eq!(position.character, 1);
+    }
+
+    #[test]
+    fn subscript_incomplete_string() {
+        for src in vec!["a[\"", "a[\"\n"] {
+            let stmt = parse_statement(src);
+            let stmt = stmt.statement().unwrap();
+            let expr = stmt.expression().subscript_expression().unwrap();
+
+            assert_matches!(expr, SubscriptExpression{ .. } => {
+                let arguments = expr.arguments().collect::<Vec<_>>();
+                assert_eq!(arguments.len(), 1);
+                assert_matches!(arguments[0].kind, ExpressionKind::StringLiteral(..));
+            });
+
+            let tokens = stmt.expression.code().collect::<Vec<_>>();
+            assert_eq!(tokens.len(), 4);
+
+            let (_, item) = unwrap_missing_token(tokens[3]);
+            assert_eq!(item, MissingTokenKind::Char(']'));
+        }
+    }
+
+    #[test]
+    fn array_empty() {
+        let stmt = parse_statement("[]");
+        let stmt = stmt.statement().unwrap();
+        let expr = stmt.expression().array_expression().unwrap();
+
+        assert_matches!(expr, ArrayExpression{ .. } => {
+            let elements = expr.elements().collect::<Vec<_>>();
+            assert_eq!(elements.len(), 0);
+        });
+
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 2);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(token.kind, TokenKind::Char('['));
+
+        let token = unwrap_interpreted_token(tokens[1]);
+        assert_matches!(token.kind, TokenKind::Char(']'));
+    }
+
+    #[test]
+    fn array_one_element_and_trailing_comma() {
+        let stmt = parse_statement("[1,]");
+        let stmt = stmt.statement().unwrap();
+        let expr = stmt.expression().array_expression().unwrap();
+
+        assert_matches!(expr, ArrayExpression{ .. } => {
+            let elements = expr.elements().collect::<Vec<_>>();
+            assert_eq!(elements.len(), 1);
+
+            assert_eq!(elements.len(), 1);
+            assert_matches!(elements[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+        });
+
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 4);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(token.kind, TokenKind::Char('['));
+
+        let node = unwrap_node(tokens[1]);
+        assert!(node.is_expression());
+
+        let token = unwrap_interpreted_token(tokens[2]);
+        assert_matches!(token.kind, TokenKind::Char(','));
+
+        let token = unwrap_interpreted_token(tokens[3]);
+        assert_matches!(token.kind, TokenKind::Char(']'));
     }
 
     // --- helpers

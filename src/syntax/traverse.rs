@@ -205,9 +205,6 @@ pub trait Visitor {
     fn enter_variable(&mut self, path: &mut NodePath, expr: &Identifier) {}
     fn exit_variable(&mut self, path: &mut NodePath, expr: &Identifier) {}
 
-    fn enter_call_expression(&mut self, path: &mut NodePath, expr: &CallExpression) {}
-    fn exit_call_expression(&mut self, path: &mut NodePath, expr: &CallExpression) {}
-
     fn enter_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
     fn exit_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
 
@@ -215,8 +212,13 @@ pub trait Visitor {
     fn exit_unary_expression(&mut self, path: &mut NodePath, expr: &UnaryExpression) {}
 
     fn enter_subscript_expression(&mut self, path: &mut NodePath, expr: &SubscriptExpression) {}
-
     fn exit_subscript_expression(&mut self, path: &mut NodePath, expr: &SubscriptExpression) {}
+
+    fn enter_call_expression(&mut self, path: &mut NodePath, expr: &CallExpression) {}
+    fn exit_call_expression(&mut self, path: &mut NodePath, expr: &CallExpression) {}
+
+    fn enter_array_expression(&mut self, path: &mut NodePath, expr: &ArrayExpression) {}
+    fn exit_array_expression(&mut self, path: &mut NodePath, expr: &ArrayExpression) {}
 }
 
 pub fn traverse(visitor: &mut dyn Visitor, node: &Rc<Node>, parent: Option<Rc<RefCell<NodePath>>>) {
@@ -289,9 +291,6 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     ExpressionKind::VariableExpression(expr) => {
                         visitor.enter_variable(&mut path, expr);
                     }
-                    ExpressionKind::CallExpression(expr) => {
-                        visitor.enter_call_expression(&mut path, expr);
-                    }
                     ExpressionKind::BinaryExpression(expr) => {
                         visitor.enter_binary_expression(&mut path, expr);
                     }
@@ -300,6 +299,12 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     }
                     ExpressionKind::SubscriptExpression(expr) => {
                         visitor.enter_subscript_expression(&mut path, expr);
+                    }
+                    ExpressionKind::CallExpression(expr) => {
+                        visitor.enter_call_expression(&mut path, expr);
+                    }
+                    ExpressionKind::ArrayExpression(expr) => {
+                        visitor.enter_array_expression(&mut path, expr);
                     }
                     ExpressionKind::Expression(_) => {}
                 }
@@ -357,9 +362,6 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     ExpressionKind::VariableExpression(expr) => {
                         visitor.exit_variable(&mut path, expr);
                     }
-                    ExpressionKind::CallExpression(expr) => {
-                        visitor.exit_call_expression(&mut path, expr);
-                    }
                     ExpressionKind::BinaryExpression(expr) => {
                         visitor.exit_binary_expression(&mut path, expr);
                     }
@@ -368,6 +370,12 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     }
                     ExpressionKind::SubscriptExpression(expr) => {
                         visitor.exit_subscript_expression(&mut path, expr);
+                    }
+                    ExpressionKind::CallExpression(expr) => {
+                        visitor.exit_call_expression(&mut path, expr);
+                    }
+                    ExpressionKind::ArrayExpression(expr) => {
+                        visitor.exit_array_expression(&mut path, expr);
                     }
                     ExpressionKind::Expression(_) => {}
                 }

@@ -249,8 +249,8 @@ impl SubscriptExpression {
         self.callee.expression().unwrap()
     }
 
-    pub fn arguments(&self) -> Arguments {
-        Arguments {
+    pub fn arguments(&self) -> Expressions {
+        Expressions {
             iter: self.arguments.iter(),
             len: self.arguments.len(),
         }
@@ -272,10 +272,28 @@ impl CallExpression {
         self.callee.expression().unwrap()
     }
 
-    pub fn arguments(&self) -> Arguments {
-        Arguments {
+    pub fn arguments(&self) -> Expressions {
+        Expressions {
             iter: self.arguments.iter(),
             len: self.arguments.len(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ArrayExpression {
+    pub elements: Vec<Rc<Node>>,
+}
+
+impl ArrayExpression {
+    pub fn new(elements: Vec<Rc<Node>>) -> Self {
+        Self { elements }
+    }
+
+    pub fn elements(&self) -> Expressions {
+        Expressions {
+            iter: self.elements.iter(),
+            len: self.elements.len(),
         }
     }
 }
@@ -316,6 +334,7 @@ pub enum ExpressionKind {
     UnaryExpression(UnaryExpression),
     SubscriptExpression(SubscriptExpression),
     CallExpression(CallExpression),
+    ArrayExpression(ArrayExpression),
     Expression(Rc<Node>),
 }
 
@@ -527,16 +546,24 @@ impl Expression {
             None
         }
     }
+
+    pub fn array_expression(&self) -> Option<&ArrayExpression> {
+        if let ExpressionKind::ArrayExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
 }
 
 // -- Iterators
 #[derive(Debug, Clone)]
-pub struct Arguments<'a> {
+pub struct Expressions<'a> {
     iter: slice::Iter<'a, Rc<Node>>,
     len: usize,
 }
 
-impl<'a> Arguments<'a> {
+impl<'a> Expressions<'a> {
     pub fn len(&self) -> usize {
         self.len
     }
@@ -546,7 +573,7 @@ impl<'a> Arguments<'a> {
     }
 }
 
-impl<'a> Iterator for Arguments<'a> {
+impl<'a> Iterator for Expressions<'a> {
     type Item = &'a Expression;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -633,6 +660,7 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::UnaryExpression(_) => write!(f, "UnaryExpression"),
             ExpressionKind::SubscriptExpression(_) => write!(f, "SubscriptExpression"),
             ExpressionKind::CallExpression(_) => write!(f, "CallExpression"),
+            ExpressionKind::ArrayExpression(_) => write!(f, "ArrayExpression"),
             ExpressionKind::Expression(expr) => write!(f, "({})", expr.kind()),
         }
     }
