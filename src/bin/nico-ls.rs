@@ -417,6 +417,8 @@ impl Connection {
         let doc = self.get_document(uri)?;
         let node = Rc::new(Parser::parse_string(&doc.borrow().text));
 
+        syntax::bind_scopes(&node);
+
         self.compiled_results.insert(uri.clone(), Rc::clone(&node));
 
         Ok(node)
@@ -504,6 +506,7 @@ impl Connection {
         params: &SemanticTokensParams,
     ) -> Result<SemanticTokens, HandlerError> {
         info!("[on_text_document_semantic_tokens_full] {:?}", params);
+        let node = self.get_compiled_result(&params.text_document.uri)?;
 
         let server_options = self.server_options()?;
 
@@ -511,9 +514,7 @@ impl Connection {
             &server_options.token_type_legend,
             &server_options.token_modifier_legend,
         );
-        let node = self.get_compiled_result(&params.text_document.uri)?;
 
-        syntax::bind_scopes(node);
         syntax::traverse(&mut tokenizer, node, None);
 
         //info!("tokens = {:?}", tokenizer.tokens);
