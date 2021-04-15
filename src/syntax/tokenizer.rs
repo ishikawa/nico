@@ -6,6 +6,7 @@
 //! sequences and EOF in the middle.
 //!
 //! It is responsibility of parsers to interpret these tokens and generate strings and other nodes.
+use std::convert::TryFrom;
 use std::fmt;
 use std::iter::Peekable;
 use std::str::Chars;
@@ -14,18 +15,18 @@ use std::str::Chars;
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default)]
 pub struct Position {
     /// Line position in a document (zero-based).
-    pub line: usize,
+    pub line: u32,
     /// Character offset on a line in a document (zero-based). Assuming that
     /// the line is represented as a string, the `character` value represents
     /// the gap between the `character` and `character + 1`.
-    pub character: usize,
+    pub character: u32,
 }
 
 // The effective range of a token.
 // `start` inclusive, `end` exclusive.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default)]
 pub struct EffectiveRange {
-    pub length: usize,
+    pub length: u32,
     pub start: Position,
     pub end: Position,
 }
@@ -194,9 +195,23 @@ impl<'a> Tokenizer<'a> {
     }
 
     pub fn current_position(&self) -> Position {
-        Position {
-            line: self.lineno,
-            character: self.columnno,
+        // Convert usize to u32 in favor of LSP compatibility.
+        let line = u32::try_from(self.lineno).unwrap_or_else(|_| panic!("overflow line number"));
+        let character =
+            u32::try_from(self.columnno).unwrap_or_else(|_| panic!("overflow column number"));
+
+        Position { line, character }
+    }
+
+    fn current_range(&self) -> EffectiveRange {
+        // Convert usize to u32 in favor of LSP compatibility.
+        let length = u32::try_from(self.token_text.len())
+            .unwrap_or_else(|_| panic!("overflow token length"));
+
+        EffectiveRange {
+            length,
+            start: self.start_position.unwrap(),
+            end: self.current_position(),
         }
     }
 
@@ -224,14 +239,6 @@ impl<'a> Tokenizer<'a> {
     fn begin_token(&mut self) {
         self.token_text.clear();
         self.start_position = Some(self.current_position());
-    }
-
-    fn current_range(&self) -> EffectiveRange {
-        EffectiveRange {
-            length: self.token_text.len(),
-            start: self.start_position.unwrap(),
-            end: self.current_position(),
-        }
     }
 
     fn end_token(&mut self, kind: TokenKind, leading_trivia: Vec<Trivia>) -> Token {
@@ -550,6 +557,20 @@ impl fmt::Display for TokenKind {
             TokenKind::StringEscapeSequence(c) => write!(f, "\\{}", c),
             TokenKind::StringUnrecognizedEscapeSequence(c) => write!(f, "\\{}", c),
             TokenKind::StringEnd => write!(f, "...\""),
+        }
+    }
+}
+
+impl fmt::Display for MissingTokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MissingTokenKind::TopLevel => write!(f, "declaration or statement"),
+            MissingTokenKind::FunctionName => write!(f, "a function name"),
+            MissingTokenKind::Expression => write!(f, "expression"),
+            MissingTokenKind::End => write!(f, "end"),
+            MissingTokenKind::EscapeSequence => write!(f, "escape sequence"),
+            MissingTokenKind::StringEnd => write!(f, "\""),
+            MissingTokenKind::Char(c) => write!(f, "{}", c),
         }
     }
 }

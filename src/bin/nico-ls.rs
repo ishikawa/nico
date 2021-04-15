@@ -1,13 +1,7 @@
 use log::{info, warn};
-use lsp_types::{
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult,
-    InitializedParams, SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
-    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
-    SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
-    TextDocumentSyncCapability, TextDocumentSyncKind,
-};
+use lsp_types::*;
 use nico::syntax::{
-    self, MissingTokenKind, NodePath, ParseError, Parser, Token, TokenKind, Trivia,
+    self, MissingTokenKind, Node, NodePath, ParseError, Parser, Token, TokenKind, Trivia,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -51,6 +45,13 @@ struct ResponseError {
     code: i32,
     message: String,
     data: Option<Value>,
+}
+
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+struct Notification {
+    jsonrpc: String,
+    method: String,
+    params: Option<Value>,
 }
 
 #[derive(Debug)]
@@ -124,53 +125,61 @@ impl Response {
             error: None,
         }
     }
-
-    fn serialize_write<T: Write>(&self, writer: &mut T) -> Result<(), HandlerError> {
-        let json = serde_json::to_vec(self)?;
-
-        write!(writer, "Content-Length: {}\r\n\r\n", json.len())?;
-        writer.write_all(json.as_slice())?;
-        writer.flush()?;
-
-        Ok(())
-    }
 }
 
 // --- Language Server States
-
 #[derive(Debug, Default)]
-struct Connection {
-    documents: HashMap<Url, Rc<RefCell<Document>>>,
-    server_options: Option<ServerRegistrationOptions>,
+struct DiagnosticsCollector {
+    pub diagnostics: Vec<Diagnostic>,
 }
 
-/// These options are initialized in `on_initialize()` callback.
-#[derive(Debug, Clone)]
-struct ServerRegistrationOptions {
-    // Semantic tokens
-    token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
-    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, usize>>,
+impl DiagnosticsCollector {
+    pub fn new() -> Self {
+        DiagnosticsCollector::default()
+    }
 }
 
-#[derive(Debug)]
-struct Document {
-    uri: Url,
-    text: String,
+impl syntax::Visitor for DiagnosticsCollector {
+    fn enter_missing_token(
+        &mut self,
+        _path: &mut NodePath,
+        position: syntax::Position,
+        item: MissingTokenKind,
+    ) {
+        let diagnostic = Diagnostic {
+            range: Range {
+                start: Position {
+                    line: position.line,
+                    character: position.character.saturating_sub(1),
+                },
+                end: Position {
+                    line: position.line,
+                    character: position.character,
+                },
+            },
+            severity: Some(DiagnosticSeverity::Error),
+            message: format!("Syntax Error: expected {}", item),
+            source: Some("nico-ls".to_string()),
+            ..Diagnostic::default()
+        };
+
+        self.diagnostics.push(diagnostic);
+    }
 }
 
 #[derive(Debug)]
 struct SemanticTokenAbsoluteParams {
-    line: usize,
-    character: usize,
-    length: usize,
+    line: u32,
+    character: u32,
+    length: u32,
     token_type: SemanticTokenType,
     token_modifiers_bitset: u32,
 }
 
 #[derive(Debug, Default)]
 struct SemanticTokenizer {
-    token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
-    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, usize>>,
+    token_type_legend: Rc<HashMap<SemanticTokenType, u32>>,
+    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, u32>>,
     previous_line: u32,
     previous_character: u32,
     pub tokens: Vec<SemanticToken>,
@@ -178,8 +187,8 @@ struct SemanticTokenizer {
 
 impl SemanticTokenizer {
     pub fn new(
-        token_type_legend: &Rc<HashMap<SemanticTokenType, usize>>,
-        token_modifier_legend: &Rc<HashMap<SemanticTokenModifier, usize>>,
+        token_type_legend: &Rc<HashMap<SemanticTokenType, u32>>,
+        token_modifier_legend: &Rc<HashMap<SemanticTokenModifier, u32>>,
     ) -> Self {
         Self {
             token_type_legend: Rc::clone(token_type_legend),
@@ -300,14 +309,14 @@ impl SemanticTokenizer {
 
     fn add_semantic_token_absolute(&mut self, abs_sem_token: SemanticTokenAbsoluteParams) {
         let token_type = if let Some(ty) = self.token_type_legend.get(&abs_sem_token.token_type) {
-            u32::try_from(*ty).unwrap()
+            *ty
         } else {
             return;
         };
 
-        let line = u32::try_from(abs_sem_token.line).unwrap();
-        let character = u32::try_from(abs_sem_token.character).unwrap();
-        let length = u32::try_from(abs_sem_token.length).unwrap();
+        let line = abs_sem_token.line;
+        let character = abs_sem_token.character;
+        let length = abs_sem_token.length;
 
         let delta_line = line - self.previous_line;
         let delta_start = if self.previous_line == line {
@@ -360,10 +369,84 @@ impl syntax::Visitor for SemanticTokenizer {
     }
 }
 
+#[derive(Debug, Default)]
+struct Connection {
+    documents: HashMap<Url, Rc<RefCell<Document>>>,
+    compiled_results: HashMap<Url, Rc<Node>>,
+    diagnostics: HashMap<Url, Vec<Diagnostic>>,
+    server_options: Option<ServerRegistrationOptions>,
+}
+
+/// These options are initialized in `on_initialize()` callback.
+#[derive(Debug, Clone)]
+struct ServerRegistrationOptions {
+    // Semantic tokens
+    token_type_legend: Rc<HashMap<SemanticTokenType, u32>>,
+    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, u32>>,
+}
+
+#[derive(Debug)]
+struct Document {
+    uri: Url,
+    text: String,
+}
+
 #[allow(clippy::unnecessary_wraps)]
 impl Connection {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn send_response<V: Serialize>(
+        &self,
+        request: &Request,
+        value: V,
+    ) -> Result<(), HandlerError> {
+        let value = serde_json::to_value(value)?;
+        let response = Response::from_value(&request, value);
+
+        self.send_message(&response)
+    }
+
+    pub fn send_notification<P: Serialize>(
+        &self,
+        method: &str,
+        params: P,
+    ) -> Result<(), HandlerError> {
+        let params = serde_json::to_value(params)?;
+        let notification = Notification {
+            jsonrpc: "2.0".to_string(),
+            method: method.to_string(),
+            params: Some(params),
+        };
+
+        self.send_message(&notification)
+    }
+
+    fn send_message<S: Serialize>(&self, message: &S) -> Result<(), HandlerError> {
+        let mut writer = io::stdout();
+        let json = serde_json::to_vec(message)?;
+
+        write!(writer, "Content-Length: {}\r\n\r\n", json.len())?;
+        writer.write_all(json.as_slice())?;
+        writer.flush()?;
+
+        Ok(())
+    }
+
+    fn publish_diagnostics(&self, uri: &Url) -> Result<(), HandlerError> {
+        let diagnostic = self.get_diagnostics(uri)?;
+
+        let publish_diagnostics_params = PublishDiagnosticsParams {
+            uri: uri.clone(),
+            version: None,
+            diagnostics: diagnostic.clone(),
+        };
+
+        self.send_notification(
+            "textDocument/publishDiagnostics",
+            publish_diagnostics_params,
+        )
     }
 
     fn server_options(&self) -> Result<&ServerRegistrationOptions, HandlerError> {
@@ -376,6 +459,36 @@ impl Connection {
         self.documents.get(uri).ok_or_else(|| HandlerError {
             kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
         })
+    }
+
+    fn get_compiled_result(&self, uri: &Url) -> Result<&Rc<Node>, HandlerError> {
+        self.compiled_results.get(uri).ok_or_else(|| HandlerError {
+            kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
+        })
+    }
+
+    fn get_diagnostics(&self, uri: &Url) -> Result<&Vec<Diagnostic>, HandlerError> {
+        self.diagnostics.get(uri).ok_or_else(|| HandlerError {
+            kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
+        })
+    }
+
+    fn compile(&mut self, uri: &Url) -> Result<Rc<Node>, HandlerError> {
+        let doc = self.get_document(uri)?;
+        let node = Rc::new(Parser::parse_string(&doc.borrow().text));
+
+        // Scopes
+        syntax::bind_scopes(&node);
+
+        // Diagnostics
+        let mut diagnostics = DiagnosticsCollector::new();
+        syntax::traverse(&mut diagnostics, &node, None);
+
+        self.compiled_results.insert(uri.clone(), Rc::clone(&node));
+        self.diagnostics
+            .insert(uri.clone(), diagnostics.diagnostics);
+
+        Ok(node)
     }
 
     // Request callbacks
@@ -417,10 +530,12 @@ impl Connection {
         let mut token_modifier_legend = HashMap::new();
 
         for (i, token_type) in token_types.iter().enumerate() {
-            token_type_legend.insert(token_type.clone(), i);
+            let t = u32::try_from(i).unwrap();
+            token_type_legend.insert(token_type.clone(), t);
         }
         for (i, token_modifier) in token_modifiers.iter().enumerate() {
-            token_modifier_legend.insert(token_modifier.clone(), i);
+            let t = u32::try_from(i).unwrap();
+            token_modifier_legend.insert(token_modifier.clone(), t);
         }
 
         // Initialized
@@ -460,18 +575,16 @@ impl Connection {
         params: &SemanticTokensParams,
     ) -> Result<SemanticTokens, HandlerError> {
         info!("[on_text_document_semantic_tokens_full] {:?}", params);
+        let node = self.get_compiled_result(&params.text_document.uri)?;
 
         let server_options = self.server_options()?;
-        let doc = self.get_document(&params.text_document.uri)?.borrow();
 
         let mut tokenizer = SemanticTokenizer::new(
             &server_options.token_type_legend,
             &server_options.token_modifier_legend,
         );
-        let node = Rc::new(Parser::parse_string(&doc.text));
 
-        syntax::bind_scopes(&node);
-        syntax::traverse(&mut tokenizer, &node, None);
+        syntax::traverse(&mut tokenizer, node, None);
 
         //info!("tokens = {:?}", tokenizer.tokens);
         Ok(SemanticTokens {
@@ -493,9 +606,13 @@ impl Connection {
         info!("[on_text_document_did_open] {:?}", params);
 
         let doc = Document::from(&params.text_document);
+        let doc = Rc::new(RefCell::new(doc));
 
         self.documents
-            .insert(doc.uri.clone(), Rc::new(RefCell::new(doc)));
+            .insert(doc.borrow().uri.clone(), Rc::clone(&doc));
+
+        self.compile(&doc.borrow().uri)?;
+        self.publish_diagnostics(&doc.borrow().uri)?;
 
         Ok(())
     }
@@ -505,18 +622,21 @@ impl Connection {
         params: &DidChangeTextDocumentParams,
     ) -> Result<(), HandlerError> {
         info!("[on_text_document_did_change] {:?}", params);
+        {
+            let doc = self.get_document(&params.text_document.uri)?;
 
-        let doc = self.get_document(&params.text_document.uri)?;
+            for change in &params.content_changes {
+                let mut doc = doc.borrow_mut();
 
-        for change in &params.content_changes {
-            let mut doc = doc.borrow_mut();
-
-            if let Some(range) = &change.range {
-                doc.replace_range(range, &change.text);
+                if let Some(range) = &change.range {
+                    doc.replace_range(range, &change.text);
+                }
             }
         }
 
-        //info!("  => {}", doc.borrow().text);
+        self.compile(&params.text_document.uri)?;
+        self.publish_diagnostics(&params.text_document.uri)?;
+
         Ok(())
     }
 }
@@ -576,17 +696,6 @@ impl Document {
 }
 
 // --- Event Loop
-
-fn write_response<T: Write, V: Serialize>(
-    writer: &mut T,
-    request: &Request,
-    value: V,
-) -> Result<(), HandlerError> {
-    let value = serde_json::to_value(value)?;
-    let response = Response::from_value(&request, value);
-
-    response.serialize_write(writer)
-}
 
 fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
     let mut content_length: Option<usize> = None;
@@ -652,12 +761,14 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
         "initialize" => {
             let params = request.take_params::<InitializeParams>()?;
             let result = conn.on_initialize(&params)?;
-            write_response(&mut io::stdout(), &request, result)?;
+
+            conn.send_response(&request, result)?;
         }
         "textDocument/semanticTokens/full" => {
             let params = request.take_params::<SemanticTokensParams>()?;
             let result = conn.on_text_document_semantic_tokens_full(&params)?;
-            write_response(&mut io::stdout(), &request, result)?;
+
+            conn.send_response(&request, result)?;
         }
         // Notifications
         "initialized" => {
