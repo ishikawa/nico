@@ -1,11 +1,5 @@
 use log::{info, warn};
-use lsp_types::{
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult,
-    InitializedParams, SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
-    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
-    SemanticTokensServerCapabilities, ServerCapabilities, ServerInfo, TextDocumentItem,
-    TextDocumentSyncCapability, TextDocumentSyncKind,
-};
+use lsp_types::*;
 use nico::syntax::{
     self, MissingTokenKind, NodePath, ParseError, Parser, Token, TokenKind, Trivia,
 };
@@ -51,6 +45,13 @@ struct ResponseError {
     code: i32,
     message: String,
     data: Option<Value>,
+}
+
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+struct Notification {
+    jsonrpc: String,
+    method: String,
+    params: Option<Value>,
 }
 
 #[derive(Debug)]
@@ -123,16 +124,6 @@ impl Response {
             result: Some(value),
             error: None,
         }
-    }
-
-    fn serialize_write<T: Write>(&self, writer: &mut T) -> Result<(), HandlerError> {
-        let json = serde_json::to_vec(self)?;
-
-        write!(writer, "Content-Length: {}\r\n\r\n", json.len())?;
-        writer.write_all(json.as_slice())?;
-        writer.flush()?;
-
-        Ok(())
     }
 }
 
@@ -585,7 +576,32 @@ fn write_response<T: Write, V: Serialize>(
     let value = serde_json::to_value(value)?;
     let response = Response::from_value(&request, value);
 
-    response.serialize_write(writer)
+    send_message(writer, &response)
+}
+
+fn send_message<T: Write, S: Serialize>(writer: &mut T, message: &S) -> Result<(), HandlerError> {
+    let json = serde_json::to_vec(message)?;
+
+    write!(writer, "Content-Length: {}\r\n\r\n", json.len())?;
+    writer.write_all(json.as_slice())?;
+    writer.flush()?;
+
+    Ok(())
+}
+
+fn send_notification<W: Write, P: Serialize>(
+    writer: &mut W,
+    method: &str,
+    params: P,
+) -> Result<(), HandlerError> {
+    let params = serde_json::to_value(params)?;
+    let notification = Notification {
+        jsonrpc: "2.0".to_string(),
+        method: method.to_string(),
+        params: Some(params),
+    };
+
+    send_message(writer, &notification)
 }
 
 fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
