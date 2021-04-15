@@ -163,17 +163,17 @@ impl syntax::Visitor for DiagnosticsCollector {
 
 #[derive(Debug)]
 struct SemanticTokenAbsoluteParams {
-    line: usize,
-    character: usize,
-    length: usize,
+    line: u32,
+    character: u32,
+    length: u32,
     token_type: SemanticTokenType,
     token_modifiers_bitset: u32,
 }
 
 #[derive(Debug, Default)]
 struct SemanticTokenizer {
-    token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
-    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, usize>>,
+    token_type_legend: Rc<HashMap<SemanticTokenType, u32>>,
+    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, u32>>,
     previous_line: u32,
     previous_character: u32,
     pub tokens: Vec<SemanticToken>,
@@ -181,8 +181,8 @@ struct SemanticTokenizer {
 
 impl SemanticTokenizer {
     pub fn new(
-        token_type_legend: &Rc<HashMap<SemanticTokenType, usize>>,
-        token_modifier_legend: &Rc<HashMap<SemanticTokenModifier, usize>>,
+        token_type_legend: &Rc<HashMap<SemanticTokenType, u32>>,
+        token_modifier_legend: &Rc<HashMap<SemanticTokenModifier, u32>>,
     ) -> Self {
         Self {
             token_type_legend: Rc::clone(token_type_legend),
@@ -303,14 +303,14 @@ impl SemanticTokenizer {
 
     fn add_semantic_token_absolute(&mut self, abs_sem_token: SemanticTokenAbsoluteParams) {
         let token_type = if let Some(ty) = self.token_type_legend.get(&abs_sem_token.token_type) {
-            u32::try_from(*ty).unwrap()
+            *ty
         } else {
             return;
         };
 
-        let line = u32::try_from(abs_sem_token.line).unwrap();
-        let character = u32::try_from(abs_sem_token.character).unwrap();
-        let length = u32::try_from(abs_sem_token.length).unwrap();
+        let line = abs_sem_token.line;
+        let character = abs_sem_token.character;
+        let length = abs_sem_token.length;
 
         let delta_line = line - self.previous_line;
         let delta_start = if self.previous_line == line {
@@ -374,8 +374,8 @@ struct Connection {
 #[derive(Debug, Clone)]
 struct ServerRegistrationOptions {
     // Semantic tokens
-    token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
-    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, usize>>,
+    token_type_legend: Rc<HashMap<SemanticTokenType, u32>>,
+    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, u32>>,
 }
 
 #[derive(Debug)]
@@ -495,10 +495,12 @@ impl Connection {
         let mut token_modifier_legend = HashMap::new();
 
         for (i, token_type) in token_types.iter().enumerate() {
-            token_type_legend.insert(token_type.clone(), i);
+            let t = u32::try_from(i).unwrap();
+            token_type_legend.insert(token_type.clone(), t);
         }
         for (i, token_modifier) in token_modifiers.iter().enumerate() {
-            token_modifier_legend.insert(token_modifier.clone(), i);
+            let t = u32::try_from(i).unwrap();
+            token_modifier_legend.insert(token_modifier.clone(), t);
         }
 
         // Initialized
