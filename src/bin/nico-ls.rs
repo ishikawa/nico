@@ -1,7 +1,7 @@
 use log::{info, warn};
 use lsp_types::*;
 use nico::syntax::{
-    self, MissingTokenKind, NodePath, ParseError, Parser, Token, TokenKind, Trivia,
+    self, MissingTokenKind, Node, NodePath, ParseError, Parser, Token, TokenKind, Trivia,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -128,26 +128,6 @@ impl Response {
 }
 
 // --- Language Server States
-
-#[derive(Debug, Default)]
-struct Connection {
-    documents: HashMap<Url, Rc<RefCell<Document>>>,
-    server_options: Option<ServerRegistrationOptions>,
-}
-
-/// These options are initialized in `on_initialize()` callback.
-#[derive(Debug, Clone)]
-struct ServerRegistrationOptions {
-    // Semantic tokens
-    token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
-    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, usize>>,
-}
-
-#[derive(Debug)]
-struct Document {
-    uri: Url,
-    text: String,
-}
 
 #[derive(Debug)]
 struct SemanticTokenAbsoluteParams {
@@ -351,6 +331,27 @@ impl syntax::Visitor for SemanticTokenizer {
     }
 }
 
+#[derive(Debug, Default)]
+struct Connection {
+    documents: HashMap<Url, Rc<RefCell<Document>>>,
+    compiled_results: HashMap<Url, Rc<Node>>,
+    server_options: Option<ServerRegistrationOptions>,
+}
+
+/// These options are initialized in `on_initialize()` callback.
+#[derive(Debug, Clone)]
+struct ServerRegistrationOptions {
+    // Semantic tokens
+    token_type_legend: Rc<HashMap<SemanticTokenType, usize>>,
+    token_modifier_legend: Rc<HashMap<SemanticTokenModifier, usize>>,
+}
+
+#[derive(Debug)]
+struct Document {
+    uri: Url,
+    text: String,
+}
+
 #[allow(clippy::unnecessary_wraps)]
 impl Connection {
     pub fn new() -> Self {
@@ -404,6 +405,21 @@ impl Connection {
         self.documents.get(uri).ok_or_else(|| HandlerError {
             kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
         })
+    }
+
+    fn get_compiled_result(&self, uri: &Url) -> Result<&Rc<Node>, HandlerError> {
+        self.compiled_results.get(uri).ok_or_else(|| HandlerError {
+            kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
+        })
+    }
+
+    fn compile(&mut self, uri: &Url) -> Result<Rc<Node>, HandlerError> {
+        let doc = self.get_document(uri)?;
+        let node = Rc::new(Parser::parse_string(&doc.borrow().text));
+
+        self.compiled_results.insert(uri.clone(), Rc::clone(&node));
+
+        Ok(node)
     }
 
     // Request callbacks
@@ -490,16 +506,15 @@ impl Connection {
         info!("[on_text_document_semantic_tokens_full] {:?}", params);
 
         let server_options = self.server_options()?;
-        let doc = self.get_document(&params.text_document.uri)?.borrow();
 
         let mut tokenizer = SemanticTokenizer::new(
             &server_options.token_type_legend,
             &server_options.token_modifier_legend,
         );
-        let node = Rc::new(Parser::parse_string(&doc.text));
+        let node = self.get_compiled_result(&params.text_document.uri)?;
 
-        syntax::bind_scopes(&node);
-        syntax::traverse(&mut tokenizer, &node, None);
+        syntax::bind_scopes(node);
+        syntax::traverse(&mut tokenizer, node, None);
 
         //info!("tokens = {:?}", tokenizer.tokens);
         Ok(SemanticTokens {
@@ -521,9 +536,12 @@ impl Connection {
         info!("[on_text_document_did_open] {:?}", params);
 
         let doc = Document::from(&params.text_document);
+        let doc = Rc::new(RefCell::new(doc));
 
         self.documents
-            .insert(doc.uri.clone(), Rc::new(RefCell::new(doc)));
+            .insert(doc.borrow().uri.clone(), Rc::clone(&doc));
+
+        self.compile(&doc.borrow().uri)?;
 
         Ok(())
     }
@@ -534,15 +552,19 @@ impl Connection {
     ) -> Result<(), HandlerError> {
         info!("[on_text_document_did_change] {:?}", params);
 
-        let doc = self.get_document(&params.text_document.uri)?;
+        {
+            let doc = self.get_document(&params.text_document.uri)?;
 
-        for change in &params.content_changes {
-            let mut doc = doc.borrow_mut();
+            for change in &params.content_changes {
+                let mut doc = doc.borrow_mut();
 
-            if let Some(range) = &change.range {
-                doc.replace_range(range, &change.text);
+                if let Some(range) = &change.range {
+                    doc.replace_range(range, &change.text);
+                }
             }
         }
+
+        self.compile(&params.text_document.uri)?;
 
         Ok(())
     }
