@@ -128,6 +128,38 @@ impl Response {
 }
 
 // --- Language Server States
+#[derive(Debug, Default)]
+struct DiagnosticsCollector {
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl syntax::Visitor for DiagnosticsCollector {
+    fn enter_missing_token(
+        &mut self,
+        path: &mut NodePath,
+        position: syntax::Position,
+        item: MissingTokenKind,
+    ) {
+        let diagnostic = Diagnostic {
+            range: Range {
+                start: Position {
+                    line: position.line,
+                    character: position.character.saturating_sub(1),
+                },
+                end: Position {
+                    line: position.line,
+                    character: position.character,
+                },
+            },
+            severity: Some(DiagnosticSeverity::Error),
+            message: format!("Syntax Error: expected {}", item),
+            source: Some("nico-ls".to_string()),
+            ..Diagnostic::default()
+        };
+
+        self.diagnostics.push(diagnostic);
+    }
+}
 
 #[derive(Debug)]
 struct SemanticTokenAbsoluteParams {

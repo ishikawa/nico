@@ -554,6 +554,20 @@ impl fmt::Display for TokenKind {
     }
 }
 
+impl fmt::Display for MissingTokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MissingTokenKind::TopLevel => write!(f, "declaration or statement"),
+            MissingTokenKind::FunctionName => write!(f, "a function name"),
+            MissingTokenKind::Expression => write!(f, "expression"),
+            MissingTokenKind::End => write!(f, "end"),
+            MissingTokenKind::EscapeSequence => write!(f, "escape sequence"),
+            MissingTokenKind::StringEnd => write!(f, "\""),
+            MissingTokenKind::Char(c) => write!(f, "{}", c),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
