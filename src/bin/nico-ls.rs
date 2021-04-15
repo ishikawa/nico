@@ -357,6 +357,43 @@ impl Connection {
         Self::default()
     }
 
+    pub fn send_response<V: Serialize>(
+        &self,
+        request: &Request,
+        value: V,
+    ) -> Result<(), HandlerError> {
+        let value = serde_json::to_value(value)?;
+        let response = Response::from_value(&request, value);
+
+        self.send_message(&response)
+    }
+
+    pub fn send_notification<P: Serialize>(
+        &self,
+        method: &str,
+        params: P,
+    ) -> Result<(), HandlerError> {
+        let params = serde_json::to_value(params)?;
+        let notification = Notification {
+            jsonrpc: "2.0".to_string(),
+            method: method.to_string(),
+            params: Some(params),
+        };
+
+        self.send_message(&notification)
+    }
+
+    fn send_message<S: Serialize>(&self, message: &S) -> Result<(), HandlerError> {
+        let mut writer = io::stdout();
+        let json = serde_json::to_vec(message)?;
+
+        write!(writer, "Content-Length: {}\r\n\r\n", json.len())?;
+        writer.write_all(json.as_slice())?;
+        writer.flush()?;
+
+        Ok(())
+    }
+
     fn server_options(&self) -> Result<&ServerRegistrationOptions, HandlerError> {
         self.server_options.as_ref().ok_or(HandlerError {
             kind: HandlerErrorKind::ServerNotInitialized,
@@ -507,7 +544,6 @@ impl Connection {
             }
         }
 
-        //info!("  => {}", doc.borrow().text);
         Ok(())
     }
 }
@@ -567,42 +603,6 @@ impl Document {
 }
 
 // --- Event Loop
-
-fn write_response<T: Write, V: Serialize>(
-    writer: &mut T,
-    request: &Request,
-    value: V,
-) -> Result<(), HandlerError> {
-    let value = serde_json::to_value(value)?;
-    let response = Response::from_value(&request, value);
-
-    send_message(writer, &response)
-}
-
-fn send_message<T: Write, S: Serialize>(writer: &mut T, message: &S) -> Result<(), HandlerError> {
-    let json = serde_json::to_vec(message)?;
-
-    write!(writer, "Content-Length: {}\r\n\r\n", json.len())?;
-    writer.write_all(json.as_slice())?;
-    writer.flush()?;
-
-    Ok(())
-}
-
-fn send_notification<W: Write, P: Serialize>(
-    writer: &mut W,
-    method: &str,
-    params: P,
-) -> Result<(), HandlerError> {
-    let params = serde_json::to_value(params)?;
-    let notification = Notification {
-        jsonrpc: "2.0".to_string(),
-        method: method.to_string(),
-        params: Some(params),
-    };
-
-    send_message(writer, &notification)
-}
 
 fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
     let mut content_length: Option<usize> = None;
@@ -668,12 +668,14 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
         "initialize" => {
             let params = request.take_params::<InitializeParams>()?;
             let result = conn.on_initialize(&params)?;
-            write_response(&mut io::stdout(), &request, result)?;
+
+            conn.send_response(&request, result)?;
         }
         "textDocument/semanticTokens/full" => {
             let params = request.take_params::<SemanticTokensParams>()?;
             let result = conn.on_text_document_semantic_tokens_full(&params)?;
-            write_response(&mut io::stdout(), &request, result)?;
+
+            conn.send_response(&request, result)?;
         }
         // Notifications
         "initialized" => {
