@@ -130,13 +130,19 @@ impl Response {
 // --- Language Server States
 #[derive(Debug, Default)]
 struct DiagnosticsCollector {
-    diagnostics: Vec<Diagnostic>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl DiagnosticsCollector {
+    pub fn new() -> Self {
+        DiagnosticsCollector::default()
+    }
 }
 
 impl syntax::Visitor for DiagnosticsCollector {
     fn enter_missing_token(
         &mut self,
-        path: &mut NodePath,
+        _path: &mut NodePath,
         position: syntax::Position,
         item: MissingTokenKind,
     ) {
@@ -367,6 +373,7 @@ impl syntax::Visitor for SemanticTokenizer {
 struct Connection {
     documents: HashMap<Url, Rc<RefCell<Document>>>,
     compiled_results: HashMap<Url, Rc<Node>>,
+    diagnostics: HashMap<Url, Vec<Diagnostic>>,
     server_options: Option<ServerRegistrationOptions>,
 }
 
@@ -427,6 +434,21 @@ impl Connection {
         Ok(())
     }
 
+    fn publish_diagnostics(&self, uri: &Url) -> Result<(), HandlerError> {
+        let diagnostic = self.get_diagnostics(uri)?;
+
+        let publish_diagnostics_params = PublishDiagnosticsParams {
+            uri: uri.clone(),
+            version: None,
+            diagnostics: diagnostic.clone(),
+        };
+
+        self.send_notification(
+            "textDocument/publishDiagnostics",
+            publish_diagnostics_params,
+        )
+    }
+
     fn server_options(&self) -> Result<&ServerRegistrationOptions, HandlerError> {
         self.server_options.as_ref().ok_or(HandlerError {
             kind: HandlerErrorKind::ServerNotInitialized,
@@ -445,13 +467,26 @@ impl Connection {
         })
     }
 
+    fn get_diagnostics(&self, uri: &Url) -> Result<&Vec<Diagnostic>, HandlerError> {
+        self.diagnostics.get(uri).ok_or_else(|| HandlerError {
+            kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
+        })
+    }
+
     fn compile(&mut self, uri: &Url) -> Result<Rc<Node>, HandlerError> {
         let doc = self.get_document(uri)?;
         let node = Rc::new(Parser::parse_string(&doc.borrow().text));
 
+        // Scopes
         syntax::bind_scopes(&node);
 
+        // Diagnostics
+        let mut diagnostics = DiagnosticsCollector::new();
+        syntax::traverse(&mut diagnostics, &node, None);
+
         self.compiled_results.insert(uri.clone(), Rc::clone(&node));
+        self.diagnostics
+            .insert(uri.clone(), diagnostics.diagnostics);
 
         Ok(node)
     }
@@ -577,6 +612,7 @@ impl Connection {
             .insert(doc.borrow().uri.clone(), Rc::clone(&doc));
 
         self.compile(&doc.borrow().uri)?;
+        self.publish_diagnostics(&doc.borrow().uri)?;
 
         Ok(())
     }
@@ -586,7 +622,6 @@ impl Connection {
         params: &DidChangeTextDocumentParams,
     ) -> Result<(), HandlerError> {
         info!("[on_text_document_did_change] {:?}", params);
-
         {
             let doc = self.get_document(&params.text_document.uri)?;
 
@@ -600,6 +635,7 @@ impl Connection {
         }
 
         self.compile(&params.text_document.uri)?;
+        self.publish_diagnostics(&params.text_document.uri)?;
 
         Ok(())
     }
