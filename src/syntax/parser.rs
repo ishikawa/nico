@@ -644,7 +644,7 @@ impl<'a> Parser<'a> {
                 _ => {
                     // Premature EOF or unknown token.
                     code.missing(
-                        self.tokenizer.current_position(),
+                        self.tokenizer.current_insertion_range().start,
                         MissingTokenKind::Char(close_char),
                     );
                     break;
@@ -1028,8 +1028,8 @@ mod tests {
 
         let (position, item) = unwrap_missing_token(tokens[3]);
         assert_eq!(item, MissingTokenKind::Char(']'));
-        assert_eq!(position.line, 1);
-        assert_eq!(position.character, 1);
+        assert_eq!(position.line, 0);
+        assert_eq!(position.character, 2);
     }
 
     #[test]
@@ -1048,8 +1048,10 @@ mod tests {
             let tokens = stmt.expression.code().collect::<Vec<_>>();
             assert_eq!(tokens.len(), 4);
 
-            let (_, item) = unwrap_missing_token(tokens[3]);
+            let (position, item) = unwrap_missing_token(tokens[3]);
             assert_eq!(item, MissingTokenKind::Char(']'));
+            assert_eq!(position.line, 0);
+            assert_eq!(position.character, 2);
         }
     }
 
