@@ -117,7 +117,7 @@ enum TokenizerMode {
 pub enum SyntaxToken {
     Interpreted(Token),
     Missing {
-        position: Position,
+        range: EffectiveRange,
         item: MissingTokenKind,
     },
     /// A skipped token with the description of an expected node.
@@ -144,6 +144,7 @@ pub struct Tokenizer<'a> {
     chars: Peekable<Chars<'a>>,
     at_end: bool,
     newline_seen: bool,
+    previous_token: Option<Token>,
     /// Tracking the range of token.
     lineno: usize,
     columnno: usize,
@@ -169,6 +170,7 @@ impl<'a> Tokenizer<'a> {
             start_position: None,
             token_text: "".to_string(),
             peeked: None,
+            previous_token: None,
         }
     }
 
@@ -192,6 +194,18 @@ impl<'a> Tokenizer<'a> {
 
     pub fn peek_kind(&mut self) -> &TokenKind {
         &self.peek().kind
+    }
+
+    /// Returns the effective range of the token at the current position that would be
+    /// appropriate if a new token were to be inserted.
+    pub fn current_insertion_range(&self) -> EffectiveRange {
+        if self.newline_seen || self.is_at_end() {
+            if let Some(ref token) = self.previous_token {
+                return token.range;
+            }
+        }
+
+        self.current_range()
     }
 
     pub fn current_position(&self) -> Position {
@@ -230,10 +244,13 @@ impl<'a> Tokenizer<'a> {
     }
 
     pub fn next_token(&mut self) -> Token {
-        match self.peeked.take() {
+        let token = match self.peeked.take() {
             Some(v) => v,
             None => self.advance_token(),
-        }
+        };
+
+        self.previous_token = Some(token.clone());
+        token
     }
 
     fn begin_token(&mut self) {
