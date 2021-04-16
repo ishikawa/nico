@@ -117,7 +117,7 @@ enum TokenizerMode {
 pub enum SyntaxToken {
     Interpreted(Token),
     Missing {
-        position: Position,
+        range: EffectiveRange,
         item: MissingTokenKind,
     },
     /// A skipped token with the description of an expected node.

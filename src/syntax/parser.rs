@@ -114,7 +114,7 @@ impl<'a> Parser<'a> {
                     // Umm, maybe user forgot/omitted a function name?
                     // I'm sorry, but this language is not JavaScript.
                     code.missing(
-                        self.tokenizer.current_position(),
+                        self.tokenizer.current_insertion_range(),
                         MissingTokenKind::FunctionName,
                     );
                     break;
@@ -164,7 +164,10 @@ impl<'a> Parser<'a> {
                 TokenKind::Eos => {
                     // Maybe user forgot `end`.
                     // I'm sorry, but this language is like Ruby not Python.
-                    code.missing(self.tokenizer.current_position(), MissingTokenKind::End);
+                    code.missing(
+                        self.tokenizer.current_insertion_range(),
+                        MissingTokenKind::End,
+                    );
                     break;
                 }
                 _ => {
@@ -461,7 +464,7 @@ impl<'a> Parser<'a> {
                 }
                 _ => {
                     code.missing(
-                        self.tokenizer.current_position(),
+                        self.tokenizer.current_insertion_range(),
                         MissingTokenKind::StringEnd,
                     );
                     has_error = true;
@@ -501,7 +504,7 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::Eos | TokenKind::Char('\n') => {
                     code.missing(
-                        self.tokenizer.current_position(),
+                        self.tokenizer.current_insertion_range(),
                         MissingTokenKind::Char(')'),
                     );
                     break;
@@ -567,7 +570,7 @@ impl<'a> Parser<'a> {
                 TokenKind::Eos => {
                     // Oh, is it over?
                     code.missing(
-                        self.tokenizer.current_position(),
+                        self.tokenizer.current_insertion_range(),
                         MissingTokenKind::Char(open_char),
                     );
                     break;
@@ -578,7 +581,7 @@ impl<'a> Parser<'a> {
                     //     # (
                     //     )
                     code.missing(
-                        self.tokenizer.current_position(),
+                        self.tokenizer.current_insertion_range(),
                         MissingTokenKind::Char(open_char),
                     );
                     break;
@@ -593,7 +596,7 @@ impl<'a> Parser<'a> {
                         consumed = true;
 
                         code.missing(
-                            self.tokenizer.current_position(),
+                            self.tokenizer.current_insertion_range(),
                             MissingTokenKind::Char(open_char),
                         );
                         code.node(&expr);
@@ -644,7 +647,7 @@ impl<'a> Parser<'a> {
                 _ => {
                     // Premature EOF or unknown token.
                     code.missing(
-                        self.tokenizer.current_insertion_range().start,
+                        self.tokenizer.current_insertion_range(),
                         MissingTokenKind::Char(close_char),
                     );
                     break;
@@ -740,7 +743,7 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::syntax::{ExpressionKind, Position, SyntaxToken, Token};
+    use crate::syntax::{EffectiveRange, ExpressionKind, SyntaxToken, Token};
     use assert_matches::assert_matches;
 
     #[test]
@@ -1026,10 +1029,11 @@ mod tests {
         let tokens = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 4);
 
-        let (position, item) = unwrap_missing_token(tokens[3]);
+        let (range, item) = unwrap_missing_token(tokens[3]);
         assert_eq!(item, MissingTokenKind::Char(']'));
-        assert_eq!(position.line, 0);
-        assert_eq!(position.character, 2);
+        assert_eq!(range.start.line, 0);
+        assert_eq!(range.start.character, 2);
+        assert_eq!(range.length, 1);
     }
 
     #[test]
@@ -1048,10 +1052,11 @@ mod tests {
             let tokens = stmt.expression.code().collect::<Vec<_>>();
             assert_eq!(tokens.len(), 4);
 
-            let (position, item) = unwrap_missing_token(tokens[3]);
+            let (range, item) = unwrap_missing_token(tokens[3]);
             assert_eq!(item, MissingTokenKind::Char(']'));
-            assert_eq!(position.line, 0);
-            assert_eq!(position.character, 2);
+            assert_eq!(range.start.line, 0);
+            assert_eq!(range.start.character, 2);
+            assert_eq!(range.length, 1);
         }
     }
 
@@ -1134,10 +1139,10 @@ mod tests {
         panic!("expected interpreted token");
     }
 
-    fn unwrap_missing_token(kind: &CodeKind) -> (Position, MissingTokenKind) {
+    fn unwrap_missing_token(kind: &CodeKind) -> (EffectiveRange, MissingTokenKind) {
         if let CodeKind::SyntaxToken(token) = kind {
-            if let SyntaxToken::Missing { position, item } = token {
-                return (position.clone(), item.clone());
+            if let SyntaxToken::Missing { range, item } = token {
+                return (range.clone(), item.clone());
             }
         }
 

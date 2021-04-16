@@ -1,7 +1,8 @@
 use log::{info, warn};
 use lsp_types::*;
 use nico::syntax::{
-    self, MissingTokenKind, Node, NodePath, ParseError, Parser, Token, TokenKind, Trivia,
+    self, EffectiveRange, MissingTokenKind, Node, NodePath, ParseError, Parser, Token, TokenKind,
+    Trivia,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -143,18 +144,18 @@ impl syntax::Visitor for DiagnosticsCollector {
     fn enter_missing_token(
         &mut self,
         _path: &mut NodePath,
-        position: syntax::Position,
+        range: EffectiveRange,
         item: MissingTokenKind,
     ) {
         let diagnostic = Diagnostic {
             range: Range {
                 start: Position {
-                    line: position.line,
-                    character: position.character.saturating_sub(1),
+                    line: range.start.line,
+                    character: range.start.character,
                 },
                 end: Position {
-                    line: position.line,
-                    character: position.character,
+                    line: range.end.line,
+                    character: range.end.character,
                 },
             },
             severity: Some(DiagnosticSeverity::Error),

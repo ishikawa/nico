@@ -6,7 +6,7 @@ use std::{
 use crate::syntax::Token;
 use crate::{syntax::tree::*, util::wrap};
 
-use super::{MissingTokenKind, Position, Scope, SyntaxToken, Trivia, TriviaKind};
+use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Trivia, TriviaKind};
 
 pub struct NodePath {
     skipped: bool,
@@ -132,14 +132,14 @@ pub trait Visitor {
     fn enter_missing_token(
         &mut self,
         path: &mut NodePath,
-        position: Position,
+        range: EffectiveRange,
         item: MissingTokenKind,
     ) {
     }
     fn exit_missing_token(
         &mut self,
         path: &mut NodePath,
-        position: Position,
+        range: EffectiveRange,
         item: MissingTokenKind,
     ) {
     }
@@ -397,8 +397,8 @@ fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     SyntaxToken::Interpreted(token) => {
                         traverse_interpreted_token(visitor, &mut path, token)
                     }
-                    SyntaxToken::Missing { position, item } => {
-                        traverse_missing_token(visitor, &mut path, *position, *item)
+                    SyntaxToken::Missing { range, item } => {
+                        traverse_missing_token(visitor, &mut path, *range, *item)
                     }
                     SyntaxToken::Skipped { token, expected } => {
                         traverse_skipped_token(visitor, &mut path, token, *expected)
@@ -447,14 +447,14 @@ fn traverse_interpreted_token(visitor: &mut dyn Visitor, path: &mut NodePath, to
 fn traverse_missing_token(
     visitor: &mut dyn Visitor,
     path: &mut NodePath,
-    position: Position,
+    range: EffectiveRange,
     item: MissingTokenKind,
 ) {
     if !path.skipped {
-        visitor.enter_missing_token(path, position, item);
+        visitor.enter_missing_token(path, range, item);
     }
     if !path.skipped {
-        visitor.exit_missing_token(path, position, item);
+        visitor.exit_missing_token(path, range, item);
     }
 }
 

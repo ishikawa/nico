@@ -1,4 +1,4 @@
-use super::{MissingTokenKind, Position, Scope, SyntaxToken, Token};
+use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::{sem, util::wrap};
 use std::rc::Rc;
 use std::slice;
@@ -361,11 +361,9 @@ impl Code {
         self
     }
 
-    pub fn missing(&mut self, position: Position, item: MissingTokenKind) -> &mut Self {
-        self.code.push(CodeKind::SyntaxToken(SyntaxToken::Missing {
-            position,
-            item,
-        }));
+    pub fn missing(&mut self, range: EffectiveRange, item: MissingTokenKind) -> &mut Self {
+        self.code
+            .push(CodeKind::SyntaxToken(SyntaxToken::Missing { range, item }));
         self
     }
 
