@@ -486,19 +486,15 @@ impl Node {
     }
 
     pub fn variable_expression(&self) -> Option<&Identifier> {
-        if let Some(expr) = self.expression() {
-            expr.variable_expression()
-        } else {
-            None
-        }
+        self.expression().and_then(Expression::variable_expression)
     }
 
     pub fn unary_expression(&self) -> Option<&UnaryExpression> {
-        if let Some(expr) = self.expression() {
-            expr.unary_expression()
-        } else {
-            None
-        }
+        self.expression().and_then(Expression::unary_expression)
+    }
+
+    pub fn call_expression(&self) -> Option<&CallExpression> {
+        self.expression().and_then(Expression::call_expression)
     }
 
     pub fn is_function_definition(&self) -> bool {
@@ -518,21 +514,13 @@ impl Node {
     }
 
     pub fn is_call_expression(&self) -> bool {
-        if let Some(expr) = self.expression() {
-            expr.is_call_expression()
-        } else {
-            false
-        }
+        self.call_expression().is_some()
     }
 }
 
 impl Expression {
     pub fn new(kind: ExpressionKind, r#type: Rc<RefCell<sem::Type>>) -> Self {
         Self { kind, r#type }
-    }
-
-    pub fn is_call_expression(&self) -> bool {
-        matches!(self.kind, ExpressionKind::CallExpression(_))
     }
 
     pub fn variable_expression(&self) -> Option<&Identifier> {
@@ -569,6 +557,22 @@ impl Expression {
 
     pub fn array_expression(&self) -> Option<&ArrayExpression> {
         if let ExpressionKind::ArrayExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn call_expression(&self) -> Option<&CallExpression> {
+        if let ExpressionKind::CallExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn if_expression(&self) -> Option<&IfExpression> {
+        if let ExpressionKind::IfExpression(ref expr) = self.kind {
             Some(expr)
         } else {
             None

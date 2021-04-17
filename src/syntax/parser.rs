@@ -1157,6 +1157,29 @@ mod tests {
         assert_matches!(token.kind, TokenKind::Char(']'));
     }
 
+    // If expression
+    #[test]
+    fn if_expression() {
+        let stmt = parse_statement(
+            "if x > 0
+            10
+        else
+            20
+        end",
+        );
+        let stmt = stmt.statement().unwrap();
+        let expr = stmt.expression().if_expression().unwrap();
+
+        assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
+            let condition = condition.as_ref().unwrap().expression().unwrap();
+
+            assert_matches!(condition.kind, ExpressionKind::BinaryExpression(..));
+            assert!(then_body.block().is_some());
+            assert!(else_body.is_some());
+            assert!(else_body.as_ref().unwrap().block().is_some());
+        });
+    }
+
     // --- helpers
 
     fn parse_statement(src: &str) -> Rc<Node> {
