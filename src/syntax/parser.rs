@@ -1,4 +1,4 @@
-use super::{tree::*, MissingTokenKind, TokenKind, Tokenizer};
+use super::*;
 use crate::sem;
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
@@ -143,41 +143,7 @@ impl<'a> Parser<'a> {
 
     fn read_function_body(&mut self) -> Node {
         self.debug_trace("read_function_body");
-
-        let mut code = Code::new();
-
-        // body
-        let mut body = vec![];
-
-        loop {
-            if let Some(stmt) = self.parse_stmt() {
-                code.node(&stmt);
-                body.push(stmt);
-            }
-
-            match self.tokenizer.peek_kind() {
-                TokenKind::End => {
-                    // Okay, it's done.
-                    code.interpret(self.tokenizer.next_token());
-                    break;
-                }
-                TokenKind::Eos => {
-                    // Maybe user forgot `end`.
-                    // I'm sorry, but this language is like Ruby not Python.
-                    code.missing(
-                        self.tokenizer.current_insertion_range(),
-                        MissingTokenKind::End,
-                    );
-                    break;
-                }
-                _ => {
-                    // Continue until read identifier or over.
-                    code.skip(self.tokenizer.next_token(), MissingTokenKind::End);
-                }
-            }
-        }
-
-        Node::new(NodeKind::Block(Block::new(body)), code)
+        self._read_block(&[TokenKind::End])
     }
 
     fn parse_function_parameter(&mut self) -> Option<Rc<Node>> {
@@ -545,6 +511,49 @@ impl<'a> Parser<'a> {
             )),
             code,
         )
+    }
+
+    fn _read_block(&mut self, stop_tokens: &[TokenKind]) -> Node {
+        let mut code = Code::new();
+
+        // body
+        let mut body = vec![];
+
+        loop {
+            if let Some(stmt) = self.parse_stmt() {
+                code.node(&stmt);
+                body.push(stmt);
+            }
+
+            match self.tokenizer.peek_kind() {
+                TokenKind::End => {
+                    // Okay, it's done.
+                    code.interpret(self.tokenizer.next_token());
+                    break;
+                }
+                TokenKind::Eos => {
+                    // Maybe user forgot `end`.
+                    // I'm sorry, but this language is like Ruby not Python.
+                    code.missing(
+                        self.tokenizer.current_insertion_range(),
+                        MissingTokenKind::End,
+                    );
+                    break;
+                }
+                token => {
+                    if stop_tokens.contains(token) {
+                        // Okay, it's done.
+                        code.interpret(self.tokenizer.next_token());
+                        break;
+                    }
+
+                    // Continue until read identifier or over.
+                    code.skip(self.tokenizer.next_token(), MissingTokenKind::End);
+                }
+            }
+        }
+
+        Node::new(NodeKind::Block(Block::new(body)), code)
     }
 
     /// Read comma-separated elements from the start character token specified by `open_char` to
