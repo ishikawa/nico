@@ -562,13 +562,17 @@ impl<'a> Parser<'a> {
         // body
         let mut body = vec![];
 
+        // A separator must be appear before block
+        self.tokenizer.peek();
+        let mut newline_seen = self.tokenizer.is_newline_seen();
+        let mut insertion_range = self.tokenizer.current_insertion_range();
+
         loop {
-            // A separator must be appear before block
-            self.tokenizer.peek();
-            let newline_seen = self.tokenizer.is_newline_seen();
-            let insertion_range = self.tokenizer.current_insertion_range();
+            let mut stmt_seen = false;
 
             if let Some(stmt) = self.parse_stmt() {
+                stmt_seen = true;
+
                 if !newline_seen {
                     code.missing(insertion_range, MissingTokenKind::Separator);
                 }
@@ -589,12 +593,19 @@ impl<'a> Parser<'a> {
                 }
                 token => {
                     if stop_tokens.contains(token) {
-                        // Okay, it's done. don't consume a token.
+                        // Okay, it's done. don't consume a stop token.
                         break;
                     }
 
-                    // Continue until read identifier or over.
-                    code.skip(self.tokenizer.next_token(), MissingTokenKind::End);
+                    newline_seen = self.tokenizer.is_newline_seen();
+                    insertion_range = self.tokenizer.current_insertion_range();
+
+                    // `parse_stmt()` should consume at least one token.
+                    // However, in case `parse_stmt()` have not been able to consume a single token,
+                    // we have to skip the current token.
+                    if !stmt_seen {
+                        code.skip(self.tokenizer.next_token(), MissingTokenKind::Statement);
+                    }
                 }
             }
         }
