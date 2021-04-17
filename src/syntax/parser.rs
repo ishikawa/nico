@@ -349,6 +349,7 @@ impl<'a> Parser<'a> {
             TokenKind::StringStart => self.read_string(),
             TokenKind::Char('(') => self.read_paren(),
             TokenKind::Char('[') => self.read_array(),
+            TokenKind::If => self.read_if_expression(),
             _ => return None,
         };
 
@@ -503,6 +504,49 @@ impl<'a> Parser<'a> {
         Node::new(
             NodeKind::Expression(Expression::new(
                 ExpressionKind::ArrayExpression(expr),
+                self.new_type_var(),
+            )),
+            code,
+        )
+    }
+
+    fn read_if_expression(&mut self) -> Node {
+        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "if"
+        let condition = self.parse_expr();
+
+        if let Some(ref node) = condition {
+            code.node(node);
+        } else {
+            // missed condition expression
+            code.missing(
+                self.tokenizer.current_insertion_range(),
+                MissingTokenKind::Expression,
+            );
+        }
+
+        // body
+        let then_body = Rc::new(self._read_block(&[TokenKind::End, TokenKind::Else]));
+        let has_else = *self.tokenizer.peek_kind() == TokenKind::Else;
+
+        code.node(&then_body);
+        code.interpret(self.tokenizer.next_token()); // "else" or "end"
+
+        let else_body = if has_else {
+            let else_body = Rc::new(self._read_block(&[TokenKind::End]));
+
+            code.node(&else_body);
+            code.interpret(self.tokenizer.next_token()); //  "end"
+
+            Some(else_body)
+        } else {
+            None
+        };
+
+        let expr = IfExpression::new(condition, then_body, else_body);
+
+        Node::new(
+            NodeKind::Expression(Expression::new(
+                ExpressionKind::IfExpression(expr),
                 self.new_type_var(),
             )),
             code,

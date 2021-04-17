@@ -299,6 +299,27 @@ impl ArrayExpression {
 }
 
 #[derive(Debug)]
+pub struct IfExpression {
+    pub condition: Option<Rc<Node>>,
+    pub then_body: Rc<Node>,
+    pub else_body: Option<Rc<Node>>,
+}
+
+impl IfExpression {
+    pub fn new(
+        condition: Option<Rc<Node>>,
+        then_body: Rc<Node>,
+        else_body: Option<Rc<Node>>,
+    ) -> Self {
+        Self {
+            condition,
+            then_body,
+            else_body,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
     pub operand: Option<Rc<Node>>,
@@ -335,6 +356,7 @@ pub enum ExpressionKind {
     SubscriptExpression(SubscriptExpression),
     CallExpression(CallExpression),
     ArrayExpression(ArrayExpression),
+    IfExpression(IfExpression),
     Expression(Rc<Node>),
 }
 
@@ -659,6 +681,7 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::SubscriptExpression(_) => write!(f, "SubscriptExpression"),
             ExpressionKind::CallExpression(_) => write!(f, "CallExpression"),
             ExpressionKind::ArrayExpression(_) => write!(f, "ArrayExpression"),
+            ExpressionKind::IfExpression(_) => write!(f, "IfExpression"),
             ExpressionKind::Expression(expr) => write!(f, "({})", expr.kind()),
         }
     }
