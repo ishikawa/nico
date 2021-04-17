@@ -1162,10 +1162,10 @@ mod tests {
     fn if_expression() {
         let stmt = parse_statement(
             "if x > 0
-            10
-        else
-            20
-        end",
+                10
+            else
+                20
+            end",
         );
         let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().if_expression().unwrap();
@@ -1177,6 +1177,21 @@ mod tests {
             assert!(then_body.block().is_some());
             assert!(else_body.is_some());
             assert!(else_body.as_ref().unwrap().block().is_some());
+        });
+    }
+
+    fn if_expression_missing_condition() {
+        let stmt = parse_statement("if\nend");
+        let stmt = stmt.statement().unwrap();
+        let expr = stmt.expression().if_expression().unwrap();
+
+        assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
+            assert!(condition.is_none());
+            assert!(else_body.is_none());
+
+            let then_body = then_body.block().unwrap();
+            let stmts = then_body.statements();
+            assert!(stmts.is_empty());
         });
     }
 
