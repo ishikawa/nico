@@ -135,6 +135,7 @@ pub enum MissingTokenKind {
     End,
     EscapeSequence,
     StringEnd,
+    Separator, // newline
     Char(char),
 }
 
@@ -587,6 +588,7 @@ impl fmt::Display for MissingTokenKind {
             MissingTokenKind::End => write!(f, "end"),
             MissingTokenKind::EscapeSequence => write!(f, "escape sequence"),
             MissingTokenKind::StringEnd => write!(f, "\""),
+            MissingTokenKind::Separator => write!(f, "\\n"),
             MissingTokenKind::Char(c) => write!(f, "{}", c),
         }
     }

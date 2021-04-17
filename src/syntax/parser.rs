@@ -563,7 +563,16 @@ impl<'a> Parser<'a> {
         let mut body = vec![];
 
         loop {
+            // A separator must be appear before block
+            self.tokenizer.peek();
+            let newline_seen = self.tokenizer.is_newline_seen();
+            let insertion_range = self.tokenizer.current_insertion_range();
+
             if let Some(stmt) = self.parse_stmt() {
+                if !newline_seen {
+                    code.missing(insertion_range, MissingTokenKind::Separator);
+                }
+
                 code.node(&stmt);
                 body.push(stmt);
             }
@@ -1180,6 +1189,7 @@ mod tests {
         });
     }
 
+    #[test]
     fn if_expression_missing_condition() {
         let stmt = parse_statement("if\nend");
         let stmt = stmt.statement().unwrap();
@@ -1193,6 +1203,46 @@ mod tests {
             let stmts = then_body.statements();
             assert!(stmts.is_empty());
         });
+    }
+
+    #[test]
+    fn if_expression_missing_newline() {
+        let stmt = parse_statement("if b x end");
+        let stmt = stmt.statement().unwrap();
+
+        assert!(stmt.expression().if_expression().is_some());
+
+        // tokens
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 4);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(token.kind, TokenKind::If);
+
+        let node = unwrap_node(tokens[1]);
+        assert!(node.is_expression());
+
+        let node = unwrap_node(tokens[2]);
+        assert!(node.is_block());
+
+        {
+            let tokens = node.code().collect::<Vec<_>>();
+
+            assert_eq!(tokens.len(), 2);
+
+            let (range, item) = unwrap_missing_token(tokens[0]);
+            assert_eq!(item, MissingTokenKind::Separator);
+            assert_eq!(range.start.line, 0);
+            assert_eq!(range.start.character, 5);
+            assert_eq!(range.end.line, 0);
+            assert_eq!(range.end.character, 6);
+
+            let node = unwrap_node(tokens[1]);
+            assert!(node.is_statement());
+        }
+
+        let token = unwrap_interpreted_token(tokens[3]);
+        assert_matches!(token.kind, TokenKind::End);
     }
 
     // --- helpers

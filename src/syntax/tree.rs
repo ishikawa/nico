@@ -505,6 +505,14 @@ impl Node {
         matches!(self.kind, NodeKind::FunctionParameter(_))
     }
 
+    pub fn is_block(&self) -> bool {
+        matches!(self.kind, NodeKind::Block(_))
+    }
+
+    pub fn is_statement(&self) -> bool {
+        matches!(self.kind, NodeKind::Statement(_))
+    }
+
     pub fn is_expression(&self) -> bool {
         matches!(self.kind, NodeKind::Expression(_))
     }
