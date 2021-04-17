@@ -131,19 +131,15 @@ impl<'a> Parser<'a> {
             self._parse_elements('(', ')', &mut code, Parser::parse_function_parameter);
 
         // body
-        let body = Rc::new(self.read_function_body());
+        let body = Rc::new(self._read_block(&[TokenKind::End]));
 
         code.node(&body);
+        code.interpret(self.tokenizer.next_token()); // end
 
         Some(Rc::new(Node::new(
             NodeKind::FunctionDefinition(FunctionDefinition::new(function_name, parameters, body)),
             code,
         )))
-    }
-
-    fn read_function_body(&mut self) -> Node {
-        self.debug_trace("read_function_body");
-        self._read_block(&[TokenKind::End])
     }
 
     fn parse_function_parameter(&mut self) -> Option<Rc<Node>> {
@@ -513,6 +509,9 @@ impl<'a> Parser<'a> {
         )
     }
 
+    /// Reads statements until it meets a token listed in `stop_tokens`.
+    /// But this function doesn't consume a stop token itself, consuming
+    /// a stop token is caller's responsibility.
     fn _read_block(&mut self, stop_tokens: &[TokenKind]) -> Node {
         let mut code = Code::new();
 
@@ -526,11 +525,6 @@ impl<'a> Parser<'a> {
             }
 
             match self.tokenizer.peek_kind() {
-                TokenKind::End => {
-                    // Okay, it's done.
-                    code.interpret(self.tokenizer.next_token());
-                    break;
-                }
                 TokenKind::Eos => {
                     // Maybe user forgot `end`.
                     // I'm sorry, but this language is like Ruby not Python.
@@ -542,8 +536,7 @@ impl<'a> Parser<'a> {
                 }
                 token => {
                     if stop_tokens.contains(token) {
-                        // Okay, it's done.
-                        code.interpret(self.tokenizer.next_token());
+                        // Okay, it's done. don't consume a token.
                         break;
                     }
 
