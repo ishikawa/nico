@@ -581,11 +581,22 @@ impl<'a> Parser<'a> {
                 TokenKind::When => {
                     // when
                     code.interpret(self.tokenizer.next_token());
-                    let pattern = self._parse_optional_item(
-                        &mut code,
-                        Parser::parse_pattern,
-                        MissingTokenKind::Pattern,
-                    );
+
+                    // To avoid syntactic ambiguity, no newline can be placed after `when` keyword.
+                    self.tokenizer.peek();
+                    let pattern = if self.tokenizer.is_newline_seen() {
+                        code.missing(
+                            self.tokenizer.current_insertion_range(),
+                            MissingTokenKind::Pattern,
+                        );
+                        None
+                    } else {
+                        self._parse_optional_item(
+                            &mut code,
+                            Parser::parse_pattern,
+                            MissingTokenKind::Pattern,
+                        )
+                    };
 
                     // guard
                     let mut guard = None;
