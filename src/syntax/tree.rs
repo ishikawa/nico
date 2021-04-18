@@ -352,6 +352,10 @@ impl CaseArm {
             then_body,
         }
     }
+
+    pub fn pattern(&self) -> Option<&Pattern> {
+        self.pattern.as_ref().map(|p| p.pattern().unwrap())
+    }
 }
 
 #[derive(Debug)]
@@ -398,7 +402,7 @@ pub enum ExpressionKind {
 
 #[derive(Debug)]
 pub struct Pattern {
-    kind: PatternKind,
+    pub kind: PatternKind,
 }
 
 impl Pattern {

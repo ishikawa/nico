@@ -365,6 +365,7 @@ impl<'a> Parser<'a> {
             TokenKind::Integer(_) => self.read_integer(true),
             TokenKind::Identifier(_) => self.read_identifier(true),
             TokenKind::StringStart => self.read_string(true),
+            TokenKind::Char('[') => self.read_array_pattern(),
             _ => return None,
         };
 
@@ -528,6 +529,18 @@ impl<'a> Parser<'a> {
                 ExpressionKind::ArrayExpression(expr),
                 self.new_type_var(),
             )),
+            code,
+        )
+    }
+
+    fn read_array_pattern(&mut self) -> Node {
+        let mut code = Code::new();
+        let elements = self._parse_elements('[', ']', &mut code, Parser::parse_pattern);
+
+        let expr = ArrayPattern::new(elements);
+
+        Node::new(
+            NodeKind::Pattern(Pattern::new(PatternKind::ArrayPattern(expr))),
             code,
         )
     }
@@ -1387,10 +1400,12 @@ mod tests {
                 2
             when y
                 3
-            when x if x > 10
+            when [1, x]
                 4
-            else
+            when x if x > 10
                 5
+            else
+                6
             end",
         );
         let stmt = stmt.statement().unwrap();
@@ -1399,6 +1414,32 @@ mod tests {
         assert_matches!(expr, CaseExpression { head, arms, else_body } => {
             assert!(head.is_some());
             assert!(!arms.is_empty());
+
+            // when 123
+            assert!(arms[0].pattern.is_some());
+            assert!(arms[0].guard.is_none());
+            assert_matches!(arms[0].pattern().unwrap().kind, PatternKind::IntegerPattern(..));
+
+            // when \"string\"
+            assert!(arms[1].pattern.is_some());
+            assert!(arms[1].guard.is_none());
+            assert_matches!(arms[1].pattern().unwrap().kind, PatternKind::StringPattern(..));
+
+            // when y
+            assert!(arms[2].pattern.is_some());
+            assert!(arms[2].guard.is_none());
+            assert_matches!(arms[2].pattern().unwrap().kind, PatternKind::VariablePattern(..));
+
+            // when [1, x]
+            assert!(arms[3].pattern.is_some());
+            assert!(arms[3].guard.is_none());
+            assert_matches!(arms[3].pattern().unwrap().kind, PatternKind::ArrayPattern(..));
+
+            // when x if x > 10
+            assert!(arms[4].pattern.is_some());
+            assert!(arms[4].guard.is_some());
+            assert_matches!(arms[4].pattern().unwrap().kind, PatternKind::VariablePattern(..));
+
             assert!(else_body.is_some());
         });
     }
