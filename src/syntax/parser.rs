@@ -1375,6 +1375,34 @@ mod tests {
         assert_matches!(token.kind, TokenKind::End);
     }
 
+    // If expression
+    #[test]
+    fn case_expression() {
+        let stmt = parse_statement(
+            "
+            case x
+            when 123
+                1
+            when \"string\"
+                2
+            when y
+                3
+            when x if x > 10
+                4
+            else
+                5
+            end",
+        );
+        let stmt = stmt.statement().unwrap();
+        let expr = stmt.expression().case_expression().unwrap();
+
+        assert_matches!(expr, CaseExpression { head, arms, else_body } => {
+            assert!(head.is_some());
+            assert!(!arms.is_empty());
+            assert!(else_body.is_some());
+        });
+    }
+
     // --- helpers
 
     fn parse_statement(src: &str) -> Rc<Node> {

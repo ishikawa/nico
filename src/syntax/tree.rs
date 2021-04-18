@@ -652,6 +652,14 @@ impl Expression {
             None
         }
     }
+
+    pub fn case_expression(&self) -> Option<&CaseExpression> {
+        if let ExpressionKind::CaseExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
 }
 
 // -- Iterators
