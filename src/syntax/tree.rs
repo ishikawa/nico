@@ -320,6 +320,40 @@ impl IfExpression {
 }
 
 #[derive(Debug)]
+pub struct CaseExpression {
+    pub head: Option<Rc<Node>>,
+    pub arms: Vec<CaseArm>,
+    pub else_body: Option<Rc<Node>>,
+}
+
+impl CaseExpression {
+    pub fn new(head: Option<Rc<Node>>, arms: Vec<CaseArm>, else_body: Option<Rc<Node>>) -> Self {
+        Self {
+            head,
+            arms,
+            else_body,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CaseArm {
+    pub pattern: Option<PatternKind>,
+    pub guard: Option<Rc<Node>>,
+    pub then_body: Rc<Node>,
+}
+
+impl CaseArm {
+    pub fn new(pattern: Option<PatternKind>, guard: Option<Rc<Node>>, then_body: Rc<Node>) -> Self {
+        Self {
+            pattern,
+            guard,
+            then_body,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
     pub operand: Option<Rc<Node>>,
@@ -357,7 +391,15 @@ pub enum ExpressionKind {
     CallExpression(CallExpression),
     ArrayExpression(ArrayExpression),
     IfExpression(IfExpression),
+    CaseExpression(CaseExpression),
     Expression(Rc<Node>),
+}
+
+#[derive(Debug)]
+pub enum PatternKind {
+    IntegerPattern(IntegerLiteral),
+    StringPattern(StringLiteral),
+    VariablePattern(Identifier),
 }
 
 impl Code {
@@ -694,6 +736,7 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::CallExpression(_) => write!(f, "CallExpression"),
             ExpressionKind::ArrayExpression(_) => write!(f, "ArrayExpression"),
             ExpressionKind::IfExpression(_) => write!(f, "IfExpression"),
+            ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
             ExpressionKind::Expression(expr) => write!(f, "({})", expr.kind()),
         }
     }

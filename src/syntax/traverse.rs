@@ -222,6 +222,9 @@ pub trait Visitor {
 
     fn enter_if_expression(&mut self, path: &mut NodePath, expr: &IfExpression) {}
     fn exit_if_expression(&mut self, path: &mut NodePath, expr: &IfExpression) {}
+
+    fn enter_case_expression(&mut self, path: &mut NodePath, expr: &CaseExpression) {}
+    fn exit_case_expression(&mut self, path: &mut NodePath, expr: &CaseExpression) {}
 }
 
 pub fn traverse(visitor: &mut dyn Visitor, node: &Rc<Node>, parent: Option<Rc<RefCell<NodePath>>>) {
@@ -312,6 +315,9 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     ExpressionKind::IfExpression(expr) => {
                         visitor.enter_if_expression(&mut path, expr);
                     }
+                    ExpressionKind::CaseExpression(expr) => {
+                        visitor.enter_case_expression(&mut path, expr);
+                    }
                     ExpressionKind::Expression(_) => {}
                 }
             }
@@ -385,6 +391,9 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     }
                     ExpressionKind::IfExpression(expr) => {
                         visitor.exit_if_expression(&mut path, expr);
+                    }
+                    ExpressionKind::CaseExpression(expr) => {
+                        visitor.exit_case_expression(&mut path, expr);
                     }
                     ExpressionKind::Expression(_) => {}
                 }
