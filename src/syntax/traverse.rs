@@ -190,6 +190,9 @@ pub trait Visitor {
     fn enter_statement(&mut self, path: &mut NodePath) {}
     fn exit_statement(&mut self, path: &mut NodePath) {}
 
+    fn enter_pattern(&mut self, path: &mut NodePath) {}
+    fn exit_pattern(&mut self, path: &mut NodePath) {}
+
     fn enter_unit(&mut self, path: &mut NodePath) {}
     fn exit_unit(&mut self, path: &mut NodePath) {}
 
@@ -280,6 +283,9 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         NodeKind::Statement(_) => {
             visitor.enter_statement(&mut path);
         }
+        NodeKind::Pattern(_) => {
+            visitor.enter_pattern(&mut path);
+        }
         NodeKind::Unit => {
             visitor.enter_unit(&mut path);
         }
@@ -356,6 +362,9 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         }
         NodeKind::Statement(_) => {
             visitor.exit_statement(&mut path);
+        }
+        NodeKind::Pattern(_) => {
+            visitor.exit_pattern(&mut path);
         }
         NodeKind::Unit => {
             visitor.exit_unit(&mut path);

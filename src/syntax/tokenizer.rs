@@ -131,8 +131,9 @@ pub enum SyntaxToken {
 pub enum MissingTokenKind {
     TopLevel,
     FunctionName,
-    Expression,
     Statement,
+    Pattern,
+    Expression,
     End,
     EscapeSequence,
     StringEnd,
@@ -585,8 +586,9 @@ impl fmt::Display for MissingTokenKind {
         match self {
             MissingTokenKind::TopLevel => write!(f, "declaration or statement"),
             MissingTokenKind::FunctionName => write!(f, "a function name"),
-            MissingTokenKind::Expression => write!(f, "expression"),
             MissingTokenKind::Statement => write!(f, "statement"),
+            MissingTokenKind::Pattern => write!(f, "pattern"),
+            MissingTokenKind::Expression => write!(f, "expression"),
             MissingTokenKind::End => write!(f, "end"),
             MissingTokenKind::EscapeSequence => write!(f, "escape sequence"),
             MissingTokenKind::StringEnd => write!(f, "\""),

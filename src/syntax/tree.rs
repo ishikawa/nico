@@ -22,6 +22,7 @@ pub enum NodeKind {
     FunctionParameter(FunctionParameter),
     Statement(Statement),
     Expression(Expression),
+    Pattern(Pattern),
     Unit, // ()
 }
 
@@ -338,13 +339,13 @@ impl CaseExpression {
 
 #[derive(Debug)]
 pub struct CaseArm {
-    pub pattern: Option<PatternKind>,
+    pub pattern: Option<Rc<Node>>,
     pub guard: Option<Rc<Node>>,
     pub then_body: Rc<Node>,
 }
 
 impl CaseArm {
-    pub fn new(pattern: Option<PatternKind>, guard: Option<Rc<Node>>, then_body: Rc<Node>) -> Self {
+    pub fn new(pattern: Option<Rc<Node>>, guard: Option<Rc<Node>>, then_body: Rc<Node>) -> Self {
         Self {
             pattern,
             guard,
@@ -393,6 +394,17 @@ pub enum ExpressionKind {
     IfExpression(IfExpression),
     CaseExpression(CaseExpression),
     Expression(Rc<Node>),
+}
+
+#[derive(Debug)]
+pub struct Pattern {
+    kind: PatternKind,
+}
+
+impl Pattern {
+    pub fn new(kind: PatternKind) -> Self {
+        Self { kind }
+    }
 }
 
 #[derive(Debug)]
@@ -487,6 +499,14 @@ impl Node {
         }
     }
 
+    pub fn pattern(&self) -> Option<&Pattern> {
+        if let NodeKind::Pattern(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
     pub fn identifier(&self) -> Option<&Identifier> {
         if let NodeKind::Identifier(ref node) = self.kind {
             Some(node)
@@ -553,6 +573,10 @@ impl Node {
 
     pub fn is_statement(&self) -> bool {
         matches!(self.kind, NodeKind::Statement(_))
+    }
+
+    pub fn is_pattern(&self) -> bool {
+        matches!(self.kind, NodeKind::Pattern(_))
     }
 
     pub fn is_expression(&self) -> bool {
@@ -718,6 +742,7 @@ impl fmt::Display for NodeKind {
             NodeKind::TypeAnnotation(_) => write!(f, "TypeAnnotation"),
             NodeKind::FunctionParameter(_) => write!(f, "FunctionParameter"),
             NodeKind::Statement(_) => write!(f, "Statement"),
+            NodeKind::Pattern(_) => write!(f, "Pattern"),
             NodeKind::Expression(Expression { kind, .. }) => write!(f, "{}", kind),
             NodeKind::Unit => write!(f, "()"),
         }
