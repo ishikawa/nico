@@ -22,6 +22,7 @@ pub enum NodeKind {
     FunctionParameter(FunctionParameter),
     Statement(Statement),
     Expression(Expression),
+    Pattern(Pattern),
     Unit, // ()
 }
 
@@ -320,6 +321,44 @@ impl IfExpression {
 }
 
 #[derive(Debug)]
+pub struct CaseExpression {
+    pub head: Option<Rc<Node>>,
+    pub arms: Vec<CaseArm>,
+    pub else_body: Option<Rc<Node>>,
+}
+
+impl CaseExpression {
+    pub fn new(head: Option<Rc<Node>>, arms: Vec<CaseArm>, else_body: Option<Rc<Node>>) -> Self {
+        Self {
+            head,
+            arms,
+            else_body,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CaseArm {
+    pub pattern: Option<Rc<Node>>,
+    pub guard: Option<Rc<Node>>,
+    pub then_body: Rc<Node>,
+}
+
+impl CaseArm {
+    pub fn new(pattern: Option<Rc<Node>>, guard: Option<Rc<Node>>, then_body: Rc<Node>) -> Self {
+        Self {
+            pattern,
+            guard,
+            then_body,
+        }
+    }
+
+    pub fn pattern(&self) -> Option<&Pattern> {
+        self.pattern.as_ref().map(|p| p.pattern().unwrap())
+    }
+}
+
+#[derive(Debug)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
     pub operand: Option<Rc<Node>>,
@@ -357,7 +396,45 @@ pub enum ExpressionKind {
     CallExpression(CallExpression),
     ArrayExpression(ArrayExpression),
     IfExpression(IfExpression),
+    CaseExpression(CaseExpression),
     Expression(Rc<Node>),
+}
+
+#[derive(Debug)]
+pub struct Pattern {
+    pub kind: PatternKind,
+}
+
+impl Pattern {
+    pub fn new(kind: PatternKind) -> Self {
+        Self { kind }
+    }
+}
+
+#[derive(Debug)]
+pub struct ArrayPattern {
+    pub elements: Vec<Rc<Node>>,
+}
+
+impl ArrayPattern {
+    pub fn new(elements: Vec<Rc<Node>>) -> Self {
+        Self { elements }
+    }
+
+    pub fn elements(&self) -> Patterns {
+        Patterns {
+            iter: self.elements.iter(),
+            len: self.elements.len(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum PatternKind {
+    IntegerPattern(IntegerLiteral),
+    StringPattern(StringLiteral),
+    VariablePattern(Identifier),
+    ArrayPattern(ArrayPattern),
 }
 
 impl Code {
@@ -445,6 +522,14 @@ impl Node {
         }
     }
 
+    pub fn pattern(&self) -> Option<&Pattern> {
+        if let NodeKind::Pattern(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
     pub fn identifier(&self) -> Option<&Identifier> {
         if let NodeKind::Identifier(ref node) = self.kind {
             Some(node)
@@ -511,6 +596,10 @@ impl Node {
 
     pub fn is_statement(&self) -> bool {
         matches!(self.kind, NodeKind::Statement(_))
+    }
+
+    pub fn is_pattern(&self) -> bool {
+        matches!(self.kind, NodeKind::Pattern(_))
     }
 
     pub fn is_expression(&self) -> bool {
@@ -581,6 +670,14 @@ impl Expression {
 
     pub fn if_expression(&self) -> Option<&IfExpression> {
         if let ExpressionKind::IfExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn case_expression(&self) -> Option<&CaseExpression> {
+        if let ExpressionKind::CaseExpression(ref expr) = self.kind {
             Some(expr)
         } else {
             None
@@ -664,6 +761,30 @@ impl<'a> Iterator for FunctionParameters<'a> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Patterns<'a> {
+    iter: slice::Iter<'a, Rc<Node>>,
+    len: usize,
+}
+
+impl<'a> Patterns<'a> {
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl<'a> Iterator for Patterns<'a> {
+    type Item = &'a Pattern;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().as_ref().map(|x| x.pattern().unwrap())
+    }
+}
+
 impl fmt::Display for NodeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -676,6 +797,7 @@ impl fmt::Display for NodeKind {
             NodeKind::TypeAnnotation(_) => write!(f, "TypeAnnotation"),
             NodeKind::FunctionParameter(_) => write!(f, "FunctionParameter"),
             NodeKind::Statement(_) => write!(f, "Statement"),
+            NodeKind::Pattern(_) => write!(f, "Pattern"),
             NodeKind::Expression(Expression { kind, .. }) => write!(f, "{}", kind),
             NodeKind::Unit => write!(f, "()"),
         }
@@ -694,6 +816,7 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::CallExpression(_) => write!(f, "CallExpression"),
             ExpressionKind::ArrayExpression(_) => write!(f, "ArrayExpression"),
             ExpressionKind::IfExpression(_) => write!(f, "IfExpression"),
+            ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
             ExpressionKind::Expression(expr) => write!(f, "({})", expr.kind()),
         }
     }

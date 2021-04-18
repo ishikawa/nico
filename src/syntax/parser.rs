@@ -344,57 +344,77 @@ impl<'a> Parser<'a> {
 
         let token = self.tokenizer.peek();
         let node = match token.kind {
-            TokenKind::Integer(_) => self.read_integer(),
-            TokenKind::Identifier(_) => self.read_identifier(),
-            TokenKind::StringStart => self.read_string(),
+            TokenKind::Integer(_) => self.read_integer(false),
+            TokenKind::Identifier(_) => self.read_identifier(false),
+            TokenKind::StringStart => self.read_string(false),
             TokenKind::Char('(') => self.read_paren(),
             TokenKind::Char('[') => self.read_array(),
             TokenKind::If => self.read_if_expression(),
+            TokenKind::Case => self.read_case_expression(),
             _ => return None,
         };
 
         Some(Rc::new(node))
     }
 
-    fn read_integer(&mut self) -> Node {
+    fn parse_pattern(&mut self) -> Option<Rc<Node>> {
+        self.debug_trace("parse_pattern");
+
+        let token = self.tokenizer.peek();
+        let node = match token.kind {
+            TokenKind::Integer(_) => self.read_integer(true),
+            TokenKind::Identifier(_) => self.read_identifier(true),
+            TokenKind::StringStart => self.read_string(true),
+            TokenKind::Char('[') => self.read_array_pattern(),
+            _ => return None,
+        };
+
+        Some(Rc::new(node))
+    }
+
+    fn read_integer(&mut self, as_pattern: bool) -> Node {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
             let literal = IntegerLiteral(i);
             let code = Code::with_interpreted(token);
-
-            Node::new(
+            let kind = if as_pattern {
+                NodeKind::Pattern(Pattern::new(PatternKind::IntegerPattern(literal)))
+            } else {
                 NodeKind::Expression(Expression::new(
                     ExpressionKind::IntegerLiteral(literal),
                     wrap(sem::Type::Int32),
-                )),
-                code,
-            )
+                ))
+            };
+
+            Node::new(kind, code)
         } else {
             unreachable!()
         }
     }
 
-    fn read_identifier(&mut self) -> Node {
+    fn read_identifier(&mut self, as_pattern: bool) -> Node {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Identifier(ref id) = token.kind {
             let id = Identifier::new(id.clone());
             let code = Code::with_interpreted(token);
-
-            Node::new(
+            let kind = if as_pattern {
+                NodeKind::Pattern(Pattern::new(PatternKind::VariablePattern(id)))
+            } else {
                 NodeKind::Expression(Expression::new(
                     ExpressionKind::VariableExpression(id),
                     self.new_type_var(),
-                )),
-                code,
-            )
+                ))
+            };
+
+            Node::new(kind, code)
         } else {
             unreachable!()
         }
     }
 
-    fn read_string(&mut self) -> Node {
+    fn read_string(&mut self, as_pattern: bool) -> Node {
         let start_token = self.tokenizer.next_token(); // StringStart
         let mut code = Code::with_interpreted(start_token);
         let mut string = String::new();
@@ -442,13 +462,16 @@ impl<'a> Parser<'a> {
             StringLiteral(Some(string))
         };
 
-        Node::new(
+        let kind = if as_pattern {
+            NodeKind::Pattern(Pattern::new(PatternKind::StringPattern(literal)))
+        } else {
             NodeKind::Expression(Expression::new(
                 ExpressionKind::StringLiteral(literal),
                 wrap(sem::Type::String),
-            )),
-            code,
-        )
+            ))
+        };
+
+        Node::new(kind, code)
     }
 
     fn read_paren(&mut self) -> Node {
@@ -510,19 +533,22 @@ impl<'a> Parser<'a> {
         )
     }
 
+    fn read_array_pattern(&mut self) -> Node {
+        let mut code = Code::new();
+        let elements = self._parse_elements('[', ']', &mut code, Parser::parse_pattern);
+
+        let expr = ArrayPattern::new(elements);
+
+        Node::new(
+            NodeKind::Pattern(Pattern::new(PatternKind::ArrayPattern(expr))),
+            code,
+        )
+    }
+
     fn read_if_expression(&mut self) -> Node {
         let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "if"
-        let condition = self.parse_expr();
-
-        if let Some(ref node) = condition {
-            code.node(node);
-        } else {
-            // missed condition expression
-            code.missing(
-                self.tokenizer.current_insertion_range(),
-                MissingTokenKind::Expression,
-            );
-        }
+        let condition =
+            self._parse_optional_item(&mut code, Parser::parse_expr, MissingTokenKind::Expression);
 
         // body
         let then_body = Rc::new(self._read_block(&[TokenKind::End, TokenKind::Else]));
@@ -547,6 +573,95 @@ impl<'a> Parser<'a> {
         Node::new(
             NodeKind::Expression(Expression::new(
                 ExpressionKind::IfExpression(expr),
+                self.new_type_var(),
+            )),
+            code,
+        )
+    }
+
+    fn read_case_expression(&mut self) -> Node {
+        // case ...
+        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "case"
+        let head =
+            self._parse_optional_item(&mut code, Parser::parse_expr, MissingTokenKind::Expression);
+
+        // arms
+        let mut arms = vec![];
+        let mut else_body = None;
+
+        loop {
+            match self.tokenizer.peek_kind() {
+                TokenKind::When => {
+                    // when
+                    code.interpret(self.tokenizer.next_token());
+
+                    // To avoid syntactic ambiguity, no newline can be placed after `when` keyword.
+                    self.tokenizer.peek();
+                    let pattern = if self.tokenizer.is_newline_seen() {
+                        code.missing(
+                            self.tokenizer.current_insertion_range(),
+                            MissingTokenKind::Pattern,
+                        );
+                        None
+                    } else {
+                        self._parse_optional_item(
+                            &mut code,
+                            Parser::parse_pattern,
+                            MissingTokenKind::Pattern,
+                        )
+                    };
+
+                    // guard
+                    let mut guard = None;
+
+                    if *self.tokenizer.peek_kind() == TokenKind::If {
+                        code.interpret(self.tokenizer.next_token());
+                        guard = self._parse_optional_item(
+                            &mut code,
+                            Parser::parse_expr,
+                            MissingTokenKind::Expression,
+                        );
+                    }
+
+                    let then_body = Rc::new(self._read_block(&[
+                        TokenKind::When,
+                        TokenKind::Else,
+                        TokenKind::End,
+                    ]));
+                    code.node(&then_body);
+                    arms.push(CaseArm::new(pattern, guard, then_body))
+                }
+                TokenKind::Else => {
+                    code.interpret(self.tokenizer.next_token());
+
+                    let block = Rc::new(self._read_block(&[TokenKind::End]));
+                    code.node(&block);
+
+                    else_body = Some(block);
+                }
+                TokenKind::End => {
+                    code.interpret(self.tokenizer.next_token());
+                    break;
+                }
+                TokenKind::Eos => {
+                    // Premature EOS
+                    code.missing(
+                        self.tokenizer.current_insertion_range(),
+                        MissingTokenKind::End,
+                    );
+                    break;
+                }
+                _ => {
+                    code.skip(self.tokenizer.next_token(), MissingTokenKind::End);
+                }
+            }
+        }
+
+        let expr = CaseExpression::new(head, arms, else_body);
+
+        Node::new(
+            NodeKind::Expression(Expression::new(
+                ExpressionKind::CaseExpression(expr),
                 self.new_type_var(),
             )),
             code,
@@ -611,6 +726,23 @@ impl<'a> Parser<'a> {
         }
 
         Node::new(NodeKind::Block(Block::new(body)), code)
+    }
+
+    fn _parse_optional_item(
+        &mut self,
+        code: &mut Code,
+        node_parser: fn(&mut Parser<'a>) -> Option<Rc<Node>>,
+        missing_token: MissingTokenKind,
+    ) -> Option<Rc<Node>> {
+        let node = node_parser(self);
+
+        if let Some(ref node) = node {
+            code.node(node);
+        } else {
+            code.missing(self.tokenizer.current_insertion_range(), missing_token);
+        }
+
+        node
     }
 
     /// Read comma-separated elements from the start character token specified by `open_char` to
@@ -1254,6 +1386,62 @@ mod tests {
 
         let token = unwrap_interpreted_token(tokens[3]);
         assert_matches!(token.kind, TokenKind::End);
+    }
+
+    // If expression
+    #[test]
+    fn case_expression() {
+        let stmt = parse_statement(
+            "
+            case x
+            when 123
+                1
+            when \"string\"
+                2
+            when y
+                3
+            when [1, x]
+                4
+            when x if x > 10
+                5
+            else
+                6
+            end",
+        );
+        let stmt = stmt.statement().unwrap();
+        let expr = stmt.expression().case_expression().unwrap();
+
+        assert_matches!(expr, CaseExpression { head, arms, else_body } => {
+            assert!(head.is_some());
+            assert!(!arms.is_empty());
+
+            // when 123
+            assert!(arms[0].pattern.is_some());
+            assert!(arms[0].guard.is_none());
+            assert_matches!(arms[0].pattern().unwrap().kind, PatternKind::IntegerPattern(..));
+
+            // when \"string\"
+            assert!(arms[1].pattern.is_some());
+            assert!(arms[1].guard.is_none());
+            assert_matches!(arms[1].pattern().unwrap().kind, PatternKind::StringPattern(..));
+
+            // when y
+            assert!(arms[2].pattern.is_some());
+            assert!(arms[2].guard.is_none());
+            assert_matches!(arms[2].pattern().unwrap().kind, PatternKind::VariablePattern(..));
+
+            // when [1, x]
+            assert!(arms[3].pattern.is_some());
+            assert!(arms[3].guard.is_none());
+            assert_matches!(arms[3].pattern().unwrap().kind, PatternKind::ArrayPattern(..));
+
+            // when x if x > 10
+            assert!(arms[4].pattern.is_some());
+            assert!(arms[4].guard.is_some());
+            assert_matches!(arms[4].pattern().unwrap().kind, PatternKind::VariablePattern(..));
+
+            assert!(else_body.is_some());
+        });
     }
 
     // --- helpers

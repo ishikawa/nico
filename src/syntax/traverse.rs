@@ -190,6 +190,9 @@ pub trait Visitor {
     fn enter_statement(&mut self, path: &mut NodePath) {}
     fn exit_statement(&mut self, path: &mut NodePath) {}
 
+    fn enter_pattern(&mut self, path: &mut NodePath) {}
+    fn exit_pattern(&mut self, path: &mut NodePath) {}
+
     fn enter_unit(&mut self, path: &mut NodePath) {}
     fn exit_unit(&mut self, path: &mut NodePath) {}
 
@@ -222,6 +225,9 @@ pub trait Visitor {
 
     fn enter_if_expression(&mut self, path: &mut NodePath, expr: &IfExpression) {}
     fn exit_if_expression(&mut self, path: &mut NodePath, expr: &IfExpression) {}
+
+    fn enter_case_expression(&mut self, path: &mut NodePath, expr: &CaseExpression) {}
+    fn exit_case_expression(&mut self, path: &mut NodePath, expr: &CaseExpression) {}
 }
 
 pub fn traverse(visitor: &mut dyn Visitor, node: &Rc<Node>, parent: Option<Rc<RefCell<NodePath>>>) {
@@ -277,6 +283,9 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         NodeKind::Statement(_) => {
             visitor.enter_statement(&mut path);
         }
+        NodeKind::Pattern(_) => {
+            visitor.enter_pattern(&mut path);
+        }
         NodeKind::Unit => {
             visitor.enter_unit(&mut path);
         }
@@ -311,6 +320,9 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     }
                     ExpressionKind::IfExpression(expr) => {
                         visitor.enter_if_expression(&mut path, expr);
+                    }
+                    ExpressionKind::CaseExpression(expr) => {
+                        visitor.enter_case_expression(&mut path, expr);
                     }
                     ExpressionKind::Expression(_) => {}
                 }
@@ -351,6 +363,9 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         NodeKind::Statement(_) => {
             visitor.exit_statement(&mut path);
         }
+        NodeKind::Pattern(_) => {
+            visitor.exit_pattern(&mut path);
+        }
         NodeKind::Unit => {
             visitor.exit_unit(&mut path);
         }
@@ -385,6 +400,9 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     }
                     ExpressionKind::IfExpression(expr) => {
                         visitor.exit_if_expression(&mut path, expr);
+                    }
+                    ExpressionKind::CaseExpression(expr) => {
+                        visitor.exit_case_expression(&mut path, expr);
                     }
                     ExpressionKind::Expression(_) => {}
                 }
