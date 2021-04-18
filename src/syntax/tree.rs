@@ -408,10 +408,29 @@ impl Pattern {
 }
 
 #[derive(Debug)]
+pub struct ArrayPattern {
+    pub elements: Vec<Rc<Node>>,
+}
+
+impl ArrayPattern {
+    pub fn new(elements: Vec<Rc<Node>>) -> Self {
+        Self { elements }
+    }
+
+    pub fn elements(&self) -> Patterns {
+        Patterns {
+            iter: self.elements.iter(),
+            len: self.elements.len(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum PatternKind {
     IntegerPattern(IntegerLiteral),
     StringPattern(StringLiteral),
     VariablePattern(Identifier),
+    ArrayPattern(ArrayPattern),
 }
 
 impl Code {
@@ -735,6 +754,30 @@ impl<'a> Iterator for FunctionParameters<'a> {
             .next()
             .as_ref()
             .map(|x| x.function_parameter().unwrap())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Patterns<'a> {
+    iter: slice::Iter<'a, Rc<Node>>,
+    len: usize,
+}
+
+impl<'a> Patterns<'a> {
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl<'a> Iterator for Patterns<'a> {
+    type Item = &'a Pattern;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().as_ref().map(|x| x.pattern().unwrap())
     }
 }
 
