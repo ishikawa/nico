@@ -132,9 +132,11 @@ pub enum MissingTokenKind {
     TopLevel,
     FunctionName,
     Expression,
+    Statement,
     End,
     EscapeSequence,
     StringEnd,
+    Separator, // newline
     Char(char),
 }
 
@@ -584,9 +586,11 @@ impl fmt::Display for MissingTokenKind {
             MissingTokenKind::TopLevel => write!(f, "declaration or statement"),
             MissingTokenKind::FunctionName => write!(f, "a function name"),
             MissingTokenKind::Expression => write!(f, "expression"),
+            MissingTokenKind::Statement => write!(f, "statement"),
             MissingTokenKind::End => write!(f, "end"),
             MissingTokenKind::EscapeSequence => write!(f, "escape sequence"),
             MissingTokenKind::StringEnd => write!(f, "\""),
+            MissingTokenKind::Separator => write!(f, "\\n"),
             MissingTokenKind::Char(c) => write!(f, "{}", c),
         }
     }

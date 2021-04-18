@@ -1,4 +1,4 @@
-use super::{tree::*, MissingTokenKind, TokenKind, Tokenizer};
+use super::*;
 use crate::sem;
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
@@ -131,53 +131,15 @@ impl<'a> Parser<'a> {
             self._parse_elements('(', ')', &mut code, Parser::parse_function_parameter);
 
         // body
-        let body = Rc::new(self.read_function_body());
+        let body = Rc::new(self._read_block(&[TokenKind::End]));
 
         code.node(&body);
+        code.interpret(self.tokenizer.next_token()); // end
 
         Some(Rc::new(Node::new(
             NodeKind::FunctionDefinition(FunctionDefinition::new(function_name, parameters, body)),
             code,
         )))
-    }
-
-    fn read_function_body(&mut self) -> Node {
-        self.debug_trace("read_function_body");
-
-        let mut code = Code::new();
-
-        // body
-        let mut body = vec![];
-
-        loop {
-            if let Some(stmt) = self.parse_stmt() {
-                code.node(&stmt);
-                body.push(stmt);
-            }
-
-            match self.tokenizer.peek_kind() {
-                TokenKind::End => {
-                    // Okay, it's done.
-                    code.interpret(self.tokenizer.next_token());
-                    break;
-                }
-                TokenKind::Eos => {
-                    // Maybe user forgot `end`.
-                    // I'm sorry, but this language is like Ruby not Python.
-                    code.missing(
-                        self.tokenizer.current_insertion_range(),
-                        MissingTokenKind::End,
-                    );
-                    break;
-                }
-                _ => {
-                    // Continue until read identifier or over.
-                    code.skip(self.tokenizer.next_token(), MissingTokenKind::End);
-                }
-            }
-        }
-
-        Node::new(NodeKind::Block(Block::new(body)), code)
     }
 
     fn parse_function_parameter(&mut self) -> Option<Rc<Node>> {
@@ -387,6 +349,7 @@ impl<'a> Parser<'a> {
             TokenKind::StringStart => self.read_string(),
             TokenKind::Char('(') => self.read_paren(),
             TokenKind::Char('[') => self.read_array(),
+            TokenKind::If => self.read_if_expression(),
             _ => return None,
         };
 
@@ -545,6 +508,109 @@ impl<'a> Parser<'a> {
             )),
             code,
         )
+    }
+
+    fn read_if_expression(&mut self) -> Node {
+        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "if"
+        let condition = self.parse_expr();
+
+        if let Some(ref node) = condition {
+            code.node(node);
+        } else {
+            // missed condition expression
+            code.missing(
+                self.tokenizer.current_insertion_range(),
+                MissingTokenKind::Expression,
+            );
+        }
+
+        // body
+        let then_body = Rc::new(self._read_block(&[TokenKind::End, TokenKind::Else]));
+        let has_else = *self.tokenizer.peek_kind() == TokenKind::Else;
+
+        code.node(&then_body);
+        code.interpret(self.tokenizer.next_token()); // "else" or "end"
+
+        let else_body = if has_else {
+            let else_body = Rc::new(self._read_block(&[TokenKind::End]));
+
+            code.node(&else_body);
+            code.interpret(self.tokenizer.next_token()); //  "end"
+
+            Some(else_body)
+        } else {
+            None
+        };
+
+        let expr = IfExpression::new(condition, then_body, else_body);
+
+        Node::new(
+            NodeKind::Expression(Expression::new(
+                ExpressionKind::IfExpression(expr),
+                self.new_type_var(),
+            )),
+            code,
+        )
+    }
+
+    /// Reads statements until it meets a token listed in `stop_tokens`.
+    /// But this function doesn't consume a stop token itself, consuming
+    /// a stop token is caller's responsibility.
+    fn _read_block(&mut self, stop_tokens: &[TokenKind]) -> Node {
+        let mut code = Code::new();
+
+        // body
+        let mut body = vec![];
+
+        // A separator must be appear before block
+        self.tokenizer.peek();
+        let mut newline_seen = self.tokenizer.is_newline_seen();
+        let mut insertion_range = self.tokenizer.current_insertion_range();
+
+        loop {
+            let mut stmt_seen = false;
+
+            if let Some(stmt) = self.parse_stmt() {
+                stmt_seen = true;
+
+                if !newline_seen {
+                    code.missing(insertion_range, MissingTokenKind::Separator);
+                }
+
+                code.node(&stmt);
+                body.push(stmt);
+            }
+
+            match self.tokenizer.peek_kind() {
+                TokenKind::Eos => {
+                    // Maybe user forgot `end`.
+                    // I'm sorry, but this language is like Ruby not Python.
+                    code.missing(
+                        self.tokenizer.current_insertion_range(),
+                        MissingTokenKind::End,
+                    );
+                    break;
+                }
+                token => {
+                    if stop_tokens.contains(token) {
+                        // Okay, it's done. don't consume a stop token.
+                        break;
+                    }
+
+                    newline_seen = self.tokenizer.is_newline_seen();
+                    insertion_range = self.tokenizer.current_insertion_range();
+
+                    // `parse_stmt()` should consume at least one token.
+                    // However, in case `parse_stmt()` have not been able to consume a single token,
+                    // we have to skip the current token.
+                    if !stmt_seen {
+                        code.skip(self.tokenizer.next_token(), MissingTokenKind::Statement);
+                    }
+                }
+            }
+        }
+
+        Node::new(NodeKind::Block(Block::new(body)), code)
     }
 
     /// Read comma-separated elements from the start character token specified by `open_char` to
@@ -1109,6 +1175,85 @@ mod tests {
 
         let token = unwrap_interpreted_token(tokens[3]);
         assert_matches!(token.kind, TokenKind::Char(']'));
+    }
+
+    // If expression
+    #[test]
+    fn if_expression() {
+        let stmt = parse_statement(
+            "if x > 0
+                10
+            else
+                20
+            end",
+        );
+        let stmt = stmt.statement().unwrap();
+        let expr = stmt.expression().if_expression().unwrap();
+
+        assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
+            let condition = condition.as_ref().unwrap().expression().unwrap();
+
+            assert_matches!(condition.kind, ExpressionKind::BinaryExpression(..));
+            assert!(then_body.block().is_some());
+            assert!(else_body.is_some());
+            assert!(else_body.as_ref().unwrap().block().is_some());
+        });
+    }
+
+    #[test]
+    fn if_expression_missing_condition() {
+        let stmt = parse_statement("if\nend");
+        let stmt = stmt.statement().unwrap();
+        let expr = stmt.expression().if_expression().unwrap();
+
+        assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
+            assert!(condition.is_none());
+            assert!(else_body.is_none());
+
+            let then_body = then_body.block().unwrap();
+            let stmts = then_body.statements();
+            assert!(stmts.is_empty());
+        });
+    }
+
+    #[test]
+    fn if_expression_missing_newline() {
+        let stmt = parse_statement("if b x end");
+        let stmt = stmt.statement().unwrap();
+
+        assert!(stmt.expression().if_expression().is_some());
+
+        // tokens
+        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        assert_eq!(tokens.len(), 4);
+
+        let token = unwrap_interpreted_token(tokens[0]);
+        assert_matches!(token.kind, TokenKind::If);
+
+        let node = unwrap_node(tokens[1]);
+        assert!(node.is_expression());
+
+        let node = unwrap_node(tokens[2]);
+        assert!(node.is_block());
+
+        {
+            let tokens = node.code().collect::<Vec<_>>();
+
+            assert_eq!(tokens.len(), 2);
+
+            let (range, item) = unwrap_missing_token(tokens[0]);
+            assert_eq!(item, MissingTokenKind::Separator);
+            assert_eq!(range.start.line, 0);
+            assert_eq!(range.start.character, 5);
+            assert_eq!(range.end.line, 0);
+            assert_eq!(range.end.character, 6);
+
+            let node = unwrap_node(tokens[1]);
+            assert!(node.is_statement());
+        }
+
+        let token = unwrap_interpreted_token(tokens[3]);
+        assert_matches!(token.kind, TokenKind::End);
     }
 
     // --- helpers

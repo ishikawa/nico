@@ -299,6 +299,27 @@ impl ArrayExpression {
 }
 
 #[derive(Debug)]
+pub struct IfExpression {
+    pub condition: Option<Rc<Node>>,
+    pub then_body: Rc<Node>,
+    pub else_body: Option<Rc<Node>>,
+}
+
+impl IfExpression {
+    pub fn new(
+        condition: Option<Rc<Node>>,
+        then_body: Rc<Node>,
+        else_body: Option<Rc<Node>>,
+    ) -> Self {
+        Self {
+            condition,
+            then_body,
+            else_body,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
     pub operand: Option<Rc<Node>>,
@@ -335,6 +356,7 @@ pub enum ExpressionKind {
     SubscriptExpression(SubscriptExpression),
     CallExpression(CallExpression),
     ArrayExpression(ArrayExpression),
+    IfExpression(IfExpression),
     Expression(Rc<Node>),
 }
 
@@ -464,19 +486,15 @@ impl Node {
     }
 
     pub fn variable_expression(&self) -> Option<&Identifier> {
-        if let Some(expr) = self.expression() {
-            expr.variable_expression()
-        } else {
-            None
-        }
+        self.expression().and_then(Expression::variable_expression)
     }
 
     pub fn unary_expression(&self) -> Option<&UnaryExpression> {
-        if let Some(expr) = self.expression() {
-            expr.unary_expression()
-        } else {
-            None
-        }
+        self.expression().and_then(Expression::unary_expression)
+    }
+
+    pub fn call_expression(&self) -> Option<&CallExpression> {
+        self.expression().and_then(Expression::call_expression)
     }
 
     pub fn is_function_definition(&self) -> bool {
@@ -485,6 +503,14 @@ impl Node {
 
     pub fn is_function_parameter(&self) -> bool {
         matches!(self.kind, NodeKind::FunctionParameter(_))
+    }
+
+    pub fn is_block(&self) -> bool {
+        matches!(self.kind, NodeKind::Block(_))
+    }
+
+    pub fn is_statement(&self) -> bool {
+        matches!(self.kind, NodeKind::Statement(_))
     }
 
     pub fn is_expression(&self) -> bool {
@@ -496,21 +522,13 @@ impl Node {
     }
 
     pub fn is_call_expression(&self) -> bool {
-        if let Some(expr) = self.expression() {
-            expr.is_call_expression()
-        } else {
-            false
-        }
+        self.call_expression().is_some()
     }
 }
 
 impl Expression {
     pub fn new(kind: ExpressionKind, r#type: Rc<RefCell<sem::Type>>) -> Self {
         Self { kind, r#type }
-    }
-
-    pub fn is_call_expression(&self) -> bool {
-        matches!(self.kind, ExpressionKind::CallExpression(_))
     }
 
     pub fn variable_expression(&self) -> Option<&Identifier> {
@@ -547,6 +565,22 @@ impl Expression {
 
     pub fn array_expression(&self) -> Option<&ArrayExpression> {
         if let ExpressionKind::ArrayExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn call_expression(&self) -> Option<&CallExpression> {
+        if let ExpressionKind::CallExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn if_expression(&self) -> Option<&IfExpression> {
+        if let ExpressionKind::IfExpression(ref expr) = self.kind {
             Some(expr)
         } else {
             None
@@ -659,6 +693,7 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::SubscriptExpression(_) => write!(f, "SubscriptExpression"),
             ExpressionKind::CallExpression(_) => write!(f, "CallExpression"),
             ExpressionKind::ArrayExpression(_) => write!(f, "ArrayExpression"),
+            ExpressionKind::IfExpression(_) => write!(f, "IfExpression"),
             ExpressionKind::Expression(expr) => write!(f, "({})", expr.kind()),
         }
     }
