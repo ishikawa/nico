@@ -10,6 +10,136 @@ pub struct Node {
     code: Code,
 }
 
+impl Node {
+    pub fn new(kind: NodeKind, code: Code) -> Self {
+        Self { kind, code }
+    }
+
+    pub fn kind(&self) -> &NodeKind {
+        &self.kind
+    }
+
+    pub fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
+    }
+
+    pub fn program(&self) -> Option<&Program> {
+        if let NodeKind::Program(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn block(&self) -> Option<&Block> {
+        if let NodeKind::Block(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn statement(&self) -> Option<&Statement> {
+        if let NodeKind::Statement(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn pattern(&self) -> Option<&Pattern> {
+        if let NodeKind::Pattern(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn identifier(&self) -> Option<&Identifier> {
+        if let NodeKind::Identifier(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn struct_definition(&self) -> Option<&StructDefinition> {
+        if let NodeKind::StructDefinition(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
+        if let NodeKind::FunctionDefinition(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
+        if let NodeKind::FunctionParameter(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn expression(&self) -> Option<&Expression> {
+        if let NodeKind::Expression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn variable_expression(&self) -> Option<&Identifier> {
+        self.expression().and_then(Expression::variable_expression)
+    }
+
+    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
+        self.expression().and_then(Expression::unary_expression)
+    }
+
+    pub fn call_expression(&self) -> Option<&CallExpression> {
+        self.expression().and_then(Expression::call_expression)
+    }
+
+    pub fn is_function_definition(&self) -> bool {
+        matches!(self.kind, NodeKind::FunctionDefinition(_))
+    }
+
+    pub fn is_function_parameter(&self) -> bool {
+        matches!(self.kind, NodeKind::FunctionParameter(_))
+    }
+
+    pub fn is_block(&self) -> bool {
+        matches!(self.kind, NodeKind::Block(_))
+    }
+
+    pub fn is_statement(&self) -> bool {
+        matches!(self.kind, NodeKind::Statement(_))
+    }
+
+    pub fn is_pattern(&self) -> bool {
+        matches!(self.kind, NodeKind::Pattern(_))
+    }
+
+    pub fn is_expression(&self) -> bool {
+        matches!(self.kind, NodeKind::Expression(_))
+    }
+
+    pub fn is_variable_expression(&self) -> bool {
+        self.variable_expression().is_some()
+    }
+
+    pub fn is_call_expression(&self) -> bool {
+        self.call_expression().is_some()
+    }
+}
+
 #[derive(Debug)]
 pub enum NodeKind {
     Program(Program),
@@ -29,6 +159,54 @@ pub enum NodeKind {
 #[derive(Debug, Default)]
 pub struct Code {
     code: Vec<CodeKind>,
+}
+
+impl Code {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_interpreted(token: Token) -> Self {
+        Self {
+            code: vec![CodeKind::SyntaxToken(SyntaxToken::Interpreted(token))],
+        }
+    }
+
+    pub fn with_node(node: &Rc<Node>) -> Self {
+        Self {
+            code: vec![CodeKind::Node(Rc::clone(node))],
+        }
+    }
+
+    pub fn interpret(&mut self, token: Token) -> &mut Self {
+        self.code
+            .push(CodeKind::SyntaxToken(SyntaxToken::Interpreted(token)));
+        self
+    }
+
+    pub fn missing(&mut self, range: EffectiveRange, item: MissingTokenKind) -> &mut Self {
+        self.code
+            .push(CodeKind::SyntaxToken(SyntaxToken::Missing { range, item }));
+        self
+    }
+
+    pub fn skip(&mut self, token: Token, expected: MissingTokenKind) -> &mut Self {
+        self.code.push(CodeKind::SyntaxToken(SyntaxToken::Skipped {
+            token,
+            expected,
+        }));
+        self
+    }
+
+    pub fn iter(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
+    }
+
+    // children
+    pub fn node(&mut self, node: &Rc<Node>) -> &mut Self {
+        self.code.push(CodeKind::Node(Rc::clone(node)));
+        self
+    }
 }
 
 #[derive(Debug)]
@@ -218,21 +396,170 @@ impl Block {
 
 #[derive(Debug)]
 pub struct Expression {
-    pub kind: ExpressionKind,
-    pub r#type: Rc<RefCell<sem::Type>>,
+    kind: ExpressionKind,
+    r#type: Rc<RefCell<sem::Type>>,
 }
 
-#[derive(Debug)]
-pub struct IntegerLiteral(pub i32);
+impl Expression {
+    pub fn new(kind: ExpressionKind, r#type: Rc<RefCell<sem::Type>>) -> Self {
+        Self { kind, r#type }
+    }
 
-#[derive(Debug)]
-pub struct StringLiteral(pub Option<String>);
+    pub fn kind(&self) -> &ExpressionKind {
+        &self.kind
+    }
+
+    pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
+        &self.r#type
+    }
+
+    pub fn variable_expression(&self) -> Option<&Identifier> {
+        if let ExpressionKind::VariableExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn subscript_expression(&self) -> Option<&SubscriptExpression> {
+        if let ExpressionKind::SubscriptExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn binary_expression(&self) -> Option<&BinaryExpression> {
+        if let ExpressionKind::BinaryExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
+        if let ExpressionKind::UnaryExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn array_expression(&self) -> Option<&ArrayExpression> {
+        if let ExpressionKind::ArrayExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn call_expression(&self) -> Option<&CallExpression> {
+        if let ExpressionKind::CallExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn if_expression(&self) -> Option<&IfExpression> {
+        if let ExpressionKind::IfExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
+    pub fn case_expression(&self) -> Option<&CaseExpression> {
+        if let ExpressionKind::CaseExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct IntegerLiteral(i32);
+
+impl IntegerLiteral {
+    pub fn new(value: i32) -> Self {
+        Self(value)
+    }
+
+    pub fn value(&self) -> i32 {
+        self.0
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct StringLiteral(Option<String>);
+
+impl StringLiteral {
+    pub fn new(value: Option<String>) -> Self {
+        Self(value)
+    }
+
+    pub fn value(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+}
 
 #[derive(Debug)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
     pub lhs: Rc<Node>,
     pub rhs: Option<Rc<Node>>,
+}
+
+impl BinaryExpression {
+    pub fn new(operator: BinaryOperator, lhs: Rc<Node>, rhs: Option<Rc<Node>>) -> Self {
+        Self { operator, lhs, rhs }
+    }
+
+    pub fn lhs(&self) -> &Expression {
+        self.lhs.expression().unwrap()
+    }
+
+    pub fn rhs(&self) -> Option<&Expression> {
+        self.rhs.as_ref().map(|x| x.expression().unwrap())
+    }
+}
+
+#[derive(Debug)]
+pub struct UnaryExpression {
+    pub operator: UnaryOperator,
+    pub operand: Option<Rc<Node>>,
+}
+
+impl UnaryExpression {
+    pub fn new(operator: UnaryOperator, operand: Option<Rc<Node>>) -> Self {
+        Self { operator, operand }
+    }
+
+    pub fn operand(&self) -> Option<&Expression> {
+        self.operand.as_ref().map(|x| x.expression().unwrap())
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum BinaryOperator {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    Eq,
+    Ne,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum UnaryOperator {
+    Minus,
+    Plus,
 }
 
 #[derive(Debug)]
@@ -359,33 +686,6 @@ impl CaseArm {
 }
 
 #[derive(Debug)]
-pub struct UnaryExpression {
-    pub operator: UnaryOperator,
-    pub operand: Option<Rc<Node>>,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum BinaryOperator {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-    Lt,
-    Gt,
-    Le,
-    Ge,
-    Eq,
-    Ne,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum UnaryOperator {
-    Minus,
-    Plus,
-}
-
-#[derive(Debug)]
 pub enum ExpressionKind {
     IntegerLiteral(IntegerLiteral),
     StringLiteral(StringLiteral),
@@ -435,254 +735,6 @@ pub enum PatternKind {
     StringPattern(StringLiteral),
     VariablePattern(Identifier),
     ArrayPattern(ArrayPattern),
-}
-
-impl Code {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_interpreted(token: Token) -> Self {
-        Self {
-            code: vec![CodeKind::SyntaxToken(SyntaxToken::Interpreted(token))],
-        }
-    }
-
-    pub fn with_node(node: &Rc<Node>) -> Self {
-        Self {
-            code: vec![CodeKind::Node(Rc::clone(node))],
-        }
-    }
-
-    pub fn interpret(&mut self, token: Token) -> &mut Self {
-        self.code
-            .push(CodeKind::SyntaxToken(SyntaxToken::Interpreted(token)));
-        self
-    }
-
-    pub fn missing(&mut self, range: EffectiveRange, item: MissingTokenKind) -> &mut Self {
-        self.code
-            .push(CodeKind::SyntaxToken(SyntaxToken::Missing { range, item }));
-        self
-    }
-
-    pub fn skip(&mut self, token: Token, expected: MissingTokenKind) -> &mut Self {
-        self.code.push(CodeKind::SyntaxToken(SyntaxToken::Skipped {
-            token,
-            expected,
-        }));
-        self
-    }
-
-    pub fn iter(&self) -> slice::Iter<CodeKind> {
-        self.code.iter()
-    }
-
-    // children
-    pub fn node(&mut self, node: &Rc<Node>) -> &mut Self {
-        self.code.push(CodeKind::Node(Rc::clone(node)));
-        self
-    }
-}
-
-impl Node {
-    pub fn new(kind: NodeKind, code: Code) -> Self {
-        Self { kind, code }
-    }
-
-    pub fn kind(&self) -> &NodeKind {
-        &self.kind
-    }
-
-    pub fn code(&self) -> slice::Iter<CodeKind> {
-        self.code.iter()
-    }
-
-    pub fn program(&self) -> Option<&Program> {
-        if let NodeKind::Program(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn block(&self) -> Option<&Block> {
-        if let NodeKind::Block(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn statement(&self) -> Option<&Statement> {
-        if let NodeKind::Statement(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn pattern(&self) -> Option<&Pattern> {
-        if let NodeKind::Pattern(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn identifier(&self) -> Option<&Identifier> {
-        if let NodeKind::Identifier(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn struct_definition(&self) -> Option<&StructDefinition> {
-        if let NodeKind::StructDefinition(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
-        if let NodeKind::FunctionDefinition(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
-        if let NodeKind::FunctionParameter(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn expression(&self) -> Option<&Expression> {
-        if let NodeKind::Expression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn variable_expression(&self) -> Option<&Identifier> {
-        self.expression().and_then(Expression::variable_expression)
-    }
-
-    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
-        self.expression().and_then(Expression::unary_expression)
-    }
-
-    pub fn call_expression(&self) -> Option<&CallExpression> {
-        self.expression().and_then(Expression::call_expression)
-    }
-
-    pub fn is_function_definition(&self) -> bool {
-        matches!(self.kind, NodeKind::FunctionDefinition(_))
-    }
-
-    pub fn is_function_parameter(&self) -> bool {
-        matches!(self.kind, NodeKind::FunctionParameter(_))
-    }
-
-    pub fn is_block(&self) -> bool {
-        matches!(self.kind, NodeKind::Block(_))
-    }
-
-    pub fn is_statement(&self) -> bool {
-        matches!(self.kind, NodeKind::Statement(_))
-    }
-
-    pub fn is_pattern(&self) -> bool {
-        matches!(self.kind, NodeKind::Pattern(_))
-    }
-
-    pub fn is_expression(&self) -> bool {
-        matches!(self.kind, NodeKind::Expression(_))
-    }
-
-    pub fn is_variable_expression(&self) -> bool {
-        self.variable_expression().is_some()
-    }
-
-    pub fn is_call_expression(&self) -> bool {
-        self.call_expression().is_some()
-    }
-}
-
-impl Expression {
-    pub fn new(kind: ExpressionKind, r#type: Rc<RefCell<sem::Type>>) -> Self {
-        Self { kind, r#type }
-    }
-
-    pub fn variable_expression(&self) -> Option<&Identifier> {
-        if let ExpressionKind::VariableExpression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn subscript_expression(&self) -> Option<&SubscriptExpression> {
-        if let ExpressionKind::SubscriptExpression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn binary_expression(&self) -> Option<&BinaryExpression> {
-        if let ExpressionKind::BinaryExpression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
-        if let ExpressionKind::UnaryExpression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn array_expression(&self) -> Option<&ArrayExpression> {
-        if let ExpressionKind::ArrayExpression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn call_expression(&self) -> Option<&CallExpression> {
-        if let ExpressionKind::CallExpression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn if_expression(&self) -> Option<&IfExpression> {
-        if let ExpressionKind::IfExpression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn case_expression(&self) -> Option<&CaseExpression> {
-        if let ExpressionKind::CaseExpression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
 }
 
 // -- Iterators
