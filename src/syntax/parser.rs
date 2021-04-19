@@ -956,10 +956,10 @@ mod tests {
             }
         );
 
-        let code = stmt.expression.code().collect::<Vec<_>>();
+        let mut code = stmt.expression.code();
         assert_eq!(code.len(), 1);
 
-        let token = unwrap_interpreted_token(code[0]);
+        let token = next_interpreted_token(&mut code);
         assert_matches!(token.kind, TokenKind::Integer(i) => {
             assert_eq!(i, 42);
         });
@@ -974,23 +974,23 @@ mod tests {
 
             assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
 
-            let tokens = stmt.expression.code().collect::<Vec<_>>();
+            let mut tokens = stmt.expression.code();
             assert_eq!(tokens.len(), 4);
 
-            let token = unwrap_interpreted_token(tokens[0]);
+            let token = next_interpreted_token(&mut tokens);
             assert_matches!(token.kind, TokenKind::StringStart);
 
-            let token = unwrap_interpreted_token(tokens[1]);
+            let token = next_interpreted_token(&mut tokens);
             assert_matches!(&token.kind, TokenKind::StringContent(s) => {
                 assert_eq!(s, "Fizz")
             });
 
-            let token = unwrap_interpreted_token(tokens[2]);
+            let token = next_interpreted_token(&mut tokens);
             assert_matches!(token.kind, TokenKind::StringEscapeSequence(c) => {
                 assert_eq!(c, '\"')
             });
 
-            let (_, item) = unwrap_missing_token(tokens[3]);
+            let (_, item) = next_missing_token(&mut tokens);
             assert_eq!(item, MissingTokenKind::StringEnd);
         }
     }
@@ -1006,16 +1006,16 @@ mod tests {
                 assert_matches!(expr.expression().unwrap().kind(), ExpressionKind::StringLiteral(..));
             });
 
-            let tokens = stmt.expression.code().collect::<Vec<_>>();
+            let mut tokens = stmt.expression.code();
             assert_eq!(tokens.len(), 3);
 
-            let token = unwrap_interpreted_token(tokens[0]);
+            let token = next_interpreted_token(&mut tokens);
             assert_matches!(token.kind, TokenKind::Char('('));
 
-            let node = unwrap_node(tokens[1]);
+            let node = next_node(&mut tokens);
             assert_matches!(node.kind(), NodeKind::Expression(..));
 
-            let (_, item) = unwrap_missing_token(tokens[2]);
+            let (_, item) = next_missing_token(&mut tokens);
             assert_eq!(item, MissingTokenKind::Char(')'));
         }
     }
@@ -1034,16 +1034,16 @@ mod tests {
             assert_eq!(i.value(), 2);
         });
 
-        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        let mut tokens = stmt.expression.code();
         assert_eq!(tokens.len(), 3);
 
-        let node = unwrap_node(tokens[0]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
 
-        let token = unwrap_interpreted_token(tokens[1]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('+'));
 
-        let node = unwrap_node(tokens[2]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
     }
 
@@ -1059,16 +1059,16 @@ mod tests {
         });
         assert!(expr.rhs().is_none());
 
-        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        let mut tokens = stmt.expression.code();
         assert_eq!(tokens.len(), 3);
 
-        let node = unwrap_node(tokens[0]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
 
-        let token = unwrap_interpreted_token(tokens[1]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('+'));
 
-        let (token, expected) = unwrap_skipped_token(tokens[2]);
+        let (token, expected) = next_skipped_token(&mut tokens);
         assert_eq!(token.kind, TokenKind::Eos);
         assert_eq!(expected, MissingTokenKind::Expression);
     }
@@ -1087,24 +1087,24 @@ mod tests {
             assert_eq!(i.value(), 2);
         });
 
-        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        let mut tokens = stmt.expression.code();
         assert_eq!(tokens.len(), 5);
 
-        let node = unwrap_node(tokens[0]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
 
-        let token = unwrap_interpreted_token(tokens[1]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('+'));
 
-        let (token, expected) = unwrap_skipped_token(tokens[2]);
+        let (token, expected) = next_skipped_token(&mut tokens);
         assert_eq!(token.kind, TokenKind::Char('%'));
         assert_eq!(expected, MissingTokenKind::Expression);
 
-        let (token, expected) = unwrap_skipped_token(tokens[3]);
+        let (token, expected) = next_skipped_token(&mut tokens);
         assert_eq!(token.kind, TokenKind::Char('?'));
         assert_eq!(expected, MissingTokenKind::Expression);
 
-        let node = unwrap_node(tokens[4]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
     }
 
@@ -1119,13 +1119,13 @@ mod tests {
             assert_eq!(i.value(), 1);
         });
 
-        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        let mut tokens = stmt.expression.code();
         assert_eq!(tokens.len(), 2);
 
-        let token = unwrap_interpreted_token(tokens[0]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('-'));
 
-        let node = unwrap_node(tokens[1]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
     }
 
@@ -1145,13 +1145,13 @@ mod tests {
             });
         });
 
-        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        let mut tokens = stmt.expression.code();
         assert_eq!(tokens.len(), 2);
 
-        let token = unwrap_interpreted_token(tokens[0]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('-'));
 
-        let node = unwrap_node(tokens[1]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
     }
 
@@ -1175,19 +1175,19 @@ mod tests {
             });
         });
 
-        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        let mut tokens = stmt.expression.code();
         assert_eq!(tokens.len(), 4);
 
-        let node = unwrap_node(tokens[0]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
 
-        let token = unwrap_interpreted_token(tokens[1]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('['));
 
-        let node = unwrap_node(tokens[2]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
 
-        let token = unwrap_interpreted_token(tokens[3]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char(']'));
     }
 
@@ -1208,16 +1208,16 @@ mod tests {
             assert_eq!(arguments.len(), 0);
         });
 
-        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        let mut tokens = stmt.expression.code();
         assert_eq!(tokens.len(), 3);
 
-        let node = unwrap_node(tokens[0]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
 
-        let token = unwrap_interpreted_token(tokens[1]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('['));
 
-        let token = unwrap_interpreted_token(tokens[2]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char(']'));
     }
 
@@ -1241,10 +1241,14 @@ mod tests {
             });
         });
 
-        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        let mut tokens = stmt.expression.code();
         assert_eq!(tokens.len(), 4);
 
-        let (range, item) = unwrap_missing_token(tokens[3]);
+        tokens.next();
+        tokens.next();
+        tokens.next();
+
+        let (range, item) = next_missing_token(&mut tokens);
         assert_eq!(item, MissingTokenKind::Char(']'));
         assert_eq!(range.start.line, 0);
         assert_eq!(range.start.character, 2);
@@ -1264,10 +1268,14 @@ mod tests {
                 assert_matches!(arguments[0].kind(), ExpressionKind::StringLiteral(..));
             });
 
-            let tokens = stmt.expression.code().collect::<Vec<_>>();
+            let mut tokens = stmt.expression.code();
             assert_eq!(tokens.len(), 4);
 
-            let (range, item) = unwrap_missing_token(tokens[3]);
+            tokens.next();
+            tokens.next();
+            tokens.next();
+
+            let (range, item) = next_missing_token(&mut tokens);
             assert_eq!(item, MissingTokenKind::Char(']'));
             assert_eq!(range.start.line, 0);
             assert_eq!(range.start.character, 2);
@@ -1286,13 +1294,13 @@ mod tests {
             assert_eq!(elements.len(), 0);
         });
 
-        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        let mut tokens = stmt.expression.code();
         assert_eq!(tokens.len(), 2);
 
-        let token = unwrap_interpreted_token(tokens[0]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('['));
 
-        let token = unwrap_interpreted_token(tokens[1]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char(']'));
     }
 
@@ -1312,19 +1320,19 @@ mod tests {
             });
         });
 
-        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        let mut tokens = stmt.expression.code();
         assert_eq!(tokens.len(), 4);
 
-        let token = unwrap_interpreted_token(tokens[0]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('['));
 
-        let node = unwrap_node(tokens[1]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
 
-        let token = unwrap_interpreted_token(tokens[2]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char(','));
 
-        let token = unwrap_interpreted_token(tokens[3]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char(']'));
     }
 
@@ -1375,35 +1383,35 @@ mod tests {
         assert!(stmt.expression().if_expression().is_some());
 
         // tokens
-        let tokens = stmt.expression.code().collect::<Vec<_>>();
+        let mut tokens = stmt.expression.code();
         assert_eq!(tokens.len(), 4);
 
-        let token = unwrap_interpreted_token(tokens[0]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::If);
 
-        let node = unwrap_node(tokens[1]);
+        let node = next_node(&mut tokens);
         assert!(node.is_expression());
 
-        let node = unwrap_node(tokens[2]);
+        let node = next_node(&mut tokens);
         assert!(node.is_block());
 
         {
-            let tokens = node.code().collect::<Vec<_>>();
+            let mut tokens = node.code();
 
             assert_eq!(tokens.len(), 2);
 
-            let (range, item) = unwrap_missing_token(tokens[0]);
+            let (range, item) = next_missing_token(&mut tokens);
             assert_eq!(item, MissingTokenKind::Separator);
             assert_eq!(range.start.line, 0);
             assert_eq!(range.start.character, 5);
             assert_eq!(range.end.line, 0);
             assert_eq!(range.end.character, 6);
 
-            let node = unwrap_node(tokens[1]);
+            let node = next_node(&mut tokens);
             assert!(node.is_statement());
         }
 
-        let token = unwrap_interpreted_token(tokens[3]);
+        let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::End);
     }
 
@@ -1471,6 +1479,22 @@ mod tests {
 
         assert!(!module.body.is_empty());
         Rc::clone(&module.body[0])
+    }
+
+    fn next_node<'a>(tokens: &'a mut CodeKinds) -> &'a Node {
+        unwrap_node(tokens.next().unwrap())
+    }
+
+    fn next_interpreted_token<'a>(tokens: &'a mut CodeKinds) -> &'a Token {
+        unwrap_interpreted_token(tokens.next().unwrap())
+    }
+
+    fn next_missing_token(tokens: &mut CodeKinds) -> (EffectiveRange, MissingTokenKind) {
+        unwrap_missing_token(tokens.next().unwrap())
+    }
+
+    fn next_skipped_token<'a>(tokens: &'a mut CodeKinds) -> (&'a Token, MissingTokenKind) {
+        unwrap_skipped_token(tokens.next().unwrap())
     }
 
     fn unwrap_node(kind: &CodeKind) -> &Node {
