@@ -279,7 +279,7 @@ impl<'a> Parser<'a> {
         }
 
         // node
-        let expr = UnaryExpression { operand, operator };
+        let expr = UnaryExpression::new(operator, operand);
         let kind = ExpressionKind::UnaryExpression(expr);
 
         Some(Rc::new(Node::new(
@@ -1114,10 +1114,9 @@ mod tests {
         let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().unary_expression().unwrap();
 
-        assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
-            assert_matches!(operand.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
-                assert_eq!(i.value(), 1);
-            });
+        assert_eq!(expr.operator, UnaryOperator::Minus);
+        assert_matches!(expr.operand().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
+            assert_eq!(i.value(), 1);
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();

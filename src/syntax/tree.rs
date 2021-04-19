@@ -526,6 +526,43 @@ impl BinaryExpression {
 }
 
 #[derive(Debug)]
+pub struct UnaryExpression {
+    pub operator: UnaryOperator,
+    pub operand: Option<Rc<Node>>,
+}
+
+impl UnaryExpression {
+    pub fn new(operator: UnaryOperator, operand: Option<Rc<Node>>) -> Self {
+        Self { operator, operand }
+    }
+
+    pub fn operand(&self) -> Option<&Expression> {
+        self.operand.as_ref().map(|x| x.expression().unwrap())
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum BinaryOperator {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    Eq,
+    Ne,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum UnaryOperator {
+    Minus,
+    Plus,
+}
+
+#[derive(Debug)]
 pub struct SubscriptExpression {
     pub callee: Rc<Node>,
     pub arguments: Vec<Rc<Node>>,
@@ -646,33 +683,6 @@ impl CaseArm {
     pub fn pattern(&self) -> Option<&Pattern> {
         self.pattern.as_ref().map(|p| p.pattern().unwrap())
     }
-}
-
-#[derive(Debug)]
-pub struct UnaryExpression {
-    pub operator: UnaryOperator,
-    pub operand: Option<Rc<Node>>,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum BinaryOperator {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-    Lt,
-    Gt,
-    Le,
-    Ge,
-    Eq,
-    Ne,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum UnaryOperator {
-    Minus,
-    Plus,
 }
 
 #[derive(Debug)]
