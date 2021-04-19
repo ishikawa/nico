@@ -400,12 +400,13 @@ impl Block {
 #[derive(Debug)]
 pub struct Expression {
     kind: ExpressionKind,
+    code: Code,
     r#type: Rc<RefCell<sem::Type>>,
 }
 
 impl Expression {
-    pub fn new(kind: ExpressionKind, r#type: Rc<RefCell<sem::Type>>) -> Self {
-        Self { kind, r#type }
+    pub fn new(kind: ExpressionKind, code: Code, r#type: Rc<RefCell<sem::Type>>) -> Self {
+        Self { kind, code, r#type }
     }
 
     pub fn kind(&self) -> &ExpressionKind {
@@ -531,16 +532,16 @@ impl BinaryExpression {
 #[derive(Debug)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
-    pub operand: Option<Rc<Node>>,
+    pub operand: Option<Rc<Expression>>,
 }
 
 impl UnaryExpression {
-    pub fn new(operator: UnaryOperator, operand: Option<Rc<Node>>) -> Self {
+    pub fn new(operator: UnaryOperator, operand: Option<Rc<Expression>>) -> Self {
         Self { operator, operand }
     }
 
     pub fn operand(&self) -> Option<&Expression> {
-        self.operand.as_ref().map(|x| x.expression().unwrap())
+        self.operand.as_deref()
     }
 }
 

@@ -249,7 +249,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_unary_op(&mut self) -> Option<Rc<Node>> {
+    fn parse_unary_op(&mut self) -> Option<Expression> {
         self.debug_trace("parse_unary_op");
 
         let operator = match self.tokenizer.peek_kind() {
@@ -282,13 +282,10 @@ impl<'a> Parser<'a> {
         let expr = UnaryExpression::new(operator, operand);
         let kind = ExpressionKind::UnaryExpression(expr);
 
-        Some(Rc::new(Node::new(
-            NodeKind::Expression(Expression::new(kind, self.new_type_var())),
-            code,
-        )))
+        Some(Expression::new(kind, code, self.new_type_var()))
     }
 
-    fn parse_access(&mut self) -> Option<Rc<Node>> {
+    fn parse_access(&mut self) -> Option<Expression> {
         self.debug_trace("parse_access");
 
         let mut operand = self.parse_primary()?;
@@ -311,26 +308,22 @@ impl<'a> Parser<'a> {
                     let arguments = self._parse_elements('[', ']', &mut code, Parser::parse_expr);
                     let expr = SubscriptExpression::new(operand, arguments);
 
-                    operand = Rc::new(Node::new(
-                        NodeKind::Expression(Expression::new(
-                            ExpressionKind::SubscriptExpression(expr),
-                            self.new_type_var(),
-                        )),
+                    operand = Expression::new(
+                        ExpressionKind::SubscriptExpression(expr),
                         code,
-                    ));
+                        self.new_type_var(),
+                    );
                 }
                 TokenKind::Char('(') => {
                     let arguments = self._parse_elements('(', ')', &mut code, Parser::parse_expr);
 
                     let expr = CallExpression::new(operand, arguments);
 
-                    operand = Rc::new(Node::new(
-                        NodeKind::Expression(Expression::new(
-                            ExpressionKind::CallExpression(expr),
-                            self.new_type_var(),
-                        )),
+                    operand = Expression::new(
+                        ExpressionKind::CallExpression(expr),
                         code,
-                    ));
+                        self.new_type_var(),
+                    );
                 }
                 _ => break,
             }
@@ -339,7 +332,7 @@ impl<'a> Parser<'a> {
         Some(operand)
     }
 
-    fn parse_primary(&mut self) -> Option<Rc<Node>> {
+    fn parse_primary(&mut self) -> Option<Expression> {
         self.debug_trace("parse_primary");
 
         let token = self.tokenizer.peek();
