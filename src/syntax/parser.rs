@@ -376,7 +376,7 @@ impl<'a> Parser<'a> {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
-            let literal = IntegerLiteral(i);
+            let literal = IntegerLiteral::new(i);
             let code = Code::with_interpreted(token);
             let kind = if as_pattern {
                 NodeKind::Pattern(Pattern::new(PatternKind::IntegerPattern(literal)))
@@ -509,7 +509,7 @@ impl<'a> Parser<'a> {
             Node::new(
                 NodeKind::Expression(Expression::new(
                     ExpressionKind::Expression(Rc::clone(&node)),
-                    Rc::clone(&expr.r#type),
+                    Rc::clone(expr.r#type()),
                 )),
                 code,
             )
@@ -950,8 +950,10 @@ mod tests {
         let stmt = stmt.statement().unwrap();
 
         assert_matches!(
-            stmt.expression().kind,
-            ExpressionKind::IntegerLiteral(IntegerLiteral(42))
+            stmt.expression().kind(),
+            ExpressionKind::IntegerLiteral(i) => {
+                assert_eq!(i.value(), 42);
+            }
         );
 
         let code = stmt.expression.code().collect::<Vec<_>>();
@@ -970,7 +972,7 @@ mod tests {
             let stmt = stmt.statement().unwrap();
             let expr = stmt.expression();
 
-            assert_matches!(expr.kind, ExpressionKind::StringLiteral(..));
+            assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
 
             let tokens = stmt.expression.code().collect::<Vec<_>>();
             assert_eq!(tokens.len(), 4);
@@ -1000,8 +1002,8 @@ mod tests {
             let stmt = stmt.statement().unwrap();
             let expr = stmt.expression();
 
-            assert_matches!(expr.kind, ExpressionKind::Expression(ref expr) => {
-                assert_matches!(expr.expression().unwrap().kind, ExpressionKind::StringLiteral(..));
+            assert_matches!(expr.kind(), ExpressionKind::Expression(expr) => {
+                assert_matches!(expr.expression().unwrap().kind(), ExpressionKind::StringLiteral(..));
             });
 
             let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -1025,8 +1027,12 @@ mod tests {
         let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
-            assert_matches!(lhs.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
-            assert_matches!(rhs.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(2)));
+            assert_matches!(lhs.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
+                assert_eq!(i.value(), 1);
+            });
+            assert_matches!(rhs.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
+                assert_eq!(i.value(), 2);
+            });
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -1049,7 +1055,9 @@ mod tests {
         let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: None } => {
-            assert_matches!(lhs.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(lhs.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
+                assert_eq!(i.value(), 1);
+            });
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -1073,8 +1081,12 @@ mod tests {
         let expr = stmt.expression().binary_expression().unwrap();
 
         assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
-            assert_matches!(lhs.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
-            assert_matches!(rhs.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(2)));
+            assert_matches!(lhs.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
+                assert_eq!(i.value(), 1);
+            });
+            assert_matches!(rhs.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
+                assert_eq!(i.value(), 2);
+            });
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -1105,7 +1117,9 @@ mod tests {
         let expr = stmt.expression().unary_expression().unwrap();
 
         assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
-            assert_matches!(operand.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(operand.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
+                assert_eq!(i.value(), 1);
+            });
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -1128,7 +1142,9 @@ mod tests {
             let operand = operand.unary_expression().unwrap();
 
             assert_matches!(operand, UnaryExpression { operator: UnaryOperator::Plus, operand: Some(operand) } => {
-                assert_matches!(operand.expression().unwrap().kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+                assert_matches!(operand.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
+                    assert_eq!(i.value(), 1);
+                });
             });
         });
 
@@ -1157,7 +1173,9 @@ mod tests {
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
-            assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(0)));
+            assert_matches!(arguments[0].kind(), ExpressionKind::IntegerLiteral(i) => {
+                assert_eq!(i.value(), 0);
+            });
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -1221,7 +1239,9 @@ mod tests {
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
-            assert_matches!(arguments[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(arguments[0].kind(), ExpressionKind::IntegerLiteral(i) => {
+                assert_eq!(i.value(), 1);
+            });
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -1244,7 +1264,7 @@ mod tests {
             assert_matches!(expr, SubscriptExpression{ .. } => {
                 let arguments = expr.arguments().collect::<Vec<_>>();
                 assert_eq!(arguments.len(), 1);
-                assert_matches!(arguments[0].kind, ExpressionKind::StringLiteral(..));
+                assert_matches!(arguments[0].kind(), ExpressionKind::StringLiteral(..));
             });
 
             let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -1290,7 +1310,9 @@ mod tests {
             assert_eq!(elements.len(), 1);
 
             assert_eq!(elements.len(), 1);
-            assert_matches!(elements[0].kind, ExpressionKind::IntegerLiteral(IntegerLiteral(1)));
+            assert_matches!(elements[0].kind(), ExpressionKind::IntegerLiteral(i) => {
+                assert_eq!(i.value(), 1);
+            });
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -1325,7 +1347,7 @@ mod tests {
         assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
             let condition = condition.as_ref().unwrap().expression().unwrap();
 
-            assert_matches!(condition.kind, ExpressionKind::BinaryExpression(..));
+            assert_matches!(condition.kind(), ExpressionKind::BinaryExpression(..));
             assert!(then_body.block().is_some());
             assert!(else_body.is_some());
             assert!(else_body.as_ref().unwrap().block().is_some());
