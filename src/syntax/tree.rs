@@ -19,7 +19,7 @@ impl Node {
         &self.kind
     }
 
-    pub fn code(&self) -> slice::Iter<CodeKind> {
+    pub fn code(&self) -> CodeKinds {
         self.code.iter()
     }
 
@@ -198,8 +198,11 @@ impl Code {
         self
     }
 
-    pub fn iter(&self) -> slice::Iter<CodeKind> {
-        self.code.iter()
+    pub fn iter(&self) -> CodeKinds {
+        CodeKinds {
+            iter: self.code.iter(),
+            len: self.code.len(),
+        }
     }
 
     // children
@@ -738,6 +741,30 @@ pub enum PatternKind {
 }
 
 // -- Iterators
+#[derive(Debug, Clone)]
+pub struct CodeKinds<'a> {
+    iter: slice::Iter<'a, CodeKind>,
+    len: usize,
+}
+
+impl<'a> CodeKinds<'a> {
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl<'a> Iterator for CodeKinds<'a> {
+    type Item = &'a CodeKind;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Expressions<'a> {
     iter: slice::Iter<'a, Rc<Node>>,
