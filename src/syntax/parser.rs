@@ -906,7 +906,7 @@ impl<'a> Parser<'a> {
             }
 
             // node
-            let expr = BinaryExpression { lhs, rhs, operator };
+            let expr = BinaryExpression::new(operator, lhs, rhs);
 
             lhs = Rc::new(Node::new(
                 NodeKind::Expression(Expression::new(
@@ -1026,13 +1026,12 @@ mod tests {
         let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().binary_expression().unwrap();
 
-        assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
-            assert_matches!(lhs.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
-                assert_eq!(i.value(), 1);
-            });
-            assert_matches!(rhs.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
-                assert_eq!(i.value(), 2);
-            });
+        assert_eq!(expr.operator, BinaryOperator::Add);
+        assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(i) => {
+            assert_eq!(i.value(), 1);
+        });
+        assert_matches!(expr.rhs().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
+            assert_eq!(i.value(), 2);
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
@@ -1054,11 +1053,11 @@ mod tests {
         let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().binary_expression().unwrap();
 
-        assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: None } => {
-            assert_matches!(lhs.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
-                assert_eq!(i.value(), 1);
-            });
+        assert_eq!(expr.operator, BinaryOperator::Add);
+        assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(i) => {
+            assert_eq!(i.value(), 1);
         });
+        assert!(expr.rhs().is_none());
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();
         assert_eq!(tokens.len(), 3);
@@ -1080,13 +1079,12 @@ mod tests {
         let stmt = stmt.statement().unwrap();
         let expr = stmt.expression().binary_expression().unwrap();
 
-        assert_matches!(expr, BinaryExpression { operator: BinaryOperator::Add, lhs, rhs: Some(rhs) } => {
-            assert_matches!(lhs.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
-                assert_eq!(i.value(), 1);
-            });
-            assert_matches!(rhs.expression().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
-                assert_eq!(i.value(), 2);
-            });
+        assert_eq!(expr.operator, BinaryOperator::Add);
+        assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(i) => {
+            assert_eq!(i.value(), 1);
+        });
+        assert_matches!(expr.rhs().unwrap().kind(), ExpressionKind::IntegerLiteral(i) => {
+            assert_eq!(i.value(), 2);
         });
 
         let tokens = stmt.expression.code().collect::<Vec<_>>();

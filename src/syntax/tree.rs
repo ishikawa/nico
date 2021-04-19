@@ -511,6 +511,20 @@ pub struct BinaryExpression {
     pub rhs: Option<Rc<Node>>,
 }
 
+impl BinaryExpression {
+    pub fn new(operator: BinaryOperator, lhs: Rc<Node>, rhs: Option<Rc<Node>>) -> Self {
+        Self { operator, lhs, rhs }
+    }
+
+    pub fn lhs(&self) -> &Expression {
+        self.lhs.expression().unwrap()
+    }
+
+    pub fn rhs(&self) -> Option<&Expression> {
+        self.rhs.as_ref().map(|x| x.expression().unwrap())
+    }
+}
+
 #[derive(Debug)]
 pub struct SubscriptExpression {
     pub callee: Rc<Node>,
@@ -640,7 +654,7 @@ pub struct UnaryExpression {
     pub operand: Option<Rc<Node>>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BinaryOperator {
     Add,
     Sub,
@@ -655,7 +669,7 @@ pub enum BinaryOperator {
     Ne,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum UnaryOperator {
     Minus,
     Plus,
