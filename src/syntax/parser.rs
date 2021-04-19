@@ -457,9 +457,9 @@ impl<'a> Parser<'a> {
         }
 
         let literal = if has_error {
-            StringLiteral(None)
+            StringLiteral::new(None)
         } else {
-            StringLiteral(Some(string))
+            StringLiteral::new(Some(string))
         };
 
         let kind = if as_pattern {

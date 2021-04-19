@@ -492,7 +492,17 @@ impl IntegerLiteral {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct StringLiteral(pub Option<String>);
+pub struct StringLiteral(Option<String>);
+
+impl StringLiteral {
+    pub fn new(value: Option<String>) -> Self {
+        Self(value)
+    }
+
+    pub fn value(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+}
 
 #[derive(Debug)]
 pub struct BinaryExpression {
