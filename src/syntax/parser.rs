@@ -980,34 +980,25 @@ mod tests {
     #[test]
     fn number_integer() {
         let stmt = parse_statement("42");
-        let stmt = stmt.statement().unwrap();
 
-        assert_matches!(
-            stmt.expression().kind(),
-            ExpressionKind::IntegerLiteral(i) => {
-                assert_eq!(i.value(), 42);
-            }
-        );
+        assert_matches!(stmt.expression().kind(), ExpressionKind::IntegerLiteral(42));
 
         let mut code = stmt.expression.code();
         assert_eq!(code.len(), 1);
 
         let token = next_interpreted_token(&mut code);
-        assert_matches!(token.kind, TokenKind::Integer(i) => {
-            assert_eq!(i, 42);
-        });
+        assert_matches!(token.kind, TokenKind::Integer(42));
     }
 
     #[test]
     fn incomplete_string() {
         for src in vec!["\"Fizz\\\"", "\"Fizz\\\"\n"] {
             let stmt = parse_statement(src);
-            let stmt = stmt.statement().unwrap();
             let expr = stmt.expression();
 
             assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
 
-            let mut tokens = stmt.expression.code();
+            let mut tokens = stmt.code();
             assert_eq!(tokens.len(), 4);
 
             let token = next_interpreted_token(&mut tokens);
@@ -1035,8 +1026,8 @@ mod tests {
             let stmt = stmt.statement().unwrap();
             let expr = stmt.expression();
 
-            assert_matches!(expr.kind(), ExpressionKind::Expression(expr) => {
-                assert_matches!(expr.expression().unwrap().kind(), ExpressionKind::StringLiteral(..));
+            assert_matches!(expr.kind(), ExpressionKind::Expression(Some(expr)) => {
+                assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
             });
 
             let mut tokens = stmt.expression.code();
@@ -1506,15 +1497,14 @@ mod tests {
 
     // --- helpers
 
-    fn parse_statement(src: &str) -> Rc<Node> {
+    fn parse_statement(src: &str) -> Rc<Statement> {
         let module = Parser::parse_string(src);
-        let module = module.program().unwrap();
 
         assert!(!module.body.is_empty());
-        Rc::clone(&module.body[0])
+        module.body[0].statement().unwrap()
     }
 
-    fn next_node<'a>(tokens: &'a mut CodeKinds) -> &'a Node {
+    fn next_node<'a>(tokens: &'a mut CodeKinds) -> &'a NodeKind {
         unwrap_node(tokens.next().unwrap())
     }
 
@@ -1530,7 +1520,7 @@ mod tests {
         unwrap_skipped_token(tokens.next().unwrap())
     }
 
-    fn unwrap_node(kind: &CodeKind) -> &Node {
+    fn unwrap_node(kind: &CodeKind) -> &NodeKind {
         if let CodeKind::Node(node) = kind {
             return node;
         }

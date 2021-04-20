@@ -4,6 +4,10 @@ use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
 
+pub trait Node {
+    fn code(&self) -> slice::Iter<CodeKind>;
+}
+
 #[derive(Debug)]
 pub enum NodeKind {
     Program(Rc<Program>),
@@ -24,6 +28,16 @@ pub enum TopLevelKind {
     StructDefinition(Rc<StructDefinition>),
     FunctionDefinition(Rc<FunctionDefinition>),
     Statement(Rc<Statement>),
+}
+
+impl TopLevelKind {
+    pub fn statement(&self) -> Option<Rc<Statement>> {
+        if let TopLevelKind::Statement(stmt) = self {
+            Some(Rc::clone(stmt))
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -68,11 +82,8 @@ impl Code {
         self
     }
 
-    pub fn iter(&self) -> CodeKinds {
-        CodeKinds {
-            iter: self.code.iter(),
-            len: self.code.len(),
-        }
+    pub fn iter(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
     }
 
     // children
@@ -93,7 +104,7 @@ pub struct Program {
     pub body: Vec<TopLevelKind>,
     pub declarations: Rc<RefCell<Scope>>,
     pub main_scope: Rc<RefCell<Scope>>,
-    pub code: Code,
+    code: Code,
 }
 
 impl Program {
@@ -112,10 +123,16 @@ impl Program {
     }
 }
 
+impl Node for Program {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
+    }
+}
+
 #[derive(Debug)]
 pub struct Identifier {
     pub id: String,
-    pub code: Code,
+    code: Code,
 }
 
 impl Identifier {
@@ -128,6 +145,12 @@ impl Identifier {
 
     pub fn as_str(&self) -> &str {
         &self.id
+    }
+}
+
+impl Node for Identifier {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
     }
 }
 
@@ -152,11 +175,12 @@ impl fmt::Display for Identifier {
 pub struct StructDefinition {
     pub name: Option<Rc<Identifier>>,
     pub fields: Vec<Rc<TypeField>>,
+    code: Code,
 }
 
 impl StructDefinition {
-    pub fn new(name: Option<Rc<Identifier>>, fields: Vec<Rc<TypeField>>) -> Self {
-        Self { name, fields }
+    pub fn new(name: Option<Rc<Identifier>>, fields: Vec<Rc<TypeField>>, code: Code) -> Self {
+        Self { name, fields, code }
     }
 
     pub fn name(&self) -> Option<&Identifier> {
@@ -164,18 +188,36 @@ impl StructDefinition {
     }
 }
 
+impl Node for StructDefinition {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
+    }
+}
+
 #[derive(Debug)]
 pub struct TypeField {
     pub name: Option<Rc<Identifier>>,
     pub type_annotation: Option<Rc<TypeAnnotation>>,
+    code: Code,
 }
 
 impl TypeField {
-    pub fn new(name: Option<Rc<Identifier>>, type_annotation: Option<Rc<TypeAnnotation>>) -> Self {
+    pub fn new(
+        name: Option<Rc<Identifier>>,
+        type_annotation: Option<Rc<TypeAnnotation>>,
+        code: Code,
+    ) -> Self {
         Self {
             name,
             type_annotation,
+            code,
         }
+    }
+}
+
+impl Node for TypeField {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
     }
 }
 
@@ -183,11 +225,22 @@ impl TypeField {
 pub struct TypeAnnotation {
     pub name: Rc<Identifier>,
     pub r#type: Option<Rc<RefCell<sem::Type>>>,
+    code: Code,
 }
 
 impl TypeAnnotation {
-    pub fn new(name: Rc<Identifier>) -> Self {
-        Self { name, r#type: None }
+    pub fn new(name: Rc<Identifier>, code: Code) -> Self {
+        Self {
+            name,
+            r#type: None,
+            code,
+        }
+    }
+}
+
+impl Node for TypeAnnotation {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
     }
 }
 
@@ -196,7 +249,7 @@ pub struct FunctionDefinition {
     pub name: Option<Rc<Identifier>>,
     pub parameters: Vec<Rc<FunctionParameter>>,
     pub body: Rc<Block>,
-    pub code: Code,
+    code: Code,
 }
 
 impl FunctionDefinition {
@@ -227,10 +280,16 @@ impl FunctionDefinition {
     }
 }
 
+impl Node for FunctionDefinition {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
+    }
+}
+
 #[derive(Debug)]
 pub struct FunctionParameter {
     pub name: Rc<Identifier>,
-    pub code: Code,
+    code: Code,
 }
 
 impl FunctionParameter {
@@ -240,6 +299,12 @@ impl FunctionParameter {
 
     pub fn name(&self) -> &Identifier {
         self.name.as_ref()
+    }
+}
+
+impl Node for FunctionParameter {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
     }
 }
 
@@ -258,11 +323,17 @@ impl Statement {
     }
 }
 
+impl Node for Statement {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.expression.code()
+    }
+}
+
 #[derive(Debug)]
 pub struct Block {
     pub statements: Vec<Rc<Statement>>,
     pub scope: Rc<RefCell<Scope>>,
-    pub code: Code,
+    code: Code,
 }
 
 impl Block {
@@ -276,6 +347,12 @@ impl Block {
 
     pub fn statements(&self) -> slice::Iter<Rc<Statement>> {
         self.statements.iter()
+    }
+}
+
+impl Node for Block {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
     }
 }
 
@@ -361,6 +438,12 @@ impl Expression {
         } else {
             None
         }
+    }
+}
+
+impl Node for Expression {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
     }
 }
 
@@ -592,31 +675,6 @@ pub enum PatternKind {
     StringPattern(Option<String>),
     VariablePattern(String),
     ArrayPattern(ArrayPattern),
-}
-
-// -- Iterators
-#[derive(Debug, Clone)]
-pub struct CodeKinds<'a> {
-    iter: slice::Iter<'a, CodeKind>,
-    len: usize,
-}
-
-impl<'a> CodeKinds<'a> {
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-}
-
-impl<'a> Iterator for CodeKinds<'a> {
-    type Item = &'a CodeKind;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
-    }
 }
 
 impl fmt::Display for NodeKind {
