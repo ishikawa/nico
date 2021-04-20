@@ -23,6 +23,36 @@ pub enum NodeKind {
     Pattern(Rc<Pattern>),
 }
 
+impl NodeKind {
+    pub fn block(&self) -> Option<Rc<Block>> {
+        if let NodeKind::Block(block) = self {
+            Some(Rc::clone(block))
+        } else {
+            None
+        }
+    }
+
+    pub fn statement(&self) -> Option<Rc<Statement>> {
+        if let NodeKind::Statement(stmt) = self {
+            Some(Rc::clone(stmt))
+        } else {
+            None
+        }
+    }
+
+    pub fn is_block(&self) -> bool {
+        matches!(self, NodeKind::Block(..))
+    }
+
+    pub fn is_statement(&self) -> bool {
+        matches!(self, NodeKind::Statement(..))
+    }
+
+    pub fn is_expression(&self) -> bool {
+        matches!(self, NodeKind::Expression(..))
+    }
+}
+
 #[derive(Debug)]
 pub enum TopLevelKind {
     StructDefinition(Rc<StructDefinition>),
