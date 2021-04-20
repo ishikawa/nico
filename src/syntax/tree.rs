@@ -5,155 +5,26 @@ use std::slice;
 use std::{cell::RefCell, fmt};
 
 #[derive(Debug)]
-pub struct Node {
-    kind: NodeKind,
-    code: Code,
-}
-
-impl Node {
-    pub fn new(kind: NodeKind, code: Code) -> Self {
-        Self { kind, code }
-    }
-
-    pub fn kind(&self) -> &NodeKind {
-        &self.kind
-    }
-
-    pub fn code(&self) -> CodeKinds {
-        self.code.iter()
-    }
-
-    pub fn program(&self) -> Option<&Program> {
-        if let NodeKind::Program(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn block(&self) -> Option<&Block> {
-        if let NodeKind::Block(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn statement(&self) -> Option<&Statement> {
-        if let NodeKind::Statement(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn pattern(&self) -> Option<&Pattern> {
-        if let NodeKind::Pattern(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn identifier(&self) -> Option<&Identifier> {
-        if let NodeKind::Identifier(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn struct_definition(&self) -> Option<&StructDefinition> {
-        if let NodeKind::StructDefinition(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
-        if let NodeKind::FunctionDefinition(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
-        if let NodeKind::FunctionParameter(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn expression(&self) -> Option<&Expression> {
-        if let NodeKind::Expression(ref expr) = self.kind {
-            Some(expr)
-        } else {
-            None
-        }
-    }
-
-    pub fn variable_expression(&self) -> Option<&Identifier> {
-        self.expression().and_then(Expression::variable_expression)
-    }
-
-    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
-        self.expression().and_then(Expression::unary_expression)
-    }
-
-    pub fn call_expression(&self) -> Option<&CallExpression> {
-        self.expression().and_then(Expression::call_expression)
-    }
-
-    pub fn is_function_definition(&self) -> bool {
-        matches!(self.kind, NodeKind::FunctionDefinition(_))
-    }
-
-    pub fn is_function_parameter(&self) -> bool {
-        matches!(self.kind, NodeKind::FunctionParameter(_))
-    }
-
-    pub fn is_block(&self) -> bool {
-        matches!(self.kind, NodeKind::Block(_))
-    }
-
-    pub fn is_statement(&self) -> bool {
-        matches!(self.kind, NodeKind::Statement(_))
-    }
-
-    pub fn is_pattern(&self) -> bool {
-        matches!(self.kind, NodeKind::Pattern(_))
-    }
-
-    pub fn is_expression(&self) -> bool {
-        matches!(self.kind, NodeKind::Expression(_))
-    }
-
-    pub fn is_variable_expression(&self) -> bool {
-        self.variable_expression().is_some()
-    }
-
-    pub fn is_call_expression(&self) -> bool {
-        self.call_expression().is_some()
-    }
+pub enum NodeKind {
+    Program(Rc<Program>),
+    Block(Rc<Block>),
+    Identifier(Rc<Identifier>),
+    StructDefinition(Rc<StructDefinition>),
+    FunctionDefinition(Rc<FunctionDefinition>),
+    TypeField(Rc<TypeField>),
+    TypeAnnotation(Rc<TypeAnnotation>),
+    FunctionParameter(Rc<FunctionParameter>),
+    Statement(Rc<Statement>),
+    Expression(Rc<Expression>),
+    Pattern(Rc<Pattern>),
+    Unit, // ()
 }
 
 #[derive(Debug)]
-pub enum NodeKind {
-    Program(Program),
-    Block(Block),
-    Identifier(Identifier),
-    StructDefinition(StructDefinition),
-    FunctionDefinition(FunctionDefinition),
-    TypeField(TypeField),
-    TypeAnnotation(TypeAnnotation),
-    FunctionParameter(FunctionParameter),
-    Statement(Statement),
-    Expression(Expression),
-    Pattern(Pattern),
-    Unit, // ()
+pub enum TopLevelKind {
+    StructDefinition(Rc<StructDefinition>),
+    FunctionDefinition(Rc<FunctionDefinition>),
+    Statement(Rc<Statement>),
 }
 
 #[derive(Debug, Default)]
@@ -172,9 +43,9 @@ impl Code {
         }
     }
 
-    pub fn with_node(node: &Rc<Node>) -> Self {
+    pub fn with_node(node: NodeKind) -> Self {
         Self {
-            code: vec![CodeKind::Node(Rc::clone(node))],
+            code: vec![CodeKind::Node(node)],
         }
     }
 
@@ -206,27 +77,27 @@ impl Code {
     }
 
     // children
-    pub fn node(&mut self, node: &Rc<Node>) -> &mut Self {
-        self.code.push(CodeKind::Node(Rc::clone(node)));
+    pub fn node(&mut self, node: NodeKind) -> &mut Self {
+        self.code.push(CodeKind::Node(node));
         self
     }
 }
 
 #[derive(Debug)]
 pub enum CodeKind {
-    Node(Rc<Node>),
+    Node(NodeKind),
     SyntaxToken(SyntaxToken),
 }
 
 #[derive(Debug)]
 pub struct Program {
-    pub body: Vec<Rc<Node>>,
+    pub body: Vec<TopLevelKind>,
     pub declarations: Rc<RefCell<Scope>>,
     pub main_scope: Rc<RefCell<Scope>>,
 }
 
 impl Program {
-    pub fn new(body: Vec<Rc<Node>>) -> Self {
+    pub fn new(body: Vec<TopLevelKind>) -> Self {
         let declarations = wrap(Scope::new());
         let main_scope = wrap(Scope::new());
 
@@ -272,28 +143,28 @@ impl fmt::Display for Identifier {
 ///
 #[derive(Debug)]
 pub struct StructDefinition {
-    pub name: Option<Rc<Node>>,
-    pub fields: Vec<Rc<Node>>,
+    pub name: Option<Rc<Identifier>>,
+    pub fields: Vec<Rc<TypeField>>,
 }
 
 impl StructDefinition {
-    pub fn new(name: Option<Rc<Node>>, fields: Vec<Rc<Node>>) -> Self {
+    pub fn new(name: Option<Rc<Identifier>>, fields: Vec<Rc<TypeField>>) -> Self {
         Self { name, fields }
     }
 
     pub fn name(&self) -> Option<&Identifier> {
-        self.name.as_ref().map(|x| x.identifier().unwrap())
+        self.name.as_deref()
     }
 }
 
 #[derive(Debug)]
 pub struct TypeField {
-    pub name: Option<Rc<Node>>,
-    pub type_annotation: Option<Rc<Node>>,
+    pub name: Option<Rc<Identifier>>,
+    pub type_annotation: Option<Rc<TypeAnnotation>>,
 }
 
 impl TypeField {
-    pub fn new(name: Option<Rc<Node>>, type_annotation: Option<Rc<Node>>) -> Self {
+    pub fn new(name: Option<Rc<Identifier>>, type_annotation: Option<Rc<TypeAnnotation>>) -> Self {
         Self {
             name,
             type_annotation,
@@ -303,25 +174,29 @@ impl TypeField {
 
 #[derive(Debug)]
 pub struct TypeAnnotation {
-    pub name: Rc<Node>,
+    pub name: Rc<Identifier>,
     pub r#type: Option<Rc<RefCell<sem::Type>>>,
 }
 
 impl TypeAnnotation {
-    pub fn new(name: Rc<Node>) -> Self {
+    pub fn new(name: Rc<Identifier>) -> Self {
         Self { name, r#type: None }
     }
 }
 
 #[derive(Debug)]
 pub struct FunctionDefinition {
-    pub name: Option<Rc<Node>>,
-    pub parameters: Vec<Rc<Node>>,
-    pub body: Rc<Node>,
+    pub name: Option<Rc<Identifier>>,
+    pub parameters: Vec<Rc<FunctionParameter>>,
+    pub body: Rc<Block>,
 }
 
 impl FunctionDefinition {
-    pub fn new(name: Option<Rc<Node>>, parameters: Vec<Rc<Node>>, body: Rc<Node>) -> Self {
+    pub fn new(
+        name: Option<Rc<Identifier>>,
+        parameters: Vec<Rc<FunctionParameter>>,
+        body: Rc<Block>,
+    ) -> Self {
         Self {
             name,
             parameters,
@@ -330,70 +205,64 @@ impl FunctionDefinition {
     }
 
     pub fn name(&self) -> Option<&Identifier> {
-        self.name.as_ref().map(|x| x.identifier().unwrap())
+        self.name.as_deref()
     }
 
     pub fn body(&self) -> &Block {
-        self.body.block().unwrap()
+        self.body.as_ref()
     }
 
-    pub fn parameters(&self) -> FunctionParameters {
-        FunctionParameters {
-            iter: self.parameters.iter(),
-            len: self.parameters.len(),
-        }
+    pub fn parameters(&self) -> slice::Iter<Rc<FunctionParameter>> {
+        self.parameters.iter()
     }
 }
 
 #[derive(Debug)]
 pub struct FunctionParameter {
-    pub name: Rc<Node>,
+    pub name: Rc<Identifier>,
 }
 
 impl FunctionParameter {
-    pub fn new(name: Rc<Node>) -> Self {
+    pub fn new(name: Rc<Identifier>) -> Self {
         Self { name }
     }
 
     pub fn name(&self) -> &Identifier {
-        self.name.identifier().unwrap()
+        self.name.as_ref()
     }
 }
 
 #[derive(Debug)]
 pub struct Statement {
-    pub expression: Rc<Node>,
+    pub expression: Rc<Expression>,
 }
 
 impl Statement {
-    pub fn new(expression: Rc<Node>) -> Self {
+    pub fn new(expression: Rc<Expression>) -> Self {
         Self { expression }
     }
 
     pub fn expression(&self) -> &Expression {
-        self.expression.expression().unwrap()
+        self.expression.as_ref()
     }
 }
 
 #[derive(Debug)]
 pub struct Block {
-    pub statements: Vec<Rc<Node>>,
+    pub statements: Vec<Rc<Statement>>,
     pub scope: Rc<RefCell<Scope>>,
 }
 
 impl Block {
-    pub fn new(statements: Vec<Rc<Node>>) -> Self {
+    pub fn new(statements: Vec<Rc<Statement>>) -> Self {
         Self {
             statements,
             scope: wrap(Scope::new()),
         }
     }
 
-    pub fn statements(&self) -> Statements {
-        Statements {
-            iter: self.statements.iter(),
-            len: self.statements.len(),
-        }
+    pub fn statements(&self) -> slice::Iter<Rc<Statement>> {
+        self.statements.iter()
     }
 }
 
@@ -511,21 +380,21 @@ impl StringLiteral {
 #[derive(Debug)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
-    pub lhs: Rc<Node>,
-    pub rhs: Option<Rc<Node>>,
+    pub lhs: Rc<Expression>,
+    pub rhs: Option<Rc<Expression>>,
 }
 
 impl BinaryExpression {
-    pub fn new(operator: BinaryOperator, lhs: Rc<Node>, rhs: Option<Rc<Node>>) -> Self {
+    pub fn new(operator: BinaryOperator, lhs: Rc<Expression>, rhs: Option<Rc<Expression>>) -> Self {
         Self { operator, lhs, rhs }
     }
 
     pub fn lhs(&self) -> &Expression {
-        self.lhs.expression().unwrap()
+        self.lhs.as_ref()
     }
 
     pub fn rhs(&self) -> Option<&Expression> {
-        self.rhs.as_ref().map(|x| x.expression().unwrap())
+        self.rhs.as_deref()
     }
 }
 
@@ -568,80 +437,71 @@ pub enum UnaryOperator {
 
 #[derive(Debug)]
 pub struct SubscriptExpression {
-    pub callee: Rc<Node>,
-    pub arguments: Vec<Rc<Node>>,
+    pub callee: Rc<Expression>,
+    pub arguments: Vec<Rc<Expression>>,
 }
 
 impl SubscriptExpression {
-    pub fn new(callee: Rc<Node>, arguments: Vec<Rc<Node>>) -> Self {
+    pub fn new(callee: Rc<Expression>, arguments: Vec<Rc<Expression>>) -> Self {
         Self { callee, arguments }
     }
 
     pub fn callee(&self) -> &Expression {
-        self.callee.expression().unwrap()
+        self.callee.as_ref()
     }
 
-    pub fn arguments(&self) -> Expressions {
-        Expressions {
-            iter: self.arguments.iter(),
-            len: self.arguments.len(),
-        }
+    pub fn arguments(&self) -> slice::Iter<Rc<Expression>> {
+        self.arguments.iter()
     }
 }
 
 #[derive(Debug)]
 pub struct CallExpression {
-    pub callee: Rc<Node>,
-    pub arguments: Vec<Rc<Node>>,
+    pub callee: Rc<Expression>,
+    pub arguments: Vec<Rc<Expression>>,
 }
 
 impl CallExpression {
-    pub fn new(callee: Rc<Node>, arguments: Vec<Rc<Node>>) -> Self {
+    pub fn new(callee: Rc<Expression>, arguments: Vec<Rc<Expression>>) -> Self {
         Self { callee, arguments }
     }
 
     pub fn callee(&self) -> &Expression {
-        self.callee.expression().unwrap()
+        self.callee.as_ref()
     }
 
-    pub fn arguments(&self) -> Expressions {
-        Expressions {
-            iter: self.arguments.iter(),
-            len: self.arguments.len(),
-        }
+    pub fn arguments(&self) -> slice::Iter<Rc<Expression>> {
+        self.arguments.iter()
     }
 }
 
 #[derive(Debug)]
 pub struct ArrayExpression {
-    pub elements: Vec<Rc<Node>>,
+    pub elements: Vec<Rc<Expression>>,
 }
 
 impl ArrayExpression {
-    pub fn new(elements: Vec<Rc<Node>>) -> Self {
+    pub fn new(elements: Vec<Rc<Expression>>) -> Self {
         Self { elements }
     }
 
-    pub fn elements(&self) -> Expressions {
-        Expressions {
-            iter: self.elements.iter(),
-            len: self.elements.len(),
-        }
+    pub fn elements(&self) -> slice::Iter<Rc<Expression>> {
+        self.elements.iter()
     }
 }
 
 #[derive(Debug)]
 pub struct IfExpression {
-    pub condition: Option<Rc<Node>>,
-    pub then_body: Rc<Node>,
-    pub else_body: Option<Rc<Node>>,
+    pub condition: Option<Rc<Expression>>,
+    pub then_body: Rc<Block>,
+    pub else_body: Option<Rc<Block>>,
 }
 
 impl IfExpression {
     pub fn new(
-        condition: Option<Rc<Node>>,
-        then_body: Rc<Node>,
-        else_body: Option<Rc<Node>>,
+        condition: Option<Rc<Expression>>,
+        then_body: Rc<Block>,
+        else_body: Option<Rc<Block>>,
     ) -> Self {
         Self {
             condition,
@@ -653,13 +513,17 @@ impl IfExpression {
 
 #[derive(Debug)]
 pub struct CaseExpression {
-    pub head: Option<Rc<Node>>,
+    pub head: Option<Rc<Expression>>,
     pub arms: Vec<CaseArm>,
-    pub else_body: Option<Rc<Node>>,
+    pub else_body: Option<Rc<Block>>,
 }
 
 impl CaseExpression {
-    pub fn new(head: Option<Rc<Node>>, arms: Vec<CaseArm>, else_body: Option<Rc<Node>>) -> Self {
+    pub fn new(
+        head: Option<Rc<Expression>>,
+        arms: Vec<CaseArm>,
+        else_body: Option<Rc<Block>>,
+    ) -> Self {
         Self {
             head,
             arms,
@@ -670,13 +534,17 @@ impl CaseExpression {
 
 #[derive(Debug)]
 pub struct CaseArm {
-    pub pattern: Option<Rc<Node>>,
-    pub guard: Option<Rc<Node>>,
-    pub then_body: Rc<Node>,
+    pub pattern: Option<Rc<Pattern>>,
+    pub guard: Option<Rc<Expression>>,
+    pub then_body: Rc<Block>,
 }
 
 impl CaseArm {
-    pub fn new(pattern: Option<Rc<Node>>, guard: Option<Rc<Node>>, then_body: Rc<Node>) -> Self {
+    pub fn new(
+        pattern: Option<Rc<Pattern>>,
+        guard: Option<Rc<Expression>>,
+        then_body: Rc<Block>,
+    ) -> Self {
         Self {
             pattern,
             guard,
@@ -685,7 +553,7 @@ impl CaseArm {
     }
 
     pub fn pattern(&self) -> Option<&Pattern> {
-        self.pattern.as_ref().map(|p| p.pattern().unwrap())
+        self.pattern.as_deref()
     }
 }
 
@@ -701,7 +569,7 @@ pub enum ExpressionKind {
     ArrayExpression(ArrayExpression),
     IfExpression(IfExpression),
     CaseExpression(CaseExpression),
-    Expression(Rc<Node>),
+    Expression(Rc<Expression>),
 }
 
 #[derive(Debug)]
@@ -717,19 +585,16 @@ impl Pattern {
 
 #[derive(Debug)]
 pub struct ArrayPattern {
-    pub elements: Vec<Rc<Node>>,
+    pub elements: Vec<Rc<Pattern>>,
 }
 
 impl ArrayPattern {
-    pub fn new(elements: Vec<Rc<Node>>) -> Self {
+    pub fn new(elements: Vec<Rc<Pattern>>) -> Self {
         Self { elements }
     }
 
-    pub fn elements(&self) -> Patterns {
-        Patterns {
-            iter: self.elements.iter(),
-            len: self.elements.len(),
-        }
+    pub fn elements(&self) -> slice::Iter<Rc<Pattern>> {
+        self.elements.iter()
     }
 }
 
@@ -766,105 +631,6 @@ impl<'a> Iterator for CodeKinds<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Expressions<'a> {
-    iter: slice::Iter<'a, Rc<Node>>,
-    len: usize,
-}
-
-impl<'a> Expressions<'a> {
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-}
-
-impl<'a> Iterator for Expressions<'a> {
-    type Item = &'a Expression;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().as_ref().map(|x| x.expression().unwrap())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Statements<'a> {
-    iter: slice::Iter<'a, Rc<Node>>,
-    len: usize,
-}
-
-impl<'a> Statements<'a> {
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-}
-
-impl<'a> Iterator for Statements<'a> {
-    type Item = &'a Statement;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().as_ref().map(|x| x.statement().unwrap())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct FunctionParameters<'a> {
-    iter: slice::Iter<'a, Rc<Node>>,
-    len: usize,
-}
-
-impl<'a> FunctionParameters<'a> {
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-}
-
-impl<'a> Iterator for FunctionParameters<'a> {
-    type Item = &'a FunctionParameter;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter
-            .next()
-            .as_ref()
-            .map(|x| x.function_parameter().unwrap())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Patterns<'a> {
-    iter: slice::Iter<'a, Rc<Node>>,
-    len: usize,
-}
-
-impl<'a> Patterns<'a> {
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-}
-
-impl<'a> Iterator for Patterns<'a> {
-    type Item = &'a Pattern;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().as_ref().map(|x| x.pattern().unwrap())
-    }
-}
-
 impl fmt::Display for NodeKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -878,7 +644,9 @@ impl fmt::Display for NodeKind {
             NodeKind::FunctionParameter(_) => write!(f, "FunctionParameter"),
             NodeKind::Statement(_) => write!(f, "Statement"),
             NodeKind::Pattern(_) => write!(f, "Pattern"),
-            NodeKind::Expression(Expression { kind, .. }) => write!(f, "{}", kind),
+            NodeKind::Expression(expr) => {
+                write!(f, "{}", expr.kind)
+            }
             NodeKind::Unit => write!(f, "()"),
         }
     }
