@@ -10,7 +10,7 @@ use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Trivia, Trivia
 
 pub struct NodePath {
     skipped: bool,
-    node: Rc<Node>,
+    node: NodeKind,
     scope: Weak<RefCell<Scope>>,
     main_scope: Weak<RefCell<Scope>>,
     declarations: Weak<RefCell<Scope>>,
@@ -18,12 +18,12 @@ pub struct NodePath {
 }
 
 impl NodePath {
-    pub fn child(node: &Rc<Node>, parent: Option<Rc<RefCell<NodePath>>>) -> Self {
+    pub fn child(node: NodeKind, parent: Option<Rc<RefCell<NodePath>>>) -> Self {
         if let Some(ref parent) = parent {
             let borrowed_parent = parent.borrow();
             Self {
                 skipped: false,
-                node: Rc::clone(node),
+                node,
                 parent: Some(Rc::clone(parent)),
                 scope: Weak::clone(&borrowed_parent.scope),
                 main_scope: Weak::clone(&borrowed_parent.main_scope),
@@ -32,7 +32,7 @@ impl NodePath {
         } else {
             Self {
                 skipped: false,
-                node: Rc::clone(node),
+                node,
                 parent: None,
                 declarations: Weak::new(),
                 scope: Weak::new(),
@@ -41,7 +41,7 @@ impl NodePath {
         }
     }
 
-    pub fn node(&self) -> &Rc<Node> {
+    pub fn node(&self) -> &NodeKind {
         &self.node
     }
 
@@ -59,17 +59,13 @@ impl NodePath {
     }
 
     fn on_enter(&mut self) {
-        match self.node.kind() {
-            NodeKind::Program(Program {
-                main_scope,
-                declarations,
-                ..
-            }) => {
-                self.main_scope = Rc::downgrade(main_scope);
-                self.scope = Rc::downgrade(declarations);
+        match self.node() {
+            NodeKind::Program(program) => {
+                self.main_scope = Rc::downgrade(&program.main_scope);
+                self.scope = Rc::downgrade(&program.declarations);
             }
-            NodeKind::Block(Block { scope, .. }) => {
-                self.scope = Rc::downgrade(scope);
+            NodeKind::Block(block) => {
+                self.scope = Rc::downgrade(&block.scope);
             }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
@@ -83,13 +79,13 @@ impl NodePath {
     }
 
     fn on_exit(&mut self) {
-        match self.node.kind() {
+        match self.node {
             NodeKind::Program(_) => {
                 self.main_scope = Weak::new();
                 self.scope = Weak::new();
             }
-            NodeKind::Block(Block { scope, .. }) => {
-                self.scope = Weak::clone(&scope.borrow().parent);
+            NodeKind::Block(block) => {
+                self.scope = Weak::clone(&block.scope.borrow().parent);
             }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
@@ -230,7 +226,7 @@ pub trait Visitor {
     fn exit_case_expression(&mut self, path: &mut NodePath, expr: &CaseExpression) {}
 }
 
-pub fn traverse(visitor: &mut dyn Visitor, node: &Rc<Node>, parent: Option<Rc<RefCell<NodePath>>>) {
+pub fn traverse(visitor: &mut dyn Visitor, node: NodeKind, parent: Option<Rc<RefCell<NodePath>>>) {
     let path = wrap(NodePath::child(node, parent));
     traverse_path(visitor, &path);
 }
@@ -252,10 +248,10 @@ fn traverse_path(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
 }
 
 fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
-    let node = Rc::clone(path.borrow().node());
+    let node = path.borrow().node();
     let mut path = &mut path.borrow_mut();
 
-    match node.kind() {
+    match node {
         NodeKind::Program(_) => {
             visitor.enter_program(&mut path);
         }
@@ -332,10 +328,10 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
 }
 
 fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
-    let node = Rc::clone(path.borrow().node());
+    let node = path.borrow().node();
     let mut path = &mut path.borrow_mut();
 
-    match node.kind() {
+    match node {
         NodeKind::Program(_) => {
             visitor.exit_program(&mut path);
         }
@@ -412,7 +408,7 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
 }
 
 fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
-    let node = Rc::clone(path.borrow().node());
+    let node = path.borrow().node();
 
     for kind in node.code() {
         match kind {

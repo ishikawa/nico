@@ -17,7 +17,6 @@ pub enum NodeKind {
     Statement(Rc<Statement>),
     Expression(Rc<Expression>),
     Pattern(Rc<Pattern>),
-    Unit, // ()
 }
 
 #[derive(Debug)]
@@ -94,10 +93,11 @@ pub struct Program {
     pub body: Vec<TopLevelKind>,
     pub declarations: Rc<RefCell<Scope>>,
     pub main_scope: Rc<RefCell<Scope>>,
+    pub code: Code,
 }
 
 impl Program {
-    pub fn new(body: Vec<TopLevelKind>) -> Self {
+    pub fn new(body: Vec<TopLevelKind>, code: Code) -> Self {
         let declarations = wrap(Scope::new());
         let main_scope = wrap(Scope::new());
 
@@ -107,26 +107,33 @@ impl Program {
             body,
             declarations,
             main_scope,
+            code,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Identifier(String);
+#[derive(Debug)]
+pub struct Identifier {
+    pub id: String,
+    pub code: Code,
+}
 
 impl Identifier {
-    pub fn new<S: Into<String>>(name: S) -> Self {
-        Self(name.into())
+    pub fn new<S: Into<String>>(name: S, code: Code) -> Self {
+        Self {
+            id: name.into(),
+            code,
+        }
     }
 
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.id
     }
 }
 
 impl fmt::Display for Identifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.id)
     }
 }
 
@@ -189,6 +196,7 @@ pub struct FunctionDefinition {
     pub name: Option<Rc<Identifier>>,
     pub parameters: Vec<Rc<FunctionParameter>>,
     pub body: Rc<Block>,
+    pub code: Code,
 }
 
 impl FunctionDefinition {
@@ -196,11 +204,13 @@ impl FunctionDefinition {
         name: Option<Rc<Identifier>>,
         parameters: Vec<Rc<FunctionParameter>>,
         body: Rc<Block>,
+        code: Code,
     ) -> Self {
         Self {
             name,
             parameters,
             body,
+            code,
         }
     }
 
@@ -220,11 +230,12 @@ impl FunctionDefinition {
 #[derive(Debug)]
 pub struct FunctionParameter {
     pub name: Rc<Identifier>,
+    pub code: Code,
 }
 
 impl FunctionParameter {
-    pub fn new(name: Rc<Identifier>) -> Self {
-        Self { name }
+    pub fn new(name: Rc<Identifier>, code: Code) -> Self {
+        Self { name, code }
     }
 
     pub fn name(&self) -> &Identifier {
@@ -251,13 +262,15 @@ impl Statement {
 pub struct Block {
     pub statements: Vec<Rc<Statement>>,
     pub scope: Rc<RefCell<Scope>>,
+    pub code: Code,
 }
 
 impl Block {
-    pub fn new(statements: Vec<Rc<Statement>>) -> Self {
+    pub fn new(statements: Vec<Rc<Statement>>, code: Code) -> Self {
         Self {
             statements,
             scope: wrap(Scope::new()),
+            code,
         }
     }
 
@@ -286,7 +299,7 @@ impl Expression {
         &self.r#type
     }
 
-    pub fn variable_expression(&self) -> Option<&Identifier> {
+    pub fn variable_expression(&self) -> Option<&String> {
         if let ExpressionKind::VariableExpression(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -348,32 +361,6 @@ impl Expression {
         } else {
             None
         }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct IntegerLiteral(i32);
-
-impl IntegerLiteral {
-    pub fn new(value: i32) -> Self {
-        Self(value)
-    }
-
-    pub fn value(&self) -> i32 {
-        self.0
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct StringLiteral(Option<String>);
-
-impl StringLiteral {
-    pub fn new(value: Option<String>) -> Self {
-        Self(value)
-    }
-
-    pub fn value(&self) -> Option<&str> {
-        self.0.as_deref()
     }
 }
 
@@ -559,9 +546,9 @@ impl CaseArm {
 
 #[derive(Debug)]
 pub enum ExpressionKind {
-    IntegerLiteral(IntegerLiteral),
-    StringLiteral(StringLiteral),
-    VariableExpression(Identifier),
+    IntegerLiteral(i32),
+    StringLiteral(Option<String>),
+    VariableExpression(String),
     BinaryExpression(BinaryExpression),
     UnaryExpression(UnaryExpression),
     SubscriptExpression(SubscriptExpression),
@@ -569,17 +556,18 @@ pub enum ExpressionKind {
     ArrayExpression(ArrayExpression),
     IfExpression(IfExpression),
     CaseExpression(CaseExpression),
-    Expression(Rc<Expression>),
+    Expression(Option<Rc<Expression>>),
 }
 
 #[derive(Debug)]
 pub struct Pattern {
     pub kind: PatternKind,
+    pub code: Code,
 }
 
 impl Pattern {
-    pub fn new(kind: PatternKind) -> Self {
-        Self { kind }
+    pub fn new(kind: PatternKind, code: Code) -> Self {
+        Self { kind, code }
     }
 }
 
@@ -600,9 +588,9 @@ impl ArrayPattern {
 
 #[derive(Debug)]
 pub enum PatternKind {
-    IntegerPattern(IntegerLiteral),
-    StringPattern(StringLiteral),
-    VariablePattern(Identifier),
+    IntegerPattern(i32),
+    StringPattern(Option<String>),
+    VariablePattern(String),
     ArrayPattern(ArrayPattern),
 }
 
@@ -647,7 +635,6 @@ impl fmt::Display for NodeKind {
             NodeKind::Expression(expr) => {
                 write!(f, "{}", expr.kind)
             }
-            NodeKind::Unit => write!(f, "()"),
         }
     }
 }
@@ -665,7 +652,8 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::ArrayExpression(_) => write!(f, "ArrayExpression"),
             ExpressionKind::IfExpression(_) => write!(f, "IfExpression"),
             ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
-            ExpressionKind::Expression(expr) => write!(f, "({})", expr.kind()),
+            ExpressionKind::Expression(Some(expr)) => write!(f, "({})", expr.kind()),
+            ExpressionKind::Expression(None) => write!(f, "()"),
         }
     }
 }
