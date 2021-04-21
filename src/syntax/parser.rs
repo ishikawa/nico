@@ -40,17 +40,17 @@ impl<'a> Parser<'a> {
         loop {
             // Type declaration
             if let Some(node) = self.parse_struct_definition() {
-                code.node(NodeKind::StructDefinition(node));
+                code.node(NodeKind::StructDefinition(Rc::clone(&node)));
                 body.push(TopLevelKind::StructDefinition(node));
             }
             // Function
             else if let Some(node) = self.parse_function() {
-                code.node(NodeKind::FunctionDefinition(node));
+                code.node(NodeKind::FunctionDefinition(Rc::clone(&node)));
                 body.push(TopLevelKind::FunctionDefinition(node));
             }
             // Body for main function
             else if let Some(node) = self.parse_stmt() {
-                code.node(NodeKind::Statement(node));
+                code.node(NodeKind::Statement(Rc::clone(&node)));
                 body.push(TopLevelKind::Statement(node));
             }
             // No top level constructs can be consumed. It may be at the end of input or
@@ -105,7 +105,7 @@ impl<'a> Parser<'a> {
                     // Okay, it's a function name.
                     let name = self.parse_name().unwrap();
 
-                    code.node(NodeKind::Identifier(name));
+                    code.node(NodeKind::Identifier(Rc::clone(&name)));
                     function_name = Some(name);
 
                     break;
@@ -151,7 +151,7 @@ impl<'a> Parser<'a> {
 
     fn parse_function_parameter(&mut self) -> Option<Rc<FunctionParameter>> {
         if let Some(name) = self.parse_name() {
-            let code = Code::with_node(NodeKind::Identifier(name));
+            let code = Code::with_node(NodeKind::Identifier(Rc::clone(&name)));
             Some(Rc::new(FunctionParameter::new(name, code)))
         } else {
             None
@@ -187,7 +187,8 @@ impl<'a> Parser<'a> {
         self.debug_trace("parse_stmt_expr");
 
         if let Some(expr) = self.parse_expr() {
-            Some(Rc::new(Statement::new(expr)))
+            let code = Code::with_node(NodeKind::Expression(Rc::clone(&expr)));
+            Some(Rc::new(Statement::new(expr, code)))
         } else {
             None
         }
@@ -405,8 +406,9 @@ impl<'a> Parser<'a> {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Identifier(ref id) = token.kind {
+            let id = id.clone();
             let code = Code::with_interpreted(token);
-            (id.clone(), code)
+            (id, code)
         } else {
             unreachable!()
         }
@@ -723,7 +725,7 @@ impl<'a> Parser<'a> {
                     code.missing(insertion_range, MissingTokenKind::Separator);
                 }
 
-                code.node(NodeKind::Statement(stmt));
+                code.node(NodeKind::Statement(Rc::clone(&stmt)));
                 body.push(stmt);
             }
 
@@ -1000,7 +1002,7 @@ mod tests {
 
             assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
 
-            let mut tokens = stmt.code();
+            let mut tokens = stmt.expression().code();
             assert_eq!(tokens.len(), 4);
 
             let token = next_interpreted_token(&mut tokens);
@@ -1351,8 +1353,8 @@ mod tests {
         );
         let expr = stmt.expression().if_expression().unwrap();
 
-        assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
-            let condition = condition.unwrap();
+        assert_matches!(expr, IfExpression { ref condition, ref else_body, .. } => {
+            let condition = condition.as_ref().unwrap();
 
             assert_matches!(condition.kind(), ExpressionKind::BinaryExpression(..));
             assert!(else_body.is_some());
@@ -1393,7 +1395,7 @@ mod tests {
         assert!(node.is_block());
 
         {
-            let mut tokens = node.block().unwrap().code();
+            let mut tokens = node.code();
 
             assert_eq!(tokens.len(), 2);
 

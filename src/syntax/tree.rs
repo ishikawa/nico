@@ -8,22 +8,54 @@ pub trait Node {
     fn code(&self) -> slice::Iter<CodeKind>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NodeKind {
     Program(Rc<Program>),
     Block(Rc<Block>),
     Identifier(Rc<Identifier>),
     StructDefinition(Rc<StructDefinition>),
     FunctionDefinition(Rc<FunctionDefinition>),
+    FunctionParameter(Rc<FunctionParameter>),
     TypeField(Rc<TypeField>),
     TypeAnnotation(Rc<TypeAnnotation>),
-    FunctionParameter(Rc<FunctionParameter>),
     Statement(Rc<Statement>),
     Expression(Rc<Expression>),
     Pattern(Rc<Pattern>),
 }
 
 impl NodeKind {
+    pub fn program(&self) -> Option<Rc<Program>> {
+        if let NodeKind::Program(program) = self {
+            Some(Rc::clone(program))
+        } else {
+            None
+        }
+    }
+
+    pub fn struct_definition(&self) -> Option<Rc<StructDefinition>> {
+        if let NodeKind::StructDefinition(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
+    pub fn function_definition(&self) -> Option<Rc<FunctionDefinition>> {
+        if let NodeKind::FunctionDefinition(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
+    pub fn function_parameter(&self) -> Option<Rc<FunctionParameter>> {
+        if let NodeKind::FunctionParameter(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
     pub fn block(&self) -> Option<Rc<Block>> {
         if let NodeKind::Block(block) = self {
             Some(Rc::clone(block))
@@ -40,6 +72,23 @@ impl NodeKind {
         }
     }
 
+    pub fn expression(&self) -> Option<Rc<Expression>> {
+        if let NodeKind::Expression(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
+    pub fn variable_expression(&self) -> Option<&str> {
+        if let NodeKind::Expression(node) = self {
+            if let Some(v) = node.variable_expression() {
+                return Some(v);
+            }
+        }
+        None
+    }
+
     pub fn is_block(&self) -> bool {
         matches!(self, NodeKind::Block(..))
     }
@@ -48,8 +97,34 @@ impl NodeKind {
         matches!(self, NodeKind::Statement(..))
     }
 
+    pub fn is_function_definition(&self) -> bool {
+        matches!(self, NodeKind::FunctionDefinition(..))
+    }
+
+    pub fn is_function_parameter(&self) -> bool {
+        matches!(self, NodeKind::FunctionParameter(..))
+    }
+
     pub fn is_expression(&self) -> bool {
         matches!(self, NodeKind::Expression(..))
+    }
+}
+
+impl Node for NodeKind {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        match self {
+            NodeKind::Program(kind) => kind.code(),
+            NodeKind::Block(kind) => kind.code(),
+            NodeKind::Identifier(kind) => kind.code(),
+            NodeKind::StructDefinition(kind) => kind.code(),
+            NodeKind::FunctionDefinition(kind) => kind.code(),
+            NodeKind::TypeField(kind) => kind.code(),
+            NodeKind::TypeAnnotation(kind) => kind.code(),
+            NodeKind::FunctionParameter(kind) => kind.code(),
+            NodeKind::Statement(kind) => kind.code(),
+            NodeKind::Expression(kind) => kind.code(),
+            NodeKind::Pattern(kind) => kind.code(),
+        }
     }
 }
 
@@ -341,11 +416,12 @@ impl Node for FunctionParameter {
 #[derive(Debug)]
 pub struct Statement {
     pub expression: Rc<Expression>,
+    code: Code,
 }
 
 impl Statement {
-    pub fn new(expression: Rc<Expression>) -> Self {
-        Self { expression }
+    pub fn new(expression: Rc<Expression>, code: Code) -> Self {
+        Self { expression, code }
     }
 
     pub fn expression(&self) -> &Expression {
@@ -355,7 +431,7 @@ impl Statement {
 
 impl Node for Statement {
     fn code(&self) -> slice::Iter<CodeKind> {
-        self.expression.code()
+        self.code.iter()
     }
 }
 
@@ -406,7 +482,7 @@ impl Expression {
         &self.r#type
     }
 
-    pub fn variable_expression(&self) -> Option<&String> {
+    pub fn variable_expression(&self) -> Option<&str> {
         if let ExpressionKind::VariableExpression(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -681,6 +757,12 @@ pub struct Pattern {
 impl Pattern {
     pub fn new(kind: PatternKind, code: Code) -> Self {
         Self { kind, code }
+    }
+}
+
+impl Node for Pattern {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
     }
 }
 

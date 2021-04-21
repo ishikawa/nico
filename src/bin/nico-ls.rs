@@ -1,8 +1,8 @@
 use log::{info, warn};
 use lsp_types::*;
 use nico::syntax::{
-    self, EffectiveRange, MissingTokenKind, Node, NodePath, ParseError, Parser, Token, TokenKind,
-    Trivia,
+    self, EffectiveRange, MissingTokenKind, NodeKind, NodePath, ParseError, Parser, Token,
+    TokenKind, Trivia,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -240,7 +240,7 @@ impl SemanticTokenizer {
 
                 if let Some(id) = node.variable_expression() {
                     if let Some(scope) = path.scope() {
-                        if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
+                        if let Some(binding) = scope.borrow().get_binding(id) {
                             let binding = binding.borrow();
                             let declaration = binding.node();
 
@@ -373,7 +373,7 @@ impl syntax::Visitor for SemanticTokenizer {
 #[derive(Debug, Default)]
 struct Connection {
     documents: HashMap<Url, Rc<RefCell<Document>>>,
-    compiled_results: HashMap<Url, Rc<Node>>,
+    compiled_results: HashMap<Url, Rc<syntax::Program>>,
     diagnostics: HashMap<Url, Vec<Diagnostic>>,
     server_options: Option<ServerRegistrationOptions>,
 }
@@ -462,7 +462,7 @@ impl Connection {
         })
     }
 
-    fn get_compiled_result(&self, uri: &Url) -> Result<&Rc<Node>, HandlerError> {
+    fn get_compiled_result(&self, uri: &Url) -> Result<&Rc<syntax::Program>, HandlerError> {
         self.compiled_results.get(uri).ok_or_else(|| HandlerError {
             kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
         })
@@ -474,16 +474,17 @@ impl Connection {
         })
     }
 
-    fn compile(&mut self, uri: &Url) -> Result<Rc<Node>, HandlerError> {
+    fn compile(&mut self, uri: &Url) -> Result<Rc<syntax::Program>, HandlerError> {
         let doc = self.get_document(uri)?;
-        let node = Rc::new(Parser::parse_string(&doc.borrow().text));
+        let node = Parser::parse_string(&doc.borrow().text);
+        let kind = NodeKind::Program(Rc::clone(&node));
 
         // Scopes
-        syntax::bind_scopes(&node);
+        syntax::bind_scopes(&kind);
 
         // Diagnostics
         let mut diagnostics = DiagnosticsCollector::new();
-        syntax::traverse(&mut diagnostics, &node, None);
+        syntax::traverse(&mut diagnostics, &kind, None);
 
         self.compiled_results.insert(uri.clone(), Rc::clone(&node));
         self.diagnostics
@@ -585,7 +586,7 @@ impl Connection {
             &server_options.token_modifier_legend,
         );
 
-        syntax::traverse(&mut tokenizer, node, None);
+        syntax::traverse(&mut tokenizer, &NodeKind::Program(Rc::clone(&node)), None);
 
         //info!("tokens = {:?}", tokenizer.tokens);
         Ok(SemanticTokens {
