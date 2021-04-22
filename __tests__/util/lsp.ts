@@ -117,6 +117,18 @@ export namespace ErrorCodes {
   export const lspReservedErrorRangeEnd = -32800;
 }
 
+interface NotificationMessage extends Message {
+  /**
+   * The method to be invoked.
+   */
+  method: string;
+
+  /**
+   * The notification's params.
+   */
+  params?: any;
+}
+
 export class LanguageServer extends EventEmitter {
   process: ChildProcessWithoutNullStreams;
 
@@ -185,8 +197,25 @@ export class LanguageServer extends EventEmitter {
     return promise;
   }
 
+  sendNotification(notification: NotificationMessage): Promise<void> {
+    const payload = JSON.stringify(notification);
+
+    this.process.stdin.write(`Content-Length: ${payload.length}\r\n`);
+    this.process.stdin.write("\r\n");
+    this.process.stdin.write(payload);
+
+    return Promise.resolve();
+  }
+
+  isStopped(): boolean {
+    return this.process.killed;
+  }
+
   stop() {
-    this.process.kill();
+    // Delay sending the signal so that we can see the output of the `console.log()` while testing.
+    setTimeout(() => {
+      this.process.kill();
+    }, 100);
   }
 }
 
@@ -196,6 +225,14 @@ export function buildRequest(method: string, params: any): RequestMessage {
   return {
     jsonrpc: "2.0",
     id: Math.floor(Math.random() * 10000),
+    method,
+    params
+  };
+}
+
+export function buildNotification(method: string, params: any): NotificationMessage {
+  return {
+    jsonrpc: "2.0",
     method,
     params
   };
@@ -271,4 +308,8 @@ export function buildInitializeRequest(): RequestMessage {
   };
 
   return buildRequest("initialize", params);
+}
+
+export function buildInitializedNotification(): NotificationMessage {
+  return buildNotification("initialized", {});
 }

@@ -1,4 +1,4 @@
-import { LanguageServer, buildRequest, buildInitializeRequest } from "./util/lsp";
+import { LanguageServer, buildInitializeRequest, buildInitializedNotification } from "./util/lsp";
 
 test("initialize", async done => {
   const server = LanguageServer.spawn();
@@ -47,6 +47,29 @@ test("initialize", async done => {
     },
     error: null
   });
+
+  server.on("exit", done);
+  server.stop();
+});
+
+test("initialized", async done => {
+  const server = LanguageServer.spawn();
+
+  // initialize
+  {
+    const request = buildInitializeRequest();
+    const response = await server.sendRequest(request);
+
+    expect(response).not.toBeNull();
+  }
+
+  // initialized
+  {
+    const notification = buildInitializedNotification();
+    await server.sendNotification(notification);
+  }
+
+  expect(server.isStopped()).toBeFalsy();
 
   server.on("exit", done);
   server.stop();
