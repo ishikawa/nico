@@ -190,6 +190,8 @@ export class LanguageServer extends EventEmitter {
   }
 }
 
+// Requests and notifications
+
 export function buildRequest(method: string, params: any): RequestMessage {
   return {
     jsonrpc: "2.0",
@@ -197,4 +199,76 @@ export function buildRequest(method: string, params: any): RequestMessage {
     method,
     params
   };
+}
+
+export function buildInitializeRequest(): RequestMessage {
+  const params = {
+    trace: "verbose",
+    capabilities: {
+      textDocument: {
+        publishDiagnostics: {
+          relatedInformation: true,
+          versionSupport: false,
+          tagSupport: {
+            valueSet: [1, 2]
+          },
+          codeDescriptionSupport: true,
+          dataSupport: true
+        }
+      },
+      semanticTokens: {
+        dynamicRegistration: true,
+        tokenTypes: [
+          "namespace",
+          "type",
+          "class",
+          "enum",
+          "interface",
+          "struct",
+          "typeParameter",
+          "parameter",
+          "variable",
+          "property",
+          "enumMember",
+          "event",
+          "function",
+          "method",
+          "macro",
+          "keyword",
+          "modifier",
+          "comment",
+          "string",
+          "number",
+          "regexp",
+          "operator"
+        ],
+        tokenModifiers: [
+          "declaration",
+          "definition",
+          "readonly",
+          "static",
+          "deprecated",
+          "abstract",
+          "async",
+          "modification",
+          "documentation",
+          "defaultLibrary"
+        ],
+        formats: ["relative"],
+        requests: {
+          range: true,
+          full: {
+            delta: true
+          }
+        },
+        multilineTokenSupport: false,
+        overlappingTokenSupport: false
+      },
+      linkedEditingRange: {
+        dynamicRegistration: true
+      }
+    }
+  };
+
+  return buildRequest("initialize", params);
 }

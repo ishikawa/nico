@@ -1,78 +1,9 @@
-import { LanguageServer, buildRequest } from "./util/lsp";
+import { LanguageServer, buildRequest, buildInitializeRequest } from "./util/lsp";
 
 test("initialize", async done => {
   const server = LanguageServer.spawn();
 
-  // Initialize - params
-  const params = {
-    trace: "verbose",
-    capabilities: {
-      textDocument: {
-        publishDiagnostics: {
-          relatedInformation: true,
-          versionSupport: false,
-          tagSupport: {
-            valueSet: [1, 2]
-          },
-          codeDescriptionSupport: true,
-          dataSupport: true
-        }
-      },
-      semanticTokens: {
-        dynamicRegistration: true,
-        tokenTypes: [
-          "namespace",
-          "type",
-          "class",
-          "enum",
-          "interface",
-          "struct",
-          "typeParameter",
-          "parameter",
-          "variable",
-          "property",
-          "enumMember",
-          "event",
-          "function",
-          "method",
-          "macro",
-          "keyword",
-          "modifier",
-          "comment",
-          "string",
-          "number",
-          "regexp",
-          "operator"
-        ],
-        tokenModifiers: [
-          "declaration",
-          "definition",
-          "readonly",
-          "static",
-          "deprecated",
-          "abstract",
-          "async",
-          "modification",
-          "documentation",
-          "defaultLibrary"
-        ],
-        formats: ["relative"],
-        requests: {
-          range: true,
-          full: {
-            delta: true
-          }
-        },
-        multilineTokenSupport: false,
-        overlappingTokenSupport: false
-      },
-      linkedEditingRange: {
-        dynamicRegistration: true
-      }
-    }
-  };
-
-  const request = buildRequest("initialize", params);
+  const request = buildInitializeRequest();
   const response = await server.sendRequest(request);
 
   expect(response).toEqual({
