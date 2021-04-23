@@ -227,7 +227,6 @@ export class LanguageServer extends EventEmitter {
 }
 
 // Requests and notifications
-
 export function buildRequest(method: string, params: any): RequestMessage {
   return {
     jsonrpc: "2.0",
@@ -245,98 +244,122 @@ export function buildNotification(method: string, params: any): NotificationMess
   };
 }
 
-export function buildInitialize(): RequestMessage {
-  const params = {
-    trace: "verbose",
-    capabilities: {
-      textDocument: {
-        publishDiagnostics: {
-          relatedInformation: true,
-          versionSupport: false,
-          tagSupport: {
-            valueSet: [1, 2]
-          },
-          codeDescriptionSupport: true,
-          dataSupport: true
-        }
-      },
-      semanticTokens: {
-        dynamicRegistration: true,
-        tokenTypes: [
-          "namespace",
-          "type",
-          "class",
-          "enum",
-          "interface",
-          "struct",
-          "typeParameter",
-          "parameter",
-          "variable",
-          "property",
-          "enumMember",
-          "event",
-          "function",
-          "method",
-          "macro",
-          "keyword",
-          "modifier",
-          "comment",
-          "string",
-          "number",
-          "regexp",
-          "operator"
-        ],
-        tokenModifiers: [
-          "declaration",
-          "definition",
-          "readonly",
-          "static",
-          "deprecated",
-          "abstract",
-          "async",
-          "modification",
-          "documentation",
-          "defaultLibrary"
-        ],
-        formats: ["relative"],
-        requests: {
-          range: true,
-          full: {
-            delta: true
+export class RequestBuilder {
+  id: number;
+
+  constructor({ id }: { id: number }) {
+    this.id = id;
+  }
+
+  buildRequest(method: string, params: any): RequestMessage {
+    return {
+      jsonrpc: "2.0",
+      id: this.id++,
+      method,
+      params
+    };
+  }
+
+  buildNotification(method: string, params: any): NotificationMessage {
+    return {
+      jsonrpc: "2.0",
+      method,
+      params
+    };
+  }
+
+  initialize(): RequestMessage {
+    const params = {
+      trace: "verbose",
+      capabilities: {
+        textDocument: {
+          publishDiagnostics: {
+            relatedInformation: true,
+            versionSupport: false,
+            tagSupport: {
+              valueSet: [1, 2]
+            },
+            codeDescriptionSupport: true,
+            dataSupport: true
           }
         },
-        multilineTokenSupport: false,
-        overlappingTokenSupport: false
-      },
-      linkedEditingRange: {
-        dynamicRegistration: true
+        semanticTokens: {
+          dynamicRegistration: true,
+          tokenTypes: [
+            "namespace",
+            "type",
+            "class",
+            "enum",
+            "interface",
+            "struct",
+            "typeParameter",
+            "parameter",
+            "variable",
+            "property",
+            "enumMember",
+            "event",
+            "function",
+            "method",
+            "macro",
+            "keyword",
+            "modifier",
+            "comment",
+            "string",
+            "number",
+            "regexp",
+            "operator"
+          ],
+          tokenModifiers: [
+            "declaration",
+            "definition",
+            "readonly",
+            "static",
+            "deprecated",
+            "abstract",
+            "async",
+            "modification",
+            "documentation",
+            "defaultLibrary"
+          ],
+          formats: ["relative"],
+          requests: {
+            range: true,
+            full: {
+              delta: true
+            }
+          },
+          multilineTokenSupport: false,
+          overlappingTokenSupport: false
+        },
+        linkedEditingRange: {
+          dynamicRegistration: true
+        }
       }
-    }
-  };
+    };
 
-  return buildRequest("initialize", params);
-}
+    return this.buildRequest("initialize", params);
+  }
 
-// textDocument/semanticTokens/full
-export function buildTextDocumentSemanticTokenFull(uri: string): RequestMessage {
-  return buildRequest("textDocument/semanticTokens/full", {
-    textDocument: {
-      uri
-    }
-  });
-}
+  textDocumentSemanticTokenFull(uri: string): RequestMessage {
+    return this.buildRequest("textDocument/semanticTokens/full", {
+      textDocument: {
+        uri
+      }
+    });
+  }
 
-export function buildInitialized(): NotificationMessage {
-  return buildNotification("initialized", {});
-}
+  initialized(): NotificationMessage {
+    return this.buildNotification("initialized", {});
+  }
 
-export function buildTextDocumentDidOpen(uri: string, text: string): NotificationMessage {
-  return buildNotification("textDocument/didOpen", {
-    textDocument: {
-      languageId: "nico",
-      version: 1,
-      uri,
-      text
-    }
-  });
+  textDocumentDidOpen(uri: string, text: string): NotificationMessage {
+    return this.buildNotification("textDocument/didOpen", {
+      textDocument: {
+        languageId: "nico",
+        version: 1,
+        uri,
+        text
+      }
+    });
+  }
 }
