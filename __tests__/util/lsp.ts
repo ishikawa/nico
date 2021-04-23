@@ -117,7 +117,7 @@ export namespace ErrorCodes {
   export const lspReservedErrorRangeEnd = -32800;
 }
 
-interface NotificationMessage extends Message {
+export interface NotificationMessage extends Message {
   /**
    * The method to be invoked.
    */
@@ -150,10 +150,11 @@ export class LanguageServer extends EventEmitter {
 
     this.process = process;
     this.process.stdout.on("data", this.onReceive.bind(this));
+    /*
     this.process.stderr.on("data", data => {
       console.warn(`stderr: ${data}`);
     });
-
+    */
     this.process.on("close", code => this.emit("close", code));
     this.process.on("exit", code => this.emit("exit", code));
 
@@ -183,11 +184,14 @@ export class LanguageServer extends EventEmitter {
     }
   }
 
-  sendRequest(message: RequestMessage): Promise<ResponseMessage> {
-    const promise = new Promise<ResponseMessage>((resolve, _reject) => {
+  nextMessage<T extends Message>(): Promise<T> {
+    return new Promise(resolve => {
       this.once("message", resolve);
     });
+  }
 
+  sendRequest(message: RequestMessage): Promise<ResponseMessage> {
+    const promise = this.nextMessage<ResponseMessage>();
     const payload = JSON.stringify(message);
 
     this.process.stdin.write(`Content-Length: ${payload.length}\r\n`);
@@ -211,11 +215,14 @@ export class LanguageServer extends EventEmitter {
     return this.process.killed;
   }
 
-  stop() {
-    // Delay sending the signal so that we can see the output of the `console.log()` while testing.
-    setTimeout(() => {
-      this.process.kill();
-    }, 100);
+  stop(): Promise<void> {
+    return new Promise(resolve => {
+      // Delay sending the signal so that we can see the output of the `console.log()` while testing.
+      setTimeout(() => {
+        this.process.kill();
+        resolve();
+      }, 100);
+    });
   }
 }
 
@@ -238,7 +245,7 @@ export function buildNotification(method: string, params: any): NotificationMess
   };
 }
 
-export function buildInitializeRequest(): RequestMessage {
+export function buildInitialize(): RequestMessage {
   const params = {
     trace: "verbose",
     capabilities: {
@@ -310,6 +317,26 @@ export function buildInitializeRequest(): RequestMessage {
   return buildRequest("initialize", params);
 }
 
-export function buildInitializedNotification(): NotificationMessage {
+// textDocument/semanticTokens/full
+export function buildTextDocumentSemanticTokenFull(uri: string): RequestMessage {
+  return buildRequest("textDocument/semanticTokens/full", {
+    textDocument: {
+      uri
+    }
+  });
+}
+
+export function buildInitialized(): NotificationMessage {
   return buildNotification("initialized", {});
+}
+
+export function buildTextDocumentDidOpen(uri: string, text: string): NotificationMessage {
+  return buildNotification("textDocument/didOpen", {
+    textDocument: {
+      languageId: "nico",
+      version: 1,
+      uri,
+      text
+    }
+  });
 }
