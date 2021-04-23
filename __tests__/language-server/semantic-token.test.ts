@@ -1,4 +1,10 @@
 import { LanguageServer, NotificationMessage, RequestBuilder } from "../util/lsp";
+import fs from "fs";
+
+interface TestCase {
+  input?: string;
+  file?: string;
+}
 
 let server: LanguageServer | undefined;
 
@@ -25,39 +31,67 @@ afterAll(() => {
   }
 });
 
-test("open a document", async done => {
-  const builder = new RequestBuilder({ id: 756 });
-  const uri = "file:///home/user/nico/sample.nico";
-
-  // Open document and no compilation errors
+const cases: TestCase[] = [
   {
-    const nextNotification = server!.nextMessage<NotificationMessage>();
-    const notification1 = builder.textDocumentDidOpen(uri, "1 + 2");
-    await server!.sendNotification(notification1);
+    input: ""
+  },
+  {
+    input: "1"
+  },
+  {
+    input: "1 + 2"
+  },
+  {
+    file: "./samples/fib.nico"
+  },
+  {
+    file: "./samples/fizzbuzz.nico"
+  }
+  //"./samples/max.nico",
+  //"./samples/sum.nico"
+];
 
-    const notification2 = await nextNotification;
-    expect(notification2).toEqual({
-      jsonrpc: "2.0",
-      method: "textDocument/publishDiagnostics",
-      // no errors
-      params: { diagnostics: [], uri }
-    });
+cases.forEach((testCase, i) => {
+  let src = "";
+  let name = "-";
+
+  if (testCase.input) {
+    src = testCase.input;
+    name = src;
+  } else if (testCase.file) {
+    const srcBuffer = fs.readFileSync(testCase.file);
+    src = srcBuffer.toString("utf-8");
+    name = testCase.file;
   }
 
-  // Semantic coloring
-  {
-    const request = builder.textDocumentSemanticTokenFull(uri);
-    const response = await server?.sendRequest(request);
+  // No compilation errors and semantic tokens
+  test(`${i}: open a document at \`${name}\``, async done => {
+    const builder = new RequestBuilder({ id: 1000 + 1 });
+    const uri = `file:///home/user/nico/sample${i}.nico`;
 
-    expect(response).toEqual({
-      id: request.id,
-      jsonrpc: "2.0",
-      result: {
-        data: [0, 0, 1, 3, 0, 0, 2, 1, 4, 0, 0, 2, 1, 3, 0]
-      },
-      error: null
-    });
-  }
+    // Open document and no compilation errors
+    {
+      const nextNotification = server!.nextMessage<NotificationMessage>();
+      const notification1 = builder.textDocumentDidOpen(uri, src);
+      await server!.sendNotification(notification1);
 
-  done();
+      const notification2 = await nextNotification;
+      expect(notification2).toEqual({
+        jsonrpc: "2.0",
+        method: "textDocument/publishDiagnostics",
+        // no errors
+        params: { diagnostics: [], uri }
+      });
+    }
+
+    // Semantic coloring
+    {
+      const request = builder.textDocumentSemanticTokenFull(uri);
+      const response = await server?.sendRequest(request);
+
+      expect(response).toMatchSnapshot();
+    }
+
+    done();
+  });
 });
