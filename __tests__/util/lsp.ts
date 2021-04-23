@@ -150,11 +150,13 @@ export class LanguageServer extends EventEmitter {
 
     this.process = process;
     this.process.stdout.on("data", this.onReceive.bind(this));
+
     /*
     this.process.stderr.on("data", data => {
       console.warn(`stderr: ${data}`);
     });
     */
+
     this.process.on("close", code => this.emit("close", code));
     this.process.on("exit", code => this.emit("exit", code));
 
@@ -170,17 +172,37 @@ export class LanguageServer extends EventEmitter {
     // Splits payload into header and contents.
     // If the received contents is valid JSON-RPC message, the number of
     // elements is greater than 3 and the last element is not empty.
-    const parts = this.payload.split("\r\n", 4);
+    //
+    // Currently, we assume the structure of payload is as follow:
+    //
+    //     Content-Length: xxx\r\n
+    //     \r\n
+    //     ...
+    //
+    const lines = this.payload.split("\r\n", 4);
 
-    if (parts.length >= 3) {
-      const content = parts[parts.length - 1];
+    if (lines.length < 3) {
+      // not completed
+      return;
+    }
 
-      if (content.length > 0) {
-        const message = JSON.parse(content);
+    if (lines.length !== 3) {
+      throw new Error(`invalid JSON-RPC message: ${payload}`);
+    }
 
-        this.payload = "";
-        this.emit("message", message);
-      }
+    const header = lines[0].trimEnd().split(/:\s*/);
+
+    if (header[0] !== "Content-Length") {
+      throw new Error(`invalid header, expected "Content-Length" but was ${header}`);
+    }
+
+    const content = lines[2];
+
+    if (content.length > 0) {
+      const message = JSON.parse(content);
+
+      this.payload = "";
+      this.emit("message", message);
     }
   }
 

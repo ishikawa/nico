@@ -227,7 +227,6 @@ pub trait Visitor {
 }
 
 pub fn traverse(visitor: &mut dyn Visitor, node: &NodeKind, parent: Option<Rc<RefCell<NodePath>>>) {
-    println!("traverse - {}", node);
     let path = wrap(NodePath::child(node, parent));
     traverse_path(visitor, &path);
 }
