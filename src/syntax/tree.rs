@@ -64,6 +64,38 @@ impl NodeKind {
         }
     }
 
+    pub fn identifier(&self) -> Option<Rc<Identifier>> {
+        if let NodeKind::Identifier(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
+    pub fn type_field(&self) -> Option<Rc<TypeField>> {
+        if let NodeKind::TypeField(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
+    pub fn type_annotation(&self) -> Option<Rc<TypeAnnotation>> {
+        if let NodeKind::TypeAnnotation(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
+    pub fn pattern(&self) -> Option<Rc<Pattern>> {
+        if let NodeKind::Pattern(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
     pub fn statement(&self) -> Option<Rc<Statement>> {
         if let NodeKind::Statement(stmt) = self {
             Some(Rc::clone(stmt))

@@ -1,4 +1,7 @@
-use super::{traverse, NodeKind, NodePath, Visitor};
+use super::{
+    traverse, Block, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Program,
+    StructDefinition, Visitor,
+};
 use crate::util::wrap;
 use std::{
     cell::RefCell,
@@ -114,16 +117,15 @@ impl DeclarationBinder {
 }
 
 impl Visitor for DeclarationBinder {
-    fn enter_program(&mut self, path: &mut NodePath) {
-        let node = path.node();
-        self.declarations = Some(Rc::clone(&node.program().unwrap().declarations));
+    fn enter_program(&mut self, _path: &mut NodePath, program: &Program) {
+        self.declarations = Some(Rc::clone(&program.declarations));
     }
 
-    fn enter_struct_definition(&mut self, path: &mut NodePath) {
+    fn enter_struct_definition(&mut self, path: &mut NodePath, _definition: &StructDefinition) {
         self.register_declaration(path.node());
     }
 
-    fn enter_function_definition(&mut self, path: &mut NodePath) {
+    fn enter_function_definition(&mut self, path: &mut NodePath, _definition: &FunctionDefinition) {
         self.register_declaration(path.node());
     }
 }
@@ -140,21 +142,16 @@ impl BlockBinder {
 }
 
 impl Visitor for BlockBinder {
-    fn enter_program(&mut self, path: &mut NodePath) {
-        let program = path.node().program().unwrap();
-
+    fn enter_program(&mut self, _path: &mut NodePath, program: &Program) {
         self.scope = Rc::downgrade(&program.main_scope);
     }
 
-    fn enter_block(&mut self, path: &mut NodePath) {
-        let node = path.node();
-        let block = node.block().unwrap();
-
+    fn enter_block(&mut self, _path: &mut NodePath, block: &Block) {
         block.scope.borrow_mut().parent = Weak::clone(&self.scope);
         self.scope = Rc::downgrade(&block.scope);
     }
 
-    fn enter_function_parameter(&mut self, path: &mut NodePath) {
+    fn enter_function_parameter(&mut self, path: &mut NodePath, _param: &FunctionParameter) {
         let node = path.node();
 
         let parent_path = path.parent().unwrap();
