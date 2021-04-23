@@ -1,26 +1,20 @@
-import {
-  LanguageServer,
-  NotificationMessage,
-  buildInitialize,
-  buildInitialized,
-  buildTextDocumentDidOpen,
-  buildTextDocumentSemanticTokenFull
-} from "../util/lsp";
+import { LanguageServer, NotificationMessage, RequestBuilder } from "../util/lsp";
 
 let server: LanguageServer | undefined;
 
 beforeAll(async () => {
+  const builder = new RequestBuilder({ id: 1 });
   server = LanguageServer.spawn();
 
   // initialize
   {
-    const request = buildInitialize();
+    const request = builder.initialize();
     await server.sendRequest(request);
   }
 
   // initialized
   {
-    const notification = buildInitialized();
+    const notification = builder.initialized();
     await server.sendNotification(notification);
   }
 });
@@ -32,12 +26,13 @@ afterAll(() => {
 });
 
 test("open a document", async done => {
+  const builder = new RequestBuilder({ id: 756 });
   const uri = "file:///home/user/nico/sample.nico";
 
   // Open document and no compilation errors
   {
     const nextNotification = server!.nextMessage<NotificationMessage>();
-    const notification1 = buildTextDocumentDidOpen(uri, "1 + 2");
+    const notification1 = builder.textDocumentDidOpen(uri, "1 + 2");
     await server!.sendNotification(notification1);
 
     const notification2 = await nextNotification;
@@ -51,7 +46,7 @@ test("open a document", async done => {
 
   // Semantic coloring
   {
-    const request = buildTextDocumentSemanticTokenFull(uri);
+    const request = builder.textDocumentSemanticTokenFull(uri);
     const response = await server?.sendRequest(request);
 
     expect(response).toEqual({
