@@ -131,6 +131,9 @@ pub enum SyntaxToken {
 pub enum MissingTokenKind {
     TopLevel,
     FunctionName,
+    StructName,
+    FieldName,
+    TypeAnnotation,
     Statement,
     Pattern,
     Expression,
@@ -585,7 +588,10 @@ impl fmt::Display for MissingTokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MissingTokenKind::TopLevel => write!(f, "declaration or statement"),
-            MissingTokenKind::FunctionName => write!(f, "a function name"),
+            MissingTokenKind::FunctionName => write!(f, "function name"),
+            MissingTokenKind::StructName => write!(f, "struct name"),
+            MissingTokenKind::FieldName => write!(f, "field name"),
+            MissingTokenKind::TypeAnnotation => write!(f, "type annotation"),
             MissingTokenKind::Statement => write!(f, "statement"),
             MissingTokenKind::Pattern => write!(f, "pattern"),
             MissingTokenKind::Expression => write!(f, "expression"),

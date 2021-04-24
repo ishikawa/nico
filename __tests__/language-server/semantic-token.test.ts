@@ -48,8 +48,13 @@ const cases: TestCase[] = [
     file: "./samples/fizzbuzz.nico"
   },
   {
+    input: "struct Rectangle { width: i32, height: i32 }"
+  }
+  /*
+  {
     file: "./samples/struct.nico"
   }
+  */
   //"./samples/max.nico",
   //"./samples/sum.nico"
 ];

@@ -1,6 +1,8 @@
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import { EventEmitter } from "events";
 
+const DEBUG = false;
+
 // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#baseProtocol
 export interface Message {
   jsonrpc: string;
@@ -151,11 +153,11 @@ export class LanguageServer extends EventEmitter {
     this.process = process;
     this.process.stdout.on("data", this.onReceive.bind(this));
 
-    /*
-    this.process.stderr.on("data", data => {
-      console.warn(`stderr: ${data}`);
-    });
-    */
+    if (DEBUG) {
+      this.process.stderr.on("data", data => {
+        console.warn(`stderr: ${data}`);
+      });
+    }
 
     this.process.on("close", code => this.emit("close", code));
     this.process.on("exit", code => this.emit("exit", code));

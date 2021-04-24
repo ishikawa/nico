@@ -658,3 +658,35 @@ Object {
   },
 }
 `;
+
+exports[`5: open a document at \`struct Rectangle { width: i32, height: i32 }\` 1`] = `
+Object {
+  "error": null,
+  "id": 1001,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "data": Array [
+      0,
+      0,
+      6,
+      0,
+      0,
+      0,
+      7,
+      9,
+      1,
+      0,
+      0,
+      12,
+      5,
+      1,
+      0,
+      0,
+      12,
+      6,
+      1,
+      0,
+    ],
+  },
+}
+`;
