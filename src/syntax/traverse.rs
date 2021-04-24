@@ -10,7 +10,7 @@ use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Trivia, Trivia
 
 pub struct NodePath {
     skipped: bool,
-    node: Rc<Node>,
+    node: NodeKind,
     scope: Weak<RefCell<Scope>>,
     main_scope: Weak<RefCell<Scope>>,
     declarations: Weak<RefCell<Scope>>,
@@ -18,12 +18,12 @@ pub struct NodePath {
 }
 
 impl NodePath {
-    pub fn child(node: &Rc<Node>, parent: Option<Rc<RefCell<NodePath>>>) -> Self {
+    pub fn child(node: &NodeKind, parent: Option<Rc<RefCell<NodePath>>>) -> Self {
         if let Some(ref parent) = parent {
             let borrowed_parent = parent.borrow();
             Self {
                 skipped: false,
-                node: Rc::clone(node),
+                node: node.clone(),
                 parent: Some(Rc::clone(parent)),
                 scope: Weak::clone(&borrowed_parent.scope),
                 main_scope: Weak::clone(&borrowed_parent.main_scope),
@@ -32,7 +32,7 @@ impl NodePath {
         } else {
             Self {
                 skipped: false,
-                node: Rc::clone(node),
+                node: node.clone(),
                 parent: None,
                 declarations: Weak::new(),
                 scope: Weak::new(),
@@ -41,7 +41,7 @@ impl NodePath {
         }
     }
 
-    pub fn node(&self) -> &Rc<Node> {
+    pub fn node(&self) -> &NodeKind {
         &self.node
     }
 
@@ -59,17 +59,13 @@ impl NodePath {
     }
 
     fn on_enter(&mut self) {
-        match self.node.kind() {
-            NodeKind::Program(Program {
-                main_scope,
-                declarations,
-                ..
-            }) => {
-                self.main_scope = Rc::downgrade(main_scope);
-                self.scope = Rc::downgrade(declarations);
+        match self.node {
+            NodeKind::Program(ref program) => {
+                self.main_scope = Rc::downgrade(&program.main_scope);
+                self.scope = Rc::downgrade(&program.declarations);
             }
-            NodeKind::Block(Block { scope, .. }) => {
-                self.scope = Rc::downgrade(scope);
+            NodeKind::Block(ref block) => {
+                self.scope = Rc::downgrade(&block.scope);
             }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
@@ -83,13 +79,13 @@ impl NodePath {
     }
 
     fn on_exit(&mut self) {
-        match self.node.kind() {
+        match self.node {
             NodeKind::Program(_) => {
                 self.main_scope = Weak::new();
                 self.scope = Weak::new();
             }
-            NodeKind::Block(Block { scope, .. }) => {
-                self.scope = Weak::clone(&scope.borrow().parent);
+            NodeKind::Block(ref block) => {
+                self.scope = Weak::clone(&block.scope.borrow().parent);
             }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
@@ -160,53 +156,47 @@ pub trait Visitor {
     }
 
     // Node
-    fn enter_program(&mut self, path: &mut NodePath) {}
-    fn exit_program(&mut self, path: &mut NodePath) {}
+    fn enter_program(&mut self, path: &mut NodePath, program: &Program) {}
+    fn exit_program(&mut self, path: &mut NodePath, program: &Program) {}
 
-    fn enter_block(&mut self, path: &mut NodePath) {}
-    fn exit_block(&mut self, path: &mut NodePath) {}
+    fn enter_block(&mut self, path: &mut NodePath, block: &Block) {}
+    fn exit_block(&mut self, path: &mut NodePath, block: &Block) {}
 
-    fn enter_identifier(&mut self, path: &mut NodePath) {}
-    fn exit_identifier(&mut self, path: &mut NodePath) {}
+    fn enter_identifier(&mut self, path: &mut NodePath, id: &Identifier) {}
+    fn exit_identifier(&mut self, path: &mut NodePath, id: &Identifier) {}
 
-    fn enter_struct_definition(&mut self, path: &mut NodePath) {}
-    fn exit_struct_definition(&mut self, path: &mut NodePath) {}
+    fn enter_struct_definition(&mut self, path: &mut NodePath, definition: &StructDefinition) {}
+    fn exit_struct_definition(&mut self, path: &mut NodePath, definition: &StructDefinition) {}
 
-    fn enter_function_definition(&mut self, path: &mut NodePath) {}
-    fn exit_function_definition(&mut self, path: &mut NodePath) {}
+    fn enter_function_definition(&mut self, path: &mut NodePath, definition: &FunctionDefinition) {}
+    fn exit_function_definition(&mut self, path: &mut NodePath, definition: &FunctionDefinition) {}
 
-    fn enter_function_parameter(&mut self, path: &mut NodePath) {}
-    fn exit_function_parameter(&mut self, path: &mut NodePath) {}
+    fn enter_function_parameter(&mut self, path: &mut NodePath, param: &FunctionParameter) {}
+    fn exit_function_parameter(&mut self, path: &mut NodePath, param: &FunctionParameter) {}
 
-    fn enter_type_field(&mut self, path: &mut NodePath) {}
-    fn exit_type_field(&mut self, path: &mut NodePath) {}
+    fn enter_type_field(&mut self, path: &mut NodePath, field: &TypeField) {}
+    fn exit_type_field(&mut self, path: &mut NodePath, field: &TypeField) {}
 
-    fn enter_type_annotation(&mut self, path: &mut NodePath) {}
-    fn exit_type_annotation(&mut self, path: &mut NodePath) {}
+    fn enter_type_annotation(&mut self, path: &mut NodePath, annotation: &TypeAnnotation) {}
+    fn exit_type_annotation(&mut self, path: &mut NodePath, annotation: &TypeAnnotation) {}
 
-    fn enter_unknown_token(&mut self, path: &mut NodePath) {}
-    fn exit_unknown_token(&mut self, path: &mut NodePath) {}
+    fn enter_statement(&mut self, path: &mut NodePath, statement: &Statement) {}
+    fn exit_statement(&mut self, path: &mut NodePath, statement: &Statement) {}
 
-    fn enter_statement(&mut self, path: &mut NodePath) {}
-    fn exit_statement(&mut self, path: &mut NodePath) {}
+    fn enter_pattern(&mut self, path: &mut NodePath, pattern: &Pattern) {}
+    fn exit_pattern(&mut self, path: &mut NodePath, pattern: &Pattern) {}
 
-    fn enter_pattern(&mut self, path: &mut NodePath) {}
-    fn exit_pattern(&mut self, path: &mut NodePath) {}
+    fn enter_expression(&mut self, path: &mut NodePath, expression: &Expression) {}
+    fn exit_expression(&mut self, path: &mut NodePath, expression: &Expression) {}
 
-    fn enter_unit(&mut self, path: &mut NodePath) {}
-    fn exit_unit(&mut self, path: &mut NodePath) {}
+    fn enter_integer_literal(&mut self, path: &mut NodePath, literal: i32) {}
+    fn exit_integer_literal(&mut self, path: &mut NodePath, literal: i32) {}
 
-    fn enter_expression(&mut self, path: &mut NodePath) {}
-    fn exit_expression(&mut self, path: &mut NodePath) {}
+    fn enter_string_literal(&mut self, path: &mut NodePath, literal: Option<&str>) {}
+    fn exit_string_literal(&mut self, path: &mut NodePath, literal: Option<&str>) {}
 
-    fn enter_integer_literal(&mut self, path: &mut NodePath, literal: &IntegerLiteral) {}
-    fn exit_integer_literal(&mut self, path: &mut NodePath, literal: &IntegerLiteral) {}
-
-    fn enter_string_literal(&mut self, path: &mut NodePath, literal: &StringLiteral) {}
-    fn exit_string_literal(&mut self, path: &mut NodePath, literal: &StringLiteral) {}
-
-    fn enter_variable(&mut self, path: &mut NodePath, expr: &Identifier) {}
-    fn exit_variable(&mut self, path: &mut NodePath, expr: &Identifier) {}
+    fn enter_variable(&mut self, path: &mut NodePath, expr: &str) {}
+    fn exit_variable(&mut self, path: &mut NodePath, expr: &str) {}
 
     fn enter_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
     fn exit_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
@@ -230,7 +220,7 @@ pub trait Visitor {
     fn exit_case_expression(&mut self, path: &mut NodePath, expr: &CaseExpression) {}
 }
 
-pub fn traverse(visitor: &mut dyn Visitor, node: &Rc<Node>, parent: Option<Rc<RefCell<NodePath>>>) {
+pub fn traverse(visitor: &mut dyn Visitor, node: &NodeKind, parent: Option<Rc<RefCell<NodePath>>>) {
     let path = wrap(NodePath::child(node, parent));
     traverse_path(visitor, &path);
 }
@@ -252,53 +242,53 @@ fn traverse_path(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
 }
 
 fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
-    let node = Rc::clone(path.borrow().node());
     let mut path = &mut path.borrow_mut();
+    let node = path.node().clone();
 
-    match node.kind() {
+    match node {
         NodeKind::Program(_) => {
-            visitor.enter_program(&mut path);
+            visitor.enter_program(&mut path, node.program().unwrap().as_ref());
         }
         NodeKind::Block(_) => {
-            visitor.enter_block(&mut path);
+            visitor.enter_block(&mut path, node.block().unwrap().as_ref());
         }
         NodeKind::Identifier(_) => {
-            visitor.enter_identifier(&mut path);
+            visitor.enter_identifier(&mut path, node.identifier().unwrap().as_ref());
         }
         NodeKind::StructDefinition(_) => {
-            visitor.enter_struct_definition(&mut path);
+            visitor.enter_struct_definition(&mut path, node.struct_definition().unwrap().as_ref());
         }
         NodeKind::FunctionDefinition(_) => {
-            visitor.enter_function_definition(&mut path);
+            visitor
+                .enter_function_definition(&mut path, node.function_definition().unwrap().as_ref());
         }
         NodeKind::TypeField(_) => {
-            visitor.enter_type_field(&mut path);
+            visitor.enter_type_field(&mut path, node.type_field().unwrap().as_ref());
         }
         NodeKind::TypeAnnotation(_) => {
-            visitor.enter_type_annotation(&mut path);
+            visitor.enter_type_annotation(&mut path, node.type_annotation().unwrap().as_ref());
         }
         NodeKind::FunctionParameter(_) => {
-            visitor.enter_function_parameter(&mut path);
+            visitor
+                .enter_function_parameter(&mut path, node.function_parameter().unwrap().as_ref());
         }
         NodeKind::Statement(_) => {
-            visitor.enter_statement(&mut path);
+            visitor.enter_statement(&mut path, node.statement().unwrap().as_ref());
         }
         NodeKind::Pattern(_) => {
-            visitor.enter_pattern(&mut path);
+            visitor.enter_pattern(&mut path, node.pattern().unwrap().as_ref());
         }
-        NodeKind::Unit => {
-            visitor.enter_unit(&mut path);
-        }
-        NodeKind::Expression(expr) => {
-            visitor.enter_expression(&mut path);
+        NodeKind::Expression(_) => {
+            let expr = node.expression().unwrap();
+            visitor.enter_expression(&mut path, &expr);
 
             if !path.skipped {
                 match expr.kind() {
-                    ExpressionKind::IntegerLiteral(kind) => {
-                        visitor.enter_integer_literal(&mut path, kind);
+                    ExpressionKind::IntegerLiteral(value) => {
+                        visitor.enter_integer_literal(&mut path, *value);
                     }
-                    ExpressionKind::StringLiteral(kind) => {
-                        visitor.enter_string_literal(&mut path, kind);
+                    ExpressionKind::StringLiteral(value) => {
+                        visitor.enter_string_literal(&mut path, value.as_deref());
                     }
                     ExpressionKind::VariableExpression(kind) => {
                         visitor.enter_variable(&mut path, kind);
@@ -332,53 +322,52 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
 }
 
 fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
-    let node = Rc::clone(path.borrow().node());
     let mut path = &mut path.borrow_mut();
+    let node = path.node().clone();
 
-    match node.kind() {
+    match node {
         NodeKind::Program(_) => {
-            visitor.exit_program(&mut path);
+            visitor.exit_program(&mut path, node.program().unwrap().as_ref());
         }
         NodeKind::Block(_) => {
-            visitor.exit_block(&mut path);
+            visitor.exit_block(&mut path, node.block().unwrap().as_ref());
         }
         NodeKind::Identifier(_) => {
-            visitor.exit_identifier(&mut path);
+            visitor.exit_identifier(&mut path, node.identifier().unwrap().as_ref());
         }
         NodeKind::StructDefinition(_) => {
-            visitor.exit_struct_definition(&mut path);
+            visitor.exit_struct_definition(&mut path, node.struct_definition().unwrap().as_ref());
         }
         NodeKind::FunctionDefinition(_) => {
-            visitor.exit_function_definition(&mut path);
+            visitor
+                .exit_function_definition(&mut path, node.function_definition().unwrap().as_ref());
         }
         NodeKind::TypeField(_) => {
-            visitor.exit_type_field(&mut path);
+            visitor.exit_type_field(&mut path, node.type_field().unwrap().as_ref());
         }
         NodeKind::TypeAnnotation(_) => {
-            visitor.exit_type_annotation(&mut path);
+            visitor.exit_type_annotation(&mut path, node.type_annotation().unwrap().as_ref());
         }
         NodeKind::FunctionParameter(_) => {
-            visitor.exit_function_parameter(&mut path);
+            visitor.exit_function_parameter(&mut path, node.function_parameter().unwrap().as_ref());
         }
         NodeKind::Statement(_) => {
-            visitor.exit_statement(&mut path);
+            visitor.exit_statement(&mut path, node.statement().unwrap().as_ref());
         }
         NodeKind::Pattern(_) => {
-            visitor.exit_pattern(&mut path);
+            visitor.exit_pattern(&mut path, node.pattern().unwrap().as_ref());
         }
-        NodeKind::Unit => {
-            visitor.exit_unit(&mut path);
-        }
-        NodeKind::Expression(expr) => {
-            visitor.exit_expression(&mut path);
+        NodeKind::Expression(_) => {
+            let expr = node.expression().unwrap();
+            visitor.exit_expression(&mut path, &expr);
 
             if !path.skipped {
                 match expr.kind() {
-                    ExpressionKind::IntegerLiteral(kind) => {
-                        visitor.exit_integer_literal(&mut path, kind);
+                    ExpressionKind::IntegerLiteral(value) => {
+                        visitor.exit_integer_literal(&mut path, *value);
                     }
-                    ExpressionKind::StringLiteral(kind) => {
-                        visitor.exit_string_literal(&mut path, kind);
+                    ExpressionKind::StringLiteral(value) => {
+                        visitor.exit_string_literal(&mut path, value.as_deref());
                     }
                     ExpressionKind::VariableExpression(kind) => {
                         visitor.exit_variable(&mut path, kind);
@@ -412,23 +401,23 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
 }
 
 fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
-    let node = Rc::clone(path.borrow().node());
+    let node = path.borrow().node().clone();
 
     for kind in node.code() {
         match kind {
             CodeKind::Node(node) => traverse(visitor, node, Some(Rc::clone(path))),
             CodeKind::SyntaxToken(token) => {
-                let mut path = path.borrow_mut();
+                let mut mut_path = path.borrow_mut();
 
                 match token {
                     SyntaxToken::Interpreted(token) => {
-                        traverse_interpreted_token(visitor, &mut path, token)
+                        traverse_interpreted_token(visitor, &mut mut_path, token)
                     }
                     SyntaxToken::Missing { range, item } => {
-                        traverse_missing_token(visitor, &mut path, *range, *item)
+                        traverse_missing_token(visitor, &mut mut_path, *range, *item)
                     }
                     SyntaxToken::Skipped { token, expected } => {
-                        traverse_skipped_token(visitor, &mut path, token, *expected)
+                        traverse_skipped_token(visitor, &mut mut_path, token, *expected)
                     }
                 }
             }
@@ -513,7 +502,7 @@ mod tests {
     }
 
     impl Visitor for NodeCounter {
-        fn enter_expression(&mut self, _path: &mut NodePath) {
+        fn enter_expression(&mut self, _path: &mut NodePath, _expr: &Expression) {
             self.number_of_expressions += 1;
         }
     }
@@ -521,9 +510,9 @@ mod tests {
     #[test]
     fn number_integer() {
         let mut visitor = NodeCounter::default();
-        let program = Rc::new(Parser::parse_string("42"));
+        let program = Parser::parse_string("42");
 
-        traverse(&mut visitor, &program, None);
+        traverse(&mut visitor, &NodeKind::Program(Rc::clone(&program)), None);
         assert_eq!(visitor.number_of_expressions, 1);
     }
 }

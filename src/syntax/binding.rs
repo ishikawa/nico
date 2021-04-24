@@ -1,3 +1,8 @@
+use super::{
+    traverse, Block, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Program,
+    StructDefinition, Visitor,
+};
+use crate::util::wrap;
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -5,22 +10,18 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::util::wrap;
-
-use super::{traverse, Identifier, Node, NodePath, Visitor};
-
 #[derive(Debug)]
 pub struct Binding {
-    id: Identifier,
-    node: Rc<Node>,
+    id: String,
+    node: NodeKind,
 }
 
 impl Binding {
-    pub fn identifier(&self) -> &Identifier {
+    pub fn id(&self) -> &str {
         &self.id
     }
 
-    pub fn node(&self) -> &Node {
+    pub fn node(&self) -> &NodeKind {
         &self.node
     }
 }
@@ -40,25 +41,25 @@ impl Scope {
         self.bindings.insert(binding.id.to_string(), wrap(binding));
     }
 
-    pub fn register_declaration(&mut self, declaration: &Rc<Node>) {
+    pub fn register_declaration(&mut self, declaration: &NodeKind) {
         if let Some(fun) = declaration.function_definition() {
             if let Some(name) = fun.name() {
                 self.insert_binding(Binding {
-                    id: name.clone(),
-                    node: Rc::clone(declaration),
+                    id: name.to_string(),
+                    node: declaration.clone(),
                 });
             }
         } else if let Some(def) = declaration.struct_definition() {
             if let Some(name) = def.name() {
                 self.insert_binding(Binding {
-                    id: name.clone(),
-                    node: Rc::clone(declaration),
+                    id: name.to_string(),
+                    node: declaration.clone(),
                 });
             }
         } else if let Some(param) = declaration.function_parameter() {
             self.insert_binding(Binding {
-                id: param.name().clone(),
-                node: Rc::clone(declaration),
+                id: param.name().to_string(),
+                node: declaration.clone(),
             });
         }
     }
@@ -83,7 +84,7 @@ impl Display for Scope {
         write!(f, "{{")?;
         while let Some((name, binding)) = peekable.next() {
             write!(f, " {}:", name)?;
-            write!(f, " {}", binding.borrow().node().kind())?;
+            write!(f, " {}", binding.borrow().node())?;
 
             if peekable.peek().is_some() {
                 write!(f, ",")?;
@@ -108,7 +109,7 @@ impl DeclarationBinder {
         Self::default()
     }
 
-    fn register_declaration(&mut self, node: &Rc<Node>) {
+    fn register_declaration(&mut self, node: &NodeKind) {
         if let Some(ref declarations) = self.declarations {
             declarations.borrow_mut().register_declaration(node);
         }
@@ -116,16 +117,15 @@ impl DeclarationBinder {
 }
 
 impl Visitor for DeclarationBinder {
-    fn enter_program(&mut self, path: &mut NodePath) {
-        let node = path.node();
-        self.declarations = Some(Rc::clone(&node.program().unwrap().declarations));
+    fn enter_program(&mut self, _path: &mut NodePath, program: &Program) {
+        self.declarations = Some(Rc::clone(&program.declarations));
     }
 
-    fn enter_struct_definition(&mut self, path: &mut NodePath) {
+    fn enter_struct_definition(&mut self, path: &mut NodePath, _definition: &StructDefinition) {
         self.register_declaration(path.node());
     }
 
-    fn enter_function_definition(&mut self, path: &mut NodePath) {
+    fn enter_function_definition(&mut self, path: &mut NodePath, _definition: &FunctionDefinition) {
         self.register_declaration(path.node());
     }
 }
@@ -142,21 +142,16 @@ impl BlockBinder {
 }
 
 impl Visitor for BlockBinder {
-    fn enter_program(&mut self, path: &mut NodePath) {
-        let program = path.node().program().unwrap();
-
+    fn enter_program(&mut self, _path: &mut NodePath, program: &Program) {
         self.scope = Rc::downgrade(&program.main_scope);
     }
 
-    fn enter_block(&mut self, path: &mut NodePath) {
-        let node = path.node();
-        let block = node.block().unwrap();
-
+    fn enter_block(&mut self, _path: &mut NodePath, block: &Block) {
         block.scope.borrow_mut().parent = Weak::clone(&self.scope);
         self.scope = Rc::downgrade(&block.scope);
     }
 
-    fn enter_function_parameter(&mut self, path: &mut NodePath) {
+    fn enter_function_parameter(&mut self, path: &mut NodePath, _param: &FunctionParameter) {
         let node = path.node();
 
         let parent_path = path.parent().unwrap();
@@ -168,7 +163,7 @@ impl Visitor for BlockBinder {
     }
 }
 
-pub fn bind_scopes(node: &Rc<Node>) {
+pub fn bind_scopes(node: &NodeKind) {
     let mut binder = DeclarationBinder::new();
     traverse(&mut binder, node, None);
 
@@ -179,22 +174,21 @@ pub fn bind_scopes(node: &Rc<Node>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::syntax::{traverse, Parser};
+    use crate::syntax::{traverse, NodeKind, Parser};
 
     #[test]
     fn top_level_declarations() {
         let mut visitor = DeclarationBinder::new();
-        let node = Rc::new(Parser::parse_string("fun foo()\nend"));
+        let program = Parser::parse_string("fun foo()\nend");
 
-        traverse(&mut visitor, &node, None);
+        traverse(&mut visitor, &NodeKind::Program(Rc::clone(&program)), None);
 
-        let program = node.program().unwrap();
         let scope = program.declarations.borrow();
         let binding = scope.get_binding("foo");
 
         assert!(binding.is_some());
 
         let binding = binding.unwrap();
-        assert_eq!(binding.borrow().identifier().as_str(), "foo");
+        assert_eq!(binding.borrow().id(), "foo");
     }
 }
