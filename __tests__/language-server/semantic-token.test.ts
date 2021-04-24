@@ -46,6 +46,9 @@ const cases: TestCase[] = [
   },
   {
     file: "./samples/fizzbuzz.nico"
+  },
+  {
+    file: "./samples/struct.nico"
   }
   //"./samples/max.nico",
   //"./samples/sum.nico"
