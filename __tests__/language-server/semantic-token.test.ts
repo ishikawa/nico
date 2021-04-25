@@ -63,10 +63,6 @@ cases = cases.concat(
   }))
 );
 
-const samples = glob.sync("./samples/**/*.nico");
-
-console.log(samples);
-
 cases.forEach((testCase, i) => {
   let src = "";
   let name = "-";
