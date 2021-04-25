@@ -504,17 +504,35 @@ impl Node for VariableDeclaration {
 
 #[derive(Debug)]
 pub struct Statement {
-    pub expression: Rc<Expression>,
+    pub kind: StatementKind,
     code: Code,
 }
 
+#[derive(Debug)]
+pub enum StatementKind {
+    Expression(Rc<Expression>),
+    VariableDeclaration(Rc<VariableDeclaration>),
+}
+
 impl Statement {
-    pub fn new(expression: Rc<Expression>, code: Code) -> Self {
-        Self { expression, code }
+    pub fn new(kind: StatementKind, code: Code) -> Self {
+        Self { kind, code }
     }
 
-    pub fn expression(&self) -> &Expression {
-        self.expression.as_ref()
+    pub fn expression(&self) -> Option<&Expression> {
+        if let StatementKind::Expression(ref expr) = self.kind {
+            Some(expr.as_ref())
+        } else {
+            None
+        }
+    }
+
+    pub fn variable_declaration(&self) -> Option<&VariableDeclaration> {
+        if let StatementKind::VariableDeclaration(ref decl) = self.kind {
+            Some(decl.as_ref())
+        } else {
+            None
+        }
     }
 }
 
