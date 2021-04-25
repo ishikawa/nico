@@ -21,6 +21,7 @@ pub enum NodeKind {
     StructField(Rc<StructField>),
     StructFieldPattern(Rc<StructFieldPattern>),
     Statement(Rc<Statement>),
+    VariableDeclaration(Rc<VariableDeclaration>),
     Expression(Rc<Expression>),
     Pattern(Rc<Pattern>),
 }
@@ -52,6 +53,14 @@ impl NodeKind {
 
     pub fn function_parameter(&self) -> Option<Rc<FunctionParameter>> {
         if let NodeKind::FunctionParameter(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
+    pub fn variable_declaration(&self) -> Option<Rc<VariableDeclaration>> {
+        if let NodeKind::VariableDeclaration(node) = self {
             Some(Rc::clone(node))
         } else {
             None
@@ -182,6 +191,7 @@ impl Node for NodeKind {
             NodeKind::TypeAnnotation(kind) => kind.code(),
             NodeKind::FunctionParameter(kind) => kind.code(),
             NodeKind::Statement(kind) => kind.code(),
+            NodeKind::VariableDeclaration(kind) => kind.code(),
             NodeKind::Expression(kind) => kind.code(),
             NodeKind::Pattern(kind) => kind.code(),
         }
@@ -193,6 +203,7 @@ pub enum TopLevelKind {
     StructDefinition(Rc<StructDefinition>),
     FunctionDefinition(Rc<FunctionDefinition>),
     Statement(Rc<Statement>),
+    VariableDeclaration(Rc<VariableDeclaration>),
 }
 
 impl TopLevelKind {
@@ -463,6 +474,29 @@ impl FunctionParameter {
 }
 
 impl Node for FunctionParameter {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
+    }
+}
+
+#[derive(Debug)]
+pub struct VariableDeclaration {
+    pub pattern: Rc<Pattern>,
+    pub init: Rc<Expression>,
+    code: Code,
+}
+
+impl VariableDeclaration {
+    pub fn new(pattern: Rc<Pattern>, init: Rc<Expression>, code: Code) -> Self {
+        Self {
+            pattern,
+            init,
+            code,
+        }
+    }
+}
+
+impl Node for VariableDeclaration {
     fn code(&self) -> slice::Iter<CodeKind> {
         self.code.iter()
     }
@@ -959,6 +993,7 @@ impl fmt::Display for NodeKind {
             NodeKind::StructFieldPattern(_) => write!(f, "StructPatternField"),
             NodeKind::FunctionParameter(_) => write!(f, "FunctionParameter"),
             NodeKind::Statement(_) => write!(f, "Statement"),
+            NodeKind::VariableDeclaration(_) => write!(f, "VariableDeclaration"),
             NodeKind::Pattern(_) => write!(f, "Pattern"),
             NodeKind::Expression(expr) => {
                 write!(f, "{}", expr.kind)
