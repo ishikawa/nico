@@ -538,61 +538,61 @@ impl<'a> Parser<'a> {
     }
 
     fn read_identifier(&mut self) -> Rc<Expression> {
-        if let TokenKind::Identifier(id) = self.tokenizer.peek_kind() {
-            let id = id.clone();
-            let mut code = Code::with_interpreted(self.tokenizer.next_token());
-
-            let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
-                // Build a name node
-                let id = Identifier::new(id, code);
-                code = Code::new();
-
-                let fields = self._parse_elements(
-                    '{',
-                    '}',
-                    &mut code,
-                    Parser::parse_struct_field,
-                    NodeKind::StructField,
-                );
-
-                ExpressionKind::StructLiteral(StructLiteral::new(Rc::new(id), fields))
-            } else {
-                ExpressionKind::VariableExpression(id)
-            };
-
-            Rc::new(Expression::new(kind, code, self.new_type_var()))
+        let id = if let TokenKind::Identifier(id) = self.tokenizer.peek_kind() {
+            id.clone()
         } else {
             unreachable!()
-        }
+        };
+        let mut code = Code::with_interpreted(self.tokenizer.next_token());
+
+        let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
+            // Build a name node
+            let id = Identifier::new(id, code);
+            code = Code::new();
+
+            let fields = self._parse_elements(
+                '{',
+                '}',
+                &mut code,
+                Parser::parse_struct_field,
+                NodeKind::StructField,
+            );
+
+            ExpressionKind::StructLiteral(StructLiteral::new(Rc::new(id), fields))
+        } else {
+            ExpressionKind::VariableExpression(id)
+        };
+
+        Rc::new(Expression::new(kind, code, self.new_type_var()))
     }
 
     fn read_identifier_pattern(&mut self) -> Rc<Pattern> {
-        if let TokenKind::Identifier(id) = self.tokenizer.peek_kind() {
-            let id = id.clone();
-            let mut code = Code::with_interpreted(self.tokenizer.next_token());
-
-            let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
-                // Build a name node
-                let id = Identifier::new(id, code);
-                code = Code::new();
-
-                let fields = self._parse_elements(
-                    '{',
-                    '}',
-                    &mut code,
-                    Parser::parse_struct_field_pattern,
-                    NodeKind::StructFieldPattern,
-                );
-
-                PatternKind::StructPattern(StructPattern::new(Rc::new(id), fields))
-            } else {
-                PatternKind::VariablePattern(id)
-            };
-
-            Rc::new(Pattern::new(kind, code))
+        let id = if let TokenKind::Identifier(id) = self.tokenizer.peek_kind() {
+            id.clone()
         } else {
             unreachable!()
-        }
+        };
+        let mut code = Code::with_interpreted(self.tokenizer.next_token());
+
+        let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
+            // Build a name node
+            let id = Identifier::new(id, code);
+            code = Code::new();
+
+            let fields = self._parse_elements(
+                '{',
+                '}',
+                &mut code,
+                Parser::parse_struct_field_pattern,
+                NodeKind::StructFieldPattern,
+            );
+
+            PatternKind::StructPattern(StructPattern::new(Rc::new(id), fields))
+        } else {
+            PatternKind::VariablePattern(id)
+        };
+
+        Rc::new(Pattern::new(kind, code))
     }
 
     fn _read_string(&mut self) -> (Option<String>, Code) {
