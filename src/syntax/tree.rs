@@ -151,6 +151,10 @@ impl NodeKind {
         matches!(self, NodeKind::StructDefinition(..))
     }
 
+    pub fn is_struct_field(&self) -> bool {
+        matches!(self, NodeKind::StructField(..))
+    }
+
     pub fn is_function_definition(&self) -> bool {
         matches!(self, NodeKind::FunctionDefinition(..))
     }
@@ -589,7 +593,7 @@ impl Expression {
         }
     }
 
-    pub fn access_expression(&self) -> Option<&MemberExpression> {
+    pub fn member_expression(&self) -> Option<&MemberExpression> {
         if let ExpressionKind::MemberExpression(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -611,6 +615,14 @@ impl Expression {
         } else {
             None
         }
+    }
+
+    pub fn is_struct_literal(&self) -> bool {
+        self.struct_literal().is_some()
+    }
+
+    pub fn is_member_expression(&self) -> bool {
+        self.member_expression().is_some()
     }
 }
 

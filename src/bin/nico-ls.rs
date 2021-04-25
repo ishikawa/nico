@@ -295,6 +295,16 @@ impl SemanticTokenizer {
                         SemanticTokenType::PARAMETER
                     } else if node.is_struct_definition() {
                         SemanticTokenType::STRUCT
+                    } else if node.is_struct_field() {
+                        SemanticTokenType::PROPERTY
+                    } else if let Some(expr) = node.expression() {
+                        if expr.is_member_expression() {
+                            SemanticTokenType::PROPERTY
+                        } else if expr.is_struct_literal() {
+                            SemanticTokenType::STRUCT
+                        } else {
+                            SemanticTokenType::VARIABLE
+                        }
                     } else {
                         SemanticTokenType::VARIABLE
                     }
@@ -310,6 +320,7 @@ impl SemanticTokenizer {
                 );
                 SemanticTokenType::VARIABLE
             }
+            TokenKind::I32 => SemanticTokenType::TYPE,
             _ => return None,
         };
 

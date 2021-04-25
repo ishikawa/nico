@@ -59,7 +59,11 @@ impl<'a> Parser<'a> {
                 let token = self.tokenizer.peek();
 
                 match &token.kind {
-                    TokenKind::Eos => break,
+                    TokenKind::Eos => {
+                        // To handle whitespace and comments at the end of a document
+                        code.interpret(self.tokenizer.next_token());
+                        break;
+                    }
                     _ => {
                         let token = self.tokenizer.next_token();
                         code.skip(token, MissingTokenKind::TopLevel);
@@ -556,8 +560,8 @@ impl<'a> Parser<'a> {
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
             // Build a name node
-            let id = Identifier::new(id, code);
-            code = Code::new();
+            let id = Rc::new(Identifier::new(id, code));
+            code = Code::with_node(NodeKind::Identifier(Rc::clone(&id)));
 
             let fields = self._parse_elements(
                 '{',
@@ -567,7 +571,7 @@ impl<'a> Parser<'a> {
                 NodeKind::StructField,
             );
 
-            ExpressionKind::StructLiteral(StructLiteral::new(Rc::new(id), fields))
+            ExpressionKind::StructLiteral(StructLiteral::new(id, fields))
         } else {
             ExpressionKind::VariableExpression(id)
         };
@@ -585,8 +589,8 @@ impl<'a> Parser<'a> {
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
             // Build a name node
-            let id = Identifier::new(id, code);
-            code = Code::new();
+            let id = Rc::new(Identifier::new(id, code));
+            code = Code::with_node(NodeKind::Identifier(Rc::clone(&id)));
 
             let fields = self._parse_elements(
                 '{',
@@ -596,7 +600,7 @@ impl<'a> Parser<'a> {
                 NodeKind::StructFieldPattern,
             );
 
-            PatternKind::StructPattern(StructPattern::new(Rc::new(id), fields))
+            PatternKind::StructPattern(StructPattern::new(id, fields))
         } else {
             PatternKind::VariablePattern(id)
         };

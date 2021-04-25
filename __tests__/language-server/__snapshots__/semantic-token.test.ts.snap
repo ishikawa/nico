@@ -11,7 +11,24 @@ Object {
 }
 `;
 
-exports[`1: open a document at \`1\` 1`] = `
+exports[`1: open a document at \`# comment\` 1`] = `
+Object {
+  "error": null,
+  "id": 1001,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "data": Array [
+      0,
+      0,
+      9,
+      5,
+      0,
+    ],
+  },
+}
+`;
+
+exports[`2: open a document at \`1\` 1`] = `
 Object {
   "error": null,
   "id": 1001,
@@ -28,7 +45,7 @@ Object {
 }
 `;
 
-exports[`2: open a document at \`1 + 2\` 1`] = `
+exports[`3: open a document at \`1 + 2\` 1`] = `
 Object {
   "error": null,
   "id": 1001,
@@ -55,7 +72,7 @@ Object {
 }
 `;
 
-exports[`3: open a document at \`./samples/fib.nico\` 1`] = `
+exports[`4: open a document at \`./samples/fib.nico\` 1`] = `
 Object {
   "error": null,
   "id": 1001,
@@ -307,7 +324,7 @@ Object {
 }
 `;
 
-exports[`4: open a document at \`./samples/fizzbuzz.nico\` 1`] = `
+exports[`5: open a document at \`./samples/fizzbuzz.nico\` 1`] = `
 Object {
   "error": null,
   "id": 1001,
@@ -659,7 +676,7 @@ Object {
 }
 `;
 
-exports[`5: open a document at \`struct Rectangle { width: i32, height: i32 }\` 1`] = `
+exports[`6: open a document at \`struct Rectangle { width: i32, height: i32 }\` 1`] = `
 Object {
   "error": null,
   "id": 1001,
@@ -674,7 +691,7 @@ Object {
       0,
       7,
       9,
-      1,
+      7,
       0,
       0,
       12,
@@ -691,7 +708,7 @@ Object {
 }
 `;
 
-exports[`6: open a document at \`Rectangle { width: 100, height: 200 }\` 1`] = `
+exports[`7: open a document at \`Rectangle { width: 100, height: 200 }\` 1`] = `
 Object {
   "error": null,
   "id": 1001,
@@ -699,9 +716,14 @@ Object {
   "result": Object {
     "data": Array [
       0,
+      0,
+      9,
+      7,
+      0,
+      0,
       12,
       5,
-      1,
+      10,
       0,
       0,
       7,
@@ -711,12 +733,34 @@ Object {
       0,
       5,
       6,
-      1,
+      10,
       0,
       0,
       8,
       3,
       3,
+      0,
+    ],
+  },
+}
+`;
+
+exports[`8: open a document at \`a.b\` 1`] = `
+Object {
+  "error": null,
+  "id": 1001,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "data": Array [
+      0,
+      0,
+      1,
+      10,
+      0,
+      0,
+      2,
+      1,
+      10,
       0,
     ],
   },
