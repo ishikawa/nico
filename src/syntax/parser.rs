@@ -313,7 +313,7 @@ impl<'a> Parser<'a> {
 
         match self.tokenizer.peek_kind() {
             TokenKind::Let => self.parse_variable_declaration_stmt(),
-            _ => return self.parse_stmt_expr(),
+            _ => self.parse_stmt_expr(),
         }
     }
 
