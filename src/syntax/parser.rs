@@ -73,7 +73,51 @@ impl<'a> Parser<'a> {
 
     fn parse_struct_definition(&mut self) -> Option<Rc<StructDefinition>> {
         self.debug_trace("parse_struct_definition");
-        None
+
+        let mut code = Code::new();
+
+        // struct
+        code.interpret(self.expect_token(TokenKind::Struct)?);
+
+        // name
+        let mut struct_name = None;
+
+        loop {
+            match self.tokenizer.peek_kind() {
+                TokenKind::Identifier(_) => {
+                    let name = self.parse_name().unwrap();
+
+                    code.node(NodeKind::Identifier(Rc::clone(&name)));
+                    struct_name = Some(name);
+
+                    break;
+                }
+                TokenKind::Char('{') | TokenKind::Eos => {
+                    code.missing(
+                        self.tokenizer.current_insertion_range(),
+                        MissingTokenKind::StructName,
+                    );
+                    break;
+                }
+                _ => {
+                    // Continue until read identifier.
+                    code.skip(self.tokenizer.next_token(), MissingTokenKind::StructName);
+                }
+            }
+        }
+
+        // fields
+        let fields = self._parse_elements(
+            '{',
+            '}',
+            &mut code,
+            Parser::parse_type_field,
+            NodeKind::TypeField,
+        );
+
+        let definition = StructDefinition::new(struct_name, fields, code);
+
+        Some(Rc::new(definition))
     }
 
     fn parse_function(&mut self) -> Option<Rc<FunctionDefinition>> {
@@ -90,11 +134,7 @@ impl<'a> Parser<'a> {
         }
 
         // fun
-        if !self.match_token(TokenKind::Fun) {
-            return None;
-        }
-
-        code.interpret(self.tokenizer.next_token());
+        code.interpret(self.expect_token(TokenKind::Fun)?);
 
         // name
         let mut function_name = None;
@@ -158,6 +198,40 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_type_field(&mut self) -> Option<Rc<TypeField>> {
+        // To prevent reading too many unnecessary tokens,
+        // we should not skip tokens here.
+        let mut code = Code::new();
+
+        let name = self.parse_name();
+
+        if let Some(ref name) = name {
+            code.node(NodeKind::Identifier(Rc::clone(name)));
+        } else {
+            code.missing(
+                self.tokenizer.current_insertion_range(),
+                MissingTokenKind::FieldName,
+            );
+        }
+
+        code.interpret(self.expect_token(TokenKind::Char(':'))?);
+
+        let annotation = self.parse_type_annotation();
+
+        if let Some(ref annotation) = annotation {
+            code.node(NodeKind::TypeAnnotation(Rc::clone(annotation)));
+        } else {
+            code.missing(
+                self.tokenizer.current_insertion_range(),
+                MissingTokenKind::TypeAnnotation,
+            );
+        }
+
+        let field = TypeField::new(name, annotation, code);
+
+        Some(Rc::new(field))
+    }
+
     fn parse_name(&mut self) -> Option<Rc<Identifier>> {
         if let TokenKind::Identifier(name) = self.tokenizer.peek_kind() {
             let name = name.clone();
@@ -167,6 +241,13 @@ impl<'a> Parser<'a> {
         } else {
             None
         }
+    }
+
+    fn parse_type_annotation(&mut self) -> Option<Rc<TypeAnnotation>> {
+        let code = Code::with_interpreted(self.expect_token(TokenKind::I32)?);
+
+        let ty = TypeAnnotation::new(wrap(sem::Type::Int32), code);
+        Some(Rc::new(ty))
     }
 
     fn parse_stmt(&mut self) -> Option<Rc<Statement>> {
@@ -958,6 +1039,14 @@ impl<'a> Parser<'a> {
     // --- Helpers
     fn match_token(&mut self, kind: TokenKind) -> bool {
         *self.tokenizer.peek_kind() == kind
+    }
+
+    fn expect_token(&mut self, kind: TokenKind) -> Option<Token> {
+        if self.match_token(kind) {
+            Some(self.tokenizer.next_token())
+        } else {
+            None
+        }
     }
 
     /// Returns a new type variable.

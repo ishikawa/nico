@@ -360,18 +360,13 @@ impl Node for TypeField {
 
 #[derive(Debug)]
 pub struct TypeAnnotation {
-    pub name: Rc<Identifier>,
-    pub r#type: Option<Rc<RefCell<sem::Type>>>,
+    pub r#type: Rc<RefCell<sem::Type>>,
     code: Code,
 }
 
 impl TypeAnnotation {
-    pub fn new(name: Rc<Identifier>, code: Code) -> Self {
-        Self {
-            name,
-            r#type: None,
-            code,
-        }
+    pub fn new(r#type: Rc<RefCell<sem::Type>>, code: Code) -> Self {
+        Self { r#type, code }
     }
 }
 
