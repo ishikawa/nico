@@ -585,8 +585,8 @@ impl Expression {
         }
     }
 
-    pub fn access_expression(&self) -> Option<&AccessExpression> {
-        if let ExpressionKind::AccessExpression(ref expr) = self.kind {
+    pub fn access_expression(&self) -> Option<&MemberExpression> {
+        if let ExpressionKind::MemberExpression(ref expr) = self.kind {
             Some(expr)
         } else {
             None
@@ -746,12 +746,12 @@ impl CallExpression {
 }
 
 #[derive(Debug)]
-pub struct AccessExpression {
+pub struct MemberExpression {
     pub operand: Rc<Expression>,
     pub field: Option<Rc<Identifier>>,
 }
 
-impl AccessExpression {
+impl MemberExpression {
     pub fn new(operand: Rc<Expression>, field: Option<Rc<Identifier>>) -> Self {
         Self { operand, field }
     }
@@ -850,7 +850,7 @@ pub enum ExpressionKind {
     SubscriptExpression(SubscriptExpression),
     CallExpression(CallExpression),
     ArrayExpression(ArrayExpression),
-    AccessExpression(AccessExpression),
+    MemberExpression(MemberExpression),
     IfExpression(IfExpression),
     CaseExpression(CaseExpression),
     Expression(Option<Rc<Expression>>),
@@ -964,7 +964,7 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::ArrayExpression(_) => write!(f, "ArrayExpression"),
             ExpressionKind::IfExpression(_) => write!(f, "IfExpression"),
             ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
-            ExpressionKind::AccessExpression(_) => write!(f, "AccessExpression"),
+            ExpressionKind::MemberExpression(_) => write!(f, "MemberExpression"),
             ExpressionKind::StructLiteral(_) => write!(f, "StructLiteral"),
             ExpressionKind::Expression(Some(expr)) => write!(f, "({})", expr.kind()),
             ExpressionKind::Expression(None) => write!(f, "()"),
