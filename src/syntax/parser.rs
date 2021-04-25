@@ -435,7 +435,7 @@ impl<'a> Parser<'a> {
 
             let token = self.tokenizer.peek();
 
-            match token.kind {
+            let kind = match token.kind {
                 TokenKind::Char('[') => {
                     let arguments = self._parse_elements(
                         '[',
@@ -444,13 +444,10 @@ impl<'a> Parser<'a> {
                         Parser::parse_expr,
                         NodeKind::Expression,
                     );
-                    let expr = SubscriptExpression::new(operand, arguments);
 
-                    operand = Rc::new(Expression::new(
-                        ExpressionKind::SubscriptExpression(expr),
-                        code,
-                        self.new_type_var(),
-                    ));
+                    ExpressionKind::SubscriptExpression(SubscriptExpression::new(
+                        operand, arguments,
+                    ))
                 }
                 TokenKind::Char('(') => {
                     let arguments = self._parse_elements(
@@ -461,16 +458,28 @@ impl<'a> Parser<'a> {
                         NodeKind::Expression,
                     );
 
-                    let expr = CallExpression::new(operand, arguments);
+                    ExpressionKind::CallExpression(CallExpression::new(operand, arguments))
+                }
+                TokenKind::Char('.') => {
+                    code.interpret(self.tokenizer.next_token());
 
-                    operand = Rc::new(Expression::new(
-                        ExpressionKind::CallExpression(expr),
-                        code,
-                        self.new_type_var(),
-                    ));
+                    let field = self.parse_name();
+
+                    if let Some(ref field) = field {
+                        code.node(NodeKind::Identifier(Rc::clone(field)));
+                    } else {
+                        code.missing(
+                            self.tokenizer.current_insertion_range(),
+                            MissingTokenKind::FieldName,
+                        );
+                    }
+
+                    ExpressionKind::MemberExpression(MemberExpression::new(operand, field))
                 }
                 _ => break,
-            }
+            };
+
+            operand = Rc::new(Expression::new(kind, code, self.new_type_var()));
         }
 
         Some(operand)

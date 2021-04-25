@@ -747,13 +747,13 @@ impl CallExpression {
 
 #[derive(Debug)]
 pub struct MemberExpression {
-    pub operand: Rc<Expression>,
+    pub object: Rc<Expression>,
     pub field: Option<Rc<Identifier>>,
 }
 
 impl MemberExpression {
-    pub fn new(operand: Rc<Expression>, field: Option<Rc<Identifier>>) -> Self {
-        Self { operand, field }
+    pub fn new(object: Rc<Expression>, field: Option<Rc<Identifier>>) -> Self {
+        Self { object, field }
     }
 }
 
