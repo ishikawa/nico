@@ -26,9 +26,26 @@ pub struct Position {
 // `start` inclusive, `end` exclusive.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default)]
 pub struct EffectiveRange {
-    pub length: u32,
+    //pub length: u32,
     pub start: Position,
     pub end: Position,
+}
+
+impl EffectiveRange {
+    pub fn union(&self, other: &EffectiveRange) -> EffectiveRange {
+        EffectiveRange {
+            start: std::cmp::min(self.start, other.start),
+            end: std::cmp::max(self.end, other.end),
+        }
+    }
+}
+
+pub trait TextToken {
+    fn text(&self) -> &str;
+
+    fn len(&self) -> u32 {
+        u32::try_from(self.text().len()).unwrap_or_else(|_| panic!("overflow token length"))
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -47,14 +64,14 @@ pub struct Trivia {
     text: String,
 }
 
-impl Token {
-    pub fn text(&self) -> &str {
+impl TextToken for Token {
+    fn text(&self) -> &str {
         self.text.as_str()
     }
 }
 
-impl Trivia {
-    pub fn text(&self) -> &str {
+impl TextToken for Trivia {
+    fn text(&self) -> &str {
         self.text.as_str()
     }
 }
@@ -125,6 +142,16 @@ pub enum SyntaxToken {
         token: Token,
         expected: MissingTokenKind,
     },
+}
+
+impl SyntaxToken {
+    pub fn range(&self) -> EffectiveRange {
+        match self {
+            SyntaxToken::Interpreted(token) => token.range,
+            SyntaxToken::Missing { range, .. } => *range,
+            SyntaxToken::Skipped { token, .. } => token.range,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -224,12 +251,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn current_range(&self) -> EffectiveRange {
-        // Convert usize to u32 in favor of LSP compatibility.
-        let length = u32::try_from(self.token_text.len())
-            .unwrap_or_else(|_| panic!("overflow token length"));
-
         EffectiveRange {
-            length,
             start: self.start_position.unwrap(),
             end: self.current_position(),
         }
@@ -241,8 +263,6 @@ impl<'a> Tokenizer<'a> {
             range: EffectiveRange {
                 start: self.current_position(),
                 end: self.current_position(),
-                // A missing token must not have length.
-                length: 0,
             },
             text: name.into(),
             leading_trivia: vec![],
@@ -641,7 +661,6 @@ mod tests {
                     line: 0,
                     character: 2
                 },
-                length: 2
             }
         );
 
@@ -658,7 +677,6 @@ mod tests {
                     line: 0,
                     character: 3
                 },
-                length: 1
             }
         );
 
@@ -674,8 +692,7 @@ mod tests {
                 end: Position {
                     line: 0,
                     character: 4
-                },
-                length: 1
+                }
             }
         );
 
@@ -696,7 +713,6 @@ mod tests {
                     line: 0,
                     character: 10
                 },
-                length: 5
             }
         );
 
@@ -752,7 +768,6 @@ mod tests {
                     line: 0,
                     character: 9
                 },
-                length: 9
             }
         );
 
@@ -769,8 +784,7 @@ mod tests {
                 end: Position {
                     line: 1,
                     character: 0
-                },
-                length: 1
+                }
             }
         );
     }
@@ -792,8 +806,7 @@ mod tests {
                 end: Position {
                     line: 0,
                     character: 1
-                },
-                length: 1
+                }
             }
         );
 
@@ -809,8 +822,7 @@ mod tests {
                 end: Position {
                     line: 0,
                     character: 2
-                },
-                length: 1
+                }
             }
         );
 
@@ -827,8 +839,7 @@ mod tests {
                 end: Position {
                     line: 0,
                     character: 4
-                },
-                length: 1
+                }
             }
         );
 
@@ -845,7 +856,6 @@ mod tests {
                     line: 0,
                     character: 6
                 },
-                length: 2
             }
         );
 
@@ -861,8 +871,7 @@ mod tests {
                 end: Position {
                     line: 0,
                     character: 7
-                },
-                length: 1
+                }
             }
         );
 
@@ -879,8 +888,7 @@ mod tests {
                 end: Position {
                     line: 1,
                     character: 1
-                },
-                length: 1
+                }
             }
         );
 
@@ -897,7 +905,6 @@ mod tests {
                     line: 1,
                     character: 3
                 },
-                length: 2
             }
         );
 
@@ -913,8 +920,7 @@ mod tests {
                 end: Position {
                     line: 1,
                     character: 4
-                },
-                length: 1
+                }
             }
         );
 
@@ -931,8 +937,7 @@ mod tests {
                 end: Position {
                     line: 1,
                     character: 6
-                },
-                length: 1
+                }
             }
         );
 
@@ -951,7 +956,6 @@ mod tests {
                     line: 1,
                     character: 11
                 },
-                length: 5
             }
         );
 
@@ -968,7 +972,6 @@ mod tests {
                     line: 1,
                     character: 13
                 },
-                length: 2
             }
         );
 
@@ -984,8 +987,7 @@ mod tests {
                 end: Position {
                     line: 1,
                     character: 14
-                },
-                length: 1
+                }
             }
         );
     }

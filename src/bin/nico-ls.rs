@@ -1,8 +1,8 @@
 use log::{info, warn};
 use lsp_types::*;
 use nico::syntax::{
-    self, EffectiveRange, MissingTokenKind, NodeKind, NodePath, ParseError, Parser, Token,
-    TokenKind, Trivia,
+    self, EffectiveRange, MissingTokenKind, Node, NodeKind, NodePath, ParseError, Parser,
+    TextToken, Token, TokenKind, Trivia,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -139,7 +139,7 @@ impl DiagnosticsCollector {
         DiagnosticsCollector::default()
     }
 
-    fn add_missing_token_error(&mut self, range: EffectiveRange, expected: MissingTokenKind) {
+    fn add_diagnostic<S: Into<String>>(&mut self, range: EffectiveRange, message: S) {
         let diagnostic = Diagnostic {
             range: Range {
                 start: Position {
@@ -152,16 +152,28 @@ impl DiagnosticsCollector {
                 },
             },
             severity: Some(DiagnosticSeverity::Error),
-            message: format!("Syntax Error: expected {}", expected),
+            message: message.into(),
             source: Some("nico-ls".to_string()),
             ..Diagnostic::default()
         };
 
         self.diagnostics.push(diagnostic);
     }
+
+    fn add_missing_token_error(&mut self, range: EffectiveRange, expected: MissingTokenKind) {
+        self.add_diagnostic(range, format!("Syntax Error: expected {}", expected));
+    }
 }
 
 impl syntax::Visitor for DiagnosticsCollector {
+    fn enter_variable(&mut self, path: &mut NodePath, id: &str) {
+        if let Some(scope) = path.scope() {
+            if scope.borrow().get_binding(id).is_none() {
+                self.add_diagnostic(path.node().range(), format!("Cannot find name '{}'.", id));
+            }
+        }
+    }
+
     fn enter_missing_token(
         &mut self,
         _path: &mut NodePath,
@@ -331,7 +343,7 @@ impl SemanticTokenizer {
             token_type,
             line: token.range.start.line,
             character: token.range.start.character,
-            length: token.range.length,
+            length: token.len(),
             token_modifiers_bitset,
         })
     }
@@ -379,7 +391,7 @@ impl syntax::Visitor for SemanticTokenizer {
             token_type: SemanticTokenType::COMMENT,
             line: trivia.range.start.line,
             character: trivia.range.start.character,
-            length: trivia.range.length,
+            length: trivia.len(),
             token_modifiers_bitset: 0,
         })
     }

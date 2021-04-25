@@ -1509,7 +1509,6 @@ mod tests {
         assert_eq!(item, MissingTokenKind::Char(']'));
         assert_eq!(range.start.line, 0);
         assert_eq!(range.start.character, 2);
-        assert_eq!(range.length, 1);
     }
 
     #[test]
@@ -1535,7 +1534,6 @@ mod tests {
             assert_eq!(item, MissingTokenKind::Char(']'));
             assert_eq!(range.start.line, 0);
             assert_eq!(range.start.character, 2);
-            assert_eq!(range.length, 1);
         }
     }
 

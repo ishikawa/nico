@@ -6,6 +6,14 @@ use std::{cell::RefCell, fmt};
 
 pub trait Node {
     fn code(&self) -> slice::Iter<CodeKind>;
+
+    fn range(&self) -> EffectiveRange {
+        let mut it = self.code();
+
+        // node must be at least one token.
+        let init = it.next().unwrap();
+        it.fold(init.range(), |acc, kind| kind.range().union(&acc))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -273,6 +281,15 @@ impl Code {
 pub enum CodeKind {
     Node(NodeKind),
     SyntaxToken(SyntaxToken),
+}
+
+impl CodeKind {
+    pub fn range(&self) -> EffectiveRange {
+        match self {
+            CodeKind::Node(kind) => kind.range(),
+            CodeKind::SyntaxToken(token) => token.range(),
+        }
+    }
 }
 
 #[derive(Debug)]

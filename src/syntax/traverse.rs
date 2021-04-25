@@ -208,8 +208,8 @@ pub trait Visitor {
     fn enter_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {}
     fn exit_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {}
 
-    fn enter_variable(&mut self, path: &mut NodePath, expr: &str) {}
-    fn exit_variable(&mut self, path: &mut NodePath, expr: &str) {}
+    fn enter_variable(&mut self, path: &mut NodePath, id: &str) {}
+    fn exit_variable(&mut self, path: &mut NodePath, id: &str) {}
 
     fn enter_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
     fn exit_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
