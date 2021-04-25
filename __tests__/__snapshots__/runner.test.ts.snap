@@ -1,0 +1,184 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`./samples/fib.nico 1`] = `
+Array [
+  Array [
+    "0",
+  ],
+  Array [
+    "1",
+  ],
+  Array [
+    "1",
+  ],
+  Array [
+    "2",
+  ],
+  Array [
+    "3",
+  ],
+  Array [
+    "5",
+  ],
+  Array [
+    "8",
+  ],
+  Array [
+    "13",
+  ],
+  Array [
+    "21",
+  ],
+  Array [
+    "34",
+  ],
+  Array [
+    "55",
+  ],
+  Array [
+    "89",
+  ],
+  Array [
+    "144",
+  ],
+  Array [
+    "233",
+  ],
+  Array [
+    "377",
+  ],
+  Array [
+    "610",
+  ],
+  Array [
+    "987",
+  ],
+  Array [
+    "1597",
+  ],
+  Array [
+    "2584",
+  ],
+  Array [
+    "4181",
+  ],
+  Array [
+    "6765",
+  ],
+]
+`;
+
+exports[`./samples/fizzbuzz.nico 1`] = `
+Array [
+  Array [
+    "1",
+  ],
+  Array [
+    "2",
+  ],
+  Array [
+    "Fizz",
+  ],
+  Array [
+    "4",
+  ],
+  Array [
+    "Buzz",
+  ],
+  Array [
+    "Fizz",
+  ],
+  Array [
+    "7",
+  ],
+  Array [
+    "8",
+  ],
+  Array [
+    "Fizz",
+  ],
+  Array [
+    "Buzz",
+  ],
+  Array [
+    "11",
+  ],
+  Array [
+    "Fizz",
+  ],
+  Array [
+    "13",
+  ],
+  Array [
+    "14",
+  ],
+  Array [
+    "Fizz Buzz",
+  ],
+]
+`;
+
+exports[`./samples/max.nico 1`] = `
+Array [
+  Array [
+    "-1",
+  ],
+  Array [
+    "48",
+  ],
+  Array [
+    "76",
+  ],
+  Array [
+    "76",
+  ],
+  Array [
+    "99",
+  ],
+  Array [
+    "98",
+  ],
+]
+`;
+
+exports[`./samples/struct.nico 1`] = `
+Array [
+  Array [
+    "1500",
+  ],
+]
+`;
+
+exports[`./samples/struct_pattern.nico 1`] = `
+Array [
+  Array [
+    "7",
+  ],
+  Array [
+    "8",
+  ],
+  Array [
+    "99",
+  ],
+  Array [
+    "88",
+  ],
+]
+`;
+
+exports[`./samples/sum.nico 1`] = `
+Array [
+  Array [
+    "0",
+  ],
+  Array [
+    "1666",
+  ],
+  Array [
+    "-1215",
+  ],
+  Array [
+    "2369",
+  ],
+]
+`;

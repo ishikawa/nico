@@ -558,6 +558,7 @@ impl<'a> Parser<'a> {
             TokenKind::Identifier(_) => self.read_identifier_pattern(),
             TokenKind::StringStart => self.read_string_pattern(),
             TokenKind::Char('[') => self.read_array_pattern(),
+            TokenKind::Rest => self.read_rest_pattern(),
             _ => return None,
         };
 
@@ -792,6 +793,20 @@ impl<'a> Parser<'a> {
 
         Rc::new(Pattern::new(
             PatternKind::ArrayPattern(ArrayPattern::new(elements)),
+            code,
+        ))
+    }
+
+    fn read_rest_pattern(&mut self) -> Rc<Pattern> {
+        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "..."
+        let name = self.parse_name();
+
+        if let Some(ref node) = name {
+            code.node(NodeKind::Identifier(Rc::clone(node)));
+        }
+
+        Rc::new(Pattern::new(
+            PatternKind::RestPattern(RestPattern::new(name)),
             code,
         ))
     }

@@ -944,7 +944,7 @@ impl Node for Pattern {
 
 #[derive(Debug)]
 pub struct ArrayPattern {
-    pub elements: Vec<Rc<Pattern>>,
+    elements: Vec<Rc<Pattern>>,
 }
 
 impl ArrayPattern {
@@ -958,14 +958,29 @@ impl ArrayPattern {
 }
 
 #[derive(Debug)]
+pub struct RestPattern {
+    pub id: Option<Rc<Identifier>>,
+}
+
+impl RestPattern {
+    pub fn new(id: Option<Rc<Identifier>>) -> Self {
+        Self { id }
+    }
+}
+
+#[derive(Debug)]
 pub struct StructPattern {
     pub name: Rc<Identifier>,
-    pub fields: Vec<Rc<StructFieldPattern>>,
+    fields: Vec<Rc<StructFieldPattern>>,
 }
 
 impl StructPattern {
     pub fn new(name: Rc<Identifier>, fields: Vec<Rc<StructFieldPattern>>) -> Self {
         Self { name, fields }
+    }
+
+    pub fn fields(&self) -> slice::Iter<Rc<StructFieldPattern>> {
+        self.fields.iter()
     }
 }
 
@@ -994,6 +1009,7 @@ pub enum PatternKind {
     StringPattern(Option<String>),
     VariablePattern(String),
     ArrayPattern(ArrayPattern),
+    RestPattern(RestPattern),
     StructPattern(StructPattern),
 }
 

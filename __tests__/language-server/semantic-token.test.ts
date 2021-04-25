@@ -1,5 +1,6 @@
 import { LanguageServer, NotificationMessage, RequestBuilder } from "../util/lsp";
 import fs from "fs";
+import glob from "glob";
 
 interface TestCase {
   input?: string;
@@ -31,7 +32,7 @@ afterAll(() => {
   }
 });
 
-const cases: TestCase[] = [
+let cases: TestCase[] = [
   {
     input: ""
   },
@@ -45,12 +46,6 @@ const cases: TestCase[] = [
     input: "1 + 2"
   },
   {
-    file: "./samples/fib.nico"
-  },
-  {
-    file: "./samples/fizzbuzz.nico"
-  },
-  {
     input: "struct Rectangle { width: i32, height: i32 }"
   },
   {
@@ -58,14 +53,15 @@ const cases: TestCase[] = [
   },
   {
     input: "a.b"
-  },
-  {
-    file: "./samples/struct.nico"
   }
-
-  //"./samples/max.nico",
-  //"./samples/sum.nico"
 ];
+
+// Add samples files
+cases = cases.concat(
+  glob.sync("./samples/**/*.nico").map(path => ({
+    file: path
+  }))
+);
 
 cases.forEach((testCase, i) => {
   let src = "";
