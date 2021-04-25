@@ -49,6 +49,9 @@ const cases: TestCase[] = [
   },
   {
     input: "struct Rectangle { width: i32, height: i32 }"
+  },
+  {
+    input: "Rectangle { width: 100, height: 200 }"
   }
   /*
   {

@@ -18,6 +18,8 @@ pub enum NodeKind {
     FunctionParameter(Rc<FunctionParameter>),
     TypeField(Rc<TypeField>),
     TypeAnnotation(Rc<TypeAnnotation>),
+    StructField(Rc<StructField>),
+    StructFieldPattern(Rc<StructFieldPattern>),
     Statement(Rc<Statement>),
     Expression(Rc<Expression>),
     Pattern(Rc<Pattern>),
@@ -96,6 +98,22 @@ impl NodeKind {
         }
     }
 
+    pub fn struct_field(&self) -> Option<Rc<StructField>> {
+        if let NodeKind::StructField(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
+    pub fn struct_field_pattern(&self) -> Option<Rc<StructFieldPattern>> {
+        if let NodeKind::StructFieldPattern(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
     pub fn statement(&self) -> Option<Rc<Statement>> {
         if let NodeKind::Statement(stmt) = self {
             Some(Rc::clone(stmt))
@@ -151,6 +169,8 @@ impl Node for NodeKind {
             NodeKind::StructDefinition(kind) => kind.code(),
             NodeKind::FunctionDefinition(kind) => kind.code(),
             NodeKind::TypeField(kind) => kind.code(),
+            NodeKind::StructField(kind) => kind.code(),
+            NodeKind::StructFieldPattern(kind) => kind.code(),
             NodeKind::TypeAnnotation(kind) => kind.code(),
             NodeKind::FunctionParameter(kind) => kind.code(),
             NodeKind::Statement(kind) => kind.code(),
@@ -509,6 +529,14 @@ impl Expression {
         &self.r#type
     }
 
+    pub fn struct_literal(&self) -> Option<&StructLiteral> {
+        if let ExpressionKind::StructLiteral(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
     pub fn variable_expression(&self) -> Option<&str> {
         if let ExpressionKind::VariableExpression(ref expr) = self.kind {
             Some(expr)
@@ -575,6 +603,37 @@ impl Expression {
 }
 
 impl Node for Expression {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
+    }
+}
+
+#[derive(Debug)]
+pub struct StructLiteral {
+    pub name: Rc<Identifier>,
+    pub fields: Vec<Rc<StructField>>,
+}
+
+impl StructLiteral {
+    pub fn new(name: Rc<Identifier>, fields: Vec<Rc<StructField>>) -> Self {
+        Self { name, fields }
+    }
+}
+
+#[derive(Debug)]
+pub struct StructField {
+    pub name: Rc<Identifier>,
+    pub value: Option<Rc<Expression>>,
+    pub code: Code,
+}
+
+impl StructField {
+    pub fn new(name: Rc<Identifier>, value: Option<Rc<Expression>>, code: Code) -> Self {
+        Self { name, value, code }
+    }
+}
+
+impl Node for StructField {
     fn code(&self) -> slice::Iter<CodeKind> {
         self.code.iter()
     }
@@ -764,6 +823,7 @@ impl CaseArm {
 pub enum ExpressionKind {
     IntegerLiteral(i32),
     StringLiteral(Option<String>),
+    StructLiteral(StructLiteral),
     VariableExpression(String),
     BinaryExpression(BinaryExpression),
     UnaryExpression(UnaryExpression),
@@ -809,11 +869,43 @@ impl ArrayPattern {
 }
 
 #[derive(Debug)]
+pub struct StructPattern {
+    pub name: Rc<Identifier>,
+    pub fields: Vec<Rc<StructFieldPattern>>,
+}
+
+impl StructPattern {
+    pub fn new(name: Rc<Identifier>, fields: Vec<Rc<StructFieldPattern>>) -> Self {
+        Self { name, fields }
+    }
+}
+
+#[derive(Debug)]
+pub struct StructFieldPattern {
+    pub name: Rc<Identifier>,
+    pub value: Option<Rc<Pattern>>,
+    pub code: Code,
+}
+
+impl StructFieldPattern {
+    pub fn new(name: Rc<Identifier>, value: Option<Rc<Pattern>>, code: Code) -> Self {
+        Self { name, value, code }
+    }
+}
+
+impl Node for StructFieldPattern {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
+    }
+}
+
+#[derive(Debug)]
 pub enum PatternKind {
     IntegerPattern(i32),
     StringPattern(Option<String>),
     VariablePattern(String),
     ArrayPattern(ArrayPattern),
+    StructPattern(StructPattern),
 }
 
 impl fmt::Display for NodeKind {
@@ -826,6 +918,8 @@ impl fmt::Display for NodeKind {
             NodeKind::FunctionDefinition(_) => write!(f, "FunctionDefinition"),
             NodeKind::TypeField(_) => write!(f, "TypeField"),
             NodeKind::TypeAnnotation(_) => write!(f, "TypeAnnotation"),
+            NodeKind::StructField(_) => write!(f, "StructField"),
+            NodeKind::StructFieldPattern(_) => write!(f, "StructPatternField"),
             NodeKind::FunctionParameter(_) => write!(f, "FunctionParameter"),
             NodeKind::Statement(_) => write!(f, "Statement"),
             NodeKind::Pattern(_) => write!(f, "Pattern"),
@@ -849,6 +943,7 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::ArrayExpression(_) => write!(f, "ArrayExpression"),
             ExpressionKind::IfExpression(_) => write!(f, "IfExpression"),
             ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
+            ExpressionKind::StructLiteral(_) => write!(f, "StructLiteral"),
             ExpressionKind::Expression(Some(expr)) => write!(f, "({})", expr.kind()),
             ExpressionKind::Expression(None) => write!(f, "()"),
         }
