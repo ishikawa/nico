@@ -219,6 +219,9 @@ pub trait Visitor {
     fn enter_call_expression(&mut self, path: &mut NodePath, expr: &CallExpression) {}
     fn exit_call_expression(&mut self, path: &mut NodePath, expr: &CallExpression) {}
 
+    fn enter_access_expression(&mut self, path: &mut NodePath, expr: &AccessExpression) {}
+    fn exit_access_expression(&mut self, path: &mut NodePath, expr: &AccessExpression) {}
+
     fn enter_array_expression(&mut self, path: &mut NodePath, expr: &ArrayExpression) {}
     fn exit_array_expression(&mut self, path: &mut NodePath, expr: &ArrayExpression) {}
 
@@ -326,6 +329,9 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     ExpressionKind::CallExpression(kind) => {
                         visitor.enter_call_expression(&mut path, kind);
                     }
+                    ExpressionKind::AccessExpression(kind) => {
+                        visitor.enter_access_expression(&mut path, kind);
+                    }
                     ExpressionKind::ArrayExpression(kind) => {
                         visitor.enter_array_expression(&mut path, kind);
                     }
@@ -413,6 +419,9 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     }
                     ExpressionKind::SubscriptExpression(kind) => {
                         visitor.exit_subscript_expression(&mut path, kind);
+                    }
+                    ExpressionKind::AccessExpression(kind) => {
+                        visitor.exit_access_expression(&mut path, kind);
                     }
                     ExpressionKind::CallExpression(kind) => {
                         visitor.exit_call_expression(&mut path, kind);
