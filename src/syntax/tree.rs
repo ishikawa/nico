@@ -147,6 +147,10 @@ impl NodeKind {
         matches!(self, NodeKind::Statement(..))
     }
 
+    pub fn is_struct_definition(&self) -> bool {
+        matches!(self, NodeKind::StructDefinition(..))
+    }
+
     pub fn is_function_definition(&self) -> bool {
         matches!(self, NodeKind::FunctionDefinition(..))
     }

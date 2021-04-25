@@ -278,6 +278,8 @@ impl SemanticTokenizer {
                                 ));
                             } else if declaration.is_function_definition() {
                                 return Some((SemanticTokenType::FUNCTION, token_modifiers_bitset));
+                            } else if declaration.is_struct_definition() {
+                                return Some((SemanticTokenType::STRUCT, token_modifiers_bitset));
                             }
                         }
                     }
@@ -291,6 +293,8 @@ impl SemanticTokenizer {
                         SemanticTokenType::FUNCTION
                     } else if node.is_function_parameter() {
                         SemanticTokenType::PARAMETER
+                    } else if node.is_struct_definition() {
+                        SemanticTokenType::STRUCT
                     } else {
                         SemanticTokenType::VARIABLE
                     }
