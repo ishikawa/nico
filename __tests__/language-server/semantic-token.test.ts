@@ -36,6 +36,9 @@ const cases: TestCase[] = [
     input: ""
   },
   {
+    input: "# comment"
+  },
+  {
     input: "1"
   },
   {
@@ -52,6 +55,9 @@ const cases: TestCase[] = [
   },
   {
     input: "Rectangle { width: 100, height: 200 }"
+  },
+  {
+    input: "a.b"
   }
   /*
   {

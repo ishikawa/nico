@@ -147,6 +147,14 @@ impl NodeKind {
         matches!(self, NodeKind::Statement(..))
     }
 
+    pub fn is_struct_definition(&self) -> bool {
+        matches!(self, NodeKind::StructDefinition(..))
+    }
+
+    pub fn is_struct_field(&self) -> bool {
+        matches!(self, NodeKind::StructField(..))
+    }
+
     pub fn is_function_definition(&self) -> bool {
         matches!(self, NodeKind::FunctionDefinition(..))
     }
@@ -585,6 +593,14 @@ impl Expression {
         }
     }
 
+    pub fn member_expression(&self) -> Option<&MemberExpression> {
+        if let ExpressionKind::MemberExpression(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
     pub fn if_expression(&self) -> Option<&IfExpression> {
         if let ExpressionKind::IfExpression(ref expr) = self.kind {
             Some(expr)
@@ -599,6 +615,14 @@ impl Expression {
         } else {
             None
         }
+    }
+
+    pub fn is_struct_literal(&self) -> bool {
+        self.struct_literal().is_some()
+    }
+
+    pub fn is_member_expression(&self) -> bool {
+        self.member_expression().is_some()
     }
 }
 
@@ -738,6 +762,18 @@ impl CallExpression {
 }
 
 #[derive(Debug)]
+pub struct MemberExpression {
+    pub object: Rc<Expression>,
+    pub field: Option<Rc<Identifier>>,
+}
+
+impl MemberExpression {
+    pub fn new(object: Rc<Expression>, field: Option<Rc<Identifier>>) -> Self {
+        Self { object, field }
+    }
+}
+
+#[derive(Debug)]
 pub struct ArrayExpression {
     pub elements: Vec<Rc<Expression>>,
 }
@@ -830,6 +866,7 @@ pub enum ExpressionKind {
     SubscriptExpression(SubscriptExpression),
     CallExpression(CallExpression),
     ArrayExpression(ArrayExpression),
+    MemberExpression(MemberExpression),
     IfExpression(IfExpression),
     CaseExpression(CaseExpression),
     Expression(Option<Rc<Expression>>),
@@ -943,6 +980,7 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::ArrayExpression(_) => write!(f, "ArrayExpression"),
             ExpressionKind::IfExpression(_) => write!(f, "IfExpression"),
             ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
+            ExpressionKind::MemberExpression(_) => write!(f, "MemberExpression"),
             ExpressionKind::StructLiteral(_) => write!(f, "StructLiteral"),
             ExpressionKind::Expression(Some(expr)) => write!(f, "({})", expr.kind()),
             ExpressionKind::Expression(None) => write!(f, "()"),

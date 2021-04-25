@@ -278,6 +278,8 @@ impl SemanticTokenizer {
                                 ));
                             } else if declaration.is_function_definition() {
                                 return Some((SemanticTokenType::FUNCTION, token_modifiers_bitset));
+                            } else if declaration.is_struct_definition() {
+                                return Some((SemanticTokenType::STRUCT, token_modifiers_bitset));
                             }
                         }
                     }
@@ -291,6 +293,18 @@ impl SemanticTokenizer {
                         SemanticTokenType::FUNCTION
                     } else if node.is_function_parameter() {
                         SemanticTokenType::PARAMETER
+                    } else if node.is_struct_definition() {
+                        SemanticTokenType::STRUCT
+                    } else if node.is_struct_field() {
+                        SemanticTokenType::PROPERTY
+                    } else if let Some(expr) = node.expression() {
+                        if expr.is_member_expression() {
+                            SemanticTokenType::PROPERTY
+                        } else if expr.is_struct_literal() {
+                            SemanticTokenType::STRUCT
+                        } else {
+                            SemanticTokenType::VARIABLE
+                        }
                     } else {
                         SemanticTokenType::VARIABLE
                     }
@@ -306,6 +320,7 @@ impl SemanticTokenizer {
                 );
                 SemanticTokenType::VARIABLE
             }
+            TokenKind::I32 => SemanticTokenType::TYPE,
             _ => return None,
         };
 
