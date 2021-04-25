@@ -45,12 +45,6 @@ const cases: TestCase[] = [
     input: "1 + 2"
   },
   {
-    file: "./samples/fib.nico"
-  },
-  {
-    file: "./samples/fizzbuzz.nico"
-  },
-  {
     input: "struct Rectangle { width: i32, height: i32 }"
   },
   {
@@ -59,12 +53,22 @@ const cases: TestCase[] = [
   {
     input: "a.b"
   },
+  // samples
+  {
+    file: "./samples/fib.nico"
+  },
+  {
+    file: "./samples/fizzbuzz.nico"
+  },
   {
     file: "./samples/struct.nico"
+  },
+  {
+    file: "./samples/max.nico"
+  },
+  {
+    file: "./samples/sum.nico"
   }
-
-  //"./samples/max.nico",
-  //"./samples/sum.nico"
 ];
 
 cases.forEach((testCase, i) => {
