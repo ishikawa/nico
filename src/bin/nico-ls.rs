@@ -166,6 +166,33 @@ impl syntax::Visitor for DiagnosticsCollector {
 
         self.diagnostics.push(diagnostic);
     }
+
+    fn enter_skipped_token(
+        &mut self,
+        _path: &mut NodePath,
+        token: &Token,
+        expected: MissingTokenKind,
+    ) {
+        let range = token.range;
+        let diagnostic = Diagnostic {
+            range: Range {
+                start: Position {
+                    line: range.start.line,
+                    character: range.start.character,
+                },
+                end: Position {
+                    line: range.end.line,
+                    character: range.end.character,
+                },
+            },
+            severity: Some(DiagnosticSeverity::Error),
+            message: format!("Syntax Error: expected {}", expected),
+            source: Some("nico-ls".to_string()),
+            ..Diagnostic::default()
+        };
+
+        self.diagnostics.push(diagnostic);
+    }
 }
 
 #[derive(Debug)]
