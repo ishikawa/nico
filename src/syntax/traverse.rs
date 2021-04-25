@@ -183,6 +183,10 @@ pub trait Visitor {
     fn enter_statement(&mut self, path: &mut NodePath, statement: &Statement) {}
     fn exit_statement(&mut self, path: &mut NodePath, statement: &Statement) {}
 
+    fn enter_variable_declaration(&mut self, path: &mut NodePath, statement: &VariableDeclaration) {
+    }
+    fn exit_variable_declaration(&mut self, path: &mut NodePath, statement: &VariableDeclaration) {}
+
     fn enter_pattern(&mut self, path: &mut NodePath, pattern: &Pattern) {}
     fn exit_pattern(&mut self, path: &mut NodePath, pattern: &Pattern) {}
 
@@ -287,6 +291,12 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         NodeKind::Statement(_) => {
             visitor.enter_statement(&mut path, node.statement().unwrap().as_ref());
         }
+        NodeKind::VariableDeclaration(_) => {
+            visitor.enter_variable_declaration(
+                &mut path,
+                node.variable_declaration().unwrap().as_ref(),
+            );
+        }
         NodeKind::Pattern(_) => {
             visitor.enter_pattern(&mut path, node.pattern().unwrap().as_ref());
         }
@@ -380,6 +390,12 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         }
         NodeKind::Statement(_) => {
             visitor.exit_statement(&mut path, node.statement().unwrap().as_ref());
+        }
+        NodeKind::VariableDeclaration(_) => {
+            visitor.exit_variable_declaration(
+                &mut path,
+                node.variable_declaration().unwrap().as_ref(),
+            );
         }
         NodeKind::Pattern(_) => {
             visitor.exit_pattern(&mut path, node.pattern().unwrap().as_ref());

@@ -312,25 +312,67 @@ impl<'a> Parser<'a> {
         self.debug_trace("parse_stmt");
 
         match self.tokenizer.peek_kind() {
-            TokenKind::Let => {
-                self.tokenizer.next_token();
-            }
-            _ => return self.parse_stmt_expr(),
-        };
+            TokenKind::Let => self.parse_variable_declaration_stmt(),
+            _ => self.parse_stmt_expr(),
+        }
+    }
 
-        // TODO: Variable binding
-        None
+    fn parse_variable_declaration(&mut self) -> Option<Rc<VariableDeclaration>> {
+        self.debug_trace("parse_variable_declaration");
+
+        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // let
+        let mut pattern = None;
+        let mut init = None;
+
+        if let Some(ref pat) = self.parse_pattern() {
+            code.node(NodeKind::Pattern(Rc::clone(pat)));
+            pattern = Some(Rc::clone(pat));
+        } else {
+            code.missing(
+                self.tokenizer.current_insertion_range(),
+                MissingTokenKind::Pattern,
+            );
+        }
+
+        code.interpret(self.expect_token(TokenKind::Char('='))?);
+
+        if let Some(ref expr) = self.parse_expr() {
+            code.node(NodeKind::Expression(Rc::clone(expr)));
+            init = Some(Rc::clone(expr));
+        } else {
+            code.missing(
+                self.tokenizer.current_insertion_range(),
+                MissingTokenKind::Expression,
+            );
+        }
+
+        let decl = VariableDeclaration::new(pattern, init, code);
+
+        Some(Rc::new(decl))
+    }
+
+    fn parse_variable_declaration_stmt(&mut self) -> Option<Rc<Statement>> {
+        self.debug_trace("parse_variable_declaration_stmt");
+
+        let decl = self.parse_variable_declaration()?;
+        let code = Code::with_node(NodeKind::VariableDeclaration(Rc::clone(&decl)));
+
+        Some(Rc::new(Statement::new(
+            StatementKind::VariableDeclaration(decl),
+            code,
+        )))
     }
 
     fn parse_stmt_expr(&mut self) -> Option<Rc<Statement>> {
         self.debug_trace("parse_stmt_expr");
 
-        if let Some(expr) = self.parse_expr() {
-            let code = Code::with_node(NodeKind::Expression(Rc::clone(&expr)));
-            Some(Rc::new(Statement::new(expr, code)))
-        } else {
-            None
-        }
+        let expr = self.parse_expr()?;
+        let code = Code::with_node(NodeKind::Expression(Rc::clone(&expr)));
+
+        Some(Rc::new(Statement::new(
+            StatementKind::Expression(expr),
+            code,
+        )))
     }
 
     fn parse_expr(&mut self) -> Option<Rc<Expression>> {
@@ -1172,9 +1214,12 @@ mod tests {
     fn number_integer() {
         let stmt = parse_statement("42");
 
-        assert_matches!(stmt.expression().kind(), ExpressionKind::IntegerLiteral(42));
+        assert_matches!(
+            stmt.expression().unwrap().kind(),
+            ExpressionKind::IntegerLiteral(42)
+        );
 
-        let mut code = stmt.expression.code();
+        let mut code = stmt.expression().unwrap().code();
         assert_eq!(code.len(), 1);
 
         let token = next_interpreted_token(&mut code);
@@ -1185,11 +1230,11 @@ mod tests {
     fn incomplete_string() {
         for src in vec!["\"Fizz\\\"", "\"Fizz\\\"\n"] {
             let stmt = parse_statement(src);
-            let expr = stmt.expression();
+            let expr = stmt.expression().unwrap();
 
             assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
 
-            let mut tokens = stmt.expression().code();
+            let mut tokens = stmt.expression().unwrap().code();
             assert_eq!(tokens.len(), 4);
 
             let token = next_interpreted_token(&mut tokens);
@@ -1214,13 +1259,13 @@ mod tests {
     fn incomplete_string_in_paren() {
         for src in vec!["(\"Fizz\\\")", "(\"Fizz\\\")\n"] {
             let stmt = parse_statement(src);
-            let expr = stmt.expression();
+            let expr = stmt.expression().unwrap();
 
             assert_matches!(expr.kind(), ExpressionKind::Expression(Some(expr)) => {
                 assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
             });
 
-            let mut tokens = stmt.expression.code();
+            let mut tokens = stmt.expression().unwrap().code();
             assert_eq!(tokens.len(), 3);
 
             let token = next_interpreted_token(&mut tokens);
@@ -1237,7 +1282,7 @@ mod tests {
     #[test]
     fn add_integer() {
         let stmt = parse_statement("1+2");
-        let expr = stmt.expression().binary_expression().unwrap();
+        let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator, BinaryOperator::Add);
         assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(1));
@@ -1246,7 +1291,7 @@ mod tests {
             ExpressionKind::IntegerLiteral(2)
         );
 
-        let mut tokens = stmt.expression.code();
+        let mut tokens = stmt.expression().unwrap().code();
         assert_eq!(tokens.len(), 3);
 
         let node = next_node(&mut tokens);
@@ -1262,13 +1307,13 @@ mod tests {
     #[test]
     fn add_integer_missing_node() {
         let stmt = parse_statement("1+");
-        let expr = stmt.expression().binary_expression().unwrap();
+        let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator, BinaryOperator::Add);
         assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(1));
         assert!(expr.rhs().is_none());
 
-        let mut tokens = stmt.expression.code();
+        let mut tokens = stmt.expression().unwrap().code();
         assert_eq!(tokens.len(), 3);
 
         let node = next_node(&mut tokens);
@@ -1285,7 +1330,7 @@ mod tests {
     #[test]
     fn add_integer_skipped_tokens() {
         let stmt = parse_statement("1 + % ? 2");
-        let expr = stmt.expression().binary_expression().unwrap();
+        let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator, BinaryOperator::Add);
         assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(1));
@@ -1294,7 +1339,7 @@ mod tests {
             ExpressionKind::IntegerLiteral(2)
         );
 
-        let mut tokens = stmt.expression.code();
+        let mut tokens = stmt.expression().unwrap().code();
         assert_eq!(tokens.len(), 5);
 
         let node = next_node(&mut tokens);
@@ -1318,7 +1363,7 @@ mod tests {
     #[test]
     fn unary_op() {
         let stmt = parse_statement("-1");
-        let expr = stmt.expression().unary_expression().unwrap();
+        let expr = stmt.expression().unwrap().unary_expression().unwrap();
 
         assert_eq!(expr.operator, UnaryOperator::Minus);
         assert_matches!(
@@ -1326,7 +1371,7 @@ mod tests {
             ExpressionKind::IntegerLiteral(1)
         );
 
-        let mut tokens = stmt.expression.code();
+        let mut tokens = stmt.expression().unwrap().code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1339,7 +1384,7 @@ mod tests {
     #[test]
     fn unary_op_nested() {
         let stmt = parse_statement("-+1");
-        let expr = stmt.expression().unary_expression().unwrap();
+        let expr = stmt.expression().unwrap().unary_expression().unwrap();
 
         assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
             let operand = operand.unary_expression().unwrap();
@@ -1349,7 +1394,7 @@ mod tests {
             });
         });
 
-        let mut tokens = stmt.expression.code();
+        let mut tokens = stmt.expression().unwrap().code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1362,7 +1407,7 @@ mod tests {
     #[test]
     fn subscript_index() {
         let stmt = parse_statement("a[0]");
-        let expr = stmt.expression().subscript_expression().unwrap();
+        let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
             let id = expr.callee().variable_expression();
@@ -1376,7 +1421,7 @@ mod tests {
             assert_matches!(arguments[0].kind(), ExpressionKind::IntegerLiteral(0));
         });
 
-        let mut tokens = stmt.expression.code();
+        let mut tokens = stmt.expression().unwrap().code();
         assert_eq!(tokens.len(), 4);
 
         let node = next_node(&mut tokens);
@@ -1395,7 +1440,7 @@ mod tests {
     #[test]
     fn subscript_empty() {
         let stmt = parse_statement("a[]");
-        let expr = stmt.expression().subscript_expression().unwrap();
+        let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
             let id = expr.callee().variable_expression();
@@ -1408,7 +1453,7 @@ mod tests {
             assert_eq!(arguments.len(), 0);
         });
 
-        let mut tokens = stmt.expression.code();
+        let mut tokens = stmt.expression().unwrap().code();
         assert_eq!(tokens.len(), 3);
 
         let node = next_node(&mut tokens);
@@ -1424,7 +1469,7 @@ mod tests {
     #[test]
     fn subscript_not_closed() {
         let stmt = parse_statement("a[1\nb");
-        let expr = stmt.expression().subscript_expression().unwrap();
+        let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
             let id = expr.callee().variable_expression();
@@ -1438,7 +1483,7 @@ mod tests {
             assert_matches!(arguments[0].kind(), ExpressionKind::IntegerLiteral(1));
         });
 
-        let mut tokens = stmt.expression.code();
+        let mut tokens = stmt.expression().unwrap().code();
         assert_eq!(tokens.len(), 4);
 
         tokens.next();
@@ -1456,7 +1501,7 @@ mod tests {
     fn subscript_incomplete_string() {
         for src in vec!["a[\"", "a[\"\n"] {
             let stmt = parse_statement(src);
-            let expr = stmt.expression().subscript_expression().unwrap();
+            let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
             assert_matches!(expr, SubscriptExpression{ .. } => {
                 let arguments = expr.arguments().collect::<Vec<_>>();
@@ -1464,7 +1509,7 @@ mod tests {
                 assert_matches!(arguments[0].kind(), ExpressionKind::StringLiteral(..));
             });
 
-            let mut tokens = stmt.expression.code();
+            let mut tokens = stmt.expression().unwrap().code();
             assert_eq!(tokens.len(), 4);
 
             tokens.next();
@@ -1482,14 +1527,14 @@ mod tests {
     #[test]
     fn array_empty() {
         let stmt = parse_statement("[]");
-        let expr = stmt.expression().array_expression().unwrap();
+        let expr = stmt.expression().unwrap().array_expression().unwrap();
 
         assert_matches!(expr, ArrayExpression{ .. } => {
             let elements = expr.elements().collect::<Vec<_>>();
             assert_eq!(elements.len(), 0);
         });
 
-        let mut tokens = stmt.expression.code();
+        let mut tokens = stmt.expression().unwrap().code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1502,7 +1547,7 @@ mod tests {
     #[test]
     fn array_one_element_and_trailing_comma() {
         let stmt = parse_statement("[1,]");
-        let expr = stmt.expression().array_expression().unwrap();
+        let expr = stmt.expression().unwrap().array_expression().unwrap();
 
         assert_matches!(expr, ArrayExpression{ .. } => {
             let elements = expr.elements().collect::<Vec<_>>();
@@ -1512,7 +1557,7 @@ mod tests {
             assert_matches!(elements[0].kind(), ExpressionKind::IntegerLiteral(1));
         });
 
-        let mut tokens = stmt.expression.code();
+        let mut tokens = stmt.expression().unwrap().code();
         assert_eq!(tokens.len(), 4);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1538,7 +1583,7 @@ mod tests {
                 20
             end",
         );
-        let expr = stmt.expression().if_expression().unwrap();
+        let expr = stmt.expression().unwrap().if_expression().unwrap();
 
         assert_matches!(expr, IfExpression { ref condition, ref else_body, .. } => {
             let condition = condition.as_ref().unwrap();
@@ -1551,7 +1596,7 @@ mod tests {
     #[test]
     fn if_expression_missing_condition() {
         let stmt = parse_statement("if\nend");
-        let expr = stmt.expression().if_expression().unwrap();
+        let expr = stmt.expression().unwrap().if_expression().unwrap();
 
         assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
             assert!(condition.is_none());
@@ -1566,10 +1611,10 @@ mod tests {
     fn if_expression_missing_newline() {
         let stmt = parse_statement("if b x end");
 
-        assert!(stmt.expression().if_expression().is_some());
+        assert!(stmt.expression().unwrap().if_expression().is_some());
 
         // tokens
-        let mut tokens = stmt.expression.code();
+        let mut tokens = stmt.expression().unwrap().code();
         assert_eq!(tokens.len(), 4);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1621,7 +1666,7 @@ mod tests {
                 6
             end",
         );
-        let expr = stmt.expression().case_expression().unwrap();
+        let expr = stmt.expression().unwrap().case_expression().unwrap();
 
         assert_matches!(expr, CaseExpression { head, arms, else_body } => {
             assert!(head.is_some());

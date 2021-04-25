@@ -58,12 +58,11 @@ const cases: TestCase[] = [
   },
   {
     input: "a.b"
-  }
-  /*
+  },
   {
     file: "./samples/struct.nico"
   }
-  */
+
   //"./samples/max.nico",
   //"./samples/sum.nico"
 ];
