@@ -2,6 +2,7 @@ import os from "os";
 import path from "path";
 import { main } from "../runner/cli";
 import { compileFileToWATFile } from "./util/compiler";
+import glob from "glob";
 
 test("given empty input", async () => {
   const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {});
@@ -15,77 +16,7 @@ test("given empty input", async () => {
   consoleSpy.mockReset();
 });
 
-interface TestCase {
-  file: string;
-  consoleResult: string[][];
-}
-
-const cases: TestCase[] = [
-  {
-    file: "./samples/fib.nico",
-    consoleResult: [
-      ["0"],
-      ["1"],
-      ["1"],
-      ["2"],
-      ["3"],
-      ["5"],
-      ["8"],
-      ["13"],
-      ["21"],
-      ["34"],
-      ["55"],
-      ["89"],
-      ["144"],
-      ["233"],
-      ["377"],
-      ["610"],
-      ["987"],
-      ["1597"],
-      ["2584"],
-      ["4181"],
-      ["6765"]
-    ]
-  },
-  {
-    file: "./samples/fizzbuzz.nico",
-    consoleResult: [
-      ["1"],
-      ["2"],
-      ["Fizz"],
-      ["4"],
-      ["Buzz"],
-      ["Fizz"],
-      ["7"],
-      ["8"],
-      ["Fizz"],
-      ["Buzz"],
-      ["11"],
-      ["Fizz"],
-      ["13"],
-      ["14"],
-      ["Fizz Buzz"]
-    ]
-  },
-  {
-    file: "./samples/max.nico",
-    consoleResult: [["-1"], ["48"], ["76"], ["76"], ["99"], ["98"]]
-  },
-  {
-    file: "./samples/sum.nico",
-    consoleResult: [["0"], ["1666"], ["-1215"], ["2369"]]
-  },
-  {
-    file: "./samples/struct.nico",
-    consoleResult: [["1500"]]
-  },
-  {
-    file: "./samples/struct_pattern.nico",
-    consoleResult: [["7"], ["8"], ["99"], ["88"]]
-  }
-];
-
-cases.forEach(({ file, consoleResult }) => {
+glob.sync("./samples/**/*.nico").forEach(file => {
   test(file, async () => {
     const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     const outputFilepath = path.join(os.tmpdir(), path.basename(file));
@@ -95,7 +26,7 @@ cases.forEach(({ file, consoleResult }) => {
     let code = await main(["node", "nico", outputFilepath]);
 
     expect(code).toEqual(0);
-    expect(consoleSpy.mock.calls).toEqual(consoleResult);
+    expect(consoleSpy.mock.calls).toMatchSnapshot();
 
     consoleSpy.mockReset();
   });
