@@ -481,13 +481,13 @@ impl Node for FunctionParameter {
 
 #[derive(Debug)]
 pub struct VariableDeclaration {
-    pub pattern: Rc<Pattern>,
-    pub init: Rc<Expression>,
+    pub pattern: Option<Rc<Pattern>>,
+    pub init: Option<Rc<Expression>>,
     code: Code,
 }
 
 impl VariableDeclaration {
-    pub fn new(pattern: Rc<Pattern>, init: Rc<Expression>, code: Code) -> Self {
+    pub fn new(pattern: Option<Rc<Pattern>>, init: Option<Rc<Expression>>, code: Code) -> Self {
         Self {
             pattern,
             init,

@@ -312,28 +312,67 @@ impl<'a> Parser<'a> {
         self.debug_trace("parse_stmt");
 
         match self.tokenizer.peek_kind() {
-            TokenKind::Let => {
-                self.tokenizer.next_token();
-            }
+            TokenKind::Let => self.parse_variable_declaration_stmt(),
             _ => return self.parse_stmt_expr(),
-        };
+        }
+    }
 
-        // TODO: Variable binding
-        None
+    fn parse_variable_declaration(&mut self) -> Option<Rc<VariableDeclaration>> {
+        self.debug_trace("parse_variable_declaration");
+
+        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // let
+        let mut pattern = None;
+        let mut init = None;
+
+        if let Some(ref pat) = self.parse_pattern() {
+            code.node(NodeKind::Pattern(Rc::clone(pat)));
+            pattern = Some(Rc::clone(pat));
+        } else {
+            code.missing(
+                self.tokenizer.current_insertion_range(),
+                MissingTokenKind::Pattern,
+            );
+        }
+
+        code.interpret(self.expect_token(TokenKind::Char('='))?);
+
+        if let Some(ref expr) = self.parse_expr() {
+            code.node(NodeKind::Expression(Rc::clone(expr)));
+            init = Some(Rc::clone(expr));
+        } else {
+            code.missing(
+                self.tokenizer.current_insertion_range(),
+                MissingTokenKind::Expression,
+            );
+        }
+
+        let decl = VariableDeclaration::new(pattern, init, code);
+
+        Some(Rc::new(decl))
+    }
+
+    fn parse_variable_declaration_stmt(&mut self) -> Option<Rc<Statement>> {
+        self.debug_trace("parse_variable_declaration_stmt");
+
+        let decl = self.parse_variable_declaration()?;
+        let code = Code::with_node(NodeKind::VariableDeclaration(Rc::clone(&decl)));
+
+        Some(Rc::new(Statement::new(
+            StatementKind::VariableDeclaration(decl),
+            code,
+        )))
     }
 
     fn parse_stmt_expr(&mut self) -> Option<Rc<Statement>> {
         self.debug_trace("parse_stmt_expr");
 
-        if let Some(expr) = self.parse_expr() {
-            let code = Code::with_node(NodeKind::Expression(Rc::clone(&expr)));
-            Some(Rc::new(Statement::new(
-                StatementKind::Expression(expr),
-                code,
-            )))
-        } else {
-            None
-        }
+        let expr = self.parse_expr()?;
+        let code = Code::with_node(NodeKind::Expression(Rc::clone(&expr)));
+
+        Some(Rc::new(Statement::new(
+            StatementKind::Expression(expr),
+            code,
+        )))
     }
 
     fn parse_expr(&mut self) -> Option<Rc<Expression>> {
