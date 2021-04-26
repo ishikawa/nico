@@ -1,8 +1,11 @@
 use log::{info, warn};
 use lsp_types::*;
-use nico::syntax::{
-    self, EffectiveRange, MissingTokenKind, Node, NodeKind, NodePath, ParseError, Parser,
-    TextToken, Token, TokenKind, Trivia,
+use nico::{
+    sem,
+    syntax::{
+        self, EffectiveRange, MissingTokenKind, Node, NodeKind, NodePath, ParseError, Parser,
+        TextToken, Token, TokenKind, Trivia,
+    },
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -267,17 +270,23 @@ impl SemanticTokenizer {
                     if let Some(scope) = path.scope() {
                         if let Some(binding) = scope.borrow().get_binding(id) {
                             let binding = binding.borrow();
-                            let declaration = binding.node();
 
-                            if declaration.is_function_parameter() {
+                            if binding.function_definition().is_some() {
+                                return Some((SemanticTokenType::FUNCTION, token_modifiers_bitset));
+                            } else if binding.function_parameter().is_some() {
                                 return Some((
                                     SemanticTokenType::PARAMETER,
                                     token_modifiers_bitset,
                                 ));
-                            } else if declaration.is_function_definition() {
-                                return Some((SemanticTokenType::FUNCTION, token_modifiers_bitset));
-                            } else if declaration.is_struct_definition() {
+                            } else if binding.struct_definition().is_some() {
                                 return Some((SemanticTokenType::STRUCT, token_modifiers_bitset));
+                            } else if let Some(ty) = binding.builtin() {
+                                if let sem::Type::Function { .. } = *ty.borrow() {
+                                    return Some((
+                                        SemanticTokenType::FUNCTION,
+                                        token_modifiers_bitset,
+                                    ));
+                                }
                             }
                         }
                     }

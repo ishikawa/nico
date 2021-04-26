@@ -2,28 +2,79 @@ use super::{
     traverse, Block, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Program,
     StructDefinition, Visitor,
 };
+use crate::sem::Type;
 use crate::util::wrap;
 use std::{
     cell::RefCell,
     collections::HashMap,
-    fmt::Display,
     rc::{Rc, Weak},
 };
 
 #[derive(Debug)]
 pub struct Binding {
     id: String,
-    node: NodeKind,
+    kind: BindingKind,
 }
 
 impl Binding {
+    pub fn builtin_function<S: Into<String>>(name: S, function_type: Type) -> Self {
+        Self::defined_function(name, &wrap(function_type))
+    }
+
+    pub fn defined_function<S: Into<String>>(name: S, function_type: &Rc<RefCell<Type>>) -> Self {
+        let name = name.into();
+
+        Self {
+            id: name.clone(),
+            kind: BindingKind::Builtin(Rc::clone(&function_type)),
+        }
+    }
+
     pub fn id(&self) -> &str {
         &self.id
     }
 
-    pub fn node(&self) -> &NodeKind {
-        &self.node
+    pub fn builtin(&self) -> Option<&Rc<RefCell<Type>>> {
+        if let BindingKind::Builtin(ref ty) = self.kind {
+            Some(ty)
+        } else {
+            None
+        }
     }
+
+    pub fn struct_definition(&self) -> Option<&StructDefinition> {
+        if let BindingKind::StructDefinition(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
+        if let BindingKind::FunctionDefinition(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
+        if let BindingKind::FunctionParameter(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum BindingKind {
+    // Builtin functions, variables
+    Builtin(Rc<RefCell<Type>>),
+    // Declaration nodes
+    StructDefinition(Rc<StructDefinition>),
+    FunctionDefinition(Rc<FunctionDefinition>),
+    FunctionParameter(Rc<FunctionParameter>),
 }
 
 #[derive(Debug, Default)]
@@ -33,34 +84,63 @@ pub struct Scope {
 }
 
 impl Scope {
+    pub fn prelude() -> Self {
+        let mut scope = Self::new();
+
+        // print
+        scope.insert(Binding::builtin_function(
+            "println_str",
+            Type::Function {
+                params: vec![wrap(Type::String)],
+                return_type: wrap(Type::Int32),
+            },
+        ));
+        scope.insert(Binding::builtin_function(
+            "println_i32",
+            Type::Function {
+                params: vec![wrap(Type::Int32)],
+                return_type: wrap(Type::Int32),
+            },
+        ));
+        scope.insert(Binding::builtin_function(
+            "debug_i32",
+            Type::Function {
+                params: vec![wrap(Type::String), wrap(Type::Int32)],
+                return_type: wrap(Type::Int32),
+            },
+        ));
+
+        scope
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
 
-    fn insert_binding(&mut self, binding: Binding) {
+    fn insert(&mut self, binding: Binding) {
         self.bindings.insert(binding.id.to_string(), wrap(binding));
     }
 
     pub fn register_declaration(&mut self, declaration: &NodeKind) {
         if let Some(fun) = declaration.function_definition() {
             if let Some(name) = fun.name() {
-                self.insert_binding(Binding {
+                self.insert(Binding {
                     id: name.to_string(),
-                    node: declaration.clone(),
-                });
-            }
-        } else if let Some(def) = declaration.struct_definition() {
-            if let Some(name) = def.name() {
-                self.insert_binding(Binding {
-                    id: name.to_string(),
-                    node: declaration.clone(),
+                    kind: BindingKind::FunctionDefinition(Rc::clone(&fun)),
                 });
             }
         } else if let Some(param) = declaration.function_parameter() {
-            self.insert_binding(Binding {
+            self.insert(Binding {
                 id: param.name().to_string(),
-                node: declaration.clone(),
+                kind: BindingKind::FunctionParameter(Rc::clone(&param)),
             });
+        } else if let Some(def) = declaration.struct_definition() {
+            if let Some(name) = def.name() {
+                self.insert(Binding {
+                    id: name.to_string(),
+                    kind: BindingKind::StructDefinition(Rc::clone(&def)),
+                });
+            }
         }
     }
 
@@ -74,27 +154,6 @@ impl Scope {
         }
 
         None
-    }
-}
-
-impl Display for Scope {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut peekable = self.bindings.iter().peekable();
-
-        write!(f, "{{")?;
-        while let Some((name, binding)) = peekable.next() {
-            write!(f, " {}:", name)?;
-            write!(f, " {}", binding.borrow().node())?;
-
-            if peekable.peek().is_some() {
-                write!(f, ",")?;
-            } else if let Some(parent) = self.parent.upgrade() {
-                write!(f, "{}", parent.borrow())?;
-            } else {
-                write!(f, " ")?;
-            }
-        }
-        write!(f, "}}")
     }
 }
 

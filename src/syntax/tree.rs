@@ -302,7 +302,7 @@ pub struct Program {
 
 impl Program {
     pub fn new(body: Vec<TopLevelKind>, code: Code) -> Self {
-        let declarations = wrap(Scope::new());
+        let declarations = wrap(Scope::prelude());
         let main_scope = wrap(Scope::new());
 
         main_scope.borrow_mut().parent = Rc::downgrade(&declarations);
