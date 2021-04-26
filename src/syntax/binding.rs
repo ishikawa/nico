@@ -1,6 +1,6 @@
 use super::{
-    traverse, Block, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Program,
-    StructDefinition, Visitor,
+    traverse, Block, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Pattern, Program,
+    StructDefinition, VariableDeclaration, Visitor,
 };
 use crate::sem::Type;
 use crate::util::wrap;
@@ -65,6 +65,14 @@ impl Binding {
             None
         }
     }
+
+    pub fn pattern(&self) -> Option<&Pattern> {
+        if let BindingKind::Pattern(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -75,6 +83,7 @@ pub enum BindingKind {
     StructDefinition(Rc<StructDefinition>),
     FunctionDefinition(Rc<FunctionDefinition>),
     FunctionParameter(Rc<FunctionParameter>),
+    Pattern(Rc<Pattern>),
 }
 
 #[derive(Debug, Default)]
@@ -140,6 +149,47 @@ impl Scope {
                     id: name.to_string(),
                     kind: BindingKind::StructDefinition(Rc::clone(&def)),
                 });
+            }
+        } else if let Some(ref pattern) = declaration.pattern() {
+            self.register_pattern(pattern);
+        }
+    }
+
+    pub fn register_pattern(&mut self, pattern: &Rc<Pattern>) {
+        match &pattern.kind {
+            super::PatternKind::IntegerPattern(_) => {}
+            super::PatternKind::StringPattern(_) => {}
+            super::PatternKind::VariablePattern(name) => {
+                self.insert(Binding {
+                    id: name.clone(),
+                    kind: BindingKind::Pattern(Rc::clone(pattern)),
+                });
+            }
+            super::PatternKind::ArrayPattern(pat) => {
+                for pat in pat.elements() {
+                    self.register_pattern(pat);
+                }
+            }
+            super::PatternKind::RestPattern(pat) => {
+                if let Some(ref id) = pat.id {
+                    self.insert(Binding {
+                        id: id.to_string(),
+                        kind: BindingKind::Pattern(Rc::clone(pattern)),
+                    });
+                }
+            }
+            super::PatternKind::StructPattern(pat) => {
+                for field in pat.fields() {
+                    if let Some(ref value) = field.value {
+                        self.register_pattern(value);
+                    } else {
+                        // omitted
+                        self.insert(Binding {
+                            id: field.name.to_string(),
+                            kind: BindingKind::Pattern(Rc::clone(pattern)),
+                        });
+                    }
+                }
             }
         }
     }
@@ -214,6 +264,19 @@ impl Visitor for BlockBinder {
 
         let mut scope = fun.body().scope.borrow_mut();
         scope.register_declaration(node);
+    }
+
+    fn enter_variable_declaration(
+        &mut self,
+        _path: &mut NodePath,
+        declaration: &VariableDeclaration,
+    ) {
+        if let Some(scope) = self.scope.upgrade() {
+            if let Some(ref pattern) = declaration.pattern {
+                let mut scope = scope.borrow_mut();
+                scope.register_declaration(&NodeKind::Pattern(Rc::clone(pattern)));
+            }
+        }
     }
 
     fn enter_block(&mut self, _path: &mut NodePath, block: &Block) {

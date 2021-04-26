@@ -62,7 +62,8 @@ impl NodePath {
         match self.node {
             NodeKind::Program(ref program) => {
                 self.main_scope = Rc::downgrade(&program.main_scope);
-                self.scope = Rc::downgrade(&program.declarations);
+                self.declarations = Rc::downgrade(&program.declarations);
+                self.scope = Rc::downgrade(&program.main_scope);
             }
             NodeKind::Block(ref block) => {
                 self.scope = Rc::downgrade(&block.scope);
@@ -183,9 +184,18 @@ pub trait Visitor {
     fn enter_statement(&mut self, path: &mut NodePath, statement: &Statement) {}
     fn exit_statement(&mut self, path: &mut NodePath, statement: &Statement) {}
 
-    fn enter_variable_declaration(&mut self, path: &mut NodePath, statement: &VariableDeclaration) {
+    fn enter_variable_declaration(
+        &mut self,
+        path: &mut NodePath,
+        declaration: &VariableDeclaration,
+    ) {
     }
-    fn exit_variable_declaration(&mut self, path: &mut NodePath, statement: &VariableDeclaration) {}
+    fn exit_variable_declaration(
+        &mut self,
+        path: &mut NodePath,
+        declaration: &VariableDeclaration,
+    ) {
+    }
 
     fn enter_pattern(&mut self, path: &mut NodePath, pattern: &Pattern) {}
     fn exit_pattern(&mut self, path: &mut NodePath, pattern: &Pattern) {}
