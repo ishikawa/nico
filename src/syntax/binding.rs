@@ -205,11 +205,6 @@ impl Visitor for BlockBinder {
         self.scope = Rc::downgrade(&program.main_scope);
     }
 
-    fn enter_block(&mut self, _path: &mut NodePath, block: &Block) {
-        block.scope.borrow_mut().parent = Weak::clone(&self.scope);
-        self.scope = Rc::downgrade(&block.scope);
-    }
-
     fn enter_function_parameter(&mut self, path: &mut NodePath, _param: &FunctionParameter) {
         let node = path.node();
 
@@ -219,6 +214,17 @@ impl Visitor for BlockBinder {
 
         let mut scope = fun.body().scope.borrow_mut();
         scope.register_declaration(node);
+    }
+
+    fn enter_block(&mut self, _path: &mut NodePath, block: &Block) {
+        block.scope.borrow_mut().parent = Weak::clone(&self.scope);
+        self.scope = Rc::downgrade(&block.scope);
+    }
+
+    fn exit_block(&mut self, _path: &mut NodePath, _block: &Block) {
+        if let Some(scope) = self.scope.upgrade() {
+            self.scope = Weak::clone(&scope.borrow().parent);
+        }
     }
 }
 
