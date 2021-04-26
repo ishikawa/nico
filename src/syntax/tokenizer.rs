@@ -46,6 +46,10 @@ pub trait TextToken {
     fn len(&self) -> u32 {
         u32::try_from(self.text().len()).unwrap_or_else(|_| panic!("overflow token length"))
     }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]

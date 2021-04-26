@@ -22,10 +22,8 @@ impl Binding {
     }
 
     pub fn defined_function<S: Into<String>>(name: S, function_type: &Rc<RefCell<Type>>) -> Self {
-        let name = name.into();
-
         Self {
-            id: name.clone(),
+            id: name.into(),
             kind: BindingKind::Builtin(Rc::clone(&function_type)),
         }
     }
