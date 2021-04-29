@@ -1,7 +1,7 @@
 use super::*;
-use crate::sem;
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
+use crate::{sem, syntax::binding::bind_scopes};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -72,7 +72,11 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Rc::new(Program::new(body, code))
+        let program = Rc::new(Program::new(body, code));
+
+        bind_scopes(&NodeKind::Program(Rc::clone(&program)));
+
+        program
     }
 
     fn parse_struct_definition(&mut self) -> Option<Rc<StructDefinition>> {

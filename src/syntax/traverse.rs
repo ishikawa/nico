@@ -61,15 +61,15 @@ impl NodePath {
     fn on_enter(&mut self) {
         match self.node {
             NodeKind::Program(ref program) => {
-                self.main_scope = Rc::downgrade(&program.main_scope);
-                self.declarations = Rc::downgrade(&program.declarations);
-                self.scope = Rc::downgrade(&program.main_scope);
+                self.main_scope = Rc::downgrade(program.main_scope());
+                self.declarations = Rc::downgrade(program.declarations_scope());
+                self.scope = Rc::downgrade(program.main_scope());
             }
             NodeKind::Block(ref block) => {
-                self.scope = Rc::downgrade(&block.scope);
+                self.scope = Rc::downgrade(block.scope());
             }
             NodeKind::CaseArm(ref arm) => {
-                self.scope = Rc::downgrade(&arm.scope);
+                self.scope = Rc::downgrade(arm.scope());
             }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
@@ -89,10 +89,10 @@ impl NodePath {
                 self.scope = Weak::new();
             }
             NodeKind::Block(ref block) => {
-                self.scope = Weak::clone(&block.scope.borrow().parent);
+                self.scope = Weak::clone(block.scope().borrow().parent());
             }
             NodeKind::CaseArm(ref arm) => {
-                self.scope = Weak::clone(&arm.scope.borrow().parent);
+                self.scope = Weak::clone(arm.scope().borrow().parent());
             }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {

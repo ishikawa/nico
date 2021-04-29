@@ -87,7 +87,7 @@ pub enum BindingKind {
 #[derive(Debug, Default)]
 pub struct Scope {
     bindings: HashMap<String, Rc<RefCell<Binding>>>,
-    pub parent: Weak<RefCell<Scope>>,
+    parent: Weak<RefCell<Scope>>,
 }
 
 impl Scope {
@@ -122,6 +122,10 @@ impl Scope {
 
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn parent(&self) -> &Weak<RefCell<Scope>> {
+        &self.parent
     }
 
     fn insert(&mut self, binding: Binding) {
@@ -207,7 +211,7 @@ impl Scope {
 
 /// A Visitor collects only top-level declarations in order to resolve forward references.
 #[derive(Debug, Default)]
-pub struct DeclarationBinder {
+struct DeclarationBinder {
     declarations: Option<Rc<RefCell<Scope>>>,
 }
 
@@ -225,7 +229,7 @@ impl DeclarationBinder {
 
 impl Visitor for DeclarationBinder {
     fn enter_program(&mut self, _path: &mut NodePath, program: &Program) {
-        self.declarations = Some(Rc::clone(&program.declarations));
+        self.declarations = Some(Rc::clone(program.declarations_scope()));
     }
 
     fn enter_struct_definition(&mut self, path: &mut NodePath, _definition: &StructDefinition) {
@@ -238,7 +242,7 @@ impl Visitor for DeclarationBinder {
 }
 
 #[derive(Debug, Default)]
-pub struct BlockBinder {
+struct BlockBinder {
     scope: Weak<RefCell<Scope>>,
 }
 
@@ -261,7 +265,8 @@ impl BlockBinder {
 
 impl Visitor for BlockBinder {
     fn enter_program(&mut self, _path: &mut NodePath, program: &Program) {
-        self.scope = Rc::downgrade(&program.main_scope);
+        program.main_scope().borrow_mut().parent = Rc::downgrade(program.declarations_scope());
+        self.scope = Rc::downgrade(program.main_scope());
     }
 
     fn enter_function_parameter(&mut self, path: &mut NodePath, _param: &FunctionParameter) {
@@ -271,7 +276,7 @@ impl Visitor for BlockBinder {
         let parent_path = parent_path.borrow();
         let fun = parent_path.node().function_definition().unwrap();
 
-        let mut scope = fun.body().scope.borrow_mut();
+        let mut scope = fun.body().scope().borrow_mut();
         scope.register_declaration(node);
     }
 
@@ -289,24 +294,24 @@ impl Visitor for BlockBinder {
     }
 
     fn enter_block(&mut self, path: &mut NodePath, block: &Block) {
-        self._enter_scope(path, &block.scope);
+        self._enter_scope(path, block.scope());
     }
 
     fn exit_block(&mut self, path: &mut NodePath, block: &Block) {
-        self._exit_scope(path, &block.scope);
+        self._exit_scope(path, block.scope());
     }
 
     fn enter_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {
-        self._enter_scope(path, &arm.scope);
+        self._enter_scope(path, arm.scope());
 
         if let Some(ref pattern) = arm.pattern {
-            let mut scope = arm.scope.borrow_mut();
+            let mut scope = arm.scope().borrow_mut();
             scope.register_declaration(&NodeKind::Pattern(Rc::clone(pattern)));
         }
     }
 
     fn exit_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {
-        self._exit_scope(path, &arm.scope);
+        self._exit_scope(path, &arm.scope());
     }
 }
 
@@ -320,17 +325,13 @@ pub fn bind_scopes(node: &NodeKind) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::syntax::{traverse, NodeKind, Parser};
+    use crate::syntax::Parser;
 
     #[test]
     fn top_level_declarations() {
-        let mut visitor = DeclarationBinder::new();
         let program = Parser::parse_string("fun foo()\nend");
 
-        traverse(&mut visitor, &NodeKind::Program(Rc::clone(&program)), None);
-
-        let scope = program.declarations.borrow();
+        let scope = program.declarations_scope().borrow();
         let binding = scope.get_binding("foo");
 
         assert!(binding.is_some());
