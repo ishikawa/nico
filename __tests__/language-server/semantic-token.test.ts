@@ -52,7 +52,7 @@ let cases: TestCase[] = [
     input: "Rectangle { width: 100, height: 200 }"
   },
   {
-    input: "a.b"
+    input: ["struct A { b: i32 }", "let a = A { b: 123 }", "a.b"].join("\n")
   }
 ];
 
