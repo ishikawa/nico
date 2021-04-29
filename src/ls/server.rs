@@ -4,7 +4,6 @@ use lsp_types::{
     ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 use std::collections::HashSet;
-use std::iter::FromIterator;
 
 #[derive(Debug, Default)]
 pub struct ServerCapabilitiesBuilder<'a> {
@@ -46,8 +45,7 @@ impl<'a> ServerCapabilitiesBuilder<'a> {
             if let Some(ref semantic_tokens) = text_document.semantic_tokens {
                 // types
                 if let Some(server_token_type) = self.token_types {
-                    let client_set: HashSet<&SemanticTokenType> =
-                        HashSet::from_iter(semantic_tokens.token_types.iter());
+                    let client_set: HashSet<_> = semantic_tokens.token_types.iter().collect();
 
                     for ty in server_token_type {
                         if client_set.contains(ty) {
@@ -58,8 +56,7 @@ impl<'a> ServerCapabilitiesBuilder<'a> {
 
                 // modifiers
                 if let Some(server_token_modifiers) = self.token_modifiers {
-                    let client_set: HashSet<&SemanticTokenModifier> =
-                        HashSet::from_iter(semantic_tokens.token_modifiers.iter());
+                    let client_set: HashSet<_> = semantic_tokens.token_modifiers.iter().collect();
 
                     for m in server_token_modifiers {
                         if client_set.contains(m) {

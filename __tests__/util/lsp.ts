@@ -305,58 +305,58 @@ export class RequestBuilder {
             },
             codeDescriptionSupport: true,
             dataSupport: true
-          }
-        },
-        semanticTokens: {
-          dynamicRegistration: true,
-          tokenTypes: [
-            "namespace",
-            "type",
-            "class",
-            "enum",
-            "interface",
-            "struct",
-            "typeParameter",
-            "parameter",
-            "variable",
-            "property",
-            "enumMember",
-            "event",
-            "function",
-            "method",
-            "macro",
-            "keyword",
-            "modifier",
-            "comment",
-            "string",
-            "number",
-            "regexp",
-            "operator"
-          ],
-          tokenModifiers: [
-            "declaration",
-            "definition",
-            "readonly",
-            "static",
-            "deprecated",
-            "abstract",
-            "async",
-            "modification",
-            "documentation",
-            "defaultLibrary"
-          ],
-          formats: ["relative"],
-          requests: {
-            range: true,
-            full: {
-              delta: true
-            }
           },
-          multilineTokenSupport: false,
-          overlappingTokenSupport: false
-        },
-        linkedEditingRange: {
-          dynamicRegistration: true
+          semanticTokens: {
+            dynamicRegistration: true,
+            tokenTypes: [
+              "namespace",
+              "type",
+              "class",
+              "enum",
+              "interface",
+              "struct",
+              "typeParameter",
+              "parameter",
+              "variable",
+              "property",
+              "enumMember",
+              "event",
+              "function",
+              "method",
+              "macro",
+              "keyword",
+              "modifier",
+              "comment",
+              "string",
+              "number",
+              "regexp",
+              "operator"
+            ],
+            tokenModifiers: [
+              "declaration",
+              "definition",
+              "readonly",
+              "static",
+              "deprecated",
+              "abstract",
+              "async",
+              "modification",
+              "documentation",
+              "defaultLibrary"
+            ],
+            formats: ["relative"],
+            requests: {
+              range: true,
+              full: {
+                delta: true
+              }
+            },
+            multilineTokenSupport: false,
+            overlappingTokenSupport: false
+          },
+          linkedEditingRange: {
+            dynamicRegistration: true
+          }
         }
       }
     };
