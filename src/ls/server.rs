@@ -38,34 +38,8 @@ impl<'a> ServerCapabilitiesBuilder<'a> {
     pub fn build(&self) -> ServerCapabilities {
         let params = self.params.unwrap();
 
-        let mut token_types: Vec<SemanticTokenType> = vec![];
-        let mut token_modifiers: Vec<SemanticTokenModifier> = vec![];
-
-        if let Some(ref text_document) = params.capabilities.text_document {
-            if let Some(ref semantic_tokens) = text_document.semantic_tokens {
-                // types
-                if let Some(server_token_type) = self.token_types {
-                    let client_set: HashSet<_> = semantic_tokens.token_types.iter().collect();
-
-                    for ty in server_token_type {
-                        if client_set.contains(ty) {
-                            token_types.push(ty.clone());
-                        }
-                    }
-                }
-
-                // modifiers
-                if let Some(server_token_modifiers) = self.token_modifiers {
-                    let client_set: HashSet<_> = semantic_tokens.token_modifiers.iter().collect();
-
-                    for m in server_token_modifiers {
-                        if client_set.contains(m) {
-                            token_modifiers.push(m.clone());
-                        }
-                    }
-                }
-            }
-        }
+        let token_types = self.build_semantic_token_types(params);
+        let token_modifiers = self.build_semantic_token_modifiers(params);
 
         ServerCapabilities {
             text_document_sync: Some(TextDocumentSyncCapability::Kind(
@@ -83,5 +57,46 @@ impl<'a> ServerCapabilitiesBuilder<'a> {
             ),
             ..ServerCapabilities::default()
         }
+    }
+
+    fn build_semantic_token_types(&self, params: &InitializeParams) -> Vec<SemanticTokenType> {
+        if let Some(ref text_document) = params.capabilities.text_document {
+            if let Some(ref semantic_tokens) = text_document.semantic_tokens {
+                // types
+                if let Some(server_token_type) = self.token_types {
+                    let client_set: HashSet<_> = semantic_tokens.token_types.iter().collect();
+
+                    return server_token_type
+                        .iter()
+                        .filter(|t| client_set.contains(t))
+                        .cloned()
+                        .collect();
+                }
+            }
+        }
+
+        return vec![];
+    }
+
+    fn build_semantic_token_modifiers(
+        &self,
+        params: &InitializeParams,
+    ) -> Vec<SemanticTokenModifier> {
+        if let Some(ref text_document) = params.capabilities.text_document {
+            if let Some(ref semantic_tokens) = text_document.semantic_tokens {
+                // types
+                if let Some(server_token_modifiers) = self.token_modifiers {
+                    let client_set: HashSet<_> = semantic_tokens.token_modifiers.iter().collect();
+
+                    return server_token_modifiers
+                        .iter()
+                        .filter(|t| client_set.contains(t))
+                        .cloned()
+                        .collect();
+                }
+            }
+        }
+
+        return vec![];
     }
 }
