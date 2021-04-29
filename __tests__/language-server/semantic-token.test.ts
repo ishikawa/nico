@@ -1,4 +1,4 @@
-import { LanguageServer, NotificationMessage, RequestBuilder } from "../util/lsp";
+import { LanguageServer, NotificationMessage, RequestBuilder, spawn_server } from "../util/lsp";
 import fs from "fs";
 import glob from "glob";
 
@@ -10,20 +10,7 @@ interface TestCase {
 let server: LanguageServer | undefined;
 
 beforeAll(async () => {
-  const builder = new RequestBuilder({ id: 1 });
-  server = LanguageServer.spawn();
-
-  // initialize
-  {
-    const request = builder.initialize();
-    await server.sendRequest(request);
-  }
-
-  // initialized
-  {
-    const notification = builder.initialized();
-    await server.sendNotification(notification);
-  }
+  server = await spawn_server();
 });
 
 afterAll(() => {
