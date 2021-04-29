@@ -305,8 +305,8 @@ impl CodeKind {
 #[derive(Debug)]
 pub struct Program {
     pub body: Vec<TopLevelKind>,
-    pub declarations: Rc<RefCell<Scope>>,
-    pub main_scope: Rc<RefCell<Scope>>,
+    declarations: Rc<RefCell<Scope>>,
+    main_scope: Rc<RefCell<Scope>>,
     code: Code,
 }
 
@@ -315,14 +315,20 @@ impl Program {
         let declarations = wrap(Scope::prelude());
         let main_scope = wrap(Scope::new());
 
-        main_scope.borrow_mut().parent = Rc::downgrade(&declarations);
-
         Self {
             body,
             declarations,
             main_scope,
             code,
         }
+    }
+
+    pub fn declarations_scope(&self) -> &Rc<RefCell<Scope>> {
+        &self.declarations
+    }
+
+    pub fn main_scope(&self) -> &Rc<RefCell<Scope>> {
+        &self.main_scope
     }
 }
 
@@ -571,8 +577,8 @@ impl Node for Statement {
 
 #[derive(Debug)]
 pub struct Block {
-    pub statements: Vec<Rc<Statement>>,
-    pub scope: Rc<RefCell<Scope>>,
+    statements: Vec<Rc<Statement>>,
+    scope: Rc<RefCell<Scope>>,
     code: Code,
 }
 
@@ -583,6 +589,10 @@ impl Block {
             scope: wrap(Scope::new()),
             code,
         }
+    }
+
+    pub fn scope(&self) -> &Rc<RefCell<Scope>> {
+        &self.scope
     }
 
     pub fn statements(&self) -> slice::Iter<Rc<Statement>> {
@@ -914,10 +924,11 @@ pub struct CaseArm {
     pub pattern: Option<Rc<Pattern>>,
     pub guard: Option<Rc<Expression>>,
     pub then_body: Rc<Block>,
+
     // `CaseArm` is the only syntactic element other than Program and Block that introduces
     // a new scope. This scope is necessary to use the variables introduced in each arm in
     // the guard clause.
-    pub scope: Rc<RefCell<Scope>>,
+    scope: Rc<RefCell<Scope>>,
     code: Code,
 }
 
@@ -935,6 +946,10 @@ impl CaseArm {
             scope: wrap(Scope::new()),
             code,
         }
+    }
+
+    pub fn scope(&self) -> &Rc<RefCell<Scope>> {
+        &self.scope
     }
 
     pub fn pattern(&self) -> Option<&Pattern> {

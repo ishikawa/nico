@@ -528,9 +528,6 @@ impl Connection {
         let node = Parser::parse_string(&doc.borrow().text);
         let kind = NodeKind::Program(Rc::clone(&node));
 
-        // Scopes
-        syntax::bind_scopes(&kind);
-
         // Diagnostics
         let mut diagnostics = DiagnosticsCollector::new();
         syntax::traverse(&mut diagnostics, &kind, None);
