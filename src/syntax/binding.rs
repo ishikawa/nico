@@ -1,29 +1,87 @@
 use super::{
-    traverse, Block, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Program,
-    StructDefinition, Visitor,
+    traverse, Block, CaseArm, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Pattern,
+    Program, StructDefinition, VariableDeclaration, Visitor,
 };
+use crate::sem::Type;
 use crate::util::wrap;
 use std::{
     cell::RefCell,
     collections::HashMap,
-    fmt::Display,
     rc::{Rc, Weak},
 };
 
 #[derive(Debug)]
 pub struct Binding {
     id: String,
-    node: NodeKind,
+    kind: BindingKind,
 }
 
 impl Binding {
+    pub fn builtin_function<S: Into<String>>(name: S, function_type: Type) -> Self {
+        Self::defined_function(name, &wrap(function_type))
+    }
+
+    pub fn defined_function<S: Into<String>>(name: S, function_type: &Rc<RefCell<Type>>) -> Self {
+        Self {
+            id: name.into(),
+            kind: BindingKind::Builtin(Rc::clone(&function_type)),
+        }
+    }
+
     pub fn id(&self) -> &str {
         &self.id
     }
 
-    pub fn node(&self) -> &NodeKind {
-        &self.node
+    pub fn builtin(&self) -> Option<&Rc<RefCell<Type>>> {
+        if let BindingKind::Builtin(ref ty) = self.kind {
+            Some(ty)
+        } else {
+            None
+        }
     }
+
+    pub fn struct_definition(&self) -> Option<&StructDefinition> {
+        if let BindingKind::StructDefinition(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
+        if let BindingKind::FunctionDefinition(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
+        if let BindingKind::FunctionParameter(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn pattern(&self) -> Option<&Pattern> {
+        if let BindingKind::Pattern(ref node) = self.kind {
+            Some(node)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum BindingKind {
+    // Builtin functions, variables
+    Builtin(Rc<RefCell<Type>>),
+    // Declaration nodes
+    StructDefinition(Rc<StructDefinition>),
+    FunctionDefinition(Rc<FunctionDefinition>),
+    FunctionParameter(Rc<FunctionParameter>),
+    Pattern(Rc<Pattern>),
 }
 
 #[derive(Debug, Default)]
@@ -33,34 +91,104 @@ pub struct Scope {
 }
 
 impl Scope {
+    pub fn prelude() -> Self {
+        let mut scope = Self::new();
+
+        // print
+        scope.insert(Binding::builtin_function(
+            "println_str",
+            Type::Function {
+                params: vec![wrap(Type::String)],
+                return_type: wrap(Type::Int32),
+            },
+        ));
+        scope.insert(Binding::builtin_function(
+            "println_i32",
+            Type::Function {
+                params: vec![wrap(Type::Int32)],
+                return_type: wrap(Type::Int32),
+            },
+        ));
+        scope.insert(Binding::builtin_function(
+            "debug_i32",
+            Type::Function {
+                params: vec![wrap(Type::String), wrap(Type::Int32)],
+                return_type: wrap(Type::Int32),
+            },
+        ));
+
+        scope
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
 
-    fn insert_binding(&mut self, binding: Binding) {
+    fn insert(&mut self, binding: Binding) {
         self.bindings.insert(binding.id.to_string(), wrap(binding));
     }
 
     pub fn register_declaration(&mut self, declaration: &NodeKind) {
         if let Some(fun) = declaration.function_definition() {
             if let Some(name) = fun.name() {
-                self.insert_binding(Binding {
+                self.insert(Binding {
                     id: name.to_string(),
-                    node: declaration.clone(),
-                });
-            }
-        } else if let Some(def) = declaration.struct_definition() {
-            if let Some(name) = def.name() {
-                self.insert_binding(Binding {
-                    id: name.to_string(),
-                    node: declaration.clone(),
+                    kind: BindingKind::FunctionDefinition(Rc::clone(&fun)),
                 });
             }
         } else if let Some(param) = declaration.function_parameter() {
-            self.insert_binding(Binding {
+            self.insert(Binding {
                 id: param.name().to_string(),
-                node: declaration.clone(),
+                kind: BindingKind::FunctionParameter(Rc::clone(&param)),
             });
+        } else if let Some(def) = declaration.struct_definition() {
+            if let Some(name) = def.name() {
+                self.insert(Binding {
+                    id: name.to_string(),
+                    kind: BindingKind::StructDefinition(Rc::clone(&def)),
+                });
+            }
+        } else if let Some(ref pattern) = declaration.pattern() {
+            self.register_pattern(pattern);
+        }
+    }
+
+    pub fn register_pattern(&mut self, pattern: &Rc<Pattern>) {
+        match &pattern.kind {
+            super::PatternKind::IntegerPattern(_) => {}
+            super::PatternKind::StringPattern(_) => {}
+            super::PatternKind::VariablePattern(name) => {
+                self.insert(Binding {
+                    id: name.clone(),
+                    kind: BindingKind::Pattern(Rc::clone(pattern)),
+                });
+            }
+            super::PatternKind::ArrayPattern(pat) => {
+                for pat in pat.elements() {
+                    self.register_pattern(pat);
+                }
+            }
+            super::PatternKind::RestPattern(pat) => {
+                if let Some(ref id) = pat.id {
+                    self.insert(Binding {
+                        id: id.to_string(),
+                        kind: BindingKind::Pattern(Rc::clone(pattern)),
+                    });
+                }
+            }
+            super::PatternKind::StructPattern(pat) => {
+                for field in pat.fields() {
+                    if let Some(ref value) = field.value {
+                        self.register_pattern(value);
+                    } else {
+                        // omitted
+                        self.insert(Binding {
+                            id: field.name.to_string(),
+                            kind: BindingKind::Pattern(Rc::clone(pattern)),
+                        });
+                    }
+                }
+            }
         }
     }
 
@@ -74,27 +202,6 @@ impl Scope {
         }
 
         None
-    }
-}
-
-impl Display for Scope {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut peekable = self.bindings.iter().peekable();
-
-        write!(f, "{{")?;
-        while let Some((name, binding)) = peekable.next() {
-            write!(f, " {}:", name)?;
-            write!(f, " {}", binding.borrow().node())?;
-
-            if peekable.peek().is_some() {
-                write!(f, ",")?;
-            } else if let Some(parent) = self.parent.upgrade() {
-                write!(f, "{}", parent.borrow())?;
-            } else {
-                write!(f, " ")?;
-            }
-        }
-        write!(f, "}}")
     }
 }
 
@@ -139,16 +246,22 @@ impl BlockBinder {
     pub fn new() -> Self {
         Self::default()
     }
+
+    fn _enter_scope(&mut self, _path: &mut NodePath, scope: &Rc<RefCell<Scope>>) {
+        scope.borrow_mut().parent = Weak::clone(&self.scope);
+        self.scope = Rc::downgrade(scope);
+    }
+
+    fn _exit_scope(&mut self, _path: &mut NodePath, _scope: &Rc<RefCell<Scope>>) {
+        if let Some(scope) = self.scope.upgrade() {
+            self.scope = Weak::clone(&scope.borrow().parent);
+        }
+    }
 }
 
 impl Visitor for BlockBinder {
     fn enter_program(&mut self, _path: &mut NodePath, program: &Program) {
         self.scope = Rc::downgrade(&program.main_scope);
-    }
-
-    fn enter_block(&mut self, _path: &mut NodePath, block: &Block) {
-        block.scope.borrow_mut().parent = Weak::clone(&self.scope);
-        self.scope = Rc::downgrade(&block.scope);
     }
 
     fn enter_function_parameter(&mut self, path: &mut NodePath, _param: &FunctionParameter) {
@@ -160,6 +273,40 @@ impl Visitor for BlockBinder {
 
         let mut scope = fun.body().scope.borrow_mut();
         scope.register_declaration(node);
+    }
+
+    fn enter_variable_declaration(
+        &mut self,
+        _path: &mut NodePath,
+        declaration: &VariableDeclaration,
+    ) {
+        if let Some(scope) = self.scope.upgrade() {
+            if let Some(ref pattern) = declaration.pattern {
+                let mut scope = scope.borrow_mut();
+                scope.register_declaration(&NodeKind::Pattern(Rc::clone(pattern)));
+            }
+        }
+    }
+
+    fn enter_block(&mut self, path: &mut NodePath, block: &Block) {
+        self._enter_scope(path, &block.scope);
+    }
+
+    fn exit_block(&mut self, path: &mut NodePath, block: &Block) {
+        self._exit_scope(path, &block.scope);
+    }
+
+    fn enter_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {
+        self._enter_scope(path, &arm.scope);
+
+        if let Some(ref pattern) = arm.pattern {
+            let mut scope = arm.scope.borrow_mut();
+            scope.register_declaration(&NodeKind::Pattern(Rc::clone(pattern)));
+        }
+    }
+
+    fn exit_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {
+        self._exit_scope(path, &arm.scope);
     }
 }
 

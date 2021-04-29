@@ -387,3 +387,23 @@ export class RequestBuilder {
     });
   }
 }
+
+// helpers
+export async function spawn_server(): Promise<LanguageServer> {
+  const builder = new RequestBuilder({ id: 1 });
+  const server = LanguageServer.spawn();
+
+  // initialize
+  {
+    const request = builder.initialize();
+    await server.sendRequest(request);
+  }
+
+  // initialized
+  {
+    const notification = builder.initialized();
+    await server.sendNotification(notification);
+  }
+
+  return server;
+}

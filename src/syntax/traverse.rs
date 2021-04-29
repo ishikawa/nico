@@ -62,10 +62,14 @@ impl NodePath {
         match self.node {
             NodeKind::Program(ref program) => {
                 self.main_scope = Rc::downgrade(&program.main_scope);
-                self.scope = Rc::downgrade(&program.declarations);
+                self.declarations = Rc::downgrade(&program.declarations);
+                self.scope = Rc::downgrade(&program.main_scope);
             }
             NodeKind::Block(ref block) => {
                 self.scope = Rc::downgrade(&block.scope);
+            }
+            NodeKind::CaseArm(ref arm) => {
+                self.scope = Rc::downgrade(&arm.scope);
             }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
@@ -86,6 +90,9 @@ impl NodePath {
             }
             NodeKind::Block(ref block) => {
                 self.scope = Weak::clone(&block.scope.borrow().parent);
+            }
+            NodeKind::CaseArm(ref arm) => {
+                self.scope = Weak::clone(&arm.scope.borrow().parent);
             }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
@@ -183,9 +190,21 @@ pub trait Visitor {
     fn enter_statement(&mut self, path: &mut NodePath, statement: &Statement) {}
     fn exit_statement(&mut self, path: &mut NodePath, statement: &Statement) {}
 
-    fn enter_variable_declaration(&mut self, path: &mut NodePath, statement: &VariableDeclaration) {
+    fn enter_variable_declaration(
+        &mut self,
+        path: &mut NodePath,
+        declaration: &VariableDeclaration,
+    ) {
     }
-    fn exit_variable_declaration(&mut self, path: &mut NodePath, statement: &VariableDeclaration) {}
+    fn exit_variable_declaration(
+        &mut self,
+        path: &mut NodePath,
+        declaration: &VariableDeclaration,
+    ) {
+    }
+
+    fn enter_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {}
+    fn exit_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {}
 
     fn enter_pattern(&mut self, path: &mut NodePath, pattern: &Pattern) {}
     fn exit_pattern(&mut self, path: &mut NodePath, pattern: &Pattern) {}
@@ -208,8 +227,8 @@ pub trait Visitor {
     fn enter_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {}
     fn exit_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {}
 
-    fn enter_variable(&mut self, path: &mut NodePath, expr: &str) {}
-    fn exit_variable(&mut self, path: &mut NodePath, expr: &str) {}
+    fn enter_variable(&mut self, path: &mut NodePath, id: &str) {}
+    fn exit_variable(&mut self, path: &mut NodePath, id: &str) {}
 
     fn enter_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
     fn exit_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
@@ -296,6 +315,9 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                 &mut path,
                 node.variable_declaration().unwrap().as_ref(),
             );
+        }
+        NodeKind::CaseArm(_) => {
+            visitor.enter_case_arm(&mut path, node.case_arm().unwrap().as_ref());
         }
         NodeKind::Pattern(_) => {
             visitor.enter_pattern(&mut path, node.pattern().unwrap().as_ref());
@@ -399,6 +421,9 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         }
         NodeKind::Pattern(_) => {
             visitor.exit_pattern(&mut path, node.pattern().unwrap().as_ref());
+        }
+        NodeKind::CaseArm(_) => {
+            visitor.exit_case_arm(&mut path, node.case_arm().unwrap().as_ref());
         }
         NodeKind::StructField(_) => {
             visitor.exit_struct_field(&mut path, node.struct_field().unwrap().as_ref());

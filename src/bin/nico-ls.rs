@@ -1,8 +1,11 @@
 use log::{info, warn};
 use lsp_types::*;
-use nico::syntax::{
-    self, EffectiveRange, MissingTokenKind, NodeKind, NodePath, ParseError, Parser, Token,
-    TokenKind, Trivia,
+use nico::{
+    sem,
+    syntax::{
+        self, EffectiveRange, MissingTokenKind, Node, NodeKind, NodePath, ParseError, Parser,
+        TextToken, Token, TokenKind, Trivia,
+    },
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -138,15 +141,8 @@ impl DiagnosticsCollector {
     pub fn new() -> Self {
         DiagnosticsCollector::default()
     }
-}
 
-impl syntax::Visitor for DiagnosticsCollector {
-    fn enter_missing_token(
-        &mut self,
-        _path: &mut NodePath,
-        range: EffectiveRange,
-        item: MissingTokenKind,
-    ) {
+    fn add_diagnostic<S: Into<String>>(&mut self, range: EffectiveRange, message: S) {
         let diagnostic = Diagnostic {
             range: Range {
                 start: Position {
@@ -159,12 +155,35 @@ impl syntax::Visitor for DiagnosticsCollector {
                 },
             },
             severity: Some(DiagnosticSeverity::Error),
-            message: format!("Syntax Error: expected {}", item),
+            message: message.into(),
             source: Some("nico-ls".to_string()),
             ..Diagnostic::default()
         };
 
         self.diagnostics.push(diagnostic);
+    }
+
+    fn add_missing_token_error(&mut self, range: EffectiveRange, expected: MissingTokenKind) {
+        self.add_diagnostic(range, format!("Syntax Error: expected {}", expected));
+    }
+}
+
+impl syntax::Visitor for DiagnosticsCollector {
+    fn enter_variable(&mut self, path: &mut NodePath, id: &str) {
+        if let Some(scope) = path.scope() {
+            if scope.borrow().get_binding(id).is_none() {
+                self.add_diagnostic(path.node().range(), format!("Cannot find name '{}'.", id));
+            }
+        }
+    }
+
+    fn enter_missing_token(
+        &mut self,
+        _path: &mut NodePath,
+        range: EffectiveRange,
+        item: MissingTokenKind,
+    ) {
+        self.add_missing_token_error(range, item);
     }
 
     fn enter_skipped_token(
@@ -173,25 +192,7 @@ impl syntax::Visitor for DiagnosticsCollector {
         token: &Token,
         expected: MissingTokenKind,
     ) {
-        let range = token.range;
-        let diagnostic = Diagnostic {
-            range: Range {
-                start: Position {
-                    line: range.start.line,
-                    character: range.start.character,
-                },
-                end: Position {
-                    line: range.end.line,
-                    character: range.end.character,
-                },
-            },
-            severity: Some(DiagnosticSeverity::Error),
-            message: format!("Syntax Error: expected {}", expected),
-            source: Some("nico-ls".to_string()),
-            ..Diagnostic::default()
-        };
-
-        self.diagnostics.push(diagnostic);
+        self.add_missing_token_error(token.range, expected);
     }
 }
 
@@ -269,17 +270,23 @@ impl SemanticTokenizer {
                     if let Some(scope) = path.scope() {
                         if let Some(binding) = scope.borrow().get_binding(id) {
                             let binding = binding.borrow();
-                            let declaration = binding.node();
 
-                            if declaration.is_function_parameter() {
+                            if binding.function_definition().is_some() {
+                                return Some((SemanticTokenType::FUNCTION, token_modifiers_bitset));
+                            } else if binding.function_parameter().is_some() {
                                 return Some((
                                     SemanticTokenType::PARAMETER,
                                     token_modifiers_bitset,
                                 ));
-                            } else if declaration.is_function_definition() {
-                                return Some((SemanticTokenType::FUNCTION, token_modifiers_bitset));
-                            } else if declaration.is_struct_definition() {
+                            } else if binding.struct_definition().is_some() {
                                 return Some((SemanticTokenType::STRUCT, token_modifiers_bitset));
+                            } else if let Some(ty) = binding.builtin() {
+                                if let sem::Type::Function { .. } = *ty.borrow() {
+                                    return Some((
+                                        SemanticTokenType::FUNCTION,
+                                        token_modifiers_bitset,
+                                    ));
+                                }
                             }
                         }
                     }
@@ -345,7 +352,7 @@ impl SemanticTokenizer {
             token_type,
             line: token.range.start.line,
             character: token.range.start.character,
-            length: token.range.length,
+            length: token.len(),
             token_modifiers_bitset,
         })
     }
@@ -393,7 +400,7 @@ impl syntax::Visitor for SemanticTokenizer {
             token_type: SemanticTokenType::COMMENT,
             line: trivia.range.start.line,
             character: trivia.range.start.character,
-            length: trivia.range.length,
+            length: trivia.len(),
             token_modifiers_bitset: 0,
         })
     }
