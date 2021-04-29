@@ -68,6 +68,9 @@ impl NodePath {
             NodeKind::Block(ref block) => {
                 self.scope = Rc::downgrade(&block.scope);
             }
+            NodeKind::CaseArm(ref arm) => {
+                self.scope = Rc::downgrade(&arm.scope);
+            }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
                 self.scope = Weak::clone(&self.declarations);
@@ -87,6 +90,9 @@ impl NodePath {
             }
             NodeKind::Block(ref block) => {
                 self.scope = Weak::clone(&block.scope.borrow().parent);
+            }
+            NodeKind::CaseArm(ref arm) => {
+                self.scope = Weak::clone(&arm.scope.borrow().parent);
             }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
@@ -196,6 +202,9 @@ pub trait Visitor {
         declaration: &VariableDeclaration,
     ) {
     }
+
+    fn enter_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {}
+    fn exit_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {}
 
     fn enter_pattern(&mut self, path: &mut NodePath, pattern: &Pattern) {}
     fn exit_pattern(&mut self, path: &mut NodePath, pattern: &Pattern) {}
@@ -307,6 +316,9 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                 node.variable_declaration().unwrap().as_ref(),
             );
         }
+        NodeKind::CaseArm(_) => {
+            visitor.enter_case_arm(&mut path, node.case_arm().unwrap().as_ref());
+        }
         NodeKind::Pattern(_) => {
             visitor.enter_pattern(&mut path, node.pattern().unwrap().as_ref());
         }
@@ -409,6 +421,9 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         }
         NodeKind::Pattern(_) => {
             visitor.exit_pattern(&mut path, node.pattern().unwrap().as_ref());
+        }
+        NodeKind::CaseArm(_) => {
+            visitor.exit_case_arm(&mut path, node.case_arm().unwrap().as_ref());
         }
         NodeKind::StructField(_) => {
             visitor.exit_struct_field(&mut path, node.struct_field().unwrap().as_ref());

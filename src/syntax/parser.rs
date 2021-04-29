@@ -864,43 +864,10 @@ impl<'a> Parser<'a> {
         loop {
             match self.tokenizer.peek_kind() {
                 TokenKind::When => {
-                    // when
-                    code.interpret(self.tokenizer.next_token());
+                    let arm = self.read_case_arm();
 
-                    // To avoid syntactic ambiguity, no newline can be placed after `when` keyword.
-                    self.tokenizer.peek();
-                    let pattern = if self.tokenizer.is_newline_seen() {
-                        code.missing(
-                            self.tokenizer.current_insertion_range(),
-                            MissingTokenKind::Pattern,
-                        );
-                        None
-                    } else {
-                        self._parse_optional_item(
-                            &mut code,
-                            Parser::parse_pattern,
-                            NodeKind::Pattern,
-                            MissingTokenKind::Pattern,
-                        )
-                    };
-
-                    // guard
-                    let mut guard = None;
-
-                    if *self.tokenizer.peek_kind() == TokenKind::If {
-                        code.interpret(self.tokenizer.next_token());
-                        guard = self._parse_optional_item(
-                            &mut code,
-                            Parser::parse_expr,
-                            NodeKind::Expression,
-                            MissingTokenKind::Expression,
-                        );
-                    }
-
-                    let then_body =
-                        self._read_block(&[TokenKind::When, TokenKind::Else, TokenKind::End]);
-                    code.node(NodeKind::Block(Rc::clone(&then_body)));
-                    arms.push(CaseArm::new(pattern, guard, then_body))
+                    code.node(NodeKind::CaseArm(Rc::clone(&arm)));
+                    arms.push(arm);
                 }
                 TokenKind::Else => {
                     code.interpret(self.tokenizer.next_token());
@@ -935,6 +902,48 @@ impl<'a> Parser<'a> {
             code,
             self.new_type_var(),
         ))
+    }
+
+    fn read_case_arm(&mut self) -> Rc<CaseArm> {
+        let mut code = Code::new();
+
+        // when
+        code.interpret(self.tokenizer.next_token());
+
+        // To avoid syntactic ambiguity, no newline can be placed after `when` keyword.
+        self.tokenizer.peek();
+        let pattern = if self.tokenizer.is_newline_seen() {
+            code.missing(
+                self.tokenizer.current_insertion_range(),
+                MissingTokenKind::Pattern,
+            );
+            None
+        } else {
+            self._parse_optional_item(
+                &mut code,
+                Parser::parse_pattern,
+                NodeKind::Pattern,
+                MissingTokenKind::Pattern,
+            )
+        };
+
+        // guard
+        let mut guard = None;
+
+        if *self.tokenizer.peek_kind() == TokenKind::If {
+            code.interpret(self.tokenizer.next_token());
+            guard = self._parse_optional_item(
+                &mut code,
+                Parser::parse_expr,
+                NodeKind::Expression,
+                MissingTokenKind::Expression,
+            );
+        }
+
+        let then_body = self._read_block(&[TokenKind::When, TokenKind::Else, TokenKind::End]);
+        code.node(NodeKind::Block(Rc::clone(&then_body)));
+
+        Rc::new(CaseArm::new(pattern, guard, then_body, code))
     }
 
     /// Reads statements until it meets a token listed in `stop_tokens`.

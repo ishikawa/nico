@@ -31,6 +31,7 @@ pub enum NodeKind {
     Statement(Rc<Statement>),
     VariableDeclaration(Rc<VariableDeclaration>),
     Expression(Rc<Expression>),
+    CaseArm(Rc<CaseArm>),
     Pattern(Rc<Pattern>),
 }
 
@@ -101,6 +102,14 @@ impl NodeKind {
 
     pub fn type_annotation(&self) -> Option<Rc<TypeAnnotation>> {
         if let NodeKind::TypeAnnotation(node) = self {
+            Some(Rc::clone(node))
+        } else {
+            None
+        }
+    }
+
+    pub fn case_arm(&self) -> Option<Rc<CaseArm>> {
+        if let NodeKind::CaseArm(node) = self {
             Some(Rc::clone(node))
         } else {
             None
@@ -201,6 +210,7 @@ impl Node for NodeKind {
             NodeKind::Statement(kind) => kind.code(),
             NodeKind::VariableDeclaration(kind) => kind.code(),
             NodeKind::Expression(kind) => kind.code(),
+            NodeKind::CaseArm(kind) => kind.code(),
             NodeKind::Pattern(kind) => kind.code(),
         }
     }
@@ -881,14 +891,14 @@ impl IfExpression {
 #[derive(Debug)]
 pub struct CaseExpression {
     pub head: Option<Rc<Expression>>,
-    pub arms: Vec<CaseArm>,
+    pub arms: Vec<Rc<CaseArm>>,
     pub else_body: Option<Rc<Block>>,
 }
 
 impl CaseExpression {
     pub fn new(
         head: Option<Rc<Expression>>,
-        arms: Vec<CaseArm>,
+        arms: Vec<Rc<CaseArm>>,
         else_body: Option<Rc<Block>>,
     ) -> Self {
         Self {
@@ -904,6 +914,11 @@ pub struct CaseArm {
     pub pattern: Option<Rc<Pattern>>,
     pub guard: Option<Rc<Expression>>,
     pub then_body: Rc<Block>,
+    // `CaseArm` is the only syntactic element other than Program and Block that introduces
+    // a new scope. This scope is necessary to use the variables introduced in each arm in
+    // the guard clause.
+    pub scope: Rc<RefCell<Scope>>,
+    code: Code,
 }
 
 impl CaseArm {
@@ -911,16 +926,25 @@ impl CaseArm {
         pattern: Option<Rc<Pattern>>,
         guard: Option<Rc<Expression>>,
         then_body: Rc<Block>,
+        code: Code,
     ) -> Self {
         Self {
             pattern,
             guard,
             then_body,
+            scope: wrap(Scope::new()),
+            code,
         }
     }
 
     pub fn pattern(&self) -> Option<&Pattern> {
         self.pattern.as_deref()
+    }
+}
+
+impl Node for CaseArm {
+    fn code(&self) -> slice::Iter<CodeKind> {
+        self.code.iter()
     }
 }
 
@@ -1046,6 +1070,7 @@ impl fmt::Display for NodeKind {
             NodeKind::Statement(_) => write!(f, "Statement"),
             NodeKind::VariableDeclaration(_) => write!(f, "VariableDeclaration"),
             NodeKind::Pattern(_) => write!(f, "Pattern"),
+            NodeKind::CaseArm(_) => write!(f, "CaseArm"),
             NodeKind::Expression(expr) => {
                 write!(f, "{}", expr.kind)
             }

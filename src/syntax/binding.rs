@@ -1,6 +1,6 @@
 use super::{
-    traverse, Block, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Pattern, Program,
-    StructDefinition, VariableDeclaration, Visitor,
+    traverse, Block, CaseArm, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Pattern,
+    Program, StructDefinition, VariableDeclaration, Visitor,
 };
 use crate::sem::Type;
 use crate::util::wrap;
@@ -246,6 +246,17 @@ impl BlockBinder {
     pub fn new() -> Self {
         Self::default()
     }
+
+    fn _enter_scope(&mut self, _path: &mut NodePath, scope: &Rc<RefCell<Scope>>) {
+        scope.borrow_mut().parent = Weak::clone(&self.scope);
+        self.scope = Rc::downgrade(scope);
+    }
+
+    fn _exit_scope(&mut self, _path: &mut NodePath, _scope: &Rc<RefCell<Scope>>) {
+        if let Some(scope) = self.scope.upgrade() {
+            self.scope = Weak::clone(&scope.borrow().parent);
+        }
+    }
 }
 
 impl Visitor for BlockBinder {
@@ -277,15 +288,25 @@ impl Visitor for BlockBinder {
         }
     }
 
-    fn enter_block(&mut self, _path: &mut NodePath, block: &Block) {
-        block.scope.borrow_mut().parent = Weak::clone(&self.scope);
-        self.scope = Rc::downgrade(&block.scope);
+    fn enter_block(&mut self, path: &mut NodePath, block: &Block) {
+        self._enter_scope(path, &block.scope);
     }
 
-    fn exit_block(&mut self, _path: &mut NodePath, _block: &Block) {
-        if let Some(scope) = self.scope.upgrade() {
-            self.scope = Weak::clone(&scope.borrow().parent);
+    fn exit_block(&mut self, path: &mut NodePath, block: &Block) {
+        self._exit_scope(path, &block.scope);
+    }
+
+    fn enter_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {
+        self._enter_scope(path, &arm.scope);
+
+        if let Some(ref pattern) = arm.pattern {
+            let mut scope = arm.scope.borrow_mut();
+            scope.register_declaration(&NodeKind::Pattern(Rc::clone(pattern)));
         }
+    }
+
+    fn exit_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {
+        self._exit_scope(path, &arm.scope);
     }
 }
 
