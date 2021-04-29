@@ -1,6 +1,7 @@
 use log::{info, warn};
 use lsp_types::*;
 use nico::{
+    ls::server::ServerCapabilitiesBuilder,
     sem,
     syntax::{
         self, EffectiveRange, MissingTokenKind, Node, NodeKind, NodePath, ParseError, Parser,
@@ -435,6 +436,28 @@ struct ServerRegistrationOptions {
     token_modifier_legend: Rc<HashMap<SemanticTokenModifier, u32>>,
 }
 
+impl ServerRegistrationOptions {
+    pub fn from_semantic_tokens_options(options: &SemanticTokensOptions) -> Self {
+        // Register token type legend
+        let mut token_type_legend = HashMap::new();
+        let mut token_modifier_legend = HashMap::new();
+
+        for (i, token_type) in options.legend.token_types.iter().enumerate() {
+            let t = u32::try_from(i).unwrap();
+            token_type_legend.insert(token_type.clone(), t);
+        }
+        for (i, token_modifier) in options.legend.token_modifiers.iter().enumerate() {
+            let t = u32::try_from(i).unwrap();
+            token_modifier_legend.insert(token_modifier.clone(), t);
+        }
+
+        ServerRegistrationOptions {
+            token_type_legend: Rc::new(token_type_legend),
+            token_modifier_legend: Rc::new(token_modifier_legend),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Document {
     uri: Url,
@@ -546,71 +569,53 @@ impl Connection {
     ) -> Result<InitializeResult, HandlerError> {
         info!("[initialize] {:?}", params);
 
-        let token_types = vec![
-            SemanticTokenType::KEYWORD,
-            SemanticTokenType::VARIABLE,
-            SemanticTokenType::STRING,
-            SemanticTokenType::NUMBER,
-            SemanticTokenType::OPERATOR,
-            SemanticTokenType::COMMENT,
-            SemanticTokenType::FUNCTION,
-            SemanticTokenType::STRUCT,
-            SemanticTokenType::FUNCTION,
-            SemanticTokenType::PARAMETER,
-            SemanticTokenType::PROPERTY,
-        ];
+        let capabilities = ServerCapabilitiesBuilder::new()
+            .initialized(&params)
+            .semantic_token_types(&[
+                SemanticTokenType::KEYWORD,
+                SemanticTokenType::VARIABLE,
+                SemanticTokenType::STRING,
+                SemanticTokenType::NUMBER,
+                SemanticTokenType::OPERATOR,
+                SemanticTokenType::COMMENT,
+                SemanticTokenType::FUNCTION,
+                SemanticTokenType::STRUCT,
+                SemanticTokenType::FUNCTION,
+                SemanticTokenType::PARAMETER,
+                SemanticTokenType::PROPERTY,
+            ])
+            .semantic_token_modifiers(&[
+                SemanticTokenModifier::DECLARATION,
+                SemanticTokenModifier::DEFINITION,
+                SemanticTokenModifier::READONLY,
+                SemanticTokenModifier::STATIC,
+                SemanticTokenModifier::DEPRECATED,
+                SemanticTokenModifier::ABSTRACT,
+                SemanticTokenModifier::ASYNC,
+                SemanticTokenModifier::MODIFICATION,
+                SemanticTokenModifier::DOCUMENTATION,
+                SemanticTokenModifier::DEFAULT_LIBRARY,
+            ])
+            .build();
 
-        let token_modifiers = vec![
-            SemanticTokenModifier::DECLARATION,
-            SemanticTokenModifier::DEFINITION,
-            SemanticTokenModifier::READONLY,
-            SemanticTokenModifier::STATIC,
-            SemanticTokenModifier::DEPRECATED,
-            SemanticTokenModifier::ABSTRACT,
-            SemanticTokenModifier::ASYNC,
-            SemanticTokenModifier::MODIFICATION,
-            SemanticTokenModifier::DOCUMENTATION,
-            SemanticTokenModifier::DEFAULT_LIBRARY,
-        ];
-
-        // Register token type legend
-        let mut token_type_legend = HashMap::new();
-        let mut token_modifier_legend = HashMap::new();
-
-        for (i, token_type) in token_types.iter().enumerate() {
-            let t = u32::try_from(i).unwrap();
-            token_type_legend.insert(token_type.clone(), t);
+        if let Some(ref semantic_tokens_provider) = capabilities.semantic_tokens_provider {
+            match semantic_tokens_provider {
+                SemanticTokensServerCapabilities::SemanticTokensOptions(options) => {
+                    self.server_options = Some(
+                        ServerRegistrationOptions::from_semantic_tokens_options(options),
+                    );
+                }
+                SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(options) => {
+                    self.server_options =
+                        Some(ServerRegistrationOptions::from_semantic_tokens_options(
+                            &options.semantic_tokens_options,
+                        ));
+                }
+            }
         }
-        for (i, token_modifier) in token_modifiers.iter().enumerate() {
-            let t = u32::try_from(i).unwrap();
-            token_modifier_legend.insert(token_modifier.clone(), t);
-        }
-
-        // Initialized
-        self.server_options = Some(ServerRegistrationOptions {
-            token_type_legend: Rc::new(token_type_legend),
-            token_modifier_legend: Rc::new(token_modifier_legend),
-        });
 
         Ok(InitializeResult {
-            capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::Incremental,
-                )),
-                semantic_tokens_provider: Some(
-                    SemanticTokensServerCapabilities::SemanticTokensOptions(
-                        SemanticTokensOptions {
-                            legend: SemanticTokensLegend {
-                                token_types,
-                                token_modifiers,
-                            },
-                            full: Some(SemanticTokensFullOptions::Bool(true)),
-                            ..SemanticTokensOptions::default()
-                        },
-                    ),
-                ),
-                ..ServerCapabilities::default()
-            },
+            capabilities,
             server_info: Some(ServerInfo {
                 name: "nico-ls".to_string(),
                 version: Some("0.0.1".to_string()),
