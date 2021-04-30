@@ -20,3 +20,45 @@ test("initialize", async done => {
   server.on("exit", done);
   server.stop();
 });
+
+describe("rename", () => {
+  test("prepare support : on", async done => {
+    const server = LanguageServer.spawn();
+    const builder = new RequestBuilder({ id: 4760 });
+
+    const request = builder.initialize();
+
+    request.params.capabilities.textDocument.rename = {
+      dynamicRegistration: true,
+      prepareSupport: true,
+      prepareSupportDefaultBehavior: 1,
+      honorsChangeAnnotations: true
+    };
+
+    const response = await server.sendRequest(request);
+    expect(response).toMatchSnapshot();
+
+    server.on("exit", done);
+    server.stop();
+  });
+
+  test("prepare support : off", async done => {
+    const server = LanguageServer.spawn();
+    const builder = new RequestBuilder({ id: 4761 });
+
+    const request = builder.initialize();
+
+    request.params.capabilities.textDocument.rename = {
+      dynamicRegistration: false,
+      prepareSupport: false,
+      prepareSupportDefaultBehavior: 1,
+      honorsChangeAnnotations: false
+    };
+
+    const response = await server.sendRequest(request);
+    expect(response).toMatchSnapshot();
+
+    server.on("exit", done);
+    server.stop();
+  });
+});
