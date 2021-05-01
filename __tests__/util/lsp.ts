@@ -292,11 +292,21 @@ export class RequestBuilder {
     };
   }
 
-  initialize(): RequestMessage {
+  initialize({ rename }: { rename?: boolean } = {}): RequestMessage {
     const params = {
       trace: "verbose",
       capabilities: {
         textDocument: {
+          ...(rename
+            ? {
+                rename: {
+                  dynamicRegistration: true,
+                  prepareSupport: true,
+                  prepareSupportDefaultBehavior: 1,
+                  honorsChangeAnnotations: true
+                }
+              }
+            : {}),
           publishDiagnostics: {
             relatedInformation: true,
             versionSupport: false,
