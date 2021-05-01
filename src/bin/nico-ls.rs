@@ -285,7 +285,7 @@ impl SemanticTokenizer {
     fn token_type_and_modifiers_for_identifier(
         &self,
         path: &NodePath,
-        _modifiers: &mut u32,
+        modifiers: &mut u32,
     ) -> SemanticTokenType {
         let node = path.node();
 
@@ -298,6 +298,7 @@ impl SemanticTokenizer {
         let parent = path
             .parent()
             .unwrap_or_else(|| panic!("parent must exist."));
+
         let parent = parent.borrow();
         let scope = parent.scope();
         let parent = parent.node();
@@ -306,12 +307,10 @@ impl SemanticTokenizer {
             SemanticTokenType::FUNCTION
         } else if parent.is_function_parameter() {
             SemanticTokenType::PARAMETER
-        } else if parent.is_struct_definition() {
+        } else if parent.is_struct_definition() || parent.is_struct_literal() {
             SemanticTokenType::STRUCT
         } else if parent.is_struct_field() || parent.is_member_expression() {
             SemanticTokenType::PROPERTY
-        } else if parent.is_struct_literal() {
-            SemanticTokenType::STRUCT
         } else if parent.is_variable_expression() {
             if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
                 let binding = binding.borrow();
@@ -323,6 +322,11 @@ impl SemanticTokenizer {
                 } else if binding.struct_definition().is_some() {
                     return SemanticTokenType::STRUCT;
                 } else if let Some(ty) = binding.builtin() {
+                    self.add_token_modifiers_bitset(
+                        modifiers,
+                        SemanticTokenModifier::DEFAULT_LIBRARY,
+                    );
+
                     if let sem::Type::Function { .. } = *ty.borrow() {
                         return SemanticTokenType::FUNCTION;
                     }
