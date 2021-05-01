@@ -555,7 +555,6 @@ impl Connection {
             SemanticTokenType::NUMBER,
             SemanticTokenType::OPERATOR,
             SemanticTokenType::COMMENT,
-            SemanticTokenType::FUNCTION,
             SemanticTokenType::STRUCT,
             SemanticTokenType::FUNCTION,
             SemanticTokenType::PARAMETER,
