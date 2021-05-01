@@ -132,6 +132,22 @@ impl Response {
     }
 }
 
+// Position & Range
+fn syntax_position(position: Position) -> syntax::Position {
+    syntax::Position {
+        line: position.line,
+        character: position.character,
+    }
+}
+
+fn lsp_position(position: syntax::Position) -> Position {
+    Position::new(position.line, position.character)
+}
+
+fn lsp_range(range: syntax::EffectiveRange) -> Range {
+    Range::new(lsp_position(range.start), lsp_position(range.end))
+}
+
 // --- Language Server States
 #[derive(Debug, Default)]
 struct DiagnosticsCollector {
@@ -653,6 +669,15 @@ impl Connection {
         params: &TextDocumentPositionParams,
     ) -> Result<Option<PrepareRenameResponse>, HandlerError> {
         info!("[on_text_document_prepare_rename] {:?}", params);
+        let node = self.get_compiled_result(&params.text_document.uri)?;
+
+        if let Some(id) = node.find_identifier_at(syntax_position(params.position)) {
+            return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+                range: lsp_range(id.range()),
+                placeholder: id.to_string(),
+            }));
+        }
+
         Ok(None)
     }
 

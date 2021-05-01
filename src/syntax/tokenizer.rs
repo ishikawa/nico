@@ -38,6 +38,10 @@ impl EffectiveRange {
             end: std::cmp::max(self.end, other.end),
         }
     }
+
+    pub fn contains(&self, position: Position) -> bool {
+        position >= self.start && position <= self.end
+    }
 }
 
 pub trait TextToken {
@@ -573,6 +577,12 @@ impl<'a> Tokenizer<'a> {
 impl fmt::Display for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "line:{}:{}", self.line, self.character)
+    }
+}
+
+impl fmt::Display for EffectiveRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{{}-{}}}", self.start, self.end)
     }
 }
 
