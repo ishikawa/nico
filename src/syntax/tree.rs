@@ -190,6 +190,10 @@ impl NodeKind {
     pub fn is_expression(&self) -> bool {
         matches!(self, NodeKind::Expression(..))
     }
+
+    pub fn is_variable_expression(&self) -> bool {
+        self.variable_expression().is_some()
+    }
 }
 
 impl Node for NodeKind {
@@ -705,11 +709,15 @@ impl Expression {
     }
 
     pub fn is_struct_literal(&self) -> bool {
-        self.struct_literal().is_some()
+        matches!(self.kind, ExpressionKind::StructLiteral(..))
     }
 
     pub fn is_member_expression(&self) -> bool {
-        self.member_expression().is_some()
+        matches!(self.kind, ExpressionKind::MemberExpression(..))
+    }
+
+    pub fn is_variable_expression(&self) -> bool {
+        matches!(self.kind, ExpressionKind::VariableExpression(..))
     }
 }
 

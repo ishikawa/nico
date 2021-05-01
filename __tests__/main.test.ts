@@ -4,23 +4,17 @@ import path from "path";
 import { StringDecoder } from "string_decoder";
 import { compileFile } from "./util/compiler";
 import { BufferedPrinter, buildImportObject, ConsolePrinter, StringView } from "../runner/runtime";
+import { filterTestCases, TestCaseBase } from "./util/testcase";
 
 type Exports = Record<string, any>;
 
-interface TestCase {
-  input?: string;
-  file?: string;
+interface TestCase extends TestCaseBase {
   expected?: any;
   exec?: (exports: Exports) => any[];
   captureOutput?: boolean;
   compileError?: RegExp;
 
-  // filters
-  // - **focus** - Include these tests only.
-  // - **skip** - Exclude these tests.
-  // - **todo** - Under development. It's ok if the compiler halted with "not yet implemented"
-  focus?: boolean;
-  skip?: boolean;
+  // Under development. It's ok if the compiler halted with "not yet implemented"
   todo?: boolean;
 }
 
@@ -819,12 +813,7 @@ const cases: TestCase[] = [
   }
 ];
 
-// filter
-let focused = cases.filter(x => x.focus);
-focused = focused.length === 0 ? cases : focused;
-focused = focused.filter(x => !x.skip);
-
-focused.forEach(({ input, file, expected, compileError, exec, captureOutput, todo }) => {
+filterTestCases(cases).forEach(({ input, file, expected, compileError, exec, captureOutput, todo }) => {
   test(`given '${input || file}'`, async () => {
     let src = temporaryCodePath;
 

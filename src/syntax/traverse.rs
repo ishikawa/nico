@@ -54,8 +54,10 @@ impl NodePath {
         self.parent.as_ref().map(Rc::clone)
     }
 
-    pub fn scope(&self) -> Option<Rc<RefCell<Scope>>> {
-        self.scope.upgrade()
+    pub fn scope(&self) -> Rc<RefCell<Scope>> {
+        self.scope
+            .upgrade()
+            .unwrap_or_else(|| panic!("scope must live."))
     }
 
     fn on_enter(&mut self) {
