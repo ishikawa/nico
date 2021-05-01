@@ -1,6 +1,5 @@
 import { LanguageServer, NotificationMessage, RequestBuilder, spawn_server } from "../util/lsp";
-import fs from "fs";
-import { filterTestCases, TestCaseBase } from "../util/testcase";
+import { filterTestCases, TestCaseBase, readTestFileSync, getTestName } from "../util/testcase";
 
 let server: LanguageServer | undefined;
 
@@ -53,17 +52,8 @@ let cases: TestCaseBase[] = [
 ];
 
 filterTestCases(cases).forEach((testCase, i) => {
-  let src = "";
-  let name = "-";
-
-  if (testCase.input) {
-    src = testCase.input;
-    name = src;
-  } else if (testCase.file) {
-    const srcBuffer = fs.readFileSync(testCase.file);
-    src = srcBuffer.toString("utf-8");
-    name = testCase.file;
-  }
+  let src = readTestFileSync(testCase);
+  let name = getTestName(testCase);
 
   // No compilation errors and semantic tokens
   test(`${i}: publishDiagnostics at \`${name}\``, async done => {
