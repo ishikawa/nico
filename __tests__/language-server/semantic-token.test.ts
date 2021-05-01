@@ -1,7 +1,7 @@
-import { LanguageServer, NotificationMessage, RequestBuilder, spawn_server } from "../util/lsp";
+import { LanguageServer, LanguageServerAgent, spawn_server } from "../util/lsp";
 import fs from "fs";
 import glob from "glob";
-import { filterTestCases, TestCaseBase, readTestFileSync, getTestName, getDocumentUri } from "../util/testcase";
+import { filterTestCases, TestCaseBase, readTestFileSync, getTestName } from "../util/testcase";
 
 let server: LanguageServer | undefined;
 
@@ -52,31 +52,14 @@ filterTestCases(cases).forEach((testCase, i) => {
 
   // No compilation errors and semantic tokens
   test(`${i}: open a document at \`${name}\``, async done => {
-    const builder = new RequestBuilder({ id: 1000 + i });
-    const uri = getDocumentUri(i);
+    const agent = new LanguageServerAgent(server!, { sequence: i });
 
     // Open document and no compilation errors
-    {
-      const nextNotification = server!.nextMessage<NotificationMessage>();
-      const notification1 = builder.textDocumentDidOpen(uri, src);
-      await server!.sendNotification(notification1);
+    const diagnostics = await agent.openDocument(name, src);
+    expect(diagnostics).toHaveLength(0);
 
-      const notification2 = await nextNotification;
-      expect(notification2).toEqual({
-        jsonrpc: "2.0",
-        method: "textDocument/publishDiagnostics",
-        // no errors
-        params: { diagnostics: [], uri }
-      });
-    }
-
-    // Semantic coloring
-    {
-      const request = builder.textDocumentSemanticTokenFull(uri);
-      const response = await server?.sendRequest(request);
-
-      expect(response).toMatchSnapshot();
-    }
+    const response = await agent.textDocumentSemanticTokenFull(name);
+    expect(response).toMatchSnapshot();
 
     done();
   });

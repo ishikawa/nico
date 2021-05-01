@@ -39,8 +39,3 @@ export function getTestName(testCase: TestCaseBase): string {
 
   return "-";
 }
-
-export function getDocumentUri(name?: string | number): string {
-  const filename = encodeURIComponent(name == null ? "sample" : name.toString());
-  return `file:///home/user/nico/sample${filename}.nico`;
-}

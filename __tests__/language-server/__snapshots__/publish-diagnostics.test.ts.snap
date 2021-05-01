@@ -1,73 +1,50 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`0: publishDiagnostics at \`a\` 1`] = `
-Object {
-  "jsonrpc": "2.0",
-  "method": "textDocument/publishDiagnostics",
-  "params": Object {
-    "diagnostics": Array [
-      Object {
-        "message": "Cannot find name 'a'.",
-        "range": Object {
-          "end": Object {
-            "character": 1,
-            "line": 0,
-          },
-          "start": Object {
-            "character": 0,
-            "line": 0,
-          },
-        },
-        "severity": 1,
-        "source": "nico-ls",
+Array [
+  Object {
+    "message": "Cannot find name 'a'.",
+    "range": Object {
+      "end": Object {
+        "character": 1,
+        "line": 0,
       },
-    ],
-    "uri": "file:///home/user/nico/sample0.nico",
+      "start": Object {
+        "character": 0,
+        "line": 0,
+      },
+    },
+    "severity": 1,
+    "source": "nico-ls",
   },
-}
+]
 `;
 
 exports[`1: publishDiagnostics at \`let a = 1
-a\` 1`] = `
-Object {
-  "jsonrpc": "2.0",
-  "method": "textDocument/publishDiagnostics",
-  "params": Object {
-    "diagnostics": Array [],
-    "uri": "file:///home/user/nico/sample1.nico",
-  },
-}
-`;
+a\` 1`] = `Array []`;
 
 exports[`2: publishDiagnostics at \`if 3 > 0
     let a = 1
     println_i32(a)
 end
 a\` 1`] = `
-Object {
-  "jsonrpc": "2.0",
-  "method": "textDocument/publishDiagnostics",
-  "params": Object {
-    "diagnostics": Array [
-      Object {
-        "message": "Cannot find name 'a'.",
-        "range": Object {
-          "end": Object {
-            "character": 1,
-            "line": 4,
-          },
-          "start": Object {
-            "character": 0,
-            "line": 4,
-          },
-        },
-        "severity": 1,
-        "source": "nico-ls",
+Array [
+  Object {
+    "message": "Cannot find name 'a'.",
+    "range": Object {
+      "end": Object {
+        "character": 1,
+        "line": 4,
       },
-    ],
-    "uri": "file:///home/user/nico/sample2.nico",
+      "start": Object {
+        "character": 0,
+        "line": 4,
+      },
+    },
+    "severity": 1,
+    "source": "nico-ls",
   },
-}
+]
 `;
 
 exports[`3: publishDiagnostics at \`case 3
@@ -77,28 +54,21 @@ else
     println_i32(10)
 end
 x\` 1`] = `
-Object {
-  "jsonrpc": "2.0",
-  "method": "textDocument/publishDiagnostics",
-  "params": Object {
-    "diagnostics": Array [
-      Object {
-        "message": "Cannot find name 'x'.",
-        "range": Object {
-          "end": Object {
-            "character": 1,
-            "line": 6,
-          },
-          "start": Object {
-            "character": 0,
-            "line": 6,
-          },
-        },
-        "severity": 1,
-        "source": "nico-ls",
+Array [
+  Object {
+    "message": "Cannot find name 'x'.",
+    "range": Object {
+      "end": Object {
+        "character": 1,
+        "line": 6,
       },
-    ],
-    "uri": "file:///home/user/nico/sample3.nico",
+      "start": Object {
+        "character": 0,
+        "line": 6,
+      },
+    },
+    "severity": 1,
+    "source": "nico-ls",
   },
-}
+]
 `;

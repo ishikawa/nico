@@ -128,7 +128,7 @@ export interface NotificationMessage extends Message {
   /**
    * The notification's params.
    */
-  params?: any;
+  params?: Record<string, any>;
 }
 
 type InitializeOptions = { rename?: boolean };
@@ -400,6 +400,41 @@ export class RequestBuilder {
   }
 }
 
+export class LanguageServerAgent {
+  server: LanguageServer;
+  builder: RequestBuilder;
+
+  constructor(server: LanguageServer, options: { sequence?: number }) {
+    const { sequence } = options;
+
+    this.server = server;
+    this.builder = new RequestBuilder({ id: 1000 + (sequence ?? 0) });
+  }
+
+  async openDocument(filename: string, src: string): Promise<any[]> {
+    const uri = getDocumentUri(filename);
+
+    const nextNotification = this.server.nextMessage<NotificationMessage>();
+    const notification1 = this.builder.textDocumentDidOpen(uri, src);
+    await this.server.sendNotification(notification1);
+
+    const diagnostics = await nextNotification;
+
+    expect(diagnostics.method).toEqual("textDocument/publishDiagnostics");
+    expect(diagnostics.params).toBeDefined();
+    expect(diagnostics.params!.uri).toEqual(uri);
+
+    return diagnostics.params!.diagnostics;
+  }
+
+  async textDocumentSemanticTokenFull(filename: string): Promise<ResponseMessage> {
+    const uri = getDocumentUri(filename);
+
+    const request = this.builder.textDocumentSemanticTokenFull(uri);
+    return this.server.sendRequest(request);
+  }
+}
+
 // helpers
 export async function spawn_server(options: InitializeOptions = {}): Promise<LanguageServer> {
   const builder = new RequestBuilder({ id: 1 });
@@ -418,4 +453,9 @@ export async function spawn_server(options: InitializeOptions = {}): Promise<Lan
   }
 
   return server;
+}
+
+export function getDocumentUri(name?: string | number): string {
+  const filename = encodeURIComponent(name == null ? "sample" : name.toString());
+  return `file:///home/user/nico/sample${filename.substring(0, 64)}.nico`;
 }
