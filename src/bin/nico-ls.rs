@@ -3,8 +3,8 @@ use lsp_types::*;
 use nico::{
     sem,
     syntax::{
-        self, EffectiveRange, MissingTokenKind, Node, NodeKind, NodePath, ParseError, Parser,
-        TextToken, Token, TokenKind, Trivia,
+        self, EffectiveRange, Identifier, MissingTokenKind, Node, NodeKind, NodePath, ParseError,
+        Parser, TextToken, Token, TokenKind, Trivia,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -169,9 +169,9 @@ impl DiagnosticsCollector {
 }
 
 impl syntax::Visitor for DiagnosticsCollector {
-    fn enter_variable(&mut self, path: &mut NodePath, id: &str) {
+    fn enter_variable(&mut self, path: &mut NodePath, id: &Identifier) {
         if let Some(scope) = path.scope() {
-            if scope.borrow().get_binding(id).is_none() {
+            if scope.borrow().get_binding(id.as_str()).is_none() {
                 self.add_diagnostic(path.node().range(), format!("Cannot find name '{}'.", id));
             }
         }
@@ -268,7 +268,7 @@ impl SemanticTokenizer {
 
                 if let Some(id) = node.variable_expression() {
                     if let Some(scope) = path.scope() {
-                        if let Some(binding) = scope.borrow().get_binding(id) {
+                        if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
                             let binding = binding.borrow();
 
                             if binding.function_definition().is_some() {

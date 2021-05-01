@@ -156,11 +156,9 @@ impl NodeKind {
         }
     }
 
-    pub fn variable_expression(&self) -> Option<&str> {
+    pub fn variable_expression(&self) -> Option<&Identifier> {
         if let NodeKind::Expression(node) = self {
-            if let Some(v) = node.variable_expression() {
-                return Some(v);
-            }
+            return node.variable_expression();
         }
         None
     }
@@ -634,9 +632,9 @@ impl Expression {
         }
     }
 
-    pub fn variable_expression(&self) -> Option<&str> {
-        if let ExpressionKind::VariableExpression(ref expr) = self.kind {
-            Some(expr)
+    pub fn variable_expression(&self) -> Option<&Identifier> {
+        if let ExpressionKind::VariableExpression(ref id) = self.kind {
+            Some(id)
         } else {
             None
         }
@@ -968,7 +966,7 @@ pub enum ExpressionKind {
     IntegerLiteral(i32),
     StringLiteral(Option<String>),
     StructLiteral(StructLiteral),
-    VariableExpression(String),
+    VariableExpression(Rc<Identifier>),
     BinaryExpression(BinaryExpression),
     UnaryExpression(UnaryExpression),
     SubscriptExpression(SubscriptExpression),
@@ -1063,7 +1061,7 @@ impl Node for StructFieldPattern {
 pub enum PatternKind {
     IntegerPattern(i32),
     StringPattern(Option<String>),
-    VariablePattern(String),
+    VariablePattern(Rc<Identifier>),
     ArrayPattern(ArrayPattern),
     RestPattern(RestPattern),
     StructPattern(StructPattern),
