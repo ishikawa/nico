@@ -156,9 +156,23 @@ impl NodeKind {
         }
     }
 
+    pub fn struct_literal(&self) -> Option<&StructLiteral> {
+        if let NodeKind::Expression(node) = self {
+            return node.struct_literal();
+        }
+        None
+    }
+
     pub fn variable_expression(&self) -> Option<&Identifier> {
         if let NodeKind::Expression(node) = self {
             return node.variable_expression();
+        }
+        None
+    }
+
+    pub fn member_expression(&self) -> Option<&MemberExpression> {
+        if let NodeKind::Expression(node) = self {
+            return node.member_expression();
         }
         None
     }
@@ -191,8 +205,16 @@ impl NodeKind {
         matches!(self, NodeKind::Expression(..))
     }
 
+    pub fn is_struct_literal(&self) -> bool {
+        self.struct_literal().is_some()
+    }
+
     pub fn is_variable_expression(&self) -> bool {
         self.variable_expression().is_some()
+    }
+
+    pub fn is_member_expression(&self) -> bool {
+        self.member_expression().is_some()
     }
 }
 

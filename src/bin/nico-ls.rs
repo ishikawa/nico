@@ -301,8 +301,6 @@ impl SemanticTokenizer {
         let scope = parent.scope();
         let parent = parent.node();
 
-        eprintln!("parent = {}", parent);
-
         if parent.is_function_definition() {
             SemanticTokenType::FUNCTION
         } else if parent.is_function_parameter() {
@@ -311,25 +309,23 @@ impl SemanticTokenizer {
             SemanticTokenType::STRUCT
         } else if parent.is_struct_field() {
             SemanticTokenType::PROPERTY
-        } else if let Some(expr) = parent.expression() {
-            if expr.is_member_expression() {
-                return SemanticTokenType::PROPERTY;
-            } else if expr.is_struct_literal() {
-                return SemanticTokenType::STRUCT;
-            } else if expr.is_variable_expression() {
-                if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
-                    let binding = binding.borrow();
+        } else if parent.is_member_expression() {
+            SemanticTokenType::PROPERTY
+        } else if parent.is_struct_literal() {
+            SemanticTokenType::STRUCT
+        } else if parent.is_variable_expression() {
+            if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
+                let binding = binding.borrow();
 
-                    if binding.function_definition().is_some() {
+                if binding.function_definition().is_some() {
+                    return SemanticTokenType::FUNCTION;
+                } else if binding.function_parameter().is_some() {
+                    return SemanticTokenType::PARAMETER;
+                } else if binding.struct_definition().is_some() {
+                    return SemanticTokenType::STRUCT;
+                } else if let Some(ty) = binding.builtin() {
+                    if let sem::Type::Function { .. } = *ty.borrow() {
                         return SemanticTokenType::FUNCTION;
-                    } else if binding.function_parameter().is_some() {
-                        return SemanticTokenType::PARAMETER;
-                    } else if binding.struct_definition().is_some() {
-                        return SemanticTokenType::STRUCT;
-                    } else if let Some(ty) = binding.builtin() {
-                        if let sem::Type::Function { .. } = *ty.borrow() {
-                            return SemanticTokenType::FUNCTION;
-                        }
                     }
                 }
             }
