@@ -52,7 +52,7 @@ filterTestCases(cases).forEach((testCase, i) => {
 
   // No compilation errors and semantic tokens
   test(`${i}: open a document at \`${name}\``, async done => {
-    const builder = new RequestBuilder({ id: 1000 + 1 });
+    const builder = new RequestBuilder({ id: 1000 + i });
     const uri = getDocumentUri(i);
 
     // Open document and no compilation errors
