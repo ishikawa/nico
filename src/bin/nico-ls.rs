@@ -646,6 +646,14 @@ impl Connection {
         })
     }
 
+    fn on_text_document_prepare_rename(
+        &self,
+        params: &TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>, HandlerError> {
+        info!("[on_text_document_prepare_rename] {:?}", params);
+        Ok(None)
+    }
+
     // Notification callbacks
     fn on_initialized(&self, params: &InitializedParams) -> Result<(), HandlerError> {
         info!("[initialized] {:?}", params);
@@ -821,6 +829,12 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
             let params = request.take_params::<SemanticTokensParams>()?;
             let result = conn.on_text_document_semantic_tokens_full(&params)?;
 
+            conn.send_response(&request, result)?;
+        }
+        "textDocument/prepareRename" => {
+            let params = request.take_params::<TextDocumentPositionParams>()?;
+
+            let result = conn.on_text_document_prepare_rename(&params)?;
             conn.send_response(&request, result)?;
         }
         // Notifications
