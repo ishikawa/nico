@@ -307,9 +307,7 @@ impl SemanticTokenizer {
             SemanticTokenType::PARAMETER
         } else if parent.is_struct_definition() {
             SemanticTokenType::STRUCT
-        } else if parent.is_struct_field() {
-            SemanticTokenType::PROPERTY
-        } else if parent.is_member_expression() {
+        } else if parent.is_struct_field() || parent.is_member_expression() {
             SemanticTokenType::PROPERTY
         } else if parent.is_struct_literal() {
             SemanticTokenType::STRUCT
@@ -330,7 +328,7 @@ impl SemanticTokenizer {
                 }
             }
 
-            return SemanticTokenType::VARIABLE;
+            SemanticTokenType::VARIABLE
         } else {
             SemanticTokenType::VARIABLE
         }
