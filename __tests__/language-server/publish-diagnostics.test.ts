@@ -1,5 +1,5 @@
 import { LanguageServer, NotificationMessage, RequestBuilder, spawn_server } from "../util/lsp";
-import { filterTestCases, TestCaseBase, readTestFileSync, getTestName } from "../util/testcase";
+import { filterTestCases, TestCaseBase, readTestFileSync, getTestName, getDocumentUri } from "../util/testcase";
 
 let server: LanguageServer | undefined;
 
@@ -58,7 +58,7 @@ filterTestCases(cases).forEach((testCase, i) => {
   // No compilation errors and semantic tokens
   test(`${i}: publishDiagnostics at \`${name}\``, async done => {
     const builder = new RequestBuilder({ id: 1000 + 1 });
-    const uri = `file:///home/user/nico/sample${i}.nico`;
+    const uri = getDocumentUri(i);
 
     const nextNotification = server!.nextMessage<NotificationMessage>();
     await server!.sendNotification(builder.textDocumentDidOpen(uri, src));

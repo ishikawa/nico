@@ -1,7 +1,7 @@
 import { LanguageServer, NotificationMessage, RequestBuilder, spawn_server } from "../util/lsp";
 import fs from "fs";
 import glob from "glob";
-import { filterTestCases, TestCaseBase } from "../util/testcase";
+import { filterTestCases, TestCaseBase, readTestFileSync, getTestName, getDocumentUri } from "../util/testcase";
 
 let server: LanguageServer | undefined;
 
@@ -47,22 +47,13 @@ cases = cases.concat(
 );
 
 filterTestCases(cases).forEach((testCase, i) => {
-  let src = "";
-  let name = "-";
-
-  if (testCase.input) {
-    src = testCase.input;
-    name = src;
-  } else if (testCase.file) {
-    const srcBuffer = fs.readFileSync(testCase.file);
-    src = srcBuffer.toString("utf-8");
-    name = testCase.file;
-  }
+  let src = readTestFileSync(testCase);
+  let name = getTestName(testCase);
 
   // No compilation errors and semantic tokens
   test(`${i}: open a document at \`${name}\``, async done => {
     const builder = new RequestBuilder({ id: 1000 + 1 });
-    const uri = `file:///home/user/nico/sample${i}.nico`;
+    const uri = getDocumentUri(i);
 
     // Open document and no compilation errors
     {

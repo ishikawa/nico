@@ -131,6 +131,8 @@ export interface NotificationMessage extends Message {
   params?: any;
 }
 
+type InitializeOptions = { rename?: boolean };
+
 export class LanguageServer extends EventEmitter {
   process: ChildProcessWithoutNullStreams;
 
@@ -292,7 +294,7 @@ export class RequestBuilder {
     };
   }
 
-  initialize({ rename }: { rename?: boolean } = {}): RequestMessage {
+  initialize({ rename }: InitializeOptions = {}): RequestMessage {
     const params = {
       trace: "verbose",
       capabilities: {
@@ -399,13 +401,13 @@ export class RequestBuilder {
 }
 
 // helpers
-export async function spawn_server(): Promise<LanguageServer> {
+export async function spawn_server(options: InitializeOptions = {}): Promise<LanguageServer> {
   const builder = new RequestBuilder({ id: 1 });
   const server = LanguageServer.spawn();
 
   // initialize
   {
-    const request = builder.initialize();
+    const request = builder.initialize(options);
     await server.sendRequest(request);
   }
 
