@@ -54,8 +54,10 @@ impl NodePath {
         self.parent.as_ref().map(Rc::clone)
     }
 
-    pub fn scope(&self) -> Option<Rc<RefCell<Scope>>> {
-        self.scope.upgrade()
+    pub fn scope(&self) -> Rc<RefCell<Scope>> {
+        self.scope
+            .upgrade()
+            .unwrap_or_else(|| panic!("scope must live."))
     }
 
     fn on_enter(&mut self) {
@@ -227,8 +229,8 @@ pub trait Visitor {
     fn enter_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {}
     fn exit_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {}
 
-    fn enter_variable(&mut self, path: &mut NodePath, id: &str) {}
-    fn exit_variable(&mut self, path: &mut NodePath, id: &str) {}
+    fn enter_variable(&mut self, path: &mut NodePath, id: &Identifier) {}
+    fn exit_variable(&mut self, path: &mut NodePath, id: &Identifier) {}
 
     fn enter_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
     fn exit_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
@@ -346,8 +348,8 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     ExpressionKind::StructLiteral(kind) => {
                         visitor.enter_struct_literal(&mut path, kind);
                     }
-                    ExpressionKind::VariableExpression(kind) => {
-                        visitor.enter_variable(&mut path, kind);
+                    ExpressionKind::VariableExpression(id) => {
+                        visitor.enter_variable(&mut path, id);
                     }
                     ExpressionKind::BinaryExpression(kind) => {
                         visitor.enter_binary_expression(&mut path, kind);
@@ -446,8 +448,8 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
                     ExpressionKind::StringLiteral(value) => {
                         visitor.exit_string_literal(&mut path, value.as_deref());
                     }
-                    ExpressionKind::VariableExpression(kind) => {
-                        visitor.exit_variable(&mut path, kind);
+                    ExpressionKind::VariableExpression(id) => {
+                        visitor.exit_variable(&mut path, id);
                     }
                     ExpressionKind::StructLiteral(kind) => {
                         visitor.exit_struct_literal(&mut path, kind);

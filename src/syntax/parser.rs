@@ -598,18 +598,10 @@ impl<'a> Parser<'a> {
     }
 
     fn read_identifier(&mut self) -> Rc<Expression> {
-        let id = if let TokenKind::Identifier(id) = self.tokenizer.peek_kind() {
-            id.clone()
-        } else {
-            unreachable!()
-        };
-        let mut code = Code::with_interpreted(self.tokenizer.next_token());
+        let id = self.parse_name().unwrap();
+        let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&id)));
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
-            // Build a name node
-            let id = Rc::new(Identifier::new(id, code));
-            code = Code::with_node(NodeKind::Identifier(Rc::clone(&id)));
-
             let fields = self._parse_elements(
                 '{',
                 '}',
@@ -627,18 +619,10 @@ impl<'a> Parser<'a> {
     }
 
     fn read_identifier_pattern(&mut self) -> Rc<Pattern> {
-        let id = if let TokenKind::Identifier(id) = self.tokenizer.peek_kind() {
-            id.clone()
-        } else {
-            unreachable!()
-        };
-        let mut code = Code::with_interpreted(self.tokenizer.next_token());
+        let id = self.parse_name().unwrap();
+        let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&id)));
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
-            // Build a name node
-            let id = Rc::new(Identifier::new(id, code));
-            code = Code::with_node(NodeKind::Identifier(Rc::clone(&id)));
-
             let fields = self._parse_elements(
                 '{',
                 '}',

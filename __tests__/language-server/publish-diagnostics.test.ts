@@ -1,10 +1,6 @@
 import { LanguageServer, NotificationMessage, RequestBuilder, spawn_server } from "../util/lsp";
 import fs from "fs";
-
-interface TestCase {
-  input?: string;
-  file?: string;
-}
+import { filterTestCases, TestCaseBase } from "../util/testcase";
 
 let server: LanguageServer | undefined;
 
@@ -18,7 +14,7 @@ afterAll(() => {
   }
 });
 
-let cases: TestCase[] = [
+let cases: TestCaseBase[] = [
   // Undefined variable
   {
     input: "a"
@@ -56,7 +52,7 @@ let cases: TestCase[] = [
   }
 ];
 
-cases.forEach((testCase, i) => {
+filterTestCases(cases).forEach((testCase, i) => {
   let src = "";
   let name = "-";
 

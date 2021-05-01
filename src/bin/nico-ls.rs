@@ -4,8 +4,8 @@ use nico::{
     ls::server::ServerCapabilitiesBuilder,
     sem,
     syntax::{
-        self, EffectiveRange, MissingTokenKind, Node, NodeKind, NodePath, ParseError, Parser,
-        TextToken, Token, TokenKind, Trivia,
+        self, EffectiveRange, Identifier, MissingTokenKind, Node, NodeKind, NodePath, ParseError,
+        Parser, TextToken, Token, TokenKind, Trivia,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -170,11 +170,9 @@ impl DiagnosticsCollector {
 }
 
 impl syntax::Visitor for DiagnosticsCollector {
-    fn enter_variable(&mut self, path: &mut NodePath, id: &str) {
-        if let Some(scope) = path.scope() {
-            if scope.borrow().get_binding(id).is_none() {
-                self.add_diagnostic(path.node().range(), format!("Cannot find name '{}'.", id));
-            }
+    fn enter_variable(&mut self, path: &mut NodePath, id: &Identifier) {
+        if path.scope().borrow().get_binding(id.as_str()).is_none() {
+            self.add_diagnostic(path.node().range(), format!("Cannot find name '{}'.", id));
         }
     }
 
@@ -265,58 +263,7 @@ impl SemanticTokenizer {
             | TokenKind::Char('/')
             | TokenKind::Char('%') => SemanticTokenType::OPERATOR,
             TokenKind::Identifier(_) => {
-                let node = path.node();
-
-                if let Some(id) = node.variable_expression() {
-                    if let Some(scope) = path.scope() {
-                        if let Some(binding) = scope.borrow().get_binding(id) {
-                            let binding = binding.borrow();
-
-                            if binding.function_definition().is_some() {
-                                return Some((SemanticTokenType::FUNCTION, token_modifiers_bitset));
-                            } else if binding.function_parameter().is_some() {
-                                return Some((
-                                    SemanticTokenType::PARAMETER,
-                                    token_modifiers_bitset,
-                                ));
-                            } else if binding.struct_definition().is_some() {
-                                return Some((SemanticTokenType::STRUCT, token_modifiers_bitset));
-                            } else if let Some(ty) = binding.builtin() {
-                                if let sem::Type::Function { .. } = *ty.borrow() {
-                                    return Some((
-                                        SemanticTokenType::FUNCTION,
-                                        token_modifiers_bitset,
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                }
-
-                path.parent().map_or(SemanticTokenType::VARIABLE, |parent| {
-                    let parent = parent.borrow();
-                    let node = parent.node();
-
-                    if node.is_function_definition() {
-                        SemanticTokenType::FUNCTION
-                    } else if node.is_function_parameter() {
-                        SemanticTokenType::PARAMETER
-                    } else if node.is_struct_definition() {
-                        SemanticTokenType::STRUCT
-                    } else if node.is_struct_field() {
-                        SemanticTokenType::PROPERTY
-                    } else if let Some(expr) = node.expression() {
-                        if expr.is_member_expression() {
-                            SemanticTokenType::PROPERTY
-                        } else if expr.is_struct_literal() {
-                            SemanticTokenType::STRUCT
-                        } else {
-                            SemanticTokenType::VARIABLE
-                        }
-                    } else {
-                        SemanticTokenType::VARIABLE
-                    }
-                })
+                self.token_type_and_modifiers_for_identifier(path, &mut token_modifiers_bitset)
             }
             TokenKind::StringStart | TokenKind::StringEnd | TokenKind::StringContent(_) => {
                 SemanticTokenType::STRING
@@ -333,6 +280,59 @@ impl SemanticTokenizer {
         };
 
         Some((token_type, token_modifiers_bitset))
+    }
+
+    fn token_type_and_modifiers_for_identifier(
+        &self,
+        path: &NodePath,
+        _modifiers: &mut u32,
+    ) -> SemanticTokenType {
+        let node = path.node();
+
+        // In current AST specification, the corresponding node for an Identifier token is
+        // always an Identifier node.
+        let id = node
+            .identifier()
+            .unwrap_or_else(|| panic!("node must be an identifier."));
+
+        let parent = path
+            .parent()
+            .unwrap_or_else(|| panic!("parent must exist."));
+        let parent = parent.borrow();
+        let scope = parent.scope();
+        let parent = parent.node();
+
+        if parent.is_function_definition() {
+            SemanticTokenType::FUNCTION
+        } else if parent.is_function_parameter() {
+            SemanticTokenType::PARAMETER
+        } else if parent.is_struct_definition() {
+            SemanticTokenType::STRUCT
+        } else if parent.is_struct_field() || parent.is_member_expression() {
+            SemanticTokenType::PROPERTY
+        } else if parent.is_struct_literal() {
+            SemanticTokenType::STRUCT
+        } else if parent.is_variable_expression() {
+            if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
+                let binding = binding.borrow();
+
+                if binding.function_definition().is_some() {
+                    return SemanticTokenType::FUNCTION;
+                } else if binding.function_parameter().is_some() {
+                    return SemanticTokenType::PARAMETER;
+                } else if binding.struct_definition().is_some() {
+                    return SemanticTokenType::STRUCT;
+                } else if let Some(ty) = binding.builtin() {
+                    if let sem::Type::Function { .. } = *ty.borrow() {
+                        return SemanticTokenType::FUNCTION;
+                    }
+                }
+            }
+
+            SemanticTokenType::VARIABLE
+        } else {
+            SemanticTokenType::VARIABLE
+        }
     }
 
     fn add_token_generic(&mut self, path: &NodePath, token: &Token) {
@@ -578,7 +578,6 @@ impl Connection {
                 SemanticTokenType::NUMBER,
                 SemanticTokenType::OPERATOR,
                 SemanticTokenType::COMMENT,
-                SemanticTokenType::FUNCTION,
                 SemanticTokenType::STRUCT,
                 SemanticTokenType::FUNCTION,
                 SemanticTokenType::PARAMETER,
@@ -639,7 +638,6 @@ impl Connection {
 
         syntax::traverse(&mut tokenizer, &NodeKind::Program(Rc::clone(&node)), None);
 
-        //info!("tokens = {:?}", tokenizer.tokens);
         Ok(SemanticTokens {
             data: tokenizer.tokens,
             result_id: None,

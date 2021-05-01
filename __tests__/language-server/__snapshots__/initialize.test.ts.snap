@@ -29,7 +29,6 @@ Object {
             "number",
             "operator",
             "comment",
-            "function",
             "struct",
             "function",
             "parameter",
