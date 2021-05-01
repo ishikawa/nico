@@ -161,9 +161,9 @@ impl Scope {
         match &pattern.kind {
             super::PatternKind::IntegerPattern(_) => {}
             super::PatternKind::StringPattern(_) => {}
-            super::PatternKind::VariablePattern(name) => {
+            super::PatternKind::VariablePattern(id) => {
                 self.insert(Binding {
-                    id: name.clone(),
+                    id: id.to_string(),
                     kind: BindingKind::Pattern(Rc::clone(pattern)),
                 });
             }

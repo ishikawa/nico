@@ -156,11 +156,23 @@ impl NodeKind {
         }
     }
 
-    pub fn variable_expression(&self) -> Option<&str> {
+    pub fn struct_literal(&self) -> Option<&StructLiteral> {
         if let NodeKind::Expression(node) = self {
-            if let Some(v) = node.variable_expression() {
-                return Some(v);
-            }
+            return node.struct_literal();
+        }
+        None
+    }
+
+    pub fn variable_expression(&self) -> Option<&Identifier> {
+        if let NodeKind::Expression(node) = self {
+            return node.variable_expression();
+        }
+        None
+    }
+
+    pub fn member_expression(&self) -> Option<&MemberExpression> {
+        if let NodeKind::Expression(node) = self {
+            return node.member_expression();
         }
         None
     }
@@ -191,6 +203,18 @@ impl NodeKind {
 
     pub fn is_expression(&self) -> bool {
         matches!(self, NodeKind::Expression(..))
+    }
+
+    pub fn is_struct_literal(&self) -> bool {
+        self.struct_literal().is_some()
+    }
+
+    pub fn is_variable_expression(&self) -> bool {
+        self.variable_expression().is_some()
+    }
+
+    pub fn is_member_expression(&self) -> bool {
+        self.member_expression().is_some()
     }
 }
 
@@ -634,9 +658,9 @@ impl Expression {
         }
     }
 
-    pub fn variable_expression(&self) -> Option<&str> {
-        if let ExpressionKind::VariableExpression(ref expr) = self.kind {
-            Some(expr)
+    pub fn variable_expression(&self) -> Option<&Identifier> {
+        if let ExpressionKind::VariableExpression(ref id) = self.kind {
+            Some(id)
         } else {
             None
         }
@@ -707,11 +731,15 @@ impl Expression {
     }
 
     pub fn is_struct_literal(&self) -> bool {
-        self.struct_literal().is_some()
+        matches!(self.kind, ExpressionKind::StructLiteral(..))
     }
 
     pub fn is_member_expression(&self) -> bool {
-        self.member_expression().is_some()
+        matches!(self.kind, ExpressionKind::MemberExpression(..))
+    }
+
+    pub fn is_variable_expression(&self) -> bool {
+        matches!(self.kind, ExpressionKind::VariableExpression(..))
     }
 }
 
@@ -968,7 +996,7 @@ pub enum ExpressionKind {
     IntegerLiteral(i32),
     StringLiteral(Option<String>),
     StructLiteral(StructLiteral),
-    VariableExpression(String),
+    VariableExpression(Rc<Identifier>),
     BinaryExpression(BinaryExpression),
     UnaryExpression(UnaryExpression),
     SubscriptExpression(SubscriptExpression),
@@ -1063,7 +1091,7 @@ impl Node for StructFieldPattern {
 pub enum PatternKind {
     IntegerPattern(i32),
     StringPattern(Option<String>),
-    VariablePattern(String),
+    VariablePattern(Rc<Identifier>),
     ArrayPattern(ArrayPattern),
     RestPattern(RestPattern),
     StructPattern(StructPattern),
