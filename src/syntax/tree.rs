@@ -7,6 +7,7 @@ use std::{cell::RefCell, fmt};
 pub trait Node {
     fn code(&self) -> slice::Iter<CodeKind>;
 
+    /// Returns the effective range of this node.
     fn range(&self) -> EffectiveRange {
         let mut it = self.code();
 
