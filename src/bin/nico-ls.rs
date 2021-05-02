@@ -329,8 +329,6 @@ impl SemanticTokenizer {
     ) -> SemanticTokenType {
         let node = path.node();
 
-        eprintln!("node = {}", node);
-
         // In current AST specification, the corresponding node for an Identifier token is
         // an Identifier node. But in some fragile AST, it may be differ.
         let id = match node.identifier() {
