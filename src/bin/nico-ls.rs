@@ -47,9 +47,18 @@ struct Response {
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 struct ResponseError {
-    code: i32,
+    code: ResponseErrorCode,
     message: String,
     data: Option<Value>,
+}
+
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+enum ResponseErrorCode {
+    ParseError = -32700,
+    InvalidRequest = -32600,
+    MethodNotFound = -32601,
+    InvalidParams = -32602,
+    InternalError = -32603,
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
@@ -71,6 +80,12 @@ enum HandlerErrorKind {
     Utf8Error(string::FromUtf8Error),
     IoError(io::Error),
     JsonError(serde_json::Error),
+
+    #[allow(dead_code)]
+    GenericError {
+        id: Id,
+        message: String,
+    },
 
     // Warnings
     InvalidParams,
@@ -122,12 +137,21 @@ impl Request {
 }
 
 impl Response {
-    fn from_value(request: &Request, value: Value) -> Self {
+    fn from_value(id: &Id, value: Value) -> Self {
         Self {
-            jsonrpc: request.jsonrpc.clone(),
-            id: request.id.clone().unwrap_or_else(|| Id::Int(-1)),
+            jsonrpc: "2.0".to_string(),
+            id: id.clone(),
             result: Some(value),
             error: None,
+        }
+    }
+
+    fn from_error(id: &Id, error: ResponseError) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            id: id.clone(),
+            result: None,
+            error: Some(error),
         }
     }
 }
@@ -490,14 +514,15 @@ impl Connection {
         Self::default()
     }
 
-    pub fn send_response<V: Serialize>(
-        &self,
-        request: &Request,
-        value: V,
-    ) -> Result<(), HandlerError> {
+    pub fn send_response<V: Serialize>(&self, id: &Id, value: V) -> Result<(), HandlerError> {
         let value = serde_json::to_value(value)?;
-        let response = Response::from_value(&request, value);
+        let response = Response::from_value(id, value);
 
+        self.send_message(&response)
+    }
+
+    pub fn send_error(&self, id: &Id, error: ResponseError) -> Result<(), HandlerError> {
+        let response = Response::from_error(id, error);
         self.send_message(&response)
     }
 
@@ -681,6 +706,34 @@ impl Connection {
         Ok(None)
     }
 
+    fn on_text_document_rename(
+        &mut self,
+        params: &RenameParams,
+    ) -> Result<Option<WorkspaceEdit>, HandlerError> {
+        info!("[on_text_document_prepare_rename] {:?}", params);
+        let uri = params.text_document_position.text_document.uri.clone();
+        let node = self.get_compiled_result(&uri)?;
+
+        if let Some(id) =
+            node.find_identifier_at(syntax_position(params.text_document_position.position))
+        {
+            let mut edits: Vec<TextEdit> = vec![];
+
+            edits.push(TextEdit::new(
+                lsp_range(id.range()),
+                params.new_name.clone(),
+            ));
+
+            return Ok(Some(WorkspaceEdit {
+                changes: Some(vec![(uri, edits)].into_iter().collect()),
+                document_changes: None,
+                change_annotations: None,
+            }));
+        }
+
+        Ok(None)
+    }
+
     // Notification callbacks
     fn on_initialized(&self, params: &InitializedParams) -> Result<(), HandlerError> {
         info!("[initialized] {:?}", params);
@@ -843,6 +896,7 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
     let string = String::from_utf8(bytes)?;
     let value = serde_json::from_str::<Value>(&string)?;
     let mut request = serde_json::from_value::<Request>(value)?;
+    let request_id = request.id.clone();
 
     match request.method.as_str() {
         // Requests
@@ -850,19 +904,25 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
             let params = request.take_params::<InitializeParams>()?;
             let result = conn.on_initialize(&params)?;
 
-            conn.send_response(&request, result)?;
+            conn.send_response(&request_id.unwrap(), result)?;
         }
         "textDocument/semanticTokens/full" => {
             let params = request.take_params::<SemanticTokensParams>()?;
             let result = conn.on_text_document_semantic_tokens_full(&params)?;
 
-            conn.send_response(&request, result)?;
+            conn.send_response(&request_id.unwrap(), result)?;
         }
         "textDocument/prepareRename" => {
             let params = request.take_params::<TextDocumentPositionParams>()?;
 
             let result = conn.on_text_document_prepare_rename(&params)?;
-            conn.send_response(&request, result)?;
+            conn.send_response(&request_id.unwrap(), result)?;
+        }
+        "textDocument/rename" => {
+            let params = request.take_params::<RenameParams>()?;
+
+            let result = conn.on_text_document_rename(&params)?;
+            conn.send_response(&request_id.unwrap(), result)?;
         }
         // Notifications
         "initialized" => {
@@ -893,7 +953,24 @@ fn main() {
 
     loop {
         if let Err(err) = event_loop_main(&mut connection) {
-            todo!("Handle error or send notification to the client: {:?}", err)
+            if let HandlerErrorKind::GenericError {
+                ref id,
+                ref message,
+            } = err.kind
+            {
+                connection
+                    .send_error(
+                        id,
+                        ResponseError {
+                            code: ResponseErrorCode::InternalError,
+                            message: message.clone(),
+                            data: None,
+                        },
+                    )
+                    .expect("couldn't send error");
+            } else {
+                todo!("Handle error or send notification to the client: {:?}", err)
+            }
         }
     }
 }
