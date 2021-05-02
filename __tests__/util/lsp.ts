@@ -131,6 +131,13 @@ export interface NotificationMessage extends Message {
   params?: Record<string, any>;
 }
 
+// LSP
+export type Position = {
+  line: number;
+  character: number;
+};
+
+// server
 type InitializeOptions = { rename?: boolean };
 
 export class LanguageServer extends EventEmitter {
@@ -384,6 +391,15 @@ export class RequestBuilder {
     });
   }
 
+  prepareRename(uri: string, position: Position): RequestMessage {
+    return this.buildRequest("textDocument/prepareRename", {
+      textDocument: {
+        uri
+      },
+      position
+    });
+  }
+
   initialized(): NotificationMessage {
     return this.buildNotification("initialized", {});
   }
@@ -431,6 +447,13 @@ export class LanguageServerAgent {
     const uri = getDocumentUri(filename);
 
     const request = this.builder.textDocumentSemanticTokenFull(uri);
+    return this.server.sendRequest(request);
+  }
+
+  async prepareRename(filename: string, position: Position) {
+    const uri = getDocumentUri(filename);
+
+    const request = this.builder.prepareRename(uri, position);
     return this.server.sendRequest(request);
   }
 }

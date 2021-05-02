@@ -1,0 +1,73 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`0: prepare rename - \`struct A { b: i32 }
+
+let a = A { b: 123 }
+a.b\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1000,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "placeholder": "a",
+    "range": Object {
+      "end": Object {
+        "character": 1,
+        "line": 3,
+      },
+      "start": Object {
+        "character": 0,
+        "line": 3,
+      },
+    },
+  },
+}
+`;
+
+exports[`0: prepare rename - \`struct A { b: i32 }
+
+let a = A { b: 123 }
+a.b\` at [object Object] 2`] = `
+Object {
+  "error": null,
+  "id": 1001,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "placeholder": "a",
+    "range": Object {
+      "end": Object {
+        "character": 1,
+        "line": 3,
+      },
+      "start": Object {
+        "character": 0,
+        "line": 3,
+      },
+    },
+  },
+}
+`;
+
+exports[`0: prepare rename - \`struct A { b: i32 }
+
+let a = A { b: 123 }
+a.b\` at [object Object] 3`] = `
+Object {
+  "error": null,
+  "id": 1002,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "placeholder": "b",
+    "range": Object {
+      "end": Object {
+        "character": 3,
+        "line": 3,
+      },
+      "start": Object {
+        "character": 2,
+        "line": 3,
+      },
+    },
+  },
+}
+`;
