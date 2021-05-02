@@ -718,12 +718,10 @@ impl Connection {
         if let Some(id) =
             node.find_identifier_at(syntax_position(params.text_document_position.position))
         {
-            let mut edits: Vec<TextEdit> = vec![];
-
-            edits.push(TextEdit::new(
+            let mut edits: Vec<TextEdit> = vec![TextEdit::new(
                 lsp_range(id.range()),
                 params.new_name.clone(),
-            ));
+            )];
 
             return Ok(Some(WorkspaceEdit {
                 changes: Some(vec![(uri, edits)].into_iter().collect()),
