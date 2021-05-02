@@ -329,11 +329,14 @@ impl SemanticTokenizer {
     ) -> SemanticTokenType {
         let node = path.node();
 
+        eprintln!("node = {}", node);
+
         // In current AST specification, the corresponding node for an Identifier token is
-        // always an Identifier node.
-        let id = node
-            .identifier()
-            .unwrap_or_else(|| panic!("node must be an identifier."));
+        // an Identifier node. But in some fragile AST, it may be differ.
+        let id = match node.identifier() {
+            Some(id) => id,
+            None => return SemanticTokenType::VARIABLE,
+        };
 
         let parent = path
             .parent()

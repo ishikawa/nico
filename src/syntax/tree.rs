@@ -1252,7 +1252,7 @@ impl fmt::Display for NodeKind {
 impl fmt::Display for ExpressionKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExpressionKind::IntegerLiteral(_) => write!(f, "IntegerLiteral"),
+            ExpressionKind::IntegerLiteral(i) => write!(f, "IntegerLiteral({})", i),
             ExpressionKind::StringLiteral(_) => write!(f, "StringLiteral"),
             ExpressionKind::VariableExpression(_) => write!(f, "VariableExpression"),
             ExpressionKind::BinaryExpression(_) => write!(f, "BinaryExpression"),
