@@ -50,6 +50,19 @@ impl NodePath {
         self.skipped = true;
     }
 
+    /// stops traversing entirely.
+    pub fn stop(&mut self) {
+        self.skip();
+        Self::parent_skip(&self.parent);
+    }
+
+    fn parent_skip(parent: &Option<Rc<RefCell<NodePath>>>) {
+        if let Some(parent) = parent {
+            parent.borrow_mut().skip();
+            Self::parent_skip(&parent.borrow().parent);
+        }
+    }
+
     pub fn parent(&self) -> Option<Rc<RefCell<NodePath>>> {
         self.parent.as_ref().map(Rc::clone)
     }
@@ -171,8 +184,8 @@ pub trait Visitor {
     fn enter_block(&mut self, path: &mut NodePath, block: &Block) {}
     fn exit_block(&mut self, path: &mut NodePath, block: &Block) {}
 
-    fn enter_identifier(&mut self, path: &mut NodePath, id: &Identifier) {}
-    fn exit_identifier(&mut self, path: &mut NodePath, id: &Identifier) {}
+    fn enter_identifier(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {}
+    fn exit_identifier(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {}
 
     fn enter_struct_definition(&mut self, path: &mut NodePath, definition: &StructDefinition) {}
     fn exit_struct_definition(&mut self, path: &mut NodePath, definition: &StructDefinition) {}
@@ -290,7 +303,7 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
             visitor.enter_block(&mut path, node.block().unwrap().as_ref());
         }
         NodeKind::Identifier(_) => {
-            visitor.enter_identifier(&mut path, node.identifier().unwrap().as_ref());
+            visitor.enter_identifier(&mut path, &node.identifier().unwrap());
         }
         NodeKind::StructDefinition(_) => {
             visitor.enter_struct_definition(&mut path, node.struct_definition().unwrap().as_ref());
@@ -394,7 +407,7 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
             visitor.exit_block(&mut path, node.block().unwrap().as_ref());
         }
         NodeKind::Identifier(_) => {
-            visitor.exit_identifier(&mut path, node.identifier().unwrap().as_ref());
+            visitor.exit_identifier(&mut path, &node.identifier().unwrap());
         }
         NodeKind::StructDefinition(_) => {
             visitor.exit_struct_definition(&mut path, node.struct_definition().unwrap().as_ref());
@@ -489,6 +502,10 @@ fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     let node = path.borrow().node().clone();
 
     for kind in node.code() {
+        if path.borrow().skipped {
+            break;
+        }
+
         match kind {
             CodeKind::Node(node) => traverse(visitor, node, Some(Rc::clone(path))),
             CodeKind::SyntaxToken(token) => {
@@ -512,6 +529,10 @@ fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
 
 fn traverse_token_trivia(visitor: &mut dyn Visitor, path: &mut NodePath, token: &Token) {
     for trivia in &token.leading_trivia {
+        if path.skipped {
+            break;
+        }
+
         match &trivia.kind {
             TriviaKind::LineComment(comment) => {
                 if !path.skipped {

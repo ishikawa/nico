@@ -1,7 +1,7 @@
 use log::{info, warn};
 use lsp_types::*;
+use nico::ls::{rename::PrepareRename, server::ServerCapabilitiesBuilder};
 use nico::{
-    ls::server::ServerCapabilitiesBuilder,
     sem,
     syntax::{
         self, EffectiveRange, Identifier, MissingTokenKind, Node, NodeKind, NodePath, ParseError,
@@ -715,10 +715,17 @@ impl Connection {
         let uri = params.text_document_position.text_document.uri.clone();
         let node = self.get_compiled_result(&uri)?;
 
+        if let Some(id) = PrepareRename::find_identifier_at(
+            &NodeKind::Program(Rc::clone(node)),
+            syntax_position(params.text_document_position.position),
+        ) {
+            eprintln!("PrepareRename = {}", id);
+        }
+
         if let Some(id) =
             node.find_identifier_at(syntax_position(params.text_document_position.position))
         {
-            let mut edits: Vec<TextEdit> = vec![TextEdit::new(
+            let edits: Vec<TextEdit> = vec![TextEdit::new(
                 lsp_range(id.range()),
                 params.new_name.clone(),
             )];
