@@ -1,5 +1,5 @@
 //! Rename operation
-use crate::syntax::{self, Identifier, Node, NodeKind, NodePath, Position};
+use crate::syntax::{self, Identifier, Node, NodePath, Position, Program};
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -9,10 +9,10 @@ pub struct PrepareRename {
 }
 
 impl PrepareRename {
-    pub fn find_identifier_at(node: &NodeKind, position: Position) -> Option<Rc<Identifier>> {
+    pub fn find_identifier_at(node: &Rc<Program>, position: Position) -> Option<Rc<Identifier>> {
         let mut preparer = PrepareRename::new(position);
 
-        syntax::traverse(&mut preparer, &node, None);
+        syntax::traverse(&mut preparer, node);
 
         preparer.found
     }
@@ -29,6 +29,12 @@ impl syntax::Visitor for PrepareRename {
     fn enter_identifier(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {
         if id.range().contains(self.position) {
             self.found = Some(Rc::clone(id));
+
+            let parent = path
+                .parent()
+                .unwrap_or_else(|| panic!("parent must exist."));
+
+            eprintln!("found = {}, parent = {}", id, parent.borrow().node());
             path.stop();
         }
     }

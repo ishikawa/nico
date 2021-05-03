@@ -18,26 +18,27 @@ pub struct NodePath {
 }
 
 impl NodePath {
-    pub fn child(node: &NodeKind, parent: Option<Rc<RefCell<NodePath>>>) -> Self {
-        if let Some(ref parent) = parent {
-            let borrowed_parent = parent.borrow();
-            Self {
-                skipped: false,
-                node: node.clone(),
-                parent: Some(Rc::clone(parent)),
-                scope: Weak::clone(&borrowed_parent.scope),
-                main_scope: Weak::clone(&borrowed_parent.main_scope),
-                declarations: Weak::clone(&borrowed_parent.declarations),
-            }
-        } else {
-            Self {
-                skipped: false,
-                node: node.clone(),
-                parent: None,
-                declarations: Weak::new(),
-                scope: Weak::new(),
-                main_scope: Weak::new(),
-            }
+    pub fn new(node: &NodeKind) -> Self {
+        Self {
+            skipped: false,
+            node: node.clone(),
+            parent: None,
+            declarations: Weak::new(),
+            scope: Weak::new(),
+            main_scope: Weak::new(),
+        }
+    }
+
+    pub fn child_path(node: &NodeKind, parent: &Rc<RefCell<NodePath>>) -> Self {
+        let borrowed_parent = parent.borrow();
+
+        Self {
+            skipped: false,
+            node: node.clone(),
+            parent: Some(Rc::clone(parent)),
+            scope: Weak::clone(&borrowed_parent.scope),
+            main_scope: Weak::clone(&borrowed_parent.main_scope),
+            declarations: Weak::clone(&borrowed_parent.declarations),
         }
     }
 
@@ -270,8 +271,8 @@ pub trait Visitor {
     fn exit_case_expression(&mut self, path: &mut NodePath, expr: &CaseExpression) {}
 }
 
-pub fn traverse(visitor: &mut dyn Visitor, node: &NodeKind, parent: Option<Rc<RefCell<NodePath>>>) {
-    let path = wrap(NodePath::child(node, parent));
+pub fn traverse(visitor: &mut dyn Visitor, program: &Rc<Program>) {
+    let path = wrap(NodePath::new(&NodeKind::Program(Rc::clone(program))));
     traverse_path(visitor, &path);
 }
 
@@ -507,7 +508,10 @@ fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         }
 
         match kind {
-            CodeKind::Node(node) => traverse(visitor, node, Some(Rc::clone(path))),
+            CodeKind::Node(node) => {
+                let path = wrap(NodePath::child_path(node, &path));
+                traverse_path(visitor, &path);
+            }
             CodeKind::SyntaxToken(token) => {
                 let mut mut_path = path.borrow_mut();
 
@@ -618,7 +622,7 @@ mod tests {
         let mut visitor = NodeCounter::default();
         let program = Parser::parse_string("42");
 
-        traverse(&mut visitor, &NodeKind::Program(Rc::clone(&program)), None);
+        traverse(&mut visitor, &program);
         assert_eq!(visitor.number_of_expressions, 1);
     }
 }

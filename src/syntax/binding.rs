@@ -315,12 +315,12 @@ impl Visitor for BlockBinder {
     }
 }
 
-pub fn bind_scopes(node: &NodeKind) {
+pub fn bind_scopes(node: &Rc<Program>) {
     let mut binder = DeclarationBinder::new();
-    traverse(&mut binder, node, None);
+    traverse(&mut binder, node);
 
     let mut binder = BlockBinder::new();
-    traverse(&mut binder, node, None);
+    traverse(&mut binder, node);
 }
 
 #[cfg(test)]

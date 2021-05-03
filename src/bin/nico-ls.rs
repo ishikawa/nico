@@ -4,8 +4,8 @@ use nico::ls::{rename::PrepareRename, server::ServerCapabilitiesBuilder};
 use nico::{
     sem,
     syntax::{
-        self, EffectiveRange, Identifier, MissingTokenKind, Node, NodeKind, NodePath, ParseError,
-        Parser, TextToken, Token, TokenKind, Trivia,
+        self, EffectiveRange, Identifier, MissingTokenKind, Node, NodePath, ParseError, Parser,
+        TextToken, Token, TokenKind, Trivia,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -595,11 +595,10 @@ impl Connection {
     fn compile(&mut self, uri: &Url) -> Result<Rc<syntax::Program>, HandlerError> {
         let doc = self.get_document(uri)?;
         let node = Parser::parse_string(&doc.borrow().text);
-        let kind = NodeKind::Program(Rc::clone(&node));
 
         // Diagnostics
         let mut diagnostics = DiagnosticsCollector::new();
-        syntax::traverse(&mut diagnostics, &kind, None);
+        syntax::traverse(&mut diagnostics, &node);
 
         self.compiled_results.insert(uri.clone(), Rc::clone(&node));
         self.diagnostics
@@ -682,7 +681,7 @@ impl Connection {
             &server_options.token_modifier_legend,
         );
 
-        syntax::traverse(&mut tokenizer, &NodeKind::Program(Rc::clone(&node)), None);
+        syntax::traverse(&mut tokenizer, &node);
 
         Ok(SemanticTokens {
             data: tokenizer.tokens,
@@ -716,7 +715,7 @@ impl Connection {
         let node = self.get_compiled_result(&uri)?;
 
         if let Some(id) = PrepareRename::find_identifier_at(
-            &NodeKind::Program(Rc::clone(node)),
+            &node,
             syntax_position(params.text_document_position.position),
         ) {
             eprintln!("PrepareRename = {}", id);
