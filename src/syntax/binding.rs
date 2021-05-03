@@ -1,6 +1,6 @@
 use super::{
-    traverse, Block, CaseArm, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Pattern,
-    Program, StructDefinition, VariableDeclaration, Visitor,
+    traverse, Block, Builtin, CaseArm, DefinitionKind, FunctionDefinition, FunctionParameter,
+    NodeKind, NodePath, Pattern, Program, StructDefinition, VariableDeclaration, Visitor,
 };
 use crate::sem::Type;
 use crate::util::wrap;
@@ -10,10 +10,10 @@ use std::{
     rc::{Rc, Weak},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Binding {
     id: String,
-    kind: BindingKind,
+    kind: DefinitionKind,
 }
 
 impl Binding {
@@ -22,9 +22,11 @@ impl Binding {
     }
 
     pub fn defined_function<S: Into<String>>(name: S, function_type: &Rc<RefCell<Type>>) -> Self {
+        let name = name.into();
+
         Self {
-            id: name.into(),
-            kind: BindingKind::Builtin(Rc::clone(&function_type)),
+            id: name.clone(),
+            kind: DefinitionKind::Builtin(Rc::new(Builtin::new(name, function_type))),
         }
     }
 
@@ -32,16 +34,20 @@ impl Binding {
         &self.id
     }
 
-    pub fn builtin(&self) -> Option<&Rc<RefCell<Type>>> {
-        if let BindingKind::Builtin(ref ty) = self.kind {
-            Some(ty)
+    pub fn kind(&self) -> &DefinitionKind {
+        &self.kind
+    }
+
+    pub fn builtin(&self) -> Option<&Builtin> {
+        if let DefinitionKind::Builtin(ref builtin) = self.kind {
+            Some(builtin)
         } else {
             None
         }
     }
 
     pub fn struct_definition(&self) -> Option<&StructDefinition> {
-        if let BindingKind::StructDefinition(ref node) = self.kind {
+        if let DefinitionKind::StructDefinition(ref node) = self.kind {
             Some(node)
         } else {
             None
@@ -49,7 +55,7 @@ impl Binding {
     }
 
     pub fn function_definition(&self) -> Option<&FunctionDefinition> {
-        if let BindingKind::FunctionDefinition(ref node) = self.kind {
+        if let DefinitionKind::FunctionDefinition(ref node) = self.kind {
             Some(node)
         } else {
             None
@@ -57,7 +63,7 @@ impl Binding {
     }
 
     pub fn function_parameter(&self) -> Option<&FunctionParameter> {
-        if let BindingKind::FunctionParameter(ref node) = self.kind {
+        if let DefinitionKind::FunctionParameter(ref node) = self.kind {
             Some(node)
         } else {
             None
@@ -65,23 +71,12 @@ impl Binding {
     }
 
     pub fn pattern(&self) -> Option<&Pattern> {
-        if let BindingKind::Pattern(ref node) = self.kind {
+        if let DefinitionKind::Pattern(ref node) = self.kind {
             Some(node)
         } else {
             None
         }
     }
-}
-
-#[derive(Debug)]
-pub enum BindingKind {
-    // Builtin functions, variables
-    Builtin(Rc<RefCell<Type>>),
-    // Declaration nodes
-    StructDefinition(Rc<StructDefinition>),
-    FunctionDefinition(Rc<FunctionDefinition>),
-    FunctionParameter(Rc<FunctionParameter>),
-    Pattern(Rc<Pattern>),
 }
 
 #[derive(Debug, Default)]
@@ -137,19 +132,19 @@ impl Scope {
             if let Some(name) = fun.name() {
                 self.insert(Binding {
                     id: name.to_string(),
-                    kind: BindingKind::FunctionDefinition(Rc::clone(&fun)),
+                    kind: DefinitionKind::FunctionDefinition(Rc::clone(&fun)),
                 });
             }
         } else if let Some(param) = declaration.function_parameter() {
             self.insert(Binding {
                 id: param.name().to_string(),
-                kind: BindingKind::FunctionParameter(Rc::clone(&param)),
+                kind: DefinitionKind::FunctionParameter(Rc::clone(&param)),
             });
         } else if let Some(def) = declaration.struct_definition() {
             if let Some(name) = def.name() {
                 self.insert(Binding {
                     id: name.to_string(),
-                    kind: BindingKind::StructDefinition(Rc::clone(&def)),
+                    kind: DefinitionKind::StructDefinition(Rc::clone(&def)),
                 });
             }
         } else if let Some(ref pattern) = declaration.pattern() {
@@ -164,7 +159,7 @@ impl Scope {
             super::PatternKind::VariablePattern(id) => {
                 self.insert(Binding {
                     id: id.to_string(),
-                    kind: BindingKind::Pattern(Rc::clone(pattern)),
+                    kind: DefinitionKind::Pattern(Rc::clone(pattern)),
                 });
             }
             super::PatternKind::ArrayPattern(pat) => {
@@ -176,7 +171,7 @@ impl Scope {
                 if let Some(ref id) = pat.id {
                     self.insert(Binding {
                         id: id.to_string(),
-                        kind: BindingKind::Pattern(Rc::clone(pattern)),
+                        kind: DefinitionKind::Pattern(Rc::clone(pattern)),
                     });
                 }
             }
@@ -188,7 +183,7 @@ impl Scope {
                         // omitted
                         self.insert(Binding {
                             id: field.name.to_string(),
-                            kind: BindingKind::Pattern(Rc::clone(pattern)),
+                            kind: DefinitionKind::Pattern(Rc::clone(pattern)),
                         });
                     }
                 }

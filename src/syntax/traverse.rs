@@ -10,6 +10,7 @@ use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Trivia, Trivia
 
 pub struct NodePath {
     skipped: bool,
+    stopped: bool,
     node: NodeKind,
     scope: Weak<RefCell<Scope>>,
     main_scope: Weak<RefCell<Scope>>,
@@ -21,6 +22,7 @@ impl NodePath {
     pub fn new(node: &NodeKind) -> Self {
         Self {
             skipped: false,
+            stopped: false,
             node: node.clone(),
             parent: None,
             declarations: Weak::new(),
@@ -34,6 +36,7 @@ impl NodePath {
 
         Self {
             skipped: false,
+            stopped: false,
             node: node.clone(),
             parent: Some(Rc::clone(parent)),
             scope: Weak::clone(&borrowed_parent.scope),
@@ -46,6 +49,11 @@ impl NodePath {
         &self.node
     }
 
+    /// Returns `true` if `skip()` or `stop()` invoked.
+    fn skipped(&self) -> bool {
+        self.skipped || self.stopped
+    }
+
     /// skips traversing the children and `exit` of the current path.
     pub fn skip(&mut self) {
         self.skipped = true;
@@ -53,15 +61,7 @@ impl NodePath {
 
     /// stops traversing entirely.
     pub fn stop(&mut self) {
-        self.skip();
-        Self::parent_skip(&self.parent);
-    }
-
-    fn parent_skip(parent: &Option<Rc<RefCell<NodePath>>>) {
-        if let Some(parent) = parent {
-            parent.borrow_mut().skip();
-            Self::parent_skip(&parent.borrow().parent);
-        }
+        self.stopped = true;
     }
 
     pub fn parent(&self) -> Option<Rc<RefCell<NodePath>>> {
@@ -279,13 +279,13 @@ pub fn traverse(visitor: &mut dyn Visitor, program: &Rc<Program>) {
 fn traverse_path(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     path.borrow_mut().on_enter();
 
-    if !path.borrow().skipped {
+    if !path.borrow().skipped() {
         dispatch_enter(visitor, path);
     }
-    if !path.borrow().skipped {
+    if !path.borrow().skipped() {
         traverse_children(visitor, path);
     }
-    if !path.borrow().skipped {
+    if !path.borrow().skipped() {
         dispatch_exit(visitor, path);
     }
 
@@ -351,7 +351,7 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
             let expr = node.expression().unwrap();
             visitor.enter_expression(&mut path, &expr);
 
-            if !path.skipped {
+            if !path.skipped() {
                 match expr.kind() {
                     ExpressionKind::IntegerLiteral(value) => {
                         visitor.enter_integer_literal(&mut path, *value);
@@ -454,7 +454,7 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
             let expr = node.expression().unwrap();
             visitor.exit_expression(&mut path, &expr);
 
-            if !path.skipped {
+            if !path.skipped() {
                 match expr.kind() {
                     ExpressionKind::IntegerLiteral(value) => {
                         visitor.exit_integer_literal(&mut path, *value);
@@ -503,14 +503,17 @@ fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     let node = path.borrow().node().clone();
 
     for kind in node.code() {
-        if path.borrow().skipped {
+        if path.borrow().skipped() {
             break;
         }
 
         match kind {
             CodeKind::Node(node) => {
-                let path = wrap(NodePath::child_path(node, &path));
-                traverse_path(visitor, &path);
+                let child_path = wrap(NodePath::child_path(node, &path));
+                traverse_path(visitor, &child_path);
+
+                // Propagates `stop`
+                path.borrow_mut().stopped = child_path.borrow().stopped;
             }
             CodeKind::SyntaxToken(token) => {
                 let mut mut_path = path.borrow_mut();
@@ -533,24 +536,24 @@ fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
 
 fn traverse_token_trivia(visitor: &mut dyn Visitor, path: &mut NodePath, token: &Token) {
     for trivia in &token.leading_trivia {
-        if path.skipped {
+        if path.skipped() {
             break;
         }
 
         match &trivia.kind {
             TriviaKind::LineComment(comment) => {
-                if !path.skipped {
+                if !path.skipped() {
                     visitor.enter_line_comment(path, token, trivia, comment);
                 }
-                if !path.skipped {
+                if !path.skipped() {
                     visitor.exit_line_comment(path, token, trivia, comment);
                 }
             }
             TriviaKind::Whitespace => {
-                if !path.skipped {
+                if !path.skipped() {
                     visitor.enter_whitespace(path, token, trivia);
                 }
-                if !path.skipped {
+                if !path.skipped() {
                     visitor.exit_whitespace(path, token, trivia);
                 }
             }
@@ -559,13 +562,13 @@ fn traverse_token_trivia(visitor: &mut dyn Visitor, path: &mut NodePath, token: 
 }
 
 fn traverse_interpreted_token(visitor: &mut dyn Visitor, path: &mut NodePath, token: &Token) {
-    if !path.skipped {
+    if !path.skipped() {
         traverse_token_trivia(visitor, path, token);
     }
-    if !path.skipped {
+    if !path.skipped() {
         visitor.enter_interpreted_token(path, token);
     }
-    if !path.skipped {
+    if !path.skipped() {
         visitor.exit_interpreted_token(path, token);
     }
 }
@@ -576,10 +579,10 @@ fn traverse_missing_token(
     range: EffectiveRange,
     item: MissingTokenKind,
 ) {
-    if !path.skipped {
+    if !path.skipped() {
         visitor.enter_missing_token(path, range, item);
     }
-    if !path.skipped {
+    if !path.skipped() {
         visitor.exit_missing_token(path, range, item);
     }
 }
@@ -590,13 +593,13 @@ fn traverse_skipped_token(
     token: &Token,
     expected: MissingTokenKind,
 ) {
-    if !path.skipped {
+    if !path.skipped() {
         traverse_token_trivia(visitor, path, token);
     }
-    if !path.skipped {
+    if !path.skipped() {
         visitor.enter_skipped_token(path, token, expected);
     }
-    if !path.skipped {
+    if !path.skipped() {
         visitor.exit_skipped_token(path, token, expected);
     }
 }

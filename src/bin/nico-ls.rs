@@ -362,13 +362,13 @@ impl SemanticTokenizer {
                     return SemanticTokenType::PARAMETER;
                 } else if binding.struct_definition().is_some() {
                     return SemanticTokenType::STRUCT;
-                } else if let Some(ty) = binding.builtin() {
+                } else if let Some(builtin) = binding.builtin() {
                     self.add_token_modifiers_bitset(
                         modifiers,
                         SemanticTokenModifier::DEFAULT_LIBRARY,
                     );
 
-                    if let sem::Type::Function { .. } = *ty.borrow() {
+                    if let sem::Type::Function { .. } = *builtin.r#type().borrow() {
                         return SemanticTokenType::FUNCTION;
                     }
                 }
@@ -695,8 +695,9 @@ impl Connection {
     ) -> Result<Option<PrepareRenameResponse>, HandlerError> {
         info!("[on_text_document_prepare_rename] {:?}", params);
         let node = self.get_compiled_result(&params.text_document.uri)?;
+        let mut rename = PrepareRename::new(syntax_position(params.position));
 
-        if let Some(id) = node.find_identifier_at(syntax_position(params.position)) {
+        if let Some(id) = rename.prepare(&node) {
             return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
                 range: lsp_range(id.range()),
                 placeholder: id.to_string(),
@@ -713,11 +714,10 @@ impl Connection {
         info!("[on_text_document_prepare_rename] {:?}", params);
         let uri = params.text_document_position.text_document.uri.clone();
         let node = self.get_compiled_result(&uri)?;
+        let mut rename =
+            PrepareRename::new(syntax_position(params.text_document_position.position));
 
-        if let Some(id) = PrepareRename::find_identifier_at(
-            &node,
-            syntax_position(params.text_document_position.position),
-        ) {
+        if let Some(id) = rename.prepare(&node) {
             eprintln!("PrepareRename = {}", id);
         }
 

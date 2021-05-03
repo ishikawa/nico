@@ -280,6 +280,42 @@ impl TopLevelKind {
     }
 }
 
+/// `Builtin` is where a binding to "built-in" primitives/functions are defined.
+/// It's not a part of an AST, so it doesn't have tokens.
+#[derive(Debug)]
+pub struct Builtin {
+    name: String,
+    r#type: Rc<RefCell<sem::Type>>,
+}
+
+impl Builtin {
+    pub fn new<S: Into<String>>(name: S, r#type: &Rc<RefCell<sem::Type>>) -> Self {
+        Self {
+            name: name.into(),
+            r#type: Rc::clone(r#type),
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
+        &self.r#type
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum DefinitionKind {
+    // Builtin functions, variables
+    Builtin(Rc<Builtin>),
+    // Declaration nodes
+    StructDefinition(Rc<StructDefinition>),
+    FunctionDefinition(Rc<FunctionDefinition>),
+    FunctionParameter(Rc<FunctionParameter>),
+    Pattern(Rc<Pattern>),
+}
+
 #[derive(Debug, Default)]
 pub struct Code {
     code: Vec<CodeKind>,
