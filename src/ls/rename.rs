@@ -1,35 +1,17 @@
 //! Rename operation
-use crate::syntax::{self, DefinitionKind, Identifier, Node, NodePath, Position, Program};
+use crate::syntax::{
+    self, DefinitionKind, EffectiveRange, FunctionDefinition, Identifier, Node, NodePath, Position,
+    Program,
+};
 use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct PrepareRename {
+pub struct Rename {
     position: Position,
     operation: Option<RenameOperation>,
 }
 
-#[derive(Debug)]
-struct RenameOperation {
-    id: Rc<Identifier>,
-    kind: RenameOperationKind,
-}
-
-impl RenameOperation {
-    fn new(id: &Rc<Identifier>, kind: RenameOperationKind) -> Self {
-        Self {
-            id: Rc::clone(id),
-            kind,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-enum RenameOperationKind {
-    Definition(DefinitionKind),
-    Unknown,
-}
-
-impl PrepareRename {
+impl Rename {
     pub fn new(position: Position) -> Self {
         Self {
             position,
@@ -42,9 +24,25 @@ impl PrepareRename {
         syntax::traverse(self, program);
         self.operation.as_ref().map(|op| op.id.as_ref())
     }
+
+    pub fn rename(&mut self, program: &Rc<Program>) -> Option<Vec<EffectiveRange>> {
+        if let Some(RenameOperation { kind, .. }) = self.operation.as_ref() {
+            match kind {
+                RenameOperationKind::Definition(definition) => {
+                    let mut visitor = RenameDefinition::new(definition);
+                    syntax::traverse(&mut visitor, program);
+
+                    return Some(visitor.ranges);
+                }
+                RenameOperationKind::Unknown => {}
+            }
+        }
+
+        return None;
+    }
 }
 
-impl syntax::Visitor for PrepareRename {
+impl syntax::Visitor for Rename {
     fn enter_identifier(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {
         // Prepare
         if self.operation.is_none() && id.range().contains(self.position) {
@@ -70,7 +68,79 @@ impl syntax::Visitor for PrepareRename {
             }
 
             path.stop();
-            return;
+        }
+    }
+}
+
+// --- Operations
+
+#[derive(Debug)]
+struct RenameOperation {
+    id: Rc<Identifier>,
+    kind: RenameOperationKind,
+}
+
+impl RenameOperation {
+    fn new(id: &Rc<Identifier>, kind: RenameOperationKind) -> Self {
+        Self {
+            id: Rc::clone(id),
+            kind,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum RenameOperationKind {
+    Definition(DefinitionKind),
+    Unknown,
+}
+
+#[derive(Debug)]
+struct RenameDefinition<'a> {
+    definition: &'a DefinitionKind,
+    ranges: Vec<EffectiveRange>,
+}
+
+impl<'a> RenameDefinition<'a> {
+    fn new(definition: &'a DefinitionKind) -> Self {
+        Self {
+            definition,
+            ranges: vec![],
+        }
+    }
+}
+
+impl<'a> syntax::Visitor for RenameDefinition<'a> {
+    fn enter_function_definition(
+        &mut self,
+        _path: &mut NodePath,
+        function: &Rc<FunctionDefinition>,
+    ) {
+        if let DefinitionKind::FunctionDefinition(definition) = self.definition {
+            if std::ptr::eq(definition.as_ref(), function.as_ref()) {
+                eprintln!("Found: {}", function);
+                if let Some(ref name) = function.name {
+                    self.ranges.push(name.range());
+                }
+            }
+        }
+    }
+
+    fn enter_variable(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {
+        let scope = path.scope();
+        let scope = scope.borrow();
+
+        if let Some(binding) = scope.get_binding(id.as_str()) {
+            let binding = binding.borrow();
+
+            if let DefinitionKind::FunctionDefinition(ref function) = binding.kind() {
+                if let DefinitionKind::FunctionDefinition(ref definition) = self.definition {
+                    if std::ptr::eq(definition.as_ref(), function.as_ref()) {
+                        eprintln!("Found: {}", path.node());
+                        self.ranges.push(id.range());
+                    }
+                }
+            }
         }
     }
 }

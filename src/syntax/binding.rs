@@ -223,15 +223,19 @@ impl DeclarationBinder {
 }
 
 impl Visitor for DeclarationBinder {
-    fn enter_program(&mut self, _path: &mut NodePath, program: &Program) {
+    fn enter_program(&mut self, _path: &mut NodePath, program: &Rc<Program>) {
         self.declarations = Some(Rc::clone(program.declarations_scope()));
     }
 
-    fn enter_struct_definition(&mut self, path: &mut NodePath, _definition: &StructDefinition) {
+    fn enter_struct_definition(&mut self, path: &mut NodePath, _definition: &Rc<StructDefinition>) {
         self.register_declaration(path.node());
     }
 
-    fn enter_function_definition(&mut self, path: &mut NodePath, _definition: &FunctionDefinition) {
+    fn enter_function_definition(
+        &mut self,
+        path: &mut NodePath,
+        _definition: &Rc<FunctionDefinition>,
+    ) {
         self.register_declaration(path.node());
     }
 }
@@ -259,12 +263,12 @@ impl BlockBinder {
 }
 
 impl Visitor for BlockBinder {
-    fn enter_program(&mut self, _path: &mut NodePath, program: &Program) {
+    fn enter_program(&mut self, _path: &mut NodePath, program: &Rc<Program>) {
         program.main_scope().borrow_mut().parent = Rc::downgrade(program.declarations_scope());
         self.scope = Rc::downgrade(program.main_scope());
     }
 
-    fn enter_function_parameter(&mut self, path: &mut NodePath, _param: &FunctionParameter) {
+    fn enter_function_parameter(&mut self, path: &mut NodePath, _param: &Rc<FunctionParameter>) {
         let node = path.node();
 
         let parent_path = path.parent().unwrap();
@@ -278,7 +282,7 @@ impl Visitor for BlockBinder {
     fn enter_variable_declaration(
         &mut self,
         _path: &mut NodePath,
-        declaration: &VariableDeclaration,
+        declaration: &Rc<VariableDeclaration>,
     ) {
         if let Some(scope) = self.scope.upgrade() {
             if let Some(ref pattern) = declaration.pattern {
@@ -288,15 +292,15 @@ impl Visitor for BlockBinder {
         }
     }
 
-    fn enter_block(&mut self, path: &mut NodePath, block: &Block) {
+    fn enter_block(&mut self, path: &mut NodePath, block: &Rc<Block>) {
         self._enter_scope(path, block.scope());
     }
 
-    fn exit_block(&mut self, path: &mut NodePath, block: &Block) {
+    fn exit_block(&mut self, path: &mut NodePath, block: &Rc<Block>) {
         self._exit_scope(path, block.scope());
     }
 
-    fn enter_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {
+    fn enter_case_arm(&mut self, path: &mut NodePath, arm: &Rc<CaseArm>) {
         self._enter_scope(path, arm.scope());
 
         if let Some(ref pattern) = arm.pattern {
@@ -305,7 +309,7 @@ impl Visitor for BlockBinder {
         }
     }
 
-    fn exit_case_arm(&mut self, path: &mut NodePath, arm: &CaseArm) {
+    fn exit_case_arm(&mut self, path: &mut NodePath, arm: &Rc<CaseArm>) {
         self._exit_scope(path, &arm.scope());
     }
 }

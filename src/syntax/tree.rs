@@ -494,7 +494,7 @@ impl Node for StructDefinition {
 impl fmt::Display for StructDefinition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name() {
-            write!(f, "StructDefinition({})", name.to_string())
+            write!(f, "StructDefinition({})", name.as_str())
         } else {
             write!(f, "StructDefinition")
         }
@@ -535,7 +535,7 @@ impl Node for TypeField {
 impl fmt::Display for TypeField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name() {
-            write!(f, "TypeField({})", name.to_string())
+            write!(f, "TypeField({})", name.as_str())
         } else {
             write!(f, "TypeField")
         }
@@ -611,7 +611,7 @@ impl Node for FunctionDefinition {
 impl fmt::Display for FunctionDefinition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name() {
-            write!(f, "FunctionDefinition({})", name.to_string())
+            write!(f, "FunctionDefinition({})", name.as_str())
         } else {
             write!(f, "FunctionDefinition")
         }
@@ -642,7 +642,7 @@ impl Node for FunctionParameter {
 
 impl fmt::Display for FunctionParameter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FunctionParameter({})", self.name().to_string())
+        write!(f, "FunctionParameter({})", self.name().as_str())
     }
 }
 
@@ -924,7 +924,7 @@ impl Node for StructField {
 
 impl fmt::Display for StructField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "StructField({})", self.name().to_string())
+        write!(f, "StructField({})", self.name().as_str())
     }
 }
 
@@ -1289,8 +1289,14 @@ impl fmt::Display for ExpressionKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ExpressionKind::IntegerLiteral(i) => write!(f, "IntegerLiteral({})", i),
-            ExpressionKind::StringLiteral(_) => write!(f, "StringLiteral"),
-            ExpressionKind::VariableExpression(_) => write!(f, "VariableExpression"),
+            ExpressionKind::StringLiteral(s) => {
+                write!(
+                    f,
+                    "StringLiteral({})",
+                    s.as_ref().unwrap_or(&"-".to_string())
+                )
+            }
+            ExpressionKind::VariableExpression(expr) => write!(f, "VariableExpression({})", expr),
             ExpressionKind::BinaryExpression(_) => write!(f, "BinaryExpression"),
             ExpressionKind::UnaryExpression(_) => write!(f, "UnaryExpression"),
             ExpressionKind::SubscriptExpression(_) => write!(f, "SubscriptExpression"),

@@ -1,6 +1,6 @@
 use log::{info, warn};
 use lsp_types::*;
-use nico::ls::{rename::PrepareRename, server::ServerCapabilitiesBuilder};
+use nico::ls::{rename::Rename, server::ServerCapabilitiesBuilder};
 use nico::{
     sem,
     syntax::{
@@ -210,7 +210,7 @@ impl DiagnosticsCollector {
 }
 
 impl syntax::Visitor for DiagnosticsCollector {
-    fn enter_variable(&mut self, path: &mut NodePath, id: &Identifier) {
+    fn enter_variable(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {
         if path.scope().borrow().get_binding(id.as_str()).is_none() {
             self.add_diagnostic(path.node().range(), format!("Cannot find name '{}'.", id));
         }
@@ -695,7 +695,7 @@ impl Connection {
     ) -> Result<Option<PrepareRenameResponse>, HandlerError> {
         info!("[on_text_document_prepare_rename] {:?}", params);
         let node = self.get_compiled_result(&params.text_document.uri)?;
-        let mut rename = PrepareRename::new(syntax_position(params.position));
+        let mut rename = Rename::new(syntax_position(params.position));
 
         if let Some(id) = rename.prepare(&node) {
             return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
@@ -714,26 +714,21 @@ impl Connection {
         info!("[on_text_document_prepare_rename] {:?}", params);
         let uri = params.text_document_position.text_document.uri.clone();
         let node = self.get_compiled_result(&uri)?;
-        let mut rename =
-            PrepareRename::new(syntax_position(params.text_document_position.position));
+        let mut rename = Rename::new(syntax_position(params.text_document_position.position));
 
-        if let Some(id) = rename.prepare(&node) {
-            eprintln!("PrepareRename = {}", id);
-        }
+        if let Some(_) = rename.prepare(&node) {
+            if let Some(ranges) = rename.rename(&node) {
+                let edits = ranges
+                    .iter()
+                    .map(|r| TextEdit::new(lsp_range(*r), params.new_name.clone()))
+                    .collect();
 
-        if let Some(id) =
-            node.find_identifier_at(syntax_position(params.text_document_position.position))
-        {
-            let edits: Vec<TextEdit> = vec![TextEdit::new(
-                lsp_range(id.range()),
-                params.new_name.clone(),
-            )];
-
-            return Ok(Some(WorkspaceEdit {
-                changes: Some(vec![(uri, edits)].into_iter().collect()),
-                document_changes: None,
-                change_annotations: None,
-            }));
+                return Ok(Some(WorkspaceEdit {
+                    changes: Some(vec![(uri, edits)].into_iter().collect()),
+                    document_changes: None,
+                    change_annotations: None,
+                }));
+            }
         }
 
         Ok(None)
