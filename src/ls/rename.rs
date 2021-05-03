@@ -1,7 +1,7 @@
 //! Rename operation
 use crate::syntax::{
     self, DefinitionKind, EffectiveRange, FunctionDefinition, Identifier, Node, NodePath, Position,
-    Program, StructDefinition,
+    Program, StructDefinition, StructLiteral,
 };
 use std::rc::Rc;
 
@@ -63,6 +63,24 @@ impl syntax::Visitor for Rename {
                         RenameOperationKind::Definition(binding.kind().clone()),
                     ));
                 }
+            } else if parent.is_struct_literal() {
+                if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
+                    let binding = binding.borrow();
+
+                    if let DefinitionKind::StructDefinition(_) = binding.kind() {
+                        self.operation = Some(RenameOperation::new(
+                            id,
+                            RenameOperationKind::Definition(binding.kind().clone()),
+                        ));
+                    }
+                }
+            } else if let Some(struct_def) = parent.struct_definition() {
+                self.operation = Some(RenameOperation::new(
+                    id,
+                    RenameOperationKind::Definition(DefinitionKind::StructDefinition(Rc::clone(
+                        struct_def,
+                    ))),
+                ));
             } else if let Some(function) = parent.function_definition() {
                 self.operation = Some(RenameOperation::new(
                     id,
@@ -158,6 +176,22 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
         if binding.kind().ptr_eq(self.definition) {
             eprintln!("Found: {}", path.node());
             self.ranges.push(id.range());
+        }
+    }
+
+    fn enter_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {
+        let scope = path.scope();
+        let scope = scope.borrow();
+
+        let binding = match scope.get_binding(value.name().as_str()) {
+            None => return,
+            Some(binding) => binding,
+        };
+        let binding = binding.borrow();
+
+        if binding.kind().ptr_eq(self.definition) {
+            eprintln!("Found: {}", path.node());
+            self.ranges.push(value.name().range());
         }
     }
 }
