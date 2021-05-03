@@ -400,6 +400,16 @@ export class RequestBuilder {
     });
   }
 
+  rename(uri: string, position: Position, newName: string): RequestMessage {
+    return this.buildRequest("textDocument/rename", {
+      textDocument: {
+        uri
+      },
+      position,
+      newName
+    });
+  }
+
   initialized(): NotificationMessage {
     return this.buildNotification("initialized", {});
   }
@@ -454,6 +464,13 @@ export class LanguageServerAgent {
     const uri = getDocumentUri(filename);
 
     const request = this.builder.prepareRename(uri, position);
+    return this.server.sendRequest(request);
+  }
+
+  async rename(filename: string, position: Position, newName: string) {
+    const uri = getDocumentUri(filename);
+
+    const request = this.builder.rename(uri, position, newName);
     return this.server.sendRequest(request);
   }
 }

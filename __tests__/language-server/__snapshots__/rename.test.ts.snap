@@ -1,0 +1,45 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`0: prepare rename - \`fun bar()
+    100
+end
+
+bar()\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1000,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "changes": Object {
+      "file:///home/user/nico/samplefun%20bar()%0A%20%20%20%20100%0Aend%0A%0Abar().nico": Array [
+        Object {
+          "newText": "bar",
+          "range": Object {
+            "end": Object {
+              "character": 7,
+              "line": 0,
+            },
+            "start": Object {
+              "character": 4,
+              "line": 0,
+            },
+          },
+        },
+        Object {
+          "newText": "bar",
+          "range": Object {
+            "end": Object {
+              "character": 3,
+              "line": 4,
+            },
+            "start": Object {
+              "character": 0,
+              "line": 4,
+            },
+          },
+        },
+      ],
+    },
+  },
+}
+`;
