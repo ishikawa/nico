@@ -71,3 +71,28 @@ Object {
   },
 }
 `;
+
+exports[`1: prepare rename - \`fun bar()
+    100
+end
+
+bar()\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1100,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "placeholder": "bar",
+    "range": Object {
+      "end": Object {
+        "character": 3,
+        "line": 4,
+      },
+      "start": Object {
+        "character": 0,
+        "line": 4,
+      },
+    },
+  },
+}
+`;

@@ -42,6 +42,23 @@ let cases: TestCase[] = [
         character: 3
       }
     ]
+  },
+  {
+    // prettier-ignore
+    input: [
+      "fun bar()",
+      "    100",
+      "end",
+      "",
+      "bar()"
+    ].join("\n"),
+    position: [
+      // bar
+      {
+        line: 4,
+        character: 3
+      }
+    ]
   }
 ];
 
