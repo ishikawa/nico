@@ -1,7 +1,7 @@
 //! Rename operation
 use crate::syntax::{
     self, DefinitionKind, EffectiveRange, FunctionDefinition, Identifier, Node, NodePath, Position,
-    Program,
+    Program, StructDefinition,
 };
 use std::rc::Rc;
 
@@ -52,8 +52,9 @@ impl syntax::Visitor for Rename {
 
             let parent = parent.borrow();
             let scope = parent.scope();
+            let parent = parent.node();
 
-            if parent.node().is_variable_expression() {
+            if parent.is_variable_expression() {
                 if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
                     let binding = binding.borrow();
 
@@ -62,6 +63,13 @@ impl syntax::Visitor for Rename {
                         RenameOperationKind::Definition(binding.kind().clone()),
                     ));
                 }
+            } else if let Some(function) = parent.function_definition() {
+                self.operation = Some(RenameOperation::new(
+                    id,
+                    RenameOperationKind::Definition(DefinitionKind::FunctionDefinition(Rc::clone(
+                        function,
+                    ))),
+                ));
             } else {
                 // dummy
                 self.operation = Some(RenameOperation::new(id, RenameOperationKind::Unknown));
@@ -111,6 +119,17 @@ impl<'a> RenameDefinition<'a> {
 }
 
 impl<'a> syntax::Visitor for RenameDefinition<'a> {
+    fn enter_struct_definition(&mut self, _path: &mut NodePath, struct_def: &Rc<StructDefinition>) {
+        if let DefinitionKind::StructDefinition(definition) = self.definition {
+            if std::ptr::eq(definition.as_ref(), struct_def.as_ref()) {
+                eprintln!("Found: {}", struct_def);
+                if let Some(ref name) = struct_def.name {
+                    self.ranges.push(name.range());
+                }
+            }
+        }
+    }
+
     fn enter_function_definition(
         &mut self,
         _path: &mut NodePath,
@@ -130,17 +149,15 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
         let scope = path.scope();
         let scope = scope.borrow();
 
-        if let Some(binding) = scope.get_binding(id.as_str()) {
-            let binding = binding.borrow();
+        let binding = match scope.get_binding(id.as_str()) {
+            None => return,
+            Some(binding) => binding,
+        };
+        let binding = binding.borrow();
 
-            if let DefinitionKind::FunctionDefinition(ref function) = binding.kind() {
-                if let DefinitionKind::FunctionDefinition(ref definition) = self.definition {
-                    if std::ptr::eq(definition.as_ref(), function.as_ref()) {
-                        eprintln!("Found: {}", path.node());
-                        self.ranges.push(id.range());
-                    }
-                }
-            }
+        if binding.kind().ptr_eq(self.definition) {
+            eprintln!("Found: {}", path.node());
+            self.ranges.push(id.range());
         }
     }
 }

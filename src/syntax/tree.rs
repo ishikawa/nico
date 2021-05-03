@@ -58,121 +58,121 @@ pub enum NodeKind {
 }
 
 impl NodeKind {
-    pub fn program(&self) -> Option<Rc<Program>> {
+    pub fn program(&self) -> Option<&Rc<Program>> {
         if let NodeKind::Program(program) = self {
-            Some(Rc::clone(program))
+            Some(program)
         } else {
             None
         }
     }
 
-    pub fn struct_definition(&self) -> Option<Rc<StructDefinition>> {
+    pub fn struct_definition(&self) -> Option<&Rc<StructDefinition>> {
         if let NodeKind::StructDefinition(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
     }
 
-    pub fn function_definition(&self) -> Option<Rc<FunctionDefinition>> {
+    pub fn function_definition(&self) -> Option<&Rc<FunctionDefinition>> {
         if let NodeKind::FunctionDefinition(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
     }
 
-    pub fn function_parameter(&self) -> Option<Rc<FunctionParameter>> {
+    pub fn function_parameter(&self) -> Option<&Rc<FunctionParameter>> {
         if let NodeKind::FunctionParameter(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
     }
 
-    pub fn variable_declaration(&self) -> Option<Rc<VariableDeclaration>> {
+    pub fn variable_declaration(&self) -> Option<&Rc<VariableDeclaration>> {
         if let NodeKind::VariableDeclaration(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
     }
 
-    pub fn block(&self) -> Option<Rc<Block>> {
+    pub fn block(&self) -> Option<&Rc<Block>> {
         if let NodeKind::Block(block) = self {
-            Some(Rc::clone(block))
+            Some(block)
         } else {
             None
         }
     }
 
-    pub fn identifier(&self) -> Option<Rc<Identifier>> {
+    pub fn identifier(&self) -> Option<&Rc<Identifier>> {
         if let NodeKind::Identifier(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
     }
 
-    pub fn type_field(&self) -> Option<Rc<TypeField>> {
+    pub fn type_field(&self) -> Option<&Rc<TypeField>> {
         if let NodeKind::TypeField(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
     }
 
-    pub fn type_annotation(&self) -> Option<Rc<TypeAnnotation>> {
+    pub fn type_annotation(&self) -> Option<&Rc<TypeAnnotation>> {
         if let NodeKind::TypeAnnotation(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
     }
 
-    pub fn case_arm(&self) -> Option<Rc<CaseArm>> {
+    pub fn case_arm(&self) -> Option<&Rc<CaseArm>> {
         if let NodeKind::CaseArm(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
     }
 
-    pub fn pattern(&self) -> Option<Rc<Pattern>> {
+    pub fn pattern(&self) -> Option<&Rc<Pattern>> {
         if let NodeKind::Pattern(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
     }
 
-    pub fn struct_field(&self) -> Option<Rc<StructField>> {
+    pub fn struct_field(&self) -> Option<&Rc<StructField>> {
         if let NodeKind::StructField(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
     }
 
-    pub fn struct_field_pattern(&self) -> Option<Rc<StructFieldPattern>> {
+    pub fn struct_field_pattern(&self) -> Option<&Rc<StructFieldPattern>> {
         if let NodeKind::StructFieldPattern(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
     }
 
-    pub fn statement(&self) -> Option<Rc<Statement>> {
+    pub fn statement(&self) -> Option<&Rc<Statement>> {
         if let NodeKind::Statement(stmt) = self {
-            Some(Rc::clone(stmt))
+            Some(stmt)
         } else {
             None
         }
     }
 
-    pub fn expression(&self) -> Option<Rc<Expression>> {
+    pub fn expression(&self) -> Option<&Rc<Expression>> {
         if let NodeKind::Expression(node) = self {
-            Some(Rc::clone(node))
+            Some(node)
         } else {
             None
         }
@@ -314,6 +314,42 @@ pub enum DefinitionKind {
     FunctionDefinition(Rc<FunctionDefinition>),
     FunctionParameter(Rc<FunctionParameter>),
     Pattern(Rc<Pattern>),
+}
+
+impl DefinitionKind {
+    pub fn ptr_eq(&self, other: &DefinitionKind) -> bool {
+        if let DefinitionKind::Builtin(ref definition1) = self {
+            if let DefinitionKind::Builtin(ref definition2) = other {
+                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
+            }
+        }
+
+        if let DefinitionKind::StructDefinition(ref definition1) = self {
+            if let DefinitionKind::StructDefinition(ref definition2) = other {
+                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
+            }
+        }
+
+        if let DefinitionKind::FunctionDefinition(ref definition1) = self {
+            if let DefinitionKind::FunctionDefinition(ref definition2) = other {
+                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
+            }
+        }
+
+        if let DefinitionKind::FunctionParameter(ref definition1) = self {
+            if let DefinitionKind::FunctionParameter(ref definition2) = other {
+                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
+            }
+        }
+
+        if let DefinitionKind::Pattern(ref definition1) = self {
+            if let DefinitionKind::Pattern(ref definition2) = other {
+                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
+            }
+        }
+
+        false
+    }
 }
 
 #[derive(Debug, Default)]
