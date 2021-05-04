@@ -7,6 +7,7 @@ use crate::util::wrap;
 use std::{
     cell::RefCell,
     collections::HashMap,
+    fmt,
     rc::{Rc, Weak},
 };
 
@@ -37,44 +38,16 @@ impl Binding {
     pub fn kind(&self) -> &DefinitionKind {
         &self.kind
     }
+}
 
-    pub fn builtin(&self) -> Option<&Builtin> {
-        if let DefinitionKind::Builtin(ref builtin) = self.kind {
-            Some(builtin)
-        } else {
-            None
-        }
-    }
-
-    pub fn struct_definition(&self) -> Option<&StructDefinition> {
-        if let DefinitionKind::StructDefinition(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
-        if let DefinitionKind::FunctionDefinition(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
-        if let DefinitionKind::FunctionParameter(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn pattern(&self) -> Option<&Pattern> {
-        if let DefinitionKind::Pattern(ref node) = self.kind {
-            Some(node)
-        } else {
-            None
+impl fmt::Display for Binding {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            DefinitionKind::Builtin(_) => write!(f, "builtin `{}`", self.id),
+            DefinitionKind::StructDefinition(_) => write!(f, "struct `{}`", self.id),
+            DefinitionKind::FunctionDefinition(_) => write!(f, "function `{}`", self.id),
+            DefinitionKind::FunctionParameter(_) => write!(f, "function parameter `{}`", self.id),
+            DefinitionKind::Pattern(_) => write!(f, "local variable `{}`", self.id),
         }
     }
 }

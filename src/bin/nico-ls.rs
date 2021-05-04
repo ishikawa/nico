@@ -1,12 +1,10 @@
 use log::{info, warn};
 use lsp_types::*;
 use nico::ls::{rename::Rename, server::ServerCapabilitiesBuilder};
-use nico::{
-    sem,
-    syntax::{
-        self, EffectiveRange, Identifier, MissingTokenKind, Node, NodePath, ParseError, Parser,
-        TextToken, Token, TokenKind, Trivia,
-    },
+use nico::sem;
+use nico::syntax::{
+    self, EffectiveRange, Identifier, MissingTokenKind, Node, NodePath, ParseError, Parser,
+    StructLiteral, TextToken, Token, TokenKind, Trivia,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -211,8 +209,26 @@ impl DiagnosticsCollector {
 
 impl syntax::Visitor for DiagnosticsCollector {
     fn enter_variable(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {
+        // Undefined variable
         if path.scope().borrow().get_binding(id.as_str()).is_none() {
             self.add_diagnostic(path.node().range(), format!("Cannot find name '{}'.", id));
+        }
+    }
+
+    fn enter_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {
+        // Expected struct for name
+        if let Some(binding) = path.scope().borrow().get_binding(value.name().as_str()) {
+            if !binding.borrow().kind().is_struct_definition() {
+                self.add_diagnostic(
+                    value.name().range(),
+                    format!("Expected struct, found '{}'.", binding.borrow()),
+                );
+            }
+        } else {
+            self.add_diagnostic(
+                value.name().range(),
+                format!("Cannot find name '{}'.", value.name()),
+            );
         }
     }
 
@@ -355,14 +371,15 @@ impl SemanticTokenizer {
         } else if parent.is_variable_expression() {
             if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
                 let binding = binding.borrow();
+                let definition = binding.kind();
 
-                if binding.function_definition().is_some() {
+                if definition.is_function_definition() {
                     return SemanticTokenType::FUNCTION;
-                } else if binding.function_parameter().is_some() {
+                } else if definition.is_function_parameter() {
                     return SemanticTokenType::PARAMETER;
-                } else if binding.struct_definition().is_some() {
+                } else if definition.is_struct_definition() {
                     return SemanticTokenType::STRUCT;
-                } else if let Some(builtin) = binding.builtin() {
+                } else if let Some(builtin) = definition.builtin() {
                     self.add_token_modifiers_bitset(
                         modifiers,
                         SemanticTokenModifier::DEFAULT_LIBRARY,

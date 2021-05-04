@@ -48,6 +48,13 @@ let cases: TestCaseBase[] = [
       "end",
       "x" // `x` should not be visible in this scope.
     ].join("\n")
+  },
+  {
+    // prettier-ignore
+    input: [
+      "let Rectangle = 1",
+      "let rect = Rectangle {}", // expected struct
+    ].join("\n")
   }
 ];
 

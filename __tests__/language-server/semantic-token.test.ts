@@ -29,13 +29,19 @@ let cases: TestCaseBase[] = [
     input: "1 + 2"
   },
   {
-    input: "struct Rectangle { width: i32, height: i32 }"
+    // prettier-ignore
+    input: [
+      "struct Rectangle { width: i32, height: i32 }",
+      "Rectangle { width: 100, height: 200 }"
+    ].join("\n")
   },
   {
-    input: "Rectangle { width: 100, height: 200 }"
-  },
-  {
-    input: ["struct A { b: i32 }", "let a = A { b: 123 }", "a.b"].join("\n")
+    // prettier-ignore
+    input: [
+      "struct A { b: i32 }",
+      "let a = A { b: 123 }",
+      "a.b"
+    ].join("\n")
   }
 ];
 

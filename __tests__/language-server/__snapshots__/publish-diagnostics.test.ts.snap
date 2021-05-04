@@ -72,3 +72,24 @@ Array [
   },
 ]
 `;
+
+exports[`4: publishDiagnostics at \`let Rectangle = 1
+let rect = Rectangle {}\` 1`] = `
+Array [
+  Object {
+    "message": "Expected struct, found 'local variable \`Rectangle\`'.",
+    "range": Object {
+      "end": Object {
+        "character": 20,
+        "line": 1,
+      },
+      "start": Object {
+        "character": 11,
+        "line": 1,
+      },
+    },
+    "severity": 1,
+    "source": "nico-ls",
+  },
+]
+`;
