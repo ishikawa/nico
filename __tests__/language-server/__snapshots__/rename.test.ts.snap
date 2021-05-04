@@ -171,6 +171,88 @@ Object {
 }
 `;
 
+exports[`3: prepare rename - \`let foo = 100
+println_i32(foo)\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1300,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "changes": Object {
+      "file:///home/user/nico/samplelet%20foo%20%3D%20100%0Aprintln_i32(foo).nico": Array [
+        Object {
+          "newText": "foo",
+          "range": Object {
+            "end": Object {
+              "character": 7,
+              "line": 0,
+            },
+            "start": Object {
+              "character": 4,
+              "line": 0,
+            },
+          },
+        },
+        Object {
+          "newText": "foo",
+          "range": Object {
+            "end": Object {
+              "character": 15,
+              "line": 1,
+            },
+            "start": Object {
+              "character": 12,
+              "line": 1,
+            },
+          },
+        },
+      ],
+    },
+  },
+}
+`;
+
+exports[`3: prepare rename - \`let foo = 100
+println_i32(foo)\` at [object Object] 2`] = `
+Object {
+  "error": null,
+  "id": 1301,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "changes": Object {
+      "file:///home/user/nico/samplelet%20foo%20%3D%20100%0Aprintln_i32(foo).nico": Array [
+        Object {
+          "newText": "foo",
+          "range": Object {
+            "end": Object {
+              "character": 7,
+              "line": 0,
+            },
+            "start": Object {
+              "character": 4,
+              "line": 0,
+            },
+          },
+        },
+        Object {
+          "newText": "foo",
+          "range": Object {
+            "end": Object {
+              "character": 15,
+              "line": 1,
+            },
+            "start": Object {
+              "character": 12,
+              "line": 1,
+            },
+          },
+        },
+      ],
+    },
+  },
+}
+`;
+
 exports[`3: prepare rename - \`struct A { b: i32 }
 
 let a = A { b: 123 }
@@ -254,5 +336,243 @@ Object {
       ],
     },
   },
+}
+`;
+
+exports[`4: prepare rename - \`struct A { b: i32 }
+
+let a = A { b: 123 }
+a.b\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1400,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "changes": Object {
+      "file:///home/user/nico/samplestruct%20A%20%7B%20b%3A%20i32%20%7D%0A%0Alet%20a%20%3D%20A%20%7B.nico": Array [
+        Object {
+          "newText": "c",
+          "range": Object {
+            "end": Object {
+              "character": 5,
+              "line": 2,
+            },
+            "start": Object {
+              "character": 4,
+              "line": 2,
+            },
+          },
+        },
+        Object {
+          "newText": "c",
+          "range": Object {
+            "end": Object {
+              "character": 1,
+              "line": 3,
+            },
+            "start": Object {
+              "character": 0,
+              "line": 3,
+            },
+          },
+        },
+      ],
+    },
+  },
+}
+`;
+
+exports[`4: prepare rename - \`struct A { b: i32 }
+
+let a = A { b: 123 }
+a.b\` at [object Object] 2`] = `
+Object {
+  "error": null,
+  "id": 1401,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "changes": Object {
+      "file:///home/user/nico/samplestruct%20A%20%7B%20b%3A%20i32%20%7D%0A%0Alet%20a%20%3D%20A%20%7B.nico": Array [
+        Object {
+          "newText": "foo",
+          "range": Object {
+            "end": Object {
+              "character": 5,
+              "line": 2,
+            },
+            "start": Object {
+              "character": 4,
+              "line": 2,
+            },
+          },
+        },
+        Object {
+          "newText": "foo",
+          "range": Object {
+            "end": Object {
+              "character": 1,
+              "line": 3,
+            },
+            "start": Object {
+              "character": 0,
+              "line": 3,
+            },
+          },
+        },
+      ],
+    },
+  },
+}
+`;
+
+exports[`5: prepare rename - \`let x = [1, 2, 3]
+case x
+when [x, y, z]
+    x + y + z
+else
+    100
+end\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1500,
+  "jsonrpc": "2.0",
+  "result": null,
+}
+`;
+
+exports[`5: prepare rename - \`let x = [1, 2, 3]
+case x
+when [x, y, z]
+    x + y + z
+else
+    100
+end\` at [object Object] 2`] = `
+Object {
+  "error": null,
+  "id": 1501,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "changes": Object {
+      "file:///home/user/nico/samplelet%20x%20%3D%20%5B1%2C%202%2C%203%5D%0Acase%20x%0Awhen%20%5Bx%2.nico": Array [
+        Object {
+          "newText": "b",
+          "range": Object {
+            "end": Object {
+              "character": 10,
+              "line": 2,
+            },
+            "start": Object {
+              "character": 9,
+              "line": 2,
+            },
+          },
+        },
+        Object {
+          "newText": "b",
+          "range": Object {
+            "end": Object {
+              "character": 9,
+              "line": 3,
+            },
+            "start": Object {
+              "character": 8,
+              "line": 3,
+            },
+          },
+        },
+      ],
+    },
+  },
+}
+`;
+
+exports[`5: prepare rename - \`let x = [1, 2, 3]
+case x
+when [x, y, z]
+    x + y + z
+else
+    100
+end\` at [object Object] 3`] = `
+Object {
+  "error": null,
+  "id": 1502,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "changes": Object {
+      "file:///home/user/nico/samplelet%20x%20%3D%20%5B1%2C%202%2C%203%5D%0Acase%20x%0Awhen%20%5Bx%2.nico": Array [
+        Object {
+          "newText": "c",
+          "range": Object {
+            "end": Object {
+              "character": 13,
+              "line": 2,
+            },
+            "start": Object {
+              "character": 12,
+              "line": 2,
+            },
+          },
+        },
+        Object {
+          "newText": "c",
+          "range": Object {
+            "end": Object {
+              "character": 13,
+              "line": 3,
+            },
+            "start": Object {
+              "character": 12,
+              "line": 3,
+            },
+          },
+        },
+      ],
+    },
+  },
+}
+`;
+
+exports[`5: prepare rename - \`let x = [1, 2, 3]
+case x
+when [x, y, z]
+    x + y + z
+else
+    100
+end\` at [object Object] 4`] = `
+Object {
+  "error": null,
+  "id": 1503,
+  "jsonrpc": "2.0",
+  "result": null,
+}
+`;
+
+exports[`5: prepare rename - \`let x = [1, 2, 3]
+case x
+when [x, y, z]
+    x + y + z
+else
+    100
+end\` at [object Object] 5`] = `
+Object {
+  "error": null,
+  "id": 1504,
+  "jsonrpc": "2.0",
+  "result": null,
+}
+`;
+
+exports[`5: prepare rename - \`let x = [1, 2, 3]
+case x
+when [x, y, z]
+    x + y + z
+else
+    100
+end\` at [object Object] 6`] = `
+Object {
+  "error": null,
+  "id": 1505,
+  "jsonrpc": "2.0",
+  "result": null,
 }
 `;

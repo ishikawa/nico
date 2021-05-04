@@ -88,13 +88,38 @@ let cases: TestCase[] = [
   {
     // prettier-ignore
     input: [
+      "let foo = 100",
+      "println_i32(foo)",
+    ].join("\n"),
+    requests: [
+      // let foo = 100
+      {
+        position: {
+          line: 0,
+          character: 4
+        },
+        newName: "foo"
+      },
+      // println_i32(foo)
+      {
+        position: {
+          line: 1,
+          character: 12
+        },
+        newName: "foo"
+      }
+    ]
+  },
+  {
+    // prettier-ignore
+    input: [
       "struct A { b: i32 }",
       "",
       "let a = A { b: 123 }",
       "a.b"
     ].join("\n"),
     requests: [
-      // param: let a
+      // let a
       {
         position: {
           line: 2,
@@ -102,13 +127,83 @@ let cases: TestCase[] = [
         },
         newName: "c"
       },
-      // variable: a.b
+      // a.b
       {
         position: {
           line: 3,
           character: 0
         },
         newName: "foo"
+      }
+    ]
+  },
+  // array pattern
+  {
+    // prettier-ignore
+    input: [
+      "let x = [1, 2, 3]",
+
+      "case x",
+      "when [x, y, z]",
+      "    x + y + z",
+      "else",
+      "    100",
+      "end",
+    ].join("\n"),
+    requests: [
+      // when [x, y, z]
+      //       ^
+      {
+        position: {
+          line: 3,
+          character: 6
+        },
+        newName: "a"
+      },
+      // when [a, y, z]
+      //          ^
+      {
+        position: {
+          line: 3,
+          character: 9
+        },
+        newName: "b"
+      },
+      // when [a, b, z]
+      //             ^
+      {
+        position: {
+          line: 3,
+          character: 12
+        },
+        newName: "c"
+      },
+      //     a + b + c
+      //     ^
+      {
+        position: {
+          line: 4,
+          character: 4
+        },
+        newName: "x"
+      },
+      //     a + b + c
+      //         ^
+      {
+        position: {
+          line: 4,
+          character: 8
+        },
+        newName: "y"
+      },
+      //     a + b + c
+      //             ^
+      {
+        position: {
+          line: 4,
+          character: 13
+        },
+        newName: "z"
       }
     ]
   }
