@@ -1,7 +1,7 @@
 //! Rename operation
 use crate::syntax::{
     self, DefinitionKind, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node,
-    NodePath, Position, Program, StructDefinition, StructLiteral,
+    NodePath, Pattern, Position, Program, StructDefinition, StructLiteral,
 };
 use std::rc::Rc;
 
@@ -102,6 +102,13 @@ impl syntax::Visitor for Rename {
                         param,
                     ))),
                 ));
+            }
+            // Renaming pattern
+            else if let Some(pattern) = parent.pattern() {
+                self.operation = Some(RenameOperation::new(
+                    id,
+                    RenameOperationKind::Definition(DefinitionKind::Pattern(Rc::clone(pattern))),
+                ));
             } else {
                 // dummy
                 self.operation = Some(RenameOperation::new(id, RenameOperationKind::Unknown));
@@ -162,6 +169,21 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
         }
     }
 
+    fn enter_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {
+        let scope = path.scope();
+        let scope = scope.borrow();
+
+        let binding = match scope.get_binding(value.name().as_str()) {
+            None => return,
+            Some(binding) => binding,
+        };
+        let binding = binding.borrow();
+
+        if binding.kind().ptr_eq(self.definition) {
+            self.ranges.push(value.name().range());
+        }
+    }
+
     fn enter_function_definition(
         &mut self,
         _path: &mut NodePath,
@@ -199,18 +221,11 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
         }
     }
 
-    fn enter_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {
-        let scope = path.scope();
-        let scope = scope.borrow();
-
-        let binding = match scope.get_binding(value.name().as_str()) {
-            None => return,
-            Some(binding) => binding,
-        };
-        let binding = binding.borrow();
-
-        if binding.kind().ptr_eq(self.definition) {
-            self.ranges.push(value.name().range());
+    fn enter_pattern(&mut self, _path: &mut NodePath, pattern: &Rc<Pattern>) {
+        if let DefinitionKind::Pattern(definition) = self.definition {
+            if std::ptr::eq(definition.as_ref(), pattern.as_ref()) {
+                self.ranges.push(pattern.range());
+            }
         }
     }
 }

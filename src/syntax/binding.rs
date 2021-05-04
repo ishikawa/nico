@@ -181,9 +181,11 @@ impl Scope {
                         self.register_pattern(value);
                     } else {
                         // omitted
+                        let pattern = Pattern::variable_pattern(&field.name);
+
                         self.insert(Binding {
                             id: field.name.to_string(),
-                            kind: DefinitionKind::Pattern(Rc::clone(pattern)),
+                            kind: DefinitionKind::Pattern(Rc::new(pattern)),
                         });
                     }
                 }

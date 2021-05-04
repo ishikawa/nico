@@ -1208,6 +1208,13 @@ impl Pattern {
     pub fn new(kind: PatternKind, code: Code) -> Self {
         Self { kind, code }
     }
+
+    pub fn variable_pattern(identifier: &Rc<Identifier>) -> Self {
+        Self {
+            kind: PatternKind::VariablePattern(Rc::clone(identifier)),
+            code: Code::with_node(NodeKind::Identifier(Rc::clone(identifier))),
+        }
+    }
 }
 
 impl Node for Pattern {
