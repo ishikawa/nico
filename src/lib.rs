@@ -1,7 +1,9 @@
 pub mod asm;
+pub mod ls;
 pub mod parser;
 pub mod sem;
 pub mod syntax;
+
 mod util;
 use sem::SemanticAnalyzer;
 

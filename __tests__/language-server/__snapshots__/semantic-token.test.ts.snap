@@ -3,7 +3,7 @@
 exports[`0: open a document at \`-\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1000,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [],
@@ -31,7 +31,7 @@ Object {
 exports[`2: open a document at \`1\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1002,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [
@@ -48,7 +48,7 @@ Object {
 exports[`3: open a document at \`1 + 2\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1003,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [
@@ -75,7 +75,7 @@ Object {
 exports[`4: open a document at \`struct Rectangle { width: i32, height: i32 }\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1004,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [
@@ -107,7 +107,7 @@ Object {
 exports[`5: open a document at \`Rectangle { width: 100, height: 200 }\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1005,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [
@@ -146,7 +146,7 @@ let a = A { b: 123 }
 a.b\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1006,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [
@@ -208,7 +208,7 @@ Object {
 exports[`7: open a document at \`./samples/fib.nico\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1007,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [
@@ -346,7 +346,7 @@ Object {
       4,
       11,
       7,
-      0,
+      512,
       0,
       12,
       3,
@@ -460,7 +460,7 @@ Object {
 exports[`8: open a document at \`./samples/fizzbuzz.nico\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1008,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [
@@ -563,7 +563,7 @@ Object {
       12,
       11,
       7,
-      0,
+      512,
       0,
       12,
       1,
@@ -623,7 +623,7 @@ Object {
       12,
       11,
       7,
-      0,
+      512,
       0,
       12,
       1,
@@ -683,7 +683,7 @@ Object {
       12,
       11,
       7,
-      0,
+      512,
       0,
       12,
       1,
@@ -708,7 +708,7 @@ Object {
       12,
       11,
       7,
-      0,
+      512,
       0,
       12,
       1,
@@ -812,7 +812,7 @@ Object {
 exports[`9: open a document at \`./samples/max.nico\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1009,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [
@@ -985,7 +985,7 @@ Object {
       0,
       11,
       7,
-      0,
+      512,
       0,
       12,
       3,
@@ -995,22 +995,7 @@ Object {
       0,
       11,
       7,
-      0,
-      0,
-      12,
-      3,
-      7,
-      0,
-      0,
-      5,
-      2,
-      3,
-      0,
-      1,
-      0,
-      11,
-      7,
-      0,
+      512,
       0,
       12,
       3,
@@ -1021,16 +1006,11 @@ Object {
       2,
       3,
       0,
-      0,
-      4,
-      2,
-      3,
-      0,
       1,
       0,
       11,
       7,
-      0,
+      512,
       0,
       12,
       3,
@@ -1050,7 +1030,27 @@ Object {
       0,
       11,
       7,
+      512,
       0,
+      12,
+      3,
+      7,
+      0,
+      0,
+      5,
+      2,
+      3,
+      0,
+      0,
+      4,
+      2,
+      3,
+      0,
+      1,
+      0,
+      11,
+      7,
+      512,
       0,
       12,
       3,
@@ -1075,7 +1075,7 @@ Object {
       0,
       11,
       7,
-      0,
+      512,
       0,
       12,
       3,
@@ -1139,7 +1139,7 @@ Object {
 exports[`10: open a document at \`./samples/struct_pattern.nico\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1010,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [
@@ -1217,7 +1217,7 @@ Object {
       8,
       11,
       7,
-      0,
+      512,
       0,
       12,
       1,
@@ -1252,7 +1252,7 @@ Object {
       8,
       11,
       7,
-      0,
+      512,
       0,
       12,
       1,
@@ -1282,7 +1282,7 @@ Object {
       8,
       11,
       7,
-      0,
+      512,
       0,
       12,
       1,
@@ -1292,7 +1292,7 @@ Object {
       8,
       11,
       7,
-      0,
+      512,
       0,
       12,
       1,
@@ -1421,7 +1421,7 @@ Object {
 exports[`11: open a document at \`./samples/struct.nico\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1011,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [
@@ -1529,7 +1529,7 @@ Object {
       0,
       11,
       7,
-      0,
+      512,
       0,
       12,
       4,
@@ -1553,7 +1553,7 @@ Object {
 exports[`12: open a document at \`./samples/sum.nico\` 1`] = `
 Object {
   "error": null,
-  "id": 1001,
+  "id": 1012,
   "jsonrpc": "2.0",
   "result": Object {
     "data": Array [
@@ -1646,7 +1646,7 @@ Object {
       0,
       11,
       7,
-      0,
+      512,
       0,
       12,
       3,
@@ -1661,7 +1661,7 @@ Object {
       0,
       11,
       7,
-      0,
+      512,
       0,
       12,
       3,
@@ -1726,7 +1726,7 @@ Object {
       0,
       11,
       7,
-      0,
+      512,
       0,
       12,
       3,
@@ -1831,7 +1831,7 @@ Object {
       0,
       11,
       7,
-      0,
+      512,
       0,
       12,
       3,

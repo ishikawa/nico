@@ -1,3 +1,5 @@
+import fs from "fs";
+
 export interface TestCaseBase {
   input?: string;
   file?: string;
@@ -15,4 +17,25 @@ export function filterTestCases<T extends TestCaseBase>(cases: T[]): T[] {
   focused = focused.filter(x => !x.skip);
 
   return focused;
+}
+
+export function readTestFileSync(testCase: TestCaseBase): string {
+  if (testCase.input) {
+    return testCase.input;
+  } else if (testCase.file) {
+    const srcBuffer = fs.readFileSync(testCase.file);
+    return srcBuffer.toString("utf-8");
+  }
+
+  return "";
+}
+
+export function getTestName(testCase: TestCaseBase): string {
+  if (testCase.input) {
+    return testCase.input;
+  } else if (testCase.file) {
+    return testCase.file;
+  }
+
+  return "-";
 }

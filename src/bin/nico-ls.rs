@@ -1,10 +1,11 @@
 use log::{info, warn};
 use lsp_types::*;
+use nico::ls::{rename::Rename, server::ServerCapabilitiesBuilder};
 use nico::{
     sem,
     syntax::{
-        self, EffectiveRange, Identifier, MissingTokenKind, Node, NodeKind, NodePath, ParseError,
-        Parser, TextToken, Token, TokenKind, Trivia,
+        self, EffectiveRange, Identifier, MissingTokenKind, Node, NodePath, ParseError, Parser,
+        TextToken, Token, TokenKind, Trivia,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -46,9 +47,18 @@ struct Response {
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 struct ResponseError {
-    code: i32,
+    code: ResponseErrorCode,
     message: String,
     data: Option<Value>,
+}
+
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+enum ResponseErrorCode {
+    ParseError = -32700,
+    InvalidRequest = -32600,
+    MethodNotFound = -32601,
+    InvalidParams = -32602,
+    InternalError = -32603,
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
@@ -70,6 +80,12 @@ enum HandlerErrorKind {
     Utf8Error(string::FromUtf8Error),
     IoError(io::Error),
     JsonError(serde_json::Error),
+
+    #[allow(dead_code)]
+    GenericError {
+        id: Id,
+        message: String,
+    },
 
     // Warnings
     InvalidParams,
@@ -121,14 +137,39 @@ impl Request {
 }
 
 impl Response {
-    fn from_value(request: &Request, value: Value) -> Self {
+    fn from_value(id: &Id, value: Value) -> Self {
         Self {
-            jsonrpc: request.jsonrpc.clone(),
-            id: request.id.clone().unwrap_or_else(|| Id::Int(-1)),
+            jsonrpc: "2.0".to_string(),
+            id: id.clone(),
             result: Some(value),
             error: None,
         }
     }
+
+    fn from_error(id: &Id, error: ResponseError) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            id: id.clone(),
+            result: None,
+            error: Some(error),
+        }
+    }
+}
+
+// Position & Range
+fn syntax_position(position: Position) -> syntax::Position {
+    syntax::Position {
+        line: position.line,
+        character: position.character,
+    }
+}
+
+fn lsp_position(position: syntax::Position) -> Position {
+    Position::new(position.line, position.character)
+}
+
+fn lsp_range(range: syntax::EffectiveRange) -> Range {
+    Range::new(lsp_position(range.start), lsp_position(range.end))
 }
 
 // --- Language Server States
@@ -169,7 +210,7 @@ impl DiagnosticsCollector {
 }
 
 impl syntax::Visitor for DiagnosticsCollector {
-    fn enter_variable(&mut self, path: &mut NodePath, id: &Identifier) {
+    fn enter_variable(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {
         if path.scope().borrow().get_binding(id.as_str()).is_none() {
             self.add_diagnostic(path.node().range(), format!("Cannot find name '{}'.", id));
         }
@@ -284,19 +325,21 @@ impl SemanticTokenizer {
     fn token_type_and_modifiers_for_identifier(
         &self,
         path: &NodePath,
-        _modifiers: &mut u32,
+        modifiers: &mut u32,
     ) -> SemanticTokenType {
         let node = path.node();
 
         // In current AST specification, the corresponding node for an Identifier token is
-        // always an Identifier node.
-        let id = node
-            .identifier()
-            .unwrap_or_else(|| panic!("node must be an identifier."));
+        // an Identifier node. But in some fragile AST, it may be differ.
+        let id = match node.identifier() {
+            Some(id) => id,
+            None => return SemanticTokenType::VARIABLE,
+        };
 
         let parent = path
             .parent()
             .unwrap_or_else(|| panic!("parent must exist."));
+
         let parent = parent.borrow();
         let scope = parent.scope();
         let parent = parent.node();
@@ -305,12 +348,10 @@ impl SemanticTokenizer {
             SemanticTokenType::FUNCTION
         } else if parent.is_function_parameter() {
             SemanticTokenType::PARAMETER
-        } else if parent.is_struct_definition() {
+        } else if parent.is_struct_definition() || parent.is_struct_literal() {
             SemanticTokenType::STRUCT
         } else if parent.is_struct_field() || parent.is_member_expression() {
             SemanticTokenType::PROPERTY
-        } else if parent.is_struct_literal() {
-            SemanticTokenType::STRUCT
         } else if parent.is_variable_expression() {
             if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
                 let binding = binding.borrow();
@@ -321,8 +362,13 @@ impl SemanticTokenizer {
                     return SemanticTokenType::PARAMETER;
                 } else if binding.struct_definition().is_some() {
                     return SemanticTokenType::STRUCT;
-                } else if let Some(ty) = binding.builtin() {
-                    if let sem::Type::Function { .. } = *ty.borrow() {
+                } else if let Some(builtin) = binding.builtin() {
+                    self.add_token_modifiers_bitset(
+                        modifiers,
+                        SemanticTokenModifier::DEFAULT_LIBRARY,
+                    );
+
+                    if let sem::Type::Function { .. } = *builtin.r#type().borrow() {
                         return SemanticTokenType::FUNCTION;
                     }
                 }
@@ -435,6 +481,28 @@ struct ServerRegistrationOptions {
     token_modifier_legend: Rc<HashMap<SemanticTokenModifier, u32>>,
 }
 
+impl ServerRegistrationOptions {
+    pub fn from_semantic_tokens_options(options: &SemanticTokensOptions) -> Self {
+        // Register token type legend
+        let mut token_type_legend = HashMap::new();
+        let mut token_modifier_legend = HashMap::new();
+
+        for (i, token_type) in options.legend.token_types.iter().enumerate() {
+            let t = u32::try_from(i).unwrap();
+            token_type_legend.insert(token_type.clone(), t);
+        }
+        for (i, token_modifier) in options.legend.token_modifiers.iter().enumerate() {
+            let t = u32::try_from(i).unwrap();
+            token_modifier_legend.insert(token_modifier.clone(), t);
+        }
+
+        ServerRegistrationOptions {
+            token_type_legend: Rc::new(token_type_legend),
+            token_modifier_legend: Rc::new(token_modifier_legend),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Document {
     uri: Url,
@@ -447,14 +515,15 @@ impl Connection {
         Self::default()
     }
 
-    pub fn send_response<V: Serialize>(
-        &self,
-        request: &Request,
-        value: V,
-    ) -> Result<(), HandlerError> {
+    pub fn send_response<V: Serialize>(&self, id: &Id, value: V) -> Result<(), HandlerError> {
         let value = serde_json::to_value(value)?;
-        let response = Response::from_value(&request, value);
+        let response = Response::from_value(id, value);
 
+        self.send_message(&response)
+    }
+
+    pub fn send_error(&self, id: &Id, error: ResponseError) -> Result<(), HandlerError> {
+        let response = Response::from_error(id, error);
         self.send_message(&response)
     }
 
@@ -526,11 +595,10 @@ impl Connection {
     fn compile(&mut self, uri: &Url) -> Result<Rc<syntax::Program>, HandlerError> {
         let doc = self.get_document(uri)?;
         let node = Parser::parse_string(&doc.borrow().text);
-        let kind = NodeKind::Program(Rc::clone(&node));
 
         // Diagnostics
         let mut diagnostics = DiagnosticsCollector::new();
-        syntax::traverse(&mut diagnostics, &kind, None);
+        syntax::traverse(&mut diagnostics, &node);
 
         self.compiled_results.insert(uri.clone(), Rc::clone(&node));
         self.diagnostics
@@ -546,70 +614,52 @@ impl Connection {
     ) -> Result<InitializeResult, HandlerError> {
         info!("[initialize] {:?}", params);
 
-        let token_types = vec![
-            SemanticTokenType::KEYWORD,
-            SemanticTokenType::VARIABLE,
-            SemanticTokenType::STRING,
-            SemanticTokenType::NUMBER,
-            SemanticTokenType::OPERATOR,
-            SemanticTokenType::COMMENT,
-            SemanticTokenType::STRUCT,
-            SemanticTokenType::FUNCTION,
-            SemanticTokenType::PARAMETER,
-            SemanticTokenType::PROPERTY,
-        ];
+        let capabilities = ServerCapabilitiesBuilder::new()
+            .initialized(&params)
+            .semantic_token_types(&[
+                SemanticTokenType::KEYWORD,
+                SemanticTokenType::VARIABLE,
+                SemanticTokenType::STRING,
+                SemanticTokenType::NUMBER,
+                SemanticTokenType::OPERATOR,
+                SemanticTokenType::COMMENT,
+                SemanticTokenType::STRUCT,
+                SemanticTokenType::FUNCTION,
+                SemanticTokenType::PARAMETER,
+                SemanticTokenType::PROPERTY,
+            ])
+            .semantic_token_modifiers(&[
+                SemanticTokenModifier::DECLARATION,
+                SemanticTokenModifier::DEFINITION,
+                SemanticTokenModifier::READONLY,
+                SemanticTokenModifier::STATIC,
+                SemanticTokenModifier::DEPRECATED,
+                SemanticTokenModifier::ABSTRACT,
+                SemanticTokenModifier::ASYNC,
+                SemanticTokenModifier::MODIFICATION,
+                SemanticTokenModifier::DOCUMENTATION,
+                SemanticTokenModifier::DEFAULT_LIBRARY,
+            ])
+            .build();
 
-        let token_modifiers = vec![
-            SemanticTokenModifier::DECLARATION,
-            SemanticTokenModifier::DEFINITION,
-            SemanticTokenModifier::READONLY,
-            SemanticTokenModifier::STATIC,
-            SemanticTokenModifier::DEPRECATED,
-            SemanticTokenModifier::ABSTRACT,
-            SemanticTokenModifier::ASYNC,
-            SemanticTokenModifier::MODIFICATION,
-            SemanticTokenModifier::DOCUMENTATION,
-            SemanticTokenModifier::DEFAULT_LIBRARY,
-        ];
-
-        // Register token type legend
-        let mut token_type_legend = HashMap::new();
-        let mut token_modifier_legend = HashMap::new();
-
-        for (i, token_type) in token_types.iter().enumerate() {
-            let t = u32::try_from(i).unwrap();
-            token_type_legend.insert(token_type.clone(), t);
+        if let Some(ref semantic_tokens_provider) = capabilities.semantic_tokens_provider {
+            match semantic_tokens_provider {
+                SemanticTokensServerCapabilities::SemanticTokensOptions(options) => {
+                    self.server_options = Some(
+                        ServerRegistrationOptions::from_semantic_tokens_options(options),
+                    );
+                }
+                SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(options) => {
+                    self.server_options =
+                        Some(ServerRegistrationOptions::from_semantic_tokens_options(
+                            &options.semantic_tokens_options,
+                        ));
+                }
+            }
         }
-        for (i, token_modifier) in token_modifiers.iter().enumerate() {
-            let t = u32::try_from(i).unwrap();
-            token_modifier_legend.insert(token_modifier.clone(), t);
-        }
-
-        // Initialized
-        self.server_options = Some(ServerRegistrationOptions {
-            token_type_legend: Rc::new(token_type_legend),
-            token_modifier_legend: Rc::new(token_modifier_legend),
-        });
 
         Ok(InitializeResult {
-            capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::Incremental,
-                )),
-                semantic_tokens_provider: Some(
-                    SemanticTokensServerCapabilities::SemanticTokensOptions(
-                        SemanticTokensOptions {
-                            legend: SemanticTokensLegend {
-                                token_types,
-                                token_modifiers,
-                            },
-                            full: Some(SemanticTokensFullOptions::Bool(true)),
-                            ..SemanticTokensOptions::default()
-                        },
-                    ),
-                ),
-                ..ServerCapabilities::default()
-            },
+            capabilities,
             server_info: Some(ServerInfo {
                 name: "nico-ls".to_string(),
                 version: Some("0.0.1".to_string()),
@@ -631,12 +681,57 @@ impl Connection {
             &server_options.token_modifier_legend,
         );
 
-        syntax::traverse(&mut tokenizer, &NodeKind::Program(Rc::clone(&node)), None);
+        syntax::traverse(&mut tokenizer, &node);
 
         Ok(SemanticTokens {
             data: tokenizer.tokens,
             result_id: None,
         })
+    }
+
+    fn on_text_document_prepare_rename(
+        &self,
+        params: &TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>, HandlerError> {
+        info!("[on_text_document_prepare_rename] {:?}", params);
+        let node = self.get_compiled_result(&params.text_document.uri)?;
+        let mut rename = Rename::new(syntax_position(params.position));
+
+        if let Some(id) = rename.prepare(&node) {
+            return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+                range: lsp_range(id.range()),
+                placeholder: id.to_string(),
+            }));
+        }
+
+        Ok(None)
+    }
+
+    fn on_text_document_rename(
+        &mut self,
+        params: &RenameParams,
+    ) -> Result<Option<WorkspaceEdit>, HandlerError> {
+        info!("[on_text_document_prepare_rename] {:?}", params);
+        let uri = params.text_document_position.text_document.uri.clone();
+        let node = self.get_compiled_result(&uri)?;
+        let mut rename = Rename::new(syntax_position(params.text_document_position.position));
+
+        if rename.prepare(&node).is_some() {
+            if let Some(ranges) = rename.rename(&node) {
+                let edits = ranges
+                    .iter()
+                    .map(|r| TextEdit::new(lsp_range(*r), params.new_name.clone()))
+                    .collect();
+
+                return Ok(Some(WorkspaceEdit {
+                    changes: Some(vec![(uri, edits)].into_iter().collect()),
+                    document_changes: None,
+                    change_annotations: None,
+                }));
+            }
+        }
+
+        Ok(None)
     }
 
     // Notification callbacks
@@ -801,6 +896,7 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
     let string = String::from_utf8(bytes)?;
     let value = serde_json::from_str::<Value>(&string)?;
     let mut request = serde_json::from_value::<Request>(value)?;
+    let request_id = request.id.clone();
 
     match request.method.as_str() {
         // Requests
@@ -808,13 +904,25 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
             let params = request.take_params::<InitializeParams>()?;
             let result = conn.on_initialize(&params)?;
 
-            conn.send_response(&request, result)?;
+            conn.send_response(&request_id.unwrap(), result)?;
         }
         "textDocument/semanticTokens/full" => {
             let params = request.take_params::<SemanticTokensParams>()?;
             let result = conn.on_text_document_semantic_tokens_full(&params)?;
 
-            conn.send_response(&request, result)?;
+            conn.send_response(&request_id.unwrap(), result)?;
+        }
+        "textDocument/prepareRename" => {
+            let params = request.take_params::<TextDocumentPositionParams>()?;
+
+            let result = conn.on_text_document_prepare_rename(&params)?;
+            conn.send_response(&request_id.unwrap(), result)?;
+        }
+        "textDocument/rename" => {
+            let params = request.take_params::<RenameParams>()?;
+
+            let result = conn.on_text_document_rename(&params)?;
+            conn.send_response(&request_id.unwrap(), result)?;
         }
         // Notifications
         "initialized" => {
@@ -845,7 +953,24 @@ fn main() {
 
     loop {
         if let Err(err) = event_loop_main(&mut connection) {
-            todo!("Handle error or send notification to the client: {:?}", err)
+            if let HandlerErrorKind::GenericError {
+                ref id,
+                ref message,
+            } = err.kind
+            {
+                connection
+                    .send_error(
+                        id,
+                        ResponseError {
+                            code: ResponseErrorCode::InternalError,
+                            message: message.clone(),
+                            data: None,
+                        },
+                    )
+                    .expect("couldn't send error");
+            } else {
+                todo!("Handle error or send notification to the client: {:?}", err)
+            }
         }
     }
 }

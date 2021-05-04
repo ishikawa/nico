@@ -1,6 +1,5 @@
-import { LanguageServer, NotificationMessage, RequestBuilder, spawn_server } from "../util/lsp";
-import fs from "fs";
-import { filterTestCases, TestCaseBase } from "../util/testcase";
+import { LanguageServer, LanguageServerAgent, spawn_server } from "../util/lsp";
+import { filterTestCases, TestCaseBase, readTestFileSync, getTestName } from "../util/testcase";
 
 let server: LanguageServer | undefined;
 
@@ -53,27 +52,14 @@ let cases: TestCaseBase[] = [
 ];
 
 filterTestCases(cases).forEach((testCase, i) => {
-  let src = "";
-  let name = "-";
-
-  if (testCase.input) {
-    src = testCase.input;
-    name = src;
-  } else if (testCase.file) {
-    const srcBuffer = fs.readFileSync(testCase.file);
-    src = srcBuffer.toString("utf-8");
-    name = testCase.file;
-  }
+  let src = readTestFileSync(testCase);
+  let name = getTestName(testCase);
 
   // No compilation errors and semantic tokens
   test(`${i}: publishDiagnostics at \`${name}\``, async done => {
-    const builder = new RequestBuilder({ id: 1000 + 1 });
-    const uri = `file:///home/user/nico/sample${i}.nico`;
+    const agent = new LanguageServerAgent(server!, { sequence: i });
 
-    const nextNotification = server!.nextMessage<NotificationMessage>();
-    await server!.sendNotification(builder.textDocumentDidOpen(uri, src));
-
-    const diagnostics = await nextNotification;
+    const diagnostics = await agent.openDocument(name, src);
     expect(diagnostics).toMatchSnapshot();
 
     done();

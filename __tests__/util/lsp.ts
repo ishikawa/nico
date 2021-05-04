@@ -128,8 +128,17 @@ export interface NotificationMessage extends Message {
   /**
    * The notification's params.
    */
-  params?: any;
+  params?: Record<string, any>;
 }
+
+// LSP
+export type Position = {
+  line: number;
+  character: number;
+};
+
+// server
+type InitializeOptions = { rename?: boolean };
 
 export class LanguageServer extends EventEmitter {
   process: ChildProcessWithoutNullStreams;
@@ -292,11 +301,21 @@ export class RequestBuilder {
     };
   }
 
-  initialize(): RequestMessage {
+  initialize({ rename }: InitializeOptions = {}): RequestMessage {
     const params = {
       trace: "verbose",
       capabilities: {
         textDocument: {
+          ...(rename
+            ? {
+                rename: {
+                  dynamicRegistration: true,
+                  prepareSupport: true,
+                  prepareSupportDefaultBehavior: 1,
+                  honorsChangeAnnotations: true
+                }
+              }
+            : {}),
           publishDiagnostics: {
             relatedInformation: true,
             versionSupport: false,
@@ -305,58 +324,58 @@ export class RequestBuilder {
             },
             codeDescriptionSupport: true,
             dataSupport: true
-          }
-        },
-        semanticTokens: {
-          dynamicRegistration: true,
-          tokenTypes: [
-            "namespace",
-            "type",
-            "class",
-            "enum",
-            "interface",
-            "struct",
-            "typeParameter",
-            "parameter",
-            "variable",
-            "property",
-            "enumMember",
-            "event",
-            "function",
-            "method",
-            "macro",
-            "keyword",
-            "modifier",
-            "comment",
-            "string",
-            "number",
-            "regexp",
-            "operator"
-          ],
-          tokenModifiers: [
-            "declaration",
-            "definition",
-            "readonly",
-            "static",
-            "deprecated",
-            "abstract",
-            "async",
-            "modification",
-            "documentation",
-            "defaultLibrary"
-          ],
-          formats: ["relative"],
-          requests: {
-            range: true,
-            full: {
-              delta: true
-            }
           },
-          multilineTokenSupport: false,
-          overlappingTokenSupport: false
-        },
-        linkedEditingRange: {
-          dynamicRegistration: true
+          semanticTokens: {
+            dynamicRegistration: true,
+            tokenTypes: [
+              "namespace",
+              "type",
+              "class",
+              "enum",
+              "interface",
+              "struct",
+              "typeParameter",
+              "parameter",
+              "variable",
+              "property",
+              "enumMember",
+              "event",
+              "function",
+              "method",
+              "macro",
+              "keyword",
+              "modifier",
+              "comment",
+              "string",
+              "number",
+              "regexp",
+              "operator"
+            ],
+            tokenModifiers: [
+              "declaration",
+              "definition",
+              "readonly",
+              "static",
+              "deprecated",
+              "abstract",
+              "async",
+              "modification",
+              "documentation",
+              "defaultLibrary"
+            ],
+            formats: ["relative"],
+            requests: {
+              range: true,
+              full: {
+                delta: true
+              }
+            },
+            multilineTokenSupport: false,
+            overlappingTokenSupport: false
+          },
+          linkedEditingRange: {
+            dynamicRegistration: true
+          }
         }
       }
     };
@@ -369,6 +388,25 @@ export class RequestBuilder {
       textDocument: {
         uri
       }
+    });
+  }
+
+  prepareRename(uri: string, position: Position): RequestMessage {
+    return this.buildRequest("textDocument/prepareRename", {
+      textDocument: {
+        uri
+      },
+      position
+    });
+  }
+
+  rename(uri: string, position: Position, newName: string): RequestMessage {
+    return this.buildRequest("textDocument/rename", {
+      textDocument: {
+        uri
+      },
+      position,
+      newName
     });
   }
 
@@ -388,14 +426,63 @@ export class RequestBuilder {
   }
 }
 
+export class LanguageServerAgent {
+  server: LanguageServer;
+  builder: RequestBuilder;
+
+  constructor(server: LanguageServer, options: { sequence?: number }) {
+    const { sequence } = options;
+
+    this.server = server;
+    this.builder = new RequestBuilder({ id: 1000 + (sequence ?? 0) });
+  }
+
+  async openDocument(filename: string, src: string): Promise<any[]> {
+    const uri = getDocumentUri(filename);
+
+    const nextNotification = this.server.nextMessage<NotificationMessage>();
+    const notification1 = this.builder.textDocumentDidOpen(uri, src);
+    await this.server.sendNotification(notification1);
+
+    const diagnostics = await nextNotification;
+
+    expect(diagnostics.method).toEqual("textDocument/publishDiagnostics");
+    expect(diagnostics.params).toBeDefined();
+    expect(diagnostics.params!.uri).toEqual(uri);
+
+    return diagnostics.params!.diagnostics;
+  }
+
+  async textDocumentSemanticTokenFull(filename: string): Promise<ResponseMessage> {
+    const uri = getDocumentUri(filename);
+
+    const request = this.builder.textDocumentSemanticTokenFull(uri);
+    return this.server.sendRequest(request);
+  }
+
+  async prepareRename(filename: string, position: Position) {
+    const uri = getDocumentUri(filename);
+
+    const request = this.builder.prepareRename(uri, position);
+    return this.server.sendRequest(request);
+  }
+
+  async rename(filename: string, position: Position, newName: string) {
+    const uri = getDocumentUri(filename);
+
+    const request = this.builder.rename(uri, position, newName);
+    return this.server.sendRequest(request);
+  }
+}
+
 // helpers
-export async function spawn_server(): Promise<LanguageServer> {
+export async function spawn_server(options: InitializeOptions = {}): Promise<LanguageServer> {
   const builder = new RequestBuilder({ id: 1 });
   const server = LanguageServer.spawn();
 
   // initialize
   {
-    const request = builder.initialize();
+    const request = builder.initialize(options);
     await server.sendRequest(request);
   }
 
@@ -406,4 +493,9 @@ export async function spawn_server(): Promise<LanguageServer> {
   }
 
   return server;
+}
+
+export function getDocumentUri(name?: string | number): string {
+  const filename = encodeURIComponent(name == null ? "sample" : name.toString());
+  return `file:///home/user/nico/sample${filename.substring(0, 64)}.nico`;
 }

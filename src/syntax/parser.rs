@@ -74,7 +74,7 @@ impl<'a> Parser<'a> {
 
         let program = Rc::new(Program::new(body, code));
 
-        bind_scopes(&NodeKind::Program(Rc::clone(&program)));
+        bind_scopes(&program);
 
         program
     }
