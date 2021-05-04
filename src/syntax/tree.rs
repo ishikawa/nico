@@ -200,31 +200,35 @@ impl NodeKind {
     }
 
     pub fn is_block(&self) -> bool {
-        matches!(self, NodeKind::Block(..))
+        matches!(self, Self::Block(..))
     }
 
     pub fn is_statement(&self) -> bool {
-        matches!(self, NodeKind::Statement(..))
+        matches!(self, Self::Statement(..))
     }
 
     pub fn is_struct_definition(&self) -> bool {
-        matches!(self, NodeKind::StructDefinition(..))
+        matches!(self, Self::StructDefinition(..))
     }
 
     pub fn is_struct_field(&self) -> bool {
-        matches!(self, NodeKind::StructField(..))
+        matches!(self, Self::StructField(..))
     }
 
     pub fn is_function_definition(&self) -> bool {
-        matches!(self, NodeKind::FunctionDefinition(..))
+        matches!(self, Self::FunctionDefinition(..))
     }
 
     pub fn is_function_parameter(&self) -> bool {
-        matches!(self, NodeKind::FunctionParameter(..))
+        matches!(self, Self::FunctionParameter(..))
     }
 
     pub fn is_expression(&self) -> bool {
-        matches!(self, NodeKind::Expression(..))
+        matches!(self, Self::Expression(..))
+    }
+
+    pub fn is_pattern(&self) -> bool {
+        matches!(self, Self::Pattern(..))
     }
 
     pub fn is_struct_literal(&self) -> bool {
@@ -317,6 +321,66 @@ pub enum DefinitionKind {
 }
 
 impl DefinitionKind {
+    pub fn builtin(&self) -> Option<&Rc<Builtin>> {
+        if let DefinitionKind::Builtin(node) = self {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn struct_definition(&self) -> Option<&Rc<StructDefinition>> {
+        if let DefinitionKind::StructDefinition(node) = self {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_definition(&self) -> Option<&Rc<FunctionDefinition>> {
+        if let DefinitionKind::FunctionDefinition(node) = self {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn function_parameter(&self) -> Option<&Rc<FunctionParameter>> {
+        if let DefinitionKind::FunctionParameter(node) = self {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn pattern(&self) -> Option<&Rc<Pattern>> {
+        if let DefinitionKind::Pattern(node) = self {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn is_builtin(&self) -> bool {
+        matches!(self, Self::Builtin(..))
+    }
+
+    pub fn is_struct_definition(&self) -> bool {
+        matches!(self, Self::StructDefinition(..))
+    }
+
+    pub fn is_function_definition(&self) -> bool {
+        matches!(self, Self::FunctionDefinition(..))
+    }
+
+    pub fn is_function_parameter(&self) -> bool {
+        matches!(self, Self::FunctionParameter(..))
+    }
+
+    pub fn is_pattern(&self) -> bool {
+        matches!(self, Self::Pattern(..))
+    }
+
     pub fn ptr_eq(&self, other: &DefinitionKind) -> bool {
         if let DefinitionKind::Builtin(ref definition1) = self {
             if let DefinitionKind::Builtin(ref definition2) = other {
