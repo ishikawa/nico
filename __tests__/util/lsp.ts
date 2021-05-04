@@ -315,7 +315,7 @@ export class RequestBuilder {
       } else if (rename === true) {
         return { [name]: defaultValue };
       } else {
-        return { [name]: rename };
+        return { [name]: param };
       }
     };
 

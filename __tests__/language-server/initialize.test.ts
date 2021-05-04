@@ -38,14 +38,14 @@ describe("rename", () => {
     const server = LanguageServer.spawn();
     const builder = new RequestBuilder({ id: 4761 });
 
-    const request = builder.initialize();
-
-    request.params.capabilities.textDocument.rename = {
-      dynamicRegistration: false,
-      prepareSupport: false,
-      prepareSupportDefaultBehavior: 1,
-      honorsChangeAnnotations: false
-    };
+    const request = builder.initialize({
+      rename: {
+        dynamicRegistration: false,
+        prepareSupport: false,
+        prepareSupportDefaultBehavior: 1,
+        honorsChangeAnnotations: false
+      }
+    });
 
     const response = await server.sendRequest(request);
     expect(response).toMatchSnapshot();
