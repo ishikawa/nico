@@ -139,8 +139,9 @@ export type Position = {
 
 // server
 type InitializeOptions = {
-  rename?: boolean | Record<string, any>;
+  hover?: boolean | Record<string, any>;
   signatureHelp?: boolean | Record<string, any>;
+  rename?: boolean | Record<string, any>;
 };
 
 export class LanguageServer extends EventEmitter {
@@ -304,7 +305,7 @@ export class RequestBuilder {
     };
   }
 
-  initialize({ rename, signatureHelp }: InitializeOptions = {}): RequestMessage {
+  initialize({ rename, hover, signatureHelp }: InitializeOptions = {}): RequestMessage {
     const expand = (
       name: string,
       param: boolean | undefined | null | Record<string, any>,
@@ -312,7 +313,7 @@ export class RequestBuilder {
     ): Record<string, any> => {
       if (!rename) {
         return {};
-      } else if (rename === true) {
+      } else if (param === true) {
         return { [name]: defaultValue };
       } else {
         return { [name]: param };
@@ -328,6 +329,10 @@ export class RequestBuilder {
             prepareSupport: true,
             prepareSupportDefaultBehavior: 1,
             honorsChangeAnnotations: true
+          }),
+          ...expand("hover", hover, {
+            dynamicRegistration: true,
+            contentFormat: ["markdown", "plaintext"]
           }),
           ...expand("signatureHelp", signatureHelp, {
             dynamicRegistration: true,
