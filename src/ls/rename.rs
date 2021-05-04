@@ -38,7 +38,7 @@ impl Rename {
             }
         }
 
-        return None;
+        None
     }
 }
 

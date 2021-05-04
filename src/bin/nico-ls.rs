@@ -716,7 +716,7 @@ impl Connection {
         let node = self.get_compiled_result(&uri)?;
         let mut rename = Rename::new(syntax_position(params.text_document_position.position));
 
-        if let Some(_) = rename.prepare(&node) {
+        if rename.prepare(&node).is_some() {
             if let Some(ranges) = rename.rename(&node) {
                 let edits = ranges
                     .iter()
