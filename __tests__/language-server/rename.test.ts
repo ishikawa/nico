@@ -36,6 +36,24 @@ let cases: TestCase[] = [
         newName: "bar"
       }
     ]
+  },
+  {
+    // prettier-ignore
+    input: [
+      "struct A { b: i32 }",
+      "",
+      "let a = A { b: 123 }",
+      "a.b",
+    ].join("\n"),
+    requests: [
+      {
+        position: {
+          line: 0,
+          character: 7
+        },
+        newName: "B"
+      }
+    ]
   }
 ];
 
