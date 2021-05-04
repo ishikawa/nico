@@ -54,6 +54,7 @@ impl syntax::Visitor for Rename {
             let scope = parent.scope();
             let parent = parent.node();
 
+            // Renaming variable
             if parent.is_variable_expression() {
                 if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
                     let binding = binding.borrow();
@@ -63,7 +64,9 @@ impl syntax::Visitor for Rename {
                         RenameOperationKind::Definition(binding.kind().clone()),
                     ));
                 }
-            } else if parent.is_struct_literal() {
+            }
+            // Renaming struct name
+            else if parent.is_struct_literal() {
                 if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
                     let binding = binding.borrow();
 
@@ -81,11 +84,22 @@ impl syntax::Visitor for Rename {
                         struct_def,
                     ))),
                 ));
-            } else if let Some(function) = parent.function_definition() {
+            }
+            // Renaming function name
+            else if let Some(function) = parent.function_definition() {
                 self.operation = Some(RenameOperation::new(
                     id,
                     RenameOperationKind::Definition(DefinitionKind::FunctionDefinition(Rc::clone(
                         function,
+                    ))),
+                ));
+            }
+            // Renaming function parameter
+            else if let Some(param) = parent.function_parameter() {
+                self.operation = Some(RenameOperation::new(
+                    id,
+                    RenameOperationKind::Definition(DefinitionKind::FunctionParameter(Rc::clone(
+                        param,
                     ))),
                 ));
             } else {

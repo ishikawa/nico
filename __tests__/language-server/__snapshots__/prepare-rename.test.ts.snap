@@ -96,3 +96,26 @@ Object {
   },
 }
 `;
+
+exports[`2: prepare rename - \`fun foo(x)
+    x
+end\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1200,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "placeholder": "x",
+    "range": Object {
+      "end": Object {
+        "character": 9,
+        "line": 0,
+      },
+      "start": Object {
+        "character": 8,
+        "line": 0,
+      },
+    },
+  },
+}
+`;

@@ -43,6 +43,7 @@ let cases: TestCase[] = [
       }
     ]
   },
+  // function name
   {
     // prettier-ignore
     input: [
@@ -57,6 +58,22 @@ let cases: TestCase[] = [
       {
         line: 4,
         character: 3
+      }
+    ]
+  },
+  // function parameter
+  {
+    // prettier-ignore
+    input: [
+      "fun foo(x)",
+      "    x",
+      "end",
+    ].join("\n"),
+    position: [
+      // x
+      {
+        line: 0,
+        character: 8
       }
     ]
   }
