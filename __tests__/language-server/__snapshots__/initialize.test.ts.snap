@@ -132,6 +132,63 @@ Object {
           ],
         },
       },
+      "signatureHelpProvider": Object {
+        "retriggerCharacters": Array [
+          ",",
+        ],
+        "triggerCharacters": Array [
+          "(",
+          ")",
+          "{",
+          "}",
+        ],
+      },
+      "textDocumentSync": 2,
+    },
+    "serverInfo": Object {
+      "name": "nico-ls",
+      "version": "0.0.1",
+    },
+  },
+}
+`;
+
+exports[`signatureHelp signatureHelp : on 1`] = `
+Object {
+  "error": null,
+  "id": 4760,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "capabilities": Object {
+      "semanticTokensProvider": Object {
+        "full": true,
+        "legend": Object {
+          "tokenModifiers": Array [
+            "declaration",
+            "definition",
+            "readonly",
+            "static",
+            "deprecated",
+            "abstract",
+            "async",
+            "modification",
+            "documentation",
+            "defaultLibrary",
+          ],
+          "tokenTypes": Array [
+            "keyword",
+            "variable",
+            "string",
+            "number",
+            "operator",
+            "comment",
+            "struct",
+            "function",
+            "parameter",
+            "property",
+          ],
+        },
+      },
       "textDocumentSync": 2,
     },
     "serverInfo": Object {

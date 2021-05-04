@@ -1,8 +1,8 @@
 use lsp_types::{
     InitializeParams, OneOf, RenameOptions, SemanticTokenModifier, SemanticTokenType,
     SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
-    SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncKind, WorkDoneProgressOptions,
+    SemanticTokensServerCapabilities, ServerCapabilities, SignatureHelpOptions,
+    TextDocumentSyncCapability, TextDocumentSyncKind, WorkDoneProgressOptions,
 };
 use std::collections::HashSet;
 
@@ -44,6 +44,7 @@ impl<'a> ServerCapabilitiesBuilder<'a> {
 
         ServerCapabilities {
             rename_provider: self.build_rename_provider(params),
+            signature_help_provider: self.build_signature_help_provider(params),
             text_document_sync: Some(TextDocumentSyncCapability::Kind(
                 TextDocumentSyncKind::Incremental,
             )),
@@ -65,22 +66,35 @@ impl<'a> ServerCapabilitiesBuilder<'a> {
         &self,
         params: &InitializeParams,
     ) -> Option<OneOf<bool, RenameOptions>> {
-        if let Some(ref text_document) = params.capabilities.text_document {
-            if let Some(ref rename) = text_document.rename {
-                if let Some(true) = rename.prepare_support {
-                    return Some(OneOf::Right(RenameOptions {
-                        prepare_provider: Some(true),
-                        work_done_progress_options: WorkDoneProgressOptions {
-                            work_done_progress: None,
-                        },
-                    }));
-                } else {
-                    return Some(OneOf::Left(true));
-                }
-            }
-        }
+        let text_document = params.capabilities.text_document.as_ref()?;
+        let rename = text_document.rename.as_ref()?;
 
-        None
+        if let Some(true) = rename.prepare_support {
+            Some(OneOf::Right(RenameOptions {
+                prepare_provider: Some(true),
+                work_done_progress_options: WorkDoneProgressOptions {
+                    work_done_progress: None,
+                },
+            }))
+        } else {
+            Some(OneOf::Left(true))
+        }
+    }
+
+    fn build_signature_help_provider(
+        &self,
+        params: &InitializeParams,
+    ) -> Option<SignatureHelpOptions> {
+        let text_document = params.capabilities.text_document.as_ref()?;
+        let _signature_help = text_document.signature_help.as_ref()?;
+
+        Some(SignatureHelpOptions {
+            trigger_characters: Some(["(", ")", "{", "}"].iter().map(|s| s.to_string()).collect()),
+            retrigger_characters: Some([","].iter().map(|s| s.to_string()).collect()),
+            work_done_progress_options: WorkDoneProgressOptions {
+                work_done_progress: None,
+            },
+        })
     }
 
     fn build_semantic_token_types(&self, params: &InitializeParams) -> Vec<SemanticTokenType> {

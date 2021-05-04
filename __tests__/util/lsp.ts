@@ -138,7 +138,10 @@ export type Position = {
 };
 
 // server
-type InitializeOptions = { rename?: boolean };
+type InitializeOptions = {
+  rename?: boolean | Record<string, any>;
+  signatureHelp?: boolean | Record<string, any>;
+};
 
 export class LanguageServer extends EventEmitter {
   process: ChildProcessWithoutNullStreams;
@@ -301,21 +304,42 @@ export class RequestBuilder {
     };
   }
 
-  initialize({ rename }: InitializeOptions = {}): RequestMessage {
+  initialize({ rename, signatureHelp }: InitializeOptions = {}): RequestMessage {
+    const expand = (
+      name: string,
+      param: boolean | undefined | null | Record<string, any>,
+      defaultValue: Record<string, any>
+    ): Record<string, any> => {
+      if (!rename) {
+        return {};
+      } else if (rename === true) {
+        return { [name]: defaultValue };
+      } else {
+        return { [name]: rename };
+      }
+    };
+
     const params = {
       trace: "verbose",
       capabilities: {
         textDocument: {
-          ...(rename
-            ? {
-                rename: {
-                  dynamicRegistration: true,
-                  prepareSupport: true,
-                  prepareSupportDefaultBehavior: 1,
-                  honorsChangeAnnotations: true
-                }
-              }
-            : {}),
+          ...expand("rename", rename, {
+            dynamicRegistration: true,
+            prepareSupport: true,
+            prepareSupportDefaultBehavior: 1,
+            honorsChangeAnnotations: true
+          }),
+          ...expand("signatureHelp", signatureHelp, {
+            dynamicRegistration: true,
+            signatureInformation: {
+              documentationFormat: ["markdown", "plaintext"],
+              parameterInformation: {
+                labelOffsetSupport: true
+              },
+              activeParameterSupport: true
+            },
+            contextSupport: true
+          }),
           publishDiagnostics: {
             relatedInformation: true,
             versionSupport: false,

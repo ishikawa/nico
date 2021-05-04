@@ -54,3 +54,17 @@ describe("rename", () => {
     server.stop();
   });
 });
+
+describe("signatureHelp", () => {
+  test("signatureHelp : on", async done => {
+    const server = LanguageServer.spawn();
+    const builder = new RequestBuilder({ id: 4760 });
+
+    const request = builder.initialize({ signatureHelp: true });
+    const response = await server.sendRequest(request);
+    expect(response).toMatchSnapshot();
+
+    server.on("exit", done);
+    server.stop();
+  });
+});
