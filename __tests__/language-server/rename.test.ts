@@ -18,6 +18,7 @@ afterAll(() => {
 });
 
 let cases: TestCase[] = [
+  // function name
   {
     // prettier-ignore
     input: [
@@ -37,6 +38,7 @@ let cases: TestCase[] = [
       }
     ]
   },
+  // struct name
   {
     // prettier-ignore
     input: [
@@ -52,6 +54,33 @@ let cases: TestCase[] = [
           character: 7
         },
         newName: "B"
+      }
+    ]
+  },
+  // function parameter
+  {
+    // prettier-ignore
+    input: [
+      "fun foo(x)",
+      "    x",
+      "end",
+    ].join("\n"),
+    requests: [
+      // param: x
+      {
+        position: {
+          line: 0,
+          character: 8
+        },
+        newName: "bar"
+      },
+      // variable: x
+      {
+        position: {
+          line: 1,
+          character: 4
+        },
+        newName: "foo"
       }
     ]
   }

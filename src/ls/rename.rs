@@ -1,7 +1,7 @@
 //! Rename operation
 use crate::syntax::{
-    self, DefinitionKind, EffectiveRange, FunctionDefinition, Identifier, Node, NodePath, Position,
-    Program, StructDefinition, StructLiteral,
+    self, DefinitionKind, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node,
+    NodePath, Position, Program, StructDefinition, StructLiteral,
 };
 use std::rc::Rc;
 
@@ -169,10 +169,17 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
     ) {
         if let DefinitionKind::FunctionDefinition(definition) = self.definition {
             if std::ptr::eq(definition.as_ref(), function.as_ref()) {
-                eprintln!("Found: {}", function);
                 if let Some(ref name) = function.name {
                     self.ranges.push(name.range());
                 }
+            }
+        }
+    }
+
+    fn enter_function_parameter(&mut self, _path: &mut NodePath, param: &Rc<FunctionParameter>) {
+        if let DefinitionKind::FunctionParameter(definition) = self.definition {
+            if std::ptr::eq(definition.as_ref(), param.as_ref()) {
+                self.ranges.push(param.name().range());
             }
         }
     }
@@ -188,7 +195,6 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
         let binding = binding.borrow();
 
         if binding.kind().ptr_eq(self.definition) {
-            eprintln!("Found: {}", path.node());
             self.ranges.push(id.range());
         }
     }
@@ -204,7 +210,6 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
         let binding = binding.borrow();
 
         if binding.kind().ptr_eq(self.definition) {
-            eprintln!("Found: {}", path.node());
             self.ranges.push(value.name().range());
         }
     }
