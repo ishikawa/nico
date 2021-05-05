@@ -1,5 +1,8 @@
-use crate::syntax::{self, EffectiveRange, Node, NodePath, Position, Program, TypeAnnotation};
-use std::rc::Rc;
+use crate::{
+    sem,
+    syntax::{self, EffectiveRange, Node, NodePath, Position, Program, TypeAnnotation},
+};
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug)]
 pub struct Hover {
@@ -19,6 +22,16 @@ impl Hover {
         syntax::traverse(self, program);
         self.result.as_ref().map(|(s, r)| (s.as_str(), *r))
     }
+
+    fn describe_type(&self, r#type: &Rc<RefCell<sem::Type>>) -> String {
+        let description = match *r#type.borrow() {
+            sem::Type::Int32 => "The 32-bit signed integer type.",
+            sem::Type::Boolean => "The boolean type.",
+            _ => "",
+        };
+
+        format!("```nico\n{}\n```\n---\n{}", r#type.borrow(), description)
+    }
 }
 
 impl syntax::Visitor for Hover {
@@ -27,11 +40,7 @@ impl syntax::Visitor for Hover {
             return;
         }
 
-        let description = format!(
-            "```nico\n{}\n```\n---\nThe 32-bit signed integer type.",
-            annotation.r#type.borrow()
-        );
-
-        self.result.replace((description, annotation.range()));
+        self.result
+            .replace((self.describe_type(&annotation.r#type), annotation.range()));
     }
 }
