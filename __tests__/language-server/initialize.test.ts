@@ -21,36 +21,65 @@ test("initialize", async done => {
   server.stop();
 });
 
-describe("rename", () => {
-  test("prepare support : on", async done => {
-    const server = LanguageServer.spawn();
-    const builder = new RequestBuilder({ id: 4760 });
+const cases: [string, { name: string; initialize: any }[]][] = [
+  [
+    "rename",
+    [
+      {
+        name: "prepare support : on",
+        initialize: { rename: true }
+      },
+      {
+        name: "prepare support : off",
+        initialize: {
+          rename: {
+            dynamicRegistration: false,
+            prepareSupport: false,
+            prepareSupportDefaultBehavior: 1,
+            honorsChangeAnnotations: false
+          }
+        }
+      }
+    ]
+  ],
+  [
+    "signatureHelp",
+    [
+      {
+        name: "signatureHelp : on",
+        initialize: {
+          signatureHelp: true
+        }
+      }
+    ]
+  ],
+  [
+    "hover",
+    [
+      {
+        name: "hover : on",
+        initialize: {
+          hover: true
+        }
+      }
+    ]
+  ]
+];
 
-    const request = builder.initialize({ rename: true });
-    const response = await server.sendRequest(request);
-    expect(response).toMatchSnapshot();
+cases.forEach(([description, tests], i) => {
+  describe(description, () => {
+    tests.forEach(({ name, initialize }, j) => {
+      test(name, async done => {
+        const server = LanguageServer.spawn();
+        const builder = new RequestBuilder({ id: (i + 1) * 1000 + j });
 
-    server.on("exit", done);
-    server.stop();
-  });
+        const request = builder.initialize(initialize);
+        const response = await server.sendRequest(request);
+        expect(response).toMatchSnapshot();
 
-  test("prepare support : off", async done => {
-    const server = LanguageServer.spawn();
-    const builder = new RequestBuilder({ id: 4761 });
-
-    const request = builder.initialize();
-
-    request.params.capabilities.textDocument.rename = {
-      dynamicRegistration: false,
-      prepareSupport: false,
-      prepareSupportDefaultBehavior: 1,
-      honorsChangeAnnotations: false
-    };
-
-    const response = await server.sendRequest(request);
-    expect(response).toMatchSnapshot();
-
-    server.on("exit", done);
-    server.stop();
+        server.on("exit", done);
+        server.stop();
+      });
+    });
   });
 });

@@ -1,0 +1,29 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`0: hover - \`struct A { a: i32 }\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1100,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "contents": Object {
+      "kind": "markdown",
+      "value": "\`\`\`nico
+i32
+\`\`\`
+---
+The 32-bit signed integer type.",
+    },
+    "range": Object {
+      "end": Object {
+        "character": 17,
+        "line": 0,
+      },
+      "start": Object {
+        "character": 14,
+        "line": 0,
+      },
+    },
+  },
+}
+`;

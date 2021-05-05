@@ -1,5 +1,51 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`hover hover : on 1`] = `
+Object {
+  "error": null,
+  "id": 3000,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "capabilities": Object {
+      "semanticTokensProvider": Object {
+        "full": true,
+        "legend": Object {
+          "tokenModifiers": Array [
+            "declaration",
+            "definition",
+            "readonly",
+            "static",
+            "deprecated",
+            "abstract",
+            "async",
+            "modification",
+            "documentation",
+            "defaultLibrary",
+          ],
+          "tokenTypes": Array [
+            "keyword",
+            "variable",
+            "string",
+            "number",
+            "operator",
+            "comment",
+            "struct",
+            "function",
+            "parameter",
+            "property",
+          ],
+        },
+      },
+      "textDocumentSync": 2,
+    },
+    "serverInfo": Object {
+      "name": "nico-ls",
+      "version": "0.0.1",
+    },
+  },
+}
+`;
+
 exports[`initialize 1`] = `
 Object {
   "error": null,
@@ -49,7 +95,7 @@ Object {
 exports[`rename prepare support : off 1`] = `
 Object {
   "error": null,
-  "id": 4761,
+  "id": 1001,
   "jsonrpc": "2.0",
   "result": Object {
     "capabilities": Object {
@@ -96,13 +142,59 @@ Object {
 exports[`rename prepare support : on 1`] = `
 Object {
   "error": null,
-  "id": 4760,
+  "id": 1000,
   "jsonrpc": "2.0",
   "result": Object {
     "capabilities": Object {
       "renameProvider": Object {
         "prepareProvider": true,
       },
+      "semanticTokensProvider": Object {
+        "full": true,
+        "legend": Object {
+          "tokenModifiers": Array [
+            "declaration",
+            "definition",
+            "readonly",
+            "static",
+            "deprecated",
+            "abstract",
+            "async",
+            "modification",
+            "documentation",
+            "defaultLibrary",
+          ],
+          "tokenTypes": Array [
+            "keyword",
+            "variable",
+            "string",
+            "number",
+            "operator",
+            "comment",
+            "struct",
+            "function",
+            "parameter",
+            "property",
+          ],
+        },
+      },
+      "textDocumentSync": 2,
+    },
+    "serverInfo": Object {
+      "name": "nico-ls",
+      "version": "0.0.1",
+    },
+  },
+}
+`;
+
+exports[`signatureHelp signatureHelp : on 1`] = `
+Object {
+  "error": null,
+  "id": 2000,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "capabilities": Object {
       "semanticTokensProvider": Object {
         "full": true,
         "legend": Object {

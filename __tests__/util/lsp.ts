@@ -138,7 +138,11 @@ export type Position = {
 };
 
 // server
-type InitializeOptions = { rename?: boolean };
+type InitializeOptions = {
+  hover?: boolean | Record<string, any>;
+  signatureHelp?: boolean | Record<string, any>;
+  rename?: boolean | Record<string, any>;
+};
 
 export class LanguageServer extends EventEmitter {
   process: ChildProcessWithoutNullStreams;
@@ -301,21 +305,46 @@ export class RequestBuilder {
     };
   }
 
-  initialize({ rename }: InitializeOptions = {}): RequestMessage {
+  initialize({ rename, hover, signatureHelp }: InitializeOptions = {}): RequestMessage {
+    const expand = (
+      name: string,
+      param: boolean | undefined | null | Record<string, any>,
+      defaultValue: Record<string, any>
+    ): Record<string, any> => {
+      if (!rename) {
+        return {};
+      } else if (param === true) {
+        return { [name]: defaultValue };
+      } else {
+        return { [name]: param };
+      }
+    };
+
     const params = {
       trace: "verbose",
       capabilities: {
         textDocument: {
-          ...(rename
-            ? {
-                rename: {
-                  dynamicRegistration: true,
-                  prepareSupport: true,
-                  prepareSupportDefaultBehavior: 1,
-                  honorsChangeAnnotations: true
-                }
-              }
-            : {}),
+          ...expand("rename", rename, {
+            dynamicRegistration: true,
+            prepareSupport: true,
+            prepareSupportDefaultBehavior: 1,
+            honorsChangeAnnotations: true
+          }),
+          ...expand("hover", hover, {
+            dynamicRegistration: true,
+            contentFormat: ["markdown", "plaintext"]
+          }),
+          ...expand("signatureHelp", signatureHelp, {
+            dynamicRegistration: true,
+            signatureInformation: {
+              documentationFormat: ["markdown", "plaintext"],
+              parameterInformation: {
+                labelOffsetSupport: true
+              },
+              activeParameterSupport: true
+            },
+            contextSupport: true
+          }),
           publishDiagnostics: {
             relatedInformation: true,
             versionSupport: false,
@@ -410,6 +439,15 @@ export class RequestBuilder {
     });
   }
 
+  hover(uri: string, position: Position): RequestMessage {
+    return this.buildRequest("textDocument/hover", {
+      textDocument: {
+        uri
+      },
+      position
+    });
+  }
+
   initialized(): NotificationMessage {
     return this.buildNotification("initialized", {});
   }
@@ -471,6 +509,13 @@ export class LanguageServerAgent {
     const uri = getDocumentUri(filename);
 
     const request = this.builder.rename(uri, position, newName);
+    return this.server.sendRequest(request);
+  }
+
+  async hover(filename: string, position: Position) {
+    const uri = getDocumentUri(filename);
+
+    const request = this.builder.hover(uri, position);
     return this.server.sendRequest(request);
   }
 }
