@@ -101,15 +101,17 @@ impl fmt::Display for IncompleteStructType {
 
 #[derive(Debug)]
 pub enum Type {
+    /// Unspecified and not yet inferred type.
+    Unknown,
     Int32,
     Boolean,
     String,
-    // Unit type. In many functional programming languages, this is
-    // written as `()`, but I am more familiar with `Void`.
+    /// Unit type. In many functional programming languages, this is
+    /// written as `()`, but I am more familiar with `Void`.
     Void,
     Array(Rc<RefCell<Type>>),
     Struct(StructType),
-    // Access `x.field` and Pattern `{ field, ...}` generates this constraint.
+    /// Access `x.field` and Pattern `{ field, ...}` generates this constraint.
     IncompleteStruct(IncompleteStructType),
     Function {
         params: Vec<Rc<RefCell<Type>>>,
@@ -269,6 +271,7 @@ impl Environment {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Type::Unknown => write!(f, "{{unknown}}"),
             Type::Int32 => write!(f, "i32"),
             Type::Boolean => write!(f, "bool"),
             Type::String => write!(f, "str"),
@@ -346,6 +349,7 @@ impl Type {
     /// Returns `true` if the type given by the 2nd argument appears in this type.
     pub fn contains(&self, other: &Self) -> bool {
         match self {
+            Type::Unknown => false,
             Type::Int32 => matches!(other, Type::Int32),
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),
@@ -372,6 +376,7 @@ impl Type {
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
         match self {
+            Type::Unknown => matches!(other, Type::Unknown),
             Type::Int32 => matches!(other, Type::Int32),
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),

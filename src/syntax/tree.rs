@@ -572,12 +572,18 @@ impl fmt::Display for Identifier {
 pub struct StructDefinition {
     pub name: Option<Rc<Identifier>>,
     pub fields: Vec<Rc<TypeField>>,
+    r#type: Rc<RefCell<sem::Type>>,
     code: Code,
 }
 
 impl StructDefinition {
     pub fn new(name: Option<Rc<Identifier>>, fields: Vec<Rc<TypeField>>, code: Code) -> Self {
-        Self { name, fields, code }
+        Self {
+            name,
+            fields,
+            code,
+            r#type: wrap(sem::Type::Unknown),
+        }
     }
 
     pub fn name(&self) -> Option<&Identifier> {
