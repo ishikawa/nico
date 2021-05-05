@@ -348,10 +348,10 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         NodeKind::Pattern(_) => {
             visitor.enter_pattern(&mut path, &node.pattern().unwrap());
         }
-        NodeKind::StructField(_) => {
+        NodeKind::ValueField(_) => {
             visitor.enter_value_field(&mut path, &node.struct_field().unwrap());
         }
-        NodeKind::StructFieldPattern(_) => {
+        NodeKind::ValueFieldPattern(_) => {
             visitor.enter_value_field_pattern(&mut path, &node.struct_field_pattern().unwrap());
         }
         NodeKind::Expression(_) => {
@@ -444,10 +444,10 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
         NodeKind::CaseArm(_) => {
             visitor.exit_case_arm(&mut path, &node.case_arm().unwrap());
         }
-        NodeKind::StructField(_) => {
+        NodeKind::ValueField(_) => {
             visitor.exit_value_field(&mut path, &node.struct_field().unwrap());
         }
-        NodeKind::StructFieldPattern(_) => {
+        NodeKind::ValueFieldPattern(_) => {
             visitor.exit_value_field_pattern(&mut path, &node.struct_field_pattern().unwrap());
         }
         NodeKind::Expression(_) => {

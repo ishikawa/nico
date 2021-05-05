@@ -18,6 +18,87 @@ pub trait SemanticAnalyzer {
     fn analyze(&mut self, module: &mut parser::Module);
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructType {
+    name: String,
+    fields: HashMap<String, Rc<RefCell<Type>>>,
+}
+
+impl StructType {
+    pub fn new<S: Into<String>>(name: S, fields: HashMap<String, Rc<RefCell<Type>>>) -> Self {
+        Self {
+            name: name.into(),
+            fields,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn fields(&self) -> &HashMap<String, Rc<RefCell<Type>>> {
+        &self.fields
+    }
+
+    pub fn contains_type(&self, other: &Type) -> bool {
+        self.fields
+            .iter()
+            .any(|(_name, ty)| ty.borrow().contains(other))
+    }
+}
+
+impl fmt::Display for StructType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut it = self.fields.iter().peekable();
+
+        write!(f, "{} ", self.name)?;
+        write!(f, "{{ ")?;
+        while let Some((name, ty)) = it.next() {
+            write!(f, "{}: {}", name, ty.borrow())?;
+            if it.peek().is_some() {
+                write!(f, ", ")?;
+            }
+        }
+        write!(f, " }}")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IncompleteStructType {
+    fields: HashMap<String, Rc<RefCell<Type>>>,
+}
+
+impl IncompleteStructType {
+    pub fn new(fields: HashMap<String, Rc<RefCell<Type>>>) -> Self {
+        Self { fields }
+    }
+
+    pub fn fields(&self) -> &HashMap<String, Rc<RefCell<Type>>> {
+        &self.fields
+    }
+
+    pub fn contains_type(&self, other: &Type) -> bool {
+        self.fields
+            .iter()
+            .any(|(_name, ty)| ty.borrow().contains(other))
+    }
+}
+
+impl fmt::Display for IncompleteStructType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut it = self.fields.iter().peekable();
+
+        write!(f, "{{ ")?;
+        while let Some((name, ty)) = it.next() {
+            write!(f, "{}: {}", name, ty.borrow())?;
+            if it.peek().is_some() {
+                write!(f, ", ")?;
+            }
+        }
+        write!(f, " }}")
+    }
+}
+
 #[derive(Debug)]
 pub enum Type {
     Int32,
@@ -27,14 +108,9 @@ pub enum Type {
     // written as `()`, but I am more familiar with `Void`.
     Void,
     Array(Rc<RefCell<Type>>),
-    Struct {
-        name: String,
-        fields: HashMap<String, Rc<RefCell<Type>>>,
-    },
+    Struct(StructType),
     // Access `x.field` and Pattern `{ field, ...}` generates this constraint.
-    IncompleteStruct {
-        fields: HashMap<String, Rc<RefCell<Type>>>,
-    },
+    IncompleteStruct(IncompleteStructType),
     Function {
         params: Vec<Rc<RefCell<Type>>>,
         return_type: Rc<RefCell<Type>>,
@@ -198,31 +274,8 @@ impl fmt::Display for Type {
             Type::String => write!(f, "str"),
             Type::Void => write!(f, "void"),
             Type::Array(element_type) => write!(f, "{}[]", element_type.borrow()),
-            Type::Struct { name, fields } => {
-                let mut it = fields.iter().peekable();
-
-                write!(f, "{} ", name)?;
-                write!(f, "{{ ")?;
-                while let Some((name, ty)) = it.next() {
-                    write!(f, "{}: {}", name, ty.borrow())?;
-                    if it.peek().is_some() {
-                        write!(f, ", ")?;
-                    }
-                }
-                write!(f, " }}")
-            }
-            Type::IncompleteStruct { fields } => {
-                let mut it = fields.iter().peekable();
-
-                write!(f, "{{ ")?;
-                while let Some((name, ty)) = it.next() {
-                    write!(f, "{}: {}", name, ty.borrow())?;
-                    if it.peek().is_some() {
-                        write!(f, ", ")?;
-                    }
-                }
-                write!(f, " }}")
-            }
+            Type::Struct(struct_type) => write!(f, "{}", struct_type),
+            Type::IncompleteStruct(struct_type) => write!(f, "{}", struct_type),
             Type::Function {
                 params,
                 return_type,
@@ -258,6 +311,21 @@ impl Type {
         }
     }
 
+    pub fn struct_type(&self) -> Option<&StructType> {
+        match self {
+            Type::Struct(struct_type) => Some(struct_type),
+            _ => None,
+        }
+    }
+
+    pub fn struct_fields(&self) -> Option<&HashMap<String, Rc<RefCell<Type>>>> {
+        match self {
+            Type::Struct(struct_type) => Some(struct_type.fields()),
+            Type::IncompleteStruct(struct_type) => Some(struct_type.fields()),
+            _ => None,
+        }
+    }
+
     pub fn element_type(ty: &Self) -> Option<Rc<RefCell<Self>>> {
         match ty {
             Type::Array(ref element_type) => Some(Rc::clone(element_type)),
@@ -282,9 +350,8 @@ impl Type {
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),
             Type::Array(element_type) => element_type.borrow().contains(other),
-            Type::Struct { fields, .. } | Type::IncompleteStruct { fields, .. } => {
-                fields.iter().any(|(_name, ty)| ty.borrow().contains(other))
-            }
+            Type::Struct(struct_type) => struct_type.contains_type(other),
+            Type::IncompleteStruct(struct_type) => struct_type.contains_type(other),
             Type::Void => matches!(other, Type::Void),
             Type::Function {
                 params,
@@ -315,21 +382,16 @@ impl PartialEq for Type {
                     false
                 }
             }
-            Type::Struct { name: name1, .. } => {
-                if let Type::Struct { name: name2, .. } = other {
-                    name1 == name2
+            Type::Struct(struct_type1) => {
+                if let Type::Struct(struct_type2) = other {
+                    struct_type1 == struct_type2
                 } else {
                     false
                 }
             }
-            Type::IncompleteStruct {
-                fields: fields1, ..
-            } => {
-                if let Type::IncompleteStruct {
-                    fields: fields2, ..
-                } = other
-                {
-                    fields1 == fields2
+            Type::IncompleteStruct(struct_type1) => {
+                if let Type::IncompleteStruct(struct_type2) = other {
+                    struct_type1 == struct_type2
                 } else {
                     false
                 }
@@ -398,8 +460,9 @@ impl Space {
 
     pub fn from_type(r#type: &Rc<RefCell<Type>>) -> Space {
         match &*r#type.borrow() {
-            Type::Struct { fields, .. } => {
-                let fields = fields
+            Type::Struct(struct_type) => {
+                let fields = struct_type
+                    .fields
                     .iter()
                     .map(|(name, ty)| (name.clone(), Self::from_type(ty)))
                     .collect();
@@ -424,7 +487,7 @@ impl Space {
                 let struct_type = r#type.as_ref().unwrap();
                 let mut space_fields = HashMap::new();
                 let mut type_fields = match &*struct_type.borrow() {
-                    Type::Struct { fields, .. } => fields.clone(),
+                    Type::Struct(struct_type) => struct_type.fields.clone(),
                     _ => unreachable!(),
                 };
 

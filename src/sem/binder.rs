@@ -1,4 +1,4 @@
-use super::wrap;
+use super::{wrap, StructType};
 use super::{Binding, Environment, SemanticAnalyzer, Type};
 use crate::parser;
 use parser::{Expr, Node};
@@ -387,7 +387,7 @@ fn build_struct_type(definition: &parser::StructDefinition, env: &Environment) -
         fields.insert(field.name.clone(), Rc::clone(&r#type));
     }
 
-    Type::Struct { name, fields }
+    Type::Struct(StructType::new(name, fields))
 }
 
 #[cfg(test)]

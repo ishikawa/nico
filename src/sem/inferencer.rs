@@ -11,6 +11,8 @@ use crate::util::wrap;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use super::IncompleteStructType;
+
 const DEBUG: bool = false;
 
 #[derive(Debug)]
@@ -145,21 +147,22 @@ impl TypeInferencer {
                 ..
             } => {
                 let struct_type = node.r#type.borrow();
-                let (struct_name, type_fields) = match *struct_type {
-                    Type::Struct {
-                        ref name,
-                        ref fields,
-                    } => (name, fields),
-                    ref ty => panic!("Expected struct type, but was {}", ty),
-                };
+                let struct_type = struct_type
+                    .struct_type()
+                    .unwrap_or_else(|| panic!("Expected struct type, but was {}", struct_type));
 
                 for value_field in value_fields {
-                    let field_type = type_fields.get(&value_field.name).unwrap_or_else(|| {
-                        panic!(
-                            "Unknown filed `{}` for struct {}",
-                            value_field.name, struct_name
-                        )
-                    });
+                    let field_type =
+                        struct_type
+                            .fields()
+                            .get(&value_field.name)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Unknown filed `{}` for struct {}",
+                                    value_field.name,
+                                    struct_type.name()
+                                )
+                            });
 
                     let value_type = self.analyze_expr(&mut value_field.value);
                     self.unify_and_log("field (type, value)", field_type, &value_type);
@@ -209,10 +212,9 @@ impl TypeInferencer {
                     self.prune(&operand_type)
                 };
                 let struct_type = operand_type.borrow();
-                let type_fields = match &*struct_type {
-                    Type::Struct { fields, .. } | Type::IncompleteStruct { fields, .. } => fields,
-                    ref ty => panic!("Expected struct type, but was {}", ty),
-                };
+                let type_fields = struct_type
+                    .struct_fields()
+                    .unwrap_or_else(|| panic!("Expected struct type, but was {}", struct_type));
 
                 let field_type = type_fields
                     .get(field)
@@ -413,14 +415,12 @@ impl TypeInferencer {
 
                 let target_type = self.prune(target_type);
                 let target_type = target_type.borrow();
-
-                let type_fields = match &*target_type {
-                    Type::Struct { fields, .. } => fields,
-                    ref ty => panic!("Expected struct type, but was {}", ty),
-                };
+                let struct_type = target_type
+                    .struct_type()
+                    .unwrap_or_else(|| panic!("Expected struct type, but was {}", target_type));
 
                 for field in fields {
-                    let field_type = type_fields.get(&field.name).unwrap();
+                    let field_type = struct_type.fields().get(&field.name).unwrap();
                     self.analyze_pattern(&mut field.pattern, field_type);
                 }
             }
@@ -538,7 +538,7 @@ impl TypeInferencer {
             })
             .collect();
 
-        Type::IncompleteStruct { fields }
+        Type::IncompleteStruct(IncompleteStructType::new(fields))
     }
 
     fn unify_and_log<S: AsRef<str>>(
@@ -626,13 +626,11 @@ impl TypeInferencer {
                 }
                 _ => Unification::FallthroughGeneric,
             },
-            Type::Struct {
-                fields: fields1, ..
-            } => match &*ty2.borrow() {
-                Type::IncompleteStruct { fields: fields2 } => {
+            Type::Struct(struct_type1) => match &*ty2.borrow() {
+                Type::IncompleteStruct(struct_type2) => {
                     // Unify types in Fields2 with Fields1.
-                    for (field_name2, field_type2) in fields2 {
-                        if let Some(field_type1) = fields1.get(field_name2) {
+                    for (field_name2, field_type2) in struct_type2.fields() {
+                        if let Some(field_type1) = struct_type1.fields().get(field_name2) {
                             // Both fields1 and fields2 contain same named field.
                             if let Some(error) = self._unify(field_type1, field_type2) {
                                 return Some(error);
@@ -650,13 +648,13 @@ impl TypeInferencer {
                 }
                 _ => Unification::FallthroughGeneric,
             },
-            Type::IncompleteStruct { fields: fields1 } => match &*ty2.borrow() {
-                Type::IncompleteStruct { fields: fields2 } => {
-                    let mut new_fields = fields1.clone();
+            Type::IncompleteStruct(struct_type1) => match &*ty2.borrow() {
+                Type::IncompleteStruct(struct_type2) => {
+                    let mut new_fields = struct_type1.fields().clone();
 
                     // Unify types in (Fields1 & Fields2).
-                    for (name2, ty2) in fields2 {
-                        if let Some(ty1) = fields1.get(name2) {
+                    for (name2, ty2) in struct_type2.fields() {
+                        if let Some(ty1) = struct_type1.fields().get(name2) {
                             // Both fields1 and fields2 contain same named field.
                             // Unifies types and it should be already added to new_fields.
                             if let Some(error) = self._unify(ty1, ty2) {
@@ -668,9 +666,9 @@ impl TypeInferencer {
                         }
                     }
 
-                    Unification::ReplaceIncompleteStruct(wrap(Type::IncompleteStruct {
-                        fields: new_fields,
-                    }))
+                    Unification::ReplaceIncompleteStruct(wrap(Type::IncompleteStruct(
+                        IncompleteStructType::new(new_fields),
+                    )))
                 }
                 Type::Struct { .. } => Unification::Unify(Rc::clone(ty2), Rc::clone(ty1)),
                 _ => Unification::FallthroughGeneric,
@@ -765,17 +763,7 @@ impl TypeFixer {
     pub fn fixed_type(&self, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
         match &*ty.borrow() {
             Type::Array(element_type) => wrap(Type::Array(self.fixed_type(&element_type))),
-            Type::Struct { name, fields } => {
-                let fields = fields
-                    .iter()
-                    .map(|(name, ty)| (name.clone(), Rc::clone(ty)))
-                    .collect();
-
-                wrap(Type::Struct {
-                    name: name.clone(),
-                    fields,
-                })
-            }
+            Type::Struct(struct_type) => wrap(Type::Struct(struct_type.clone())),
             Type::Function {
                 params,
                 return_type,

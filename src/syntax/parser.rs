@@ -607,7 +607,7 @@ impl<'a> Parser<'a> {
                 '}',
                 &mut code,
                 Parser::parse_struct_field,
-                NodeKind::StructField,
+                NodeKind::ValueField,
             );
 
             ExpressionKind::StructLiteral(StructLiteral::new(id, fields))
@@ -628,7 +628,7 @@ impl<'a> Parser<'a> {
                 '}',
                 &mut code,
                 Parser::parse_struct_field_pattern,
-                NodeKind::StructFieldPattern,
+                NodeKind::ValueFieldPattern,
             );
 
             PatternKind::StructPattern(StructPattern::new(id, fields))

@@ -1109,13 +1109,14 @@ impl AsmBuilder {
         // Emit each field of a struct.
         // We have to align the order with that of the struct type fields.
         let struct_type = ty.borrow();
-        let mut type_fields = match &*struct_type {
-            Type::Struct { fields, .. } => fields
-                .iter()
-                .map(|(name, ty)| (name.clone(), Rc::clone(ty)))
-                .collect::<Vec<_>>(),
-            ref ty => panic!("Expected struct type, but was {}", ty),
-        };
+        let struct_type = struct_type
+            .struct_type()
+            .unwrap_or_else(|| panic!("Expected struct type, but was {}", struct_type));
+        let mut type_fields = struct_type
+            .fields()
+            .iter()
+            .map(|(name, ty)| (name.clone(), Rc::clone(ty)))
+            .collect::<Vec<_>>();
 
         // To keep memory layout consistency, sort fields by name.
         type_fields.sort_by(|(a, _), (b, _)| a.partial_cmp(b).unwrap());
