@@ -1,6 +1,6 @@
 use log::{info, warn};
 use lsp_types::*;
-use nico::ls::{rename::Rename, server::ServerCapabilitiesBuilder};
+use nico::ls::{hover, rename::Rename, server::ServerCapabilitiesBuilder};
 use nico::sem;
 use nico::syntax::{
     self, EffectiveRange, Identifier, MissingTokenKind, Node, NodePath, ParseError, Parser,
@@ -706,6 +706,27 @@ impl Connection {
         })
     }
 
+    fn on_text_document_hover(&self, params: &HoverParams) -> Result<Option<Hover>, HandlerError> {
+        info!("[on_text_document_hover] {:?}", params);
+        let uri = &params.text_document_position_params.text_document.uri;
+        let node = self.get_compiled_result(uri)?;
+        let mut hover = hover::Hover::new(syntax_position(
+            params.text_document_position_params.position,
+        ));
+
+        if let Some((value, range)) = hover.describe(&node) {
+            return Ok(Some(Hover {
+                range: Some(lsp_range(range)),
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: value.to_string(),
+                }),
+            }));
+        }
+
+        Ok(None)
+    }
+
     fn on_text_document_prepare_rename(
         &self,
         params: &TextDocumentPositionParams,
@@ -729,8 +750,8 @@ impl Connection {
         params: &RenameParams,
     ) -> Result<Option<WorkspaceEdit>, HandlerError> {
         info!("[on_text_document_prepare_rename] {:?}", params);
-        let uri = params.text_document_position.text_document.uri.clone();
-        let node = self.get_compiled_result(&uri)?;
+        let uri = &params.text_document_position.text_document.uri;
+        let node = self.get_compiled_result(uri)?;
         let mut rename = Rename::new(syntax_position(params.text_document_position.position));
 
         if rename.prepare(&node).is_some() {
@@ -741,7 +762,7 @@ impl Connection {
                     .collect();
 
                 return Ok(Some(WorkspaceEdit {
-                    changes: Some(vec![(uri, edits)].into_iter().collect()),
+                    changes: Some(vec![(uri.clone(), edits)].into_iter().collect()),
                     document_changes: None,
                     change_annotations: None,
                 }));
@@ -927,6 +948,12 @@ fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
             let params = request.take_params::<SemanticTokensParams>()?;
             let result = conn.on_text_document_semantic_tokens_full(&params)?;
 
+            conn.send_response(&request_id.unwrap(), result)?;
+        }
+        "textDocument/hover" => {
+            let params = request.take_params::<HoverParams>()?;
+
+            let result = conn.on_text_document_hover(&params)?;
             conn.send_response(&request_id.unwrap(), result)?;
         }
         "textDocument/prepareRename" => {
