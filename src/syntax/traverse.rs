@@ -68,6 +68,11 @@ impl NodePath {
         self.parent.as_ref().map(Rc::clone)
     }
 
+    pub fn expect_parent(&self) -> Rc<RefCell<NodePath>> {
+        self.parent()
+            .unwrap_or_else(|| panic!("parent must exist."))
+    }
+
     pub fn scope(&self) -> Rc<RefCell<Scope>> {
         self.scope
             .upgrade()
@@ -235,9 +240,6 @@ pub trait Visitor {
     fn enter_pattern(&mut self, path: &mut NodePath, pattern: &Rc<Pattern>) {}
     fn exit_pattern(&mut self, path: &mut NodePath, pattern: &Rc<Pattern>) {}
 
-    fn enter_value_field(&mut self, path: &mut NodePath, pattern: &Rc<ValueField>) {}
-    fn exit_value_field(&mut self, path: &mut NodePath, pattern: &Rc<ValueField>) {}
-
     fn enter_value_field_pattern(&mut self, path: &mut NodePath, pattern: &Rc<ValueFieldPattern>) {}
     fn exit_value_field_pattern(&mut self, path: &mut NodePath, pattern: &Rc<ValueFieldPattern>) {}
 
@@ -252,6 +254,9 @@ pub trait Visitor {
 
     fn enter_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {}
     fn exit_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {}
+
+    fn enter_value_field(&mut self, path: &mut NodePath, field: &Rc<ValueField>) {}
+    fn exit_value_field(&mut self, path: &mut NodePath, field: &Rc<ValueField>) {}
 
     fn enter_variable(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {}
     fn exit_variable(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {}

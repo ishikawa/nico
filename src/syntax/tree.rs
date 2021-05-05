@@ -583,6 +583,17 @@ impl StructDefinition {
     pub fn name(&self) -> Option<&Identifier> {
         self.name.as_deref()
     }
+
+    pub fn get_type(&self, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
+        self.fields
+            .iter()
+            .find(|f| {
+                f.name()
+                    .map_or(false, |field_name| field_name.as_str() == name)
+            })
+            .and_then(|f| f.type_annotation.clone())
+            .map(|annotation| Rc::clone(&annotation.r#type))
+    }
 }
 
 impl Node for StructDefinition {

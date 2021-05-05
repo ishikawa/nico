@@ -46,10 +46,7 @@ impl syntax::Visitor for Rename {
     fn enter_identifier(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {
         // Prepare
         if self.operation.is_none() && id.range().contains(self.position) {
-            let parent = path
-                .parent()
-                .unwrap_or_else(|| panic!("parent must exist."));
-
+            let parent = path.expect_parent();
             let parent = parent.borrow();
             let scope = parent.scope();
             let parent = parent.node();
@@ -67,6 +64,7 @@ impl syntax::Visitor for Rename {
             }
             // Renaming struct name
             else if parent.is_struct_literal() {
+                // TODO: Use type info
                 if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
                     let binding = binding.borrow();
 
