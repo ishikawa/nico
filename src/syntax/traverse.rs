@@ -235,17 +235,11 @@ pub trait Visitor {
     fn enter_pattern(&mut self, path: &mut NodePath, pattern: &Rc<Pattern>) {}
     fn exit_pattern(&mut self, path: &mut NodePath, pattern: &Rc<Pattern>) {}
 
-    fn enter_struct_field(&mut self, path: &mut NodePath, pattern: &Rc<StructField>) {}
-    fn exit_struct_field(&mut self, path: &mut NodePath, pattern: &Rc<StructField>) {}
+    fn enter_value_field(&mut self, path: &mut NodePath, pattern: &Rc<ValueField>) {}
+    fn exit_value_field(&mut self, path: &mut NodePath, pattern: &Rc<ValueField>) {}
 
-    fn enter_struct_field_pattern(
-        &mut self,
-        path: &mut NodePath,
-        pattern: &Rc<StructFieldPattern>,
-    ) {
-    }
-    fn exit_struct_field_pattern(&mut self, path: &mut NodePath, pattern: &Rc<StructFieldPattern>) {
-    }
+    fn enter_value_field_pattern(&mut self, path: &mut NodePath, pattern: &Rc<ValueFieldPattern>) {}
+    fn exit_value_field_pattern(&mut self, path: &mut NodePath, pattern: &Rc<ValueFieldPattern>) {}
 
     fn enter_expression(&mut self, path: &mut NodePath, expression: &Rc<Expression>) {}
     fn exit_expression(&mut self, path: &mut NodePath, expression: &Rc<Expression>) {}
@@ -350,10 +344,10 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
             visitor.enter_pattern(&mut path, &node.pattern().unwrap());
         }
         NodeKind::StructField(_) => {
-            visitor.enter_struct_field(&mut path, &node.struct_field().unwrap());
+            visitor.enter_value_field(&mut path, &node.struct_field().unwrap());
         }
         NodeKind::StructFieldPattern(_) => {
-            visitor.enter_struct_field_pattern(&mut path, &node.struct_field_pattern().unwrap());
+            visitor.enter_value_field_pattern(&mut path, &node.struct_field_pattern().unwrap());
         }
         NodeKind::Expression(_) => {
             let expr = node.expression().unwrap();
@@ -446,10 +440,10 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
             visitor.exit_case_arm(&mut path, &node.case_arm().unwrap());
         }
         NodeKind::StructField(_) => {
-            visitor.exit_struct_field(&mut path, &node.struct_field().unwrap());
+            visitor.exit_value_field(&mut path, &node.struct_field().unwrap());
         }
         NodeKind::StructFieldPattern(_) => {
-            visitor.exit_struct_field_pattern(&mut path, &node.struct_field_pattern().unwrap());
+            visitor.exit_value_field_pattern(&mut path, &node.struct_field_pattern().unwrap());
         }
         NodeKind::Expression(_) => {
             let expr = node.expression().unwrap();

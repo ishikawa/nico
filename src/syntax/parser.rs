@@ -240,7 +240,7 @@ impl<'a> Parser<'a> {
         Some(Rc::new(field))
     }
 
-    fn parse_struct_field(&mut self) -> Option<Rc<StructField>> {
+    fn parse_struct_field(&mut self) -> Option<Rc<ValueField>> {
         let name = self.parse_name()?;
         let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&name)));
 
@@ -259,15 +259,15 @@ impl<'a> Parser<'a> {
                 );
             }
 
-            StructField::new(name, value, code)
+            ValueField::new(name, value, code)
         } else {
-            StructField::new(name, None, code)
+            ValueField::new(name, None, code)
         };
 
         Some(Rc::new(field))
     }
 
-    fn parse_struct_field_pattern(&mut self) -> Option<Rc<StructFieldPattern>> {
+    fn parse_struct_field_pattern(&mut self) -> Option<Rc<ValueFieldPattern>> {
         let name = self.parse_name()?;
         let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&name)));
 
@@ -286,9 +286,9 @@ impl<'a> Parser<'a> {
                 );
             }
 
-            StructFieldPattern::new(name, value, code)
+            ValueFieldPattern::new(name, value, code)
         } else {
-            StructFieldPattern::new(name, None, code)
+            ValueFieldPattern::new(name, None, code)
         };
 
         Some(Rc::new(field))
