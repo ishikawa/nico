@@ -48,8 +48,8 @@ pub enum NodeKind {
     FunctionParameter(Rc<FunctionParameter>),
     TypeField(Rc<TypeField>),
     TypeAnnotation(Rc<TypeAnnotation>),
-    StructField(Rc<StructField>),
-    StructFieldPattern(Rc<StructFieldPattern>),
+    StructField(Rc<ValueField>),
+    StructFieldPattern(Rc<ValueFieldPattern>),
     Statement(Rc<Statement>),
     VariableDeclaration(Rc<VariableDeclaration>),
     Expression(Rc<Expression>),
@@ -146,7 +146,7 @@ impl NodeKind {
         }
     }
 
-    pub fn struct_field(&self) -> Option<&Rc<StructField>> {
+    pub fn struct_field(&self) -> Option<&Rc<ValueField>> {
         if let NodeKind::StructField(node) = self {
             Some(node)
         } else {
@@ -154,7 +154,7 @@ impl NodeKind {
         }
     }
 
-    pub fn struct_field_pattern(&self) -> Option<&Rc<StructFieldPattern>> {
+    pub fn struct_field_pattern(&self) -> Option<&Rc<ValueFieldPattern>> {
         if let NodeKind::StructFieldPattern(node) = self {
             Some(node)
         } else {
@@ -583,6 +583,17 @@ impl StructDefinition {
     pub fn name(&self) -> Option<&Identifier> {
         self.name.as_deref()
     }
+
+    pub fn get_type(&self, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
+        self.fields
+            .iter()
+            .find(|f| {
+                f.name()
+                    .map_or(false, |field_name| field_name.as_str() == name)
+            })
+            .and_then(|f| f.type_annotation.clone())
+            .map(|annotation| Rc::clone(&annotation.r#type))
+    }
 }
 
 impl Node for StructDefinition {
@@ -986,11 +997,11 @@ impl fmt::Display for Expression {
 #[derive(Debug)]
 pub struct StructLiteral {
     pub name: Rc<Identifier>,
-    pub fields: Vec<Rc<StructField>>,
+    pub fields: Vec<Rc<ValueField>>,
 }
 
 impl StructLiteral {
-    pub fn new(name: Rc<Identifier>, fields: Vec<Rc<StructField>>) -> Self {
+    pub fn new(name: Rc<Identifier>, fields: Vec<Rc<ValueField>>) -> Self {
         Self { name, fields }
     }
 
@@ -1000,13 +1011,13 @@ impl StructLiteral {
 }
 
 #[derive(Debug)]
-pub struct StructField {
+pub struct ValueField {
     pub name: Rc<Identifier>,
     pub value: Option<Rc<Expression>>,
     pub code: Code,
 }
 
-impl StructField {
+impl ValueField {
     pub fn new(name: Rc<Identifier>, value: Option<Rc<Expression>>, code: Code) -> Self {
         Self { name, value, code }
     }
@@ -1016,13 +1027,13 @@ impl StructField {
     }
 }
 
-impl Node for StructField {
+impl Node for ValueField {
     fn code(&self) -> slice::Iter<CodeKind> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for StructField {
+impl fmt::Display for ValueField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "StructField({})", self.name().as_str())
     }
@@ -1322,39 +1333,39 @@ impl RestPattern {
 #[derive(Debug)]
 pub struct StructPattern {
     pub name: Rc<Identifier>,
-    fields: Vec<Rc<StructFieldPattern>>,
+    fields: Vec<Rc<ValueFieldPattern>>,
 }
 
 impl StructPattern {
-    pub fn new(name: Rc<Identifier>, fields: Vec<Rc<StructFieldPattern>>) -> Self {
+    pub fn new(name: Rc<Identifier>, fields: Vec<Rc<ValueFieldPattern>>) -> Self {
         Self { name, fields }
     }
 
-    pub fn fields(&self) -> slice::Iter<Rc<StructFieldPattern>> {
+    pub fn fields(&self) -> slice::Iter<Rc<ValueFieldPattern>> {
         self.fields.iter()
     }
 }
 
 #[derive(Debug)]
-pub struct StructFieldPattern {
+pub struct ValueFieldPattern {
     pub name: Rc<Identifier>,
     pub value: Option<Rc<Pattern>>,
     pub code: Code,
 }
 
-impl StructFieldPattern {
+impl ValueFieldPattern {
     pub fn new(name: Rc<Identifier>, value: Option<Rc<Pattern>>, code: Code) -> Self {
         Self { name, value, code }
     }
 }
 
-impl Node for StructFieldPattern {
+impl Node for ValueFieldPattern {
     fn code(&self) -> slice::Iter<CodeKind> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for StructFieldPattern {
+impl fmt::Display for ValueFieldPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "StructFieldPattern")
     }

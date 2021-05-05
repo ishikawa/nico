@@ -352,10 +352,7 @@ impl SemanticTokenizer {
             None => return SemanticTokenType::VARIABLE,
         };
 
-        let parent = path
-            .parent()
-            .unwrap_or_else(|| panic!("parent must exist."));
-
+        let parent = path.expect_parent();
         let parent = parent.borrow();
         let scope = parent.scope();
         let parent = parent.node();
