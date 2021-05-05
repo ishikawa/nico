@@ -1,4 +1,4 @@
-use crate::syntax::{self, EffectiveRange, Position, Program};
+use crate::syntax::{self, EffectiveRange, Node, NodePath, Position, Program, TypeAnnotation};
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -21,4 +21,17 @@ impl Hover {
     }
 }
 
-impl syntax::Visitor for Hover {}
+impl syntax::Visitor for Hover {
+    fn enter_type_annotation(&mut self, _path: &mut NodePath, annotation: &Rc<TypeAnnotation>) {
+        if !annotation.range().contains(self.position) {
+            return;
+        }
+
+        let description = format!(
+            "```nico\n{}\n```\n---\nThe 32-bit signed integer type.",
+            annotation.r#type.borrow()
+        );
+
+        self.result.replace((description, annotation.range()));
+    }
+}
