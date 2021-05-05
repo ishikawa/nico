@@ -439,6 +439,15 @@ export class RequestBuilder {
     });
   }
 
+  hover(uri: string, position: Position): RequestMessage {
+    return this.buildRequest("textDocument/hover", {
+      textDocument: {
+        uri
+      },
+      position
+    });
+  }
+
   initialized(): NotificationMessage {
     return this.buildNotification("initialized", {});
   }
@@ -500,6 +509,13 @@ export class LanguageServerAgent {
     const uri = getDocumentUri(filename);
 
     const request = this.builder.rename(uri, position, newName);
+    return this.server.sendRequest(request);
+  }
+
+  async hover(filename: string, position: Position) {
+    const uri = getDocumentUri(filename);
+
+    const request = this.builder.hover(uri, position);
     return this.server.sendRequest(request);
   }
 }
