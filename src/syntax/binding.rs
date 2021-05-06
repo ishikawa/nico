@@ -328,6 +328,16 @@ impl Visitor for TypeBinder {
         let ty = expr.r#type();
         ty.replace(sem::Type::Int32);
     }
+
+    fn enter_string_literal(
+        &mut self,
+        _path: &mut NodePath,
+        expr: &Rc<Expression>,
+        _literal: Option<&str>,
+    ) {
+        let ty = expr.r#type();
+        ty.replace(sem::Type::String);
+    }
 }
 
 pub fn bind(node: &Rc<Program>) {

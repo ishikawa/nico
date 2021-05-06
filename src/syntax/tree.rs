@@ -590,6 +590,10 @@ impl StructDefinition {
         self.name.as_deref()
     }
 
+    pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
+        &self.r#type
+    }
+
     pub fn get_field_type(&self, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
         self.fields
             .iter()
@@ -897,6 +901,10 @@ impl Expression {
 
     pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
         &self.r#type
+    }
+
+    pub fn replace_type(&mut self, ty: &Rc<RefCell<sem::Type>>) {
+        self.r#type = Rc::clone(ty);
     }
 
     pub fn struct_literal(&self) -> Option<&StructLiteral> {
