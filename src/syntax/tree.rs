@@ -883,8 +883,12 @@ pub struct Expression {
 }
 
 impl Expression {
-    pub fn new(kind: ExpressionKind, code: Code, r#type: Rc<RefCell<sem::Type>>) -> Self {
-        Self { kind, code, r#type }
+    pub fn new(kind: ExpressionKind, code: Code) -> Self {
+        Self {
+            kind,
+            code,
+            r#type: wrap(sem::Type::Unknown),
+        }
     }
 
     pub fn kind(&self) -> &ExpressionKind {
