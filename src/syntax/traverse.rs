@@ -240,50 +240,170 @@ pub trait Visitor {
     fn enter_pattern(&mut self, path: &mut NodePath, pattern: &Rc<Pattern>) {}
     fn exit_pattern(&mut self, path: &mut NodePath, pattern: &Rc<Pattern>) {}
 
+    fn enter_value_field(&mut self, path: &mut NodePath, field: &Rc<ValueField>) {}
+    fn exit_value_field(&mut self, path: &mut NodePath, field: &Rc<ValueField>) {}
+
     fn enter_value_field_pattern(&mut self, path: &mut NodePath, pattern: &Rc<ValueFieldPattern>) {}
     fn exit_value_field_pattern(&mut self, path: &mut NodePath, pattern: &Rc<ValueFieldPattern>) {}
 
     fn enter_expression(&mut self, path: &mut NodePath, expression: &Rc<Expression>) {}
     fn exit_expression(&mut self, path: &mut NodePath, expression: &Rc<Expression>) {}
 
-    fn enter_integer_literal(&mut self, path: &mut NodePath, literal: i32) {}
-    fn exit_integer_literal(&mut self, path: &mut NodePath, literal: i32) {}
+    fn enter_integer_literal(&mut self, path: &mut NodePath, expr: &Rc<Expression>, literal: i32) {}
+    fn exit_integer_literal(&mut self, path: &mut NodePath, expr: &Rc<Expression>, literal: i32) {}
 
-    fn enter_string_literal(&mut self, path: &mut NodePath, literal: Option<&str>) {}
-    fn exit_string_literal(&mut self, path: &mut NodePath, literal: Option<&str>) {}
+    fn enter_string_literal(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        literal: Option<&str>,
+    ) {
+    }
+    fn exit_string_literal(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        literal: Option<&str>,
+    ) {
+    }
 
-    fn enter_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {}
-    fn exit_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {}
+    fn enter_struct_literal(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        value: &StructLiteral,
+    ) {
+    }
+    fn exit_struct_literal(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        value: &StructLiteral,
+    ) {
+    }
 
-    fn enter_value_field(&mut self, path: &mut NodePath, field: &Rc<ValueField>) {}
-    fn exit_value_field(&mut self, path: &mut NodePath, field: &Rc<ValueField>) {}
+    fn enter_variable(&mut self, path: &mut NodePath, expr: &Rc<Expression>, id: &Rc<Identifier>) {}
+    fn exit_variable(&mut self, path: &mut NodePath, expr: &Rc<Expression>, id: &Rc<Identifier>) {}
 
-    fn enter_variable(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {}
-    fn exit_variable(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {}
+    fn enter_binary_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        bin_expr: &BinaryExpression,
+    ) {
+    }
+    fn exit_binary_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        bin_expr: &BinaryExpression,
+    ) {
+    }
 
-    fn enter_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
-    fn exit_binary_expression(&mut self, path: &mut NodePath, expr: &BinaryExpression) {}
+    fn enter_unary_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        unary_expr: &UnaryExpression,
+    ) {
+    }
+    fn exit_unary_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        unary_expr: &UnaryExpression,
+    ) {
+    }
 
-    fn enter_unary_expression(&mut self, path: &mut NodePath, expr: &UnaryExpression) {}
-    fn exit_unary_expression(&mut self, path: &mut NodePath, expr: &UnaryExpression) {}
+    fn enter_subscript_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        subscript_expr: &SubscriptExpression,
+    ) {
+    }
+    fn exit_subscript_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        subscript_expr: &SubscriptExpression,
+    ) {
+    }
 
-    fn enter_subscript_expression(&mut self, path: &mut NodePath, expr: &SubscriptExpression) {}
-    fn exit_subscript_expression(&mut self, path: &mut NodePath, expr: &SubscriptExpression) {}
+    fn enter_call_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        call_expr: &CallExpression,
+    ) {
+    }
+    fn exit_call_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        call_expr: &CallExpression,
+    ) {
+    }
 
-    fn enter_call_expression(&mut self, path: &mut NodePath, expr: &CallExpression) {}
-    fn exit_call_expression(&mut self, path: &mut NodePath, expr: &CallExpression) {}
+    fn enter_access_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        member_expr: &MemberExpression,
+    ) {
+    }
+    fn exit_access_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        member_expr: &MemberExpression,
+    ) {
+    }
 
-    fn enter_access_expression(&mut self, path: &mut NodePath, expr: &MemberExpression) {}
-    fn exit_access_expression(&mut self, path: &mut NodePath, expr: &MemberExpression) {}
+    fn enter_array_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        array_expr: &ArrayExpression,
+    ) {
+    }
+    fn exit_array_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        array_expr: &ArrayExpression,
+    ) {
+    }
 
-    fn enter_array_expression(&mut self, path: &mut NodePath, expr: &ArrayExpression) {}
-    fn exit_array_expression(&mut self, path: &mut NodePath, expr: &ArrayExpression) {}
+    fn enter_if_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        if_expr: &IfExpression,
+    ) {
+    }
+    fn exit_if_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        if_expr: &IfExpression,
+    ) {
+    }
 
-    fn enter_if_expression(&mut self, path: &mut NodePath, expr: &IfExpression) {}
-    fn exit_if_expression(&mut self, path: &mut NodePath, expr: &IfExpression) {}
-
-    fn enter_case_expression(&mut self, path: &mut NodePath, expr: &CaseExpression) {}
-    fn exit_case_expression(&mut self, path: &mut NodePath, expr: &CaseExpression) {}
+    fn enter_case_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        case_expr: &CaseExpression,
+    ) {
+    }
+    fn exit_case_expression(
+        &mut self,
+        path: &mut NodePath,
+        expr: &Rc<Expression>,
+        case_expr: &CaseExpression,
+    ) {
+    }
 }
 
 pub fn traverse(visitor: &mut dyn Visitor, program: &Rc<Program>) {
@@ -361,40 +481,40 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
             if !path.skipped() {
                 match expr.kind() {
                     ExpressionKind::IntegerLiteral(value) => {
-                        visitor.enter_integer_literal(&mut path, *value);
+                        visitor.enter_integer_literal(&mut path, &expr, *value);
                     }
                     ExpressionKind::StringLiteral(value) => {
-                        visitor.enter_string_literal(&mut path, value.as_deref());
+                        visitor.enter_string_literal(&mut path, &expr, value.as_deref());
                     }
                     ExpressionKind::StructLiteral(kind) => {
-                        visitor.enter_struct_literal(&mut path, kind);
+                        visitor.enter_struct_literal(&mut path, &expr, kind);
                     }
                     ExpressionKind::VariableExpression(id) => {
-                        visitor.enter_variable(&mut path, id);
+                        visitor.enter_variable(&mut path, &expr, id);
                     }
                     ExpressionKind::BinaryExpression(kind) => {
-                        visitor.enter_binary_expression(&mut path, kind);
+                        visitor.enter_binary_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::UnaryExpression(kind) => {
-                        visitor.enter_unary_expression(&mut path, kind);
+                        visitor.enter_unary_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::SubscriptExpression(kind) => {
-                        visitor.enter_subscript_expression(&mut path, kind);
+                        visitor.enter_subscript_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::CallExpression(kind) => {
-                        visitor.enter_call_expression(&mut path, kind);
+                        visitor.enter_call_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::MemberExpression(kind) => {
-                        visitor.enter_access_expression(&mut path, kind);
+                        visitor.enter_access_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::ArrayExpression(kind) => {
-                        visitor.enter_array_expression(&mut path, kind);
+                        visitor.enter_array_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::IfExpression(kind) => {
-                        visitor.enter_if_expression(&mut path, kind);
+                        visitor.enter_if_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::CaseExpression(kind) => {
-                        visitor.enter_case_expression(&mut path, kind);
+                        visitor.enter_case_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::Expression(_) => {}
                 }
@@ -457,40 +577,40 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
             if !path.skipped() {
                 match expr.kind() {
                     ExpressionKind::IntegerLiteral(value) => {
-                        visitor.exit_integer_literal(&mut path, *value);
+                        visitor.exit_integer_literal(&mut path, &expr, *value);
                     }
                     ExpressionKind::StringLiteral(value) => {
-                        visitor.exit_string_literal(&mut path, value.as_deref());
+                        visitor.exit_string_literal(&mut path, &expr, value.as_deref());
                     }
                     ExpressionKind::VariableExpression(id) => {
-                        visitor.exit_variable(&mut path, id);
+                        visitor.exit_variable(&mut path, &expr, id);
                     }
                     ExpressionKind::StructLiteral(kind) => {
-                        visitor.exit_struct_literal(&mut path, kind);
+                        visitor.exit_struct_literal(&mut path, &expr, kind);
                     }
                     ExpressionKind::BinaryExpression(kind) => {
-                        visitor.exit_binary_expression(&mut path, kind);
+                        visitor.exit_binary_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::UnaryExpression(kind) => {
-                        visitor.exit_unary_expression(&mut path, kind);
+                        visitor.exit_unary_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::SubscriptExpression(kind) => {
-                        visitor.exit_subscript_expression(&mut path, kind);
+                        visitor.exit_subscript_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::MemberExpression(kind) => {
-                        visitor.exit_access_expression(&mut path, kind);
+                        visitor.exit_access_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::CallExpression(kind) => {
-                        visitor.exit_call_expression(&mut path, kind);
+                        visitor.exit_call_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::ArrayExpression(kind) => {
-                        visitor.exit_array_expression(&mut path, kind);
+                        visitor.exit_array_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::IfExpression(kind) => {
-                        visitor.exit_if_expression(&mut path, kind);
+                        visitor.exit_if_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::CaseExpression(kind) => {
-                        visitor.exit_case_expression(&mut path, kind);
+                        visitor.exit_case_expression(&mut path, &expr, kind);
                     }
                     ExpressionKind::Expression(_) => {}
                 }

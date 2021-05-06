@@ -1,10 +1,11 @@
 //! This module contains implementations of `Visitor` that assigns meta information that can be
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
-    traverse, Block, Builtin, CaseArm, DefinitionKind, FunctionDefinition, FunctionParameter,
-    NodeKind, NodePath, Pattern, Program, StructDefinition, VariableDeclaration, Visitor,
+    traverse, Block, Builtin, CaseArm, DefinitionKind, Expression, FunctionDefinition,
+    FunctionParameter, NodeKind, NodePath, Pattern, Program, StructDefinition, VariableDeclaration,
+    Visitor,
 };
-use crate::sem::Type;
+use crate::sem::{self, Type};
 use crate::util::wrap;
 use std::{
     cell::RefCell,
@@ -307,6 +308,28 @@ impl Visitor for VariableBinder {
     }
 }
 
+/// Assign types for primitives and declarations
+#[derive(Debug, Default)]
+struct TypeBinder {}
+
+impl TypeBinder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Visitor for TypeBinder {
+    fn enter_integer_literal(
+        &mut self,
+        _path: &mut NodePath,
+        expr: &Rc<Expression>,
+        _literal: i32,
+    ) {
+        let ty = expr.r#type();
+        ty.replace(sem::Type::Int32);
+    }
+}
+
 pub fn bind(node: &Rc<Program>) {
     let mut binder = TopLevelDeclarationBinder::new();
     traverse(&mut binder, node);
@@ -315,6 +338,9 @@ pub fn bind(node: &Rc<Program>) {
     traverse(&mut binder, node);
 
     let mut binder = VariableBinder::new();
+    traverse(&mut binder, node);
+
+    let mut binder = TypeBinder::new();
     traverse(&mut binder, node);
 }
 

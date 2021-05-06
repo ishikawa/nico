@@ -1,7 +1,7 @@
 //! Rename operation
 use crate::syntax::{
-    self, DefinitionKind, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node,
-    NodePath, Pattern, Position, Program, StructDefinition, StructLiteral,
+    self, DefinitionKind, EffectiveRange, Expression, FunctionDefinition, FunctionParameter,
+    Identifier, Node, NodePath, Pattern, Position, Program, StructDefinition, StructLiteral,
 };
 use std::rc::Rc;
 
@@ -167,7 +167,12 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
         }
     }
 
-    fn enter_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {
+    fn enter_struct_literal(
+        &mut self,
+        path: &mut NodePath,
+        _expr: &Rc<Expression>,
+        value: &StructLiteral,
+    ) {
         let scope = path.scope();
         let scope = scope.borrow();
 
@@ -204,7 +209,7 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
         }
     }
 
-    fn enter_variable(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {
+    fn enter_variable(&mut self, path: &mut NodePath, _expr: &Rc<Expression>, id: &Rc<Identifier>) {
         let scope = path.scope();
         let scope = scope.borrow();
 

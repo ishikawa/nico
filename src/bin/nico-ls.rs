@@ -1,10 +1,13 @@
 use log::{info, warn};
 use lsp_types::*;
-use nico::ls::{self, server::ServerCapabilitiesBuilder};
 use nico::sem;
 use nico::syntax::{
     self, EffectiveRange, Identifier, MissingTokenKind, Node, NodePath, ParseError, Parser,
     StructLiteral, TextToken, Token, TokenKind, Trivia,
+};
+use nico::{
+    ls::{self, server::ServerCapabilitiesBuilder},
+    syntax::Expression,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -208,14 +211,19 @@ impl DiagnosticsCollector {
 }
 
 impl syntax::Visitor for DiagnosticsCollector {
-    fn enter_variable(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {
+    fn enter_variable(&mut self, path: &mut NodePath, expr: &Rc<Expression>, id: &Rc<Identifier>) {
         // Undefined variable
         if path.scope().borrow().get_binding(id.as_str()).is_none() {
-            self.add_diagnostic(path.node().range(), format!("Cannot find name '{}'.", id));
+            self.add_diagnostic(expr.range(), format!("Cannot find name '{}'.", id));
         }
     }
 
-    fn enter_struct_literal(&mut self, path: &mut NodePath, value: &StructLiteral) {
+    fn enter_struct_literal(
+        &mut self,
+        path: &mut NodePath,
+        _expr: &Rc<Expression>,
+        value: &StructLiteral,
+    ) {
         // Expected struct for name
         if let Some(binding) = path.scope().borrow().get_binding(value.name().as_str()) {
             if !binding.borrow().kind().is_struct_definition() {
