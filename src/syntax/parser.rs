@@ -1,7 +1,7 @@
 use super::*;
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
-use crate::{sem, syntax::binding::bind_scopes};
+use crate::{sem, syntax::binding};
 use std::rc::Rc;
 
 const DEBUG: bool = false;
@@ -73,7 +73,7 @@ impl<'a> Parser<'a> {
 
         let program = Rc::new(Program::new(body, code));
 
-        bind_scopes(&program);
+        binding::bind(&program);
 
         program
     }
