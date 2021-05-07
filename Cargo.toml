@@ -10,6 +10,7 @@ edition = "2018"
 # nico
 assert_matches = "1.5.0"
 thiserror = "1.0.24"
+id-arena = "2.2.1"
 # nico-ls
 log = "0.4.14"
 env_logger = "0.8.3"

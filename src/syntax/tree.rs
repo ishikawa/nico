@@ -1,43 +1,83 @@
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::{sem, util::wrap};
+use id_arena;
 use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
+
+pub type NodeArena = id_arena::Arena<NodeKind>;
+
+pub type NodeId = id_arena::Id<NodeKind>;
+
+pub struct AST {
+    arena: NodeArena,
+    root: NodeId,
+}
+
+impl AST {
+    pub fn new(arena: NodeArena, root: NodeId) -> Self {
+        Self { arena, root }
+    }
+
+    // get NodeKind
+    pub fn get(&self, node: NodeId) -> Option<&NodeKind> {
+        self.arena.get(node)
+    }
+
+    pub fn get_mut(&mut self, node: NodeId) -> Option<&mut NodeKind> {
+        self.arena.get_mut(node)
+    }
+
+    // root
+    pub fn root(&self) -> &Program {
+        self.get(self.root)
+            .unwrap_or_else(|| panic!("root node doesn't exist"))
+            .program()
+            .unwrap_or_else(|| panic!("root must be a program node."))
+    }
+
+    pub fn root_mut(&mut self) -> &mut Program {
+        self.get(self.root)
+            .unwrap_or_else(|| panic!("root node doesn't exist"))
+            .program_mut()
+            .unwrap_or_else(|| panic!("root must be a program node."))
+    }
+}
 
 pub trait Node: fmt::Display {
     fn code(&self) -> slice::Iter<CodeKind>;
 
     /// Returns the effective range of this node.
-    fn range(&self) -> EffectiveRange {
+    fn range(&self, tree: &AST) -> EffectiveRange {
         let mut it = self.code();
 
         // node must be at least one token.
         let init = it.next().unwrap();
-        it.fold(init.range(), |acc, kind| kind.range().union(&acc))
+        it.fold(init.range(tree), |acc, kind| kind.range(tree).union(&acc))
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum NodeKind {
-    Program(Rc<Program>),
-    Block(Rc<Block>),
-    Identifier(Rc<Identifier>),
-    StructDefinition(Rc<StructDefinition>),
-    FunctionDefinition(Rc<FunctionDefinition>),
-    FunctionParameter(Rc<FunctionParameter>),
-    TypeField(Rc<TypeField>),
-    TypeAnnotation(Rc<TypeAnnotation>),
-    ValueField(Rc<ValueField>),
-    ValueFieldPattern(Rc<ValueFieldPattern>),
-    Statement(Rc<Statement>),
-    VariableDeclaration(Rc<VariableDeclaration>),
-    Expression(Rc<Expression>),
-    CaseArm(Rc<CaseArm>),
-    Pattern(Rc<Pattern>),
+    Program(Program),
+    Block(Block),
+    Identifier(Identifier),
+    StructDefinition(StructDefinition),
+    FunctionDefinition(FunctionDefinition),
+    FunctionParameter(FunctionParameter),
+    TypeField(TypeField),
+    TypeAnnotation(TypeAnnotation),
+    ValueField(ValueField),
+    ValueFieldPattern(ValueFieldPattern),
+    Statement(Statement),
+    VariableDeclaration(VariableDeclaration),
+    Expression(Expression),
+    CaseArm(CaseArm),
+    Pattern(Pattern),
 }
 
 impl NodeKind {
-    pub fn program(&self) -> Option<&Rc<Program>> {
+    pub fn program(&self) -> Option<&Program> {
         if let NodeKind::Program(program) = self {
             Some(program)
         } else {
@@ -45,7 +85,15 @@ impl NodeKind {
         }
     }
 
-    pub fn struct_definition(&self) -> Option<&Rc<StructDefinition>> {
+    pub fn program_mut(&mut self) -> Option<&mut Program> {
+        if let NodeKind::Program(program) = self {
+            Some(program)
+        } else {
+            None
+        }
+    }
+
+    pub fn struct_definition(&self) -> Option<&StructDefinition> {
         if let NodeKind::StructDefinition(node) = self {
             Some(node)
         } else {
@@ -53,7 +101,7 @@ impl NodeKind {
         }
     }
 
-    pub fn function_definition(&self) -> Option<&Rc<FunctionDefinition>> {
+    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
         if let NodeKind::FunctionDefinition(node) = self {
             Some(node)
         } else {
@@ -61,7 +109,7 @@ impl NodeKind {
         }
     }
 
-    pub fn function_parameter(&self) -> Option<&Rc<FunctionParameter>> {
+    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
         if let NodeKind::FunctionParameter(node) = self {
             Some(node)
         } else {
@@ -69,7 +117,7 @@ impl NodeKind {
         }
     }
 
-    pub fn variable_declaration(&self) -> Option<&Rc<VariableDeclaration>> {
+    pub fn variable_declaration(&self) -> Option<&VariableDeclaration> {
         if let NodeKind::VariableDeclaration(node) = self {
             Some(node)
         } else {
@@ -77,7 +125,7 @@ impl NodeKind {
         }
     }
 
-    pub fn block(&self) -> Option<&Rc<Block>> {
+    pub fn block(&self) -> Option<&Block> {
         if let NodeKind::Block(block) = self {
             Some(block)
         } else {
@@ -85,7 +133,7 @@ impl NodeKind {
         }
     }
 
-    pub fn identifier(&self) -> Option<&Rc<Identifier>> {
+    pub fn identifier(&self) -> Option<&Identifier> {
         if let NodeKind::Identifier(node) = self {
             Some(node)
         } else {
@@ -93,7 +141,7 @@ impl NodeKind {
         }
     }
 
-    pub fn type_field(&self) -> Option<&Rc<TypeField>> {
+    pub fn type_field(&self) -> Option<&TypeField> {
         if let NodeKind::TypeField(node) = self {
             Some(node)
         } else {
@@ -101,7 +149,7 @@ impl NodeKind {
         }
     }
 
-    pub fn type_annotation(&self) -> Option<&Rc<TypeAnnotation>> {
+    pub fn type_annotation(&self) -> Option<&TypeAnnotation> {
         if let NodeKind::TypeAnnotation(node) = self {
             Some(node)
         } else {
@@ -109,7 +157,7 @@ impl NodeKind {
         }
     }
 
-    pub fn case_arm(&self) -> Option<&Rc<CaseArm>> {
+    pub fn case_arm(&self) -> Option<&CaseArm> {
         if let NodeKind::CaseArm(node) = self {
             Some(node)
         } else {
@@ -117,7 +165,7 @@ impl NodeKind {
         }
     }
 
-    pub fn pattern(&self) -> Option<&Rc<Pattern>> {
+    pub fn pattern(&self) -> Option<&Pattern> {
         if let NodeKind::Pattern(node) = self {
             Some(node)
         } else {
@@ -125,7 +173,7 @@ impl NodeKind {
         }
     }
 
-    pub fn struct_field(&self) -> Option<&Rc<ValueField>> {
+    pub fn value_field(&self) -> Option<&ValueField> {
         if let NodeKind::ValueField(node) = self {
             Some(node)
         } else {
@@ -133,7 +181,7 @@ impl NodeKind {
         }
     }
 
-    pub fn struct_field_pattern(&self) -> Option<&Rc<ValueFieldPattern>> {
+    pub fn value_field_pattern(&self) -> Option<&ValueFieldPattern> {
         if let NodeKind::ValueFieldPattern(node) = self {
             Some(node)
         } else {
@@ -141,7 +189,7 @@ impl NodeKind {
         }
     }
 
-    pub fn statement(&self) -> Option<&Rc<Statement>> {
+    pub fn statement(&self) -> Option<&Statement> {
         if let NodeKind::Statement(stmt) = self {
             Some(stmt)
         } else {
@@ -149,7 +197,7 @@ impl NodeKind {
         }
     }
 
-    pub fn expression(&self) -> Option<&Rc<Expression>> {
+    pub fn expression(&self) -> Option<&Expression> {
         if let NodeKind::Expression(node) = self {
             Some(node)
         } else {
@@ -164,7 +212,7 @@ impl NodeKind {
         None
     }
 
-    pub fn variable_expression(&self) -> Option<&Identifier> {
+    pub fn variable_expression(&self) -> Option<NodeId> {
         if let NodeKind::Expression(node) = self {
             return node.variable_expression();
         }
@@ -245,27 +293,9 @@ impl Node for NodeKind {
     }
 }
 
-#[derive(Debug)]
-pub enum TopLevelKind {
-    StructDefinition(Rc<StructDefinition>),
-    FunctionDefinition(Rc<FunctionDefinition>),
-    Statement(Rc<Statement>),
-    VariableDeclaration(Rc<VariableDeclaration>),
-}
-
-impl TopLevelKind {
-    pub fn statement(&self) -> Option<Rc<Statement>> {
-        if let TopLevelKind::Statement(stmt) = self {
-            Some(Rc::clone(stmt))
-        } else {
-            None
-        }
-    }
-}
-
 /// `Builtin` is where a binding to "built-in" primitives/functions are defined.
 /// It's not a part of an AST, so it doesn't have tokens.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Builtin {
     name: String,
     r#type: Rc<RefCell<sem::Type>>,
@@ -291,16 +321,13 @@ impl Builtin {
 #[derive(Debug, Clone)]
 pub enum DefinitionKind {
     // Builtin functions, variables
-    Builtin(Rc<Builtin>),
-    // Declaration nodes
-    StructDefinition(Rc<StructDefinition>),
-    FunctionDefinition(Rc<FunctionDefinition>),
-    FunctionParameter(Rc<FunctionParameter>),
-    Pattern(Rc<Pattern>),
+    Builtin(Builtin),
+    // Declaration node
+    Node(NodeId),
 }
 
 impl DefinitionKind {
-    pub fn builtin(&self) -> Option<&Rc<Builtin>> {
+    pub fn builtin(&self) -> Option<&Builtin> {
         if let DefinitionKind::Builtin(node) = self {
             Some(node)
         } else {
@@ -308,86 +335,84 @@ impl DefinitionKind {
         }
     }
 
-    pub fn struct_definition(&self) -> Option<&Rc<StructDefinition>> {
-        if let DefinitionKind::StructDefinition(node) = self {
-            Some(node)
-        } else {
-            None
+    pub fn struct_definition<'a>(&self, tree: &'a AST) -> Option<&'a StructDefinition> {
+        if let DefinitionKind::Node(node) = self {
+            if let Some(kind) = tree.get(*node) {
+                if let NodeKind::StructDefinition(definition) = kind {
+                    return Some(definition);
+                }
+            }
         }
+
+        None
     }
 
-    pub fn function_definition(&self) -> Option<&Rc<FunctionDefinition>> {
-        if let DefinitionKind::FunctionDefinition(node) = self {
-            Some(node)
-        } else {
-            None
+    pub fn function_definition<'a>(&self, tree: &'a AST) -> Option<&'a FunctionDefinition> {
+        if let DefinitionKind::Node(node_id) = self {
+            if let Some(kind) = tree.get(*node_id) {
+                if let NodeKind::FunctionDefinition(node) = kind {
+                    return Some(node);
+                }
+            }
         }
+
+        None
     }
 
-    pub fn function_parameter(&self) -> Option<&Rc<FunctionParameter>> {
-        if let DefinitionKind::FunctionParameter(node) = self {
-            Some(node)
-        } else {
-            None
+    pub fn function_parameter<'a>(&self, tree: &'a AST) -> Option<&'a FunctionParameter> {
+        if let DefinitionKind::Node(node_id) = self {
+            if let Some(kind) = tree.get(*node_id) {
+                if let NodeKind::FunctionParameter(node) = kind {
+                    return Some(node);
+                }
+            }
         }
+
+        None
     }
 
-    pub fn pattern(&self) -> Option<&Rc<Pattern>> {
-        if let DefinitionKind::Pattern(node) = self {
-            Some(node)
-        } else {
-            None
+    pub fn pattern<'a>(&self, tree: &'a AST) -> Option<&'a Pattern> {
+        if let DefinitionKind::Node(node_id) = self {
+            if let Some(kind) = tree.get(*node_id) {
+                if let NodeKind::Pattern(node) = kind {
+                    return Some(node);
+                }
+            }
         }
+
+        None
     }
 
     pub fn is_builtin(&self) -> bool {
         matches!(self, Self::Builtin(..))
     }
 
-    pub fn is_struct_definition(&self) -> bool {
-        matches!(self, Self::StructDefinition(..))
+    pub fn is_struct_definition(&self, tree: &AST) -> bool {
+        self.struct_definition(tree).is_some()
     }
 
-    pub fn is_function_definition(&self) -> bool {
-        matches!(self, Self::FunctionDefinition(..))
+    pub fn is_function_definition(&self, tree: &AST) -> bool {
+        self.function_definition(tree).is_some()
     }
 
-    pub fn is_function_parameter(&self) -> bool {
-        matches!(self, Self::FunctionParameter(..))
+    pub fn is_function_parameter(&self, tree: &AST) -> bool {
+        self.function_parameter(tree).is_some()
     }
 
-    pub fn is_pattern(&self) -> bool {
-        matches!(self, Self::Pattern(..))
+    pub fn is_pattern(&self, tree: &AST) -> bool {
+        self.pattern(tree).is_some()
     }
 
     pub fn ptr_eq(&self, other: &DefinitionKind) -> bool {
         if let DefinitionKind::Builtin(ref definition1) = self {
-            if let DefinitionKind::Builtin(ref definition2) = other {
-                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
+            if let DefinitionKind::Builtin(definition2) = other {
+                return std::ptr::eq(definition1, definition2);
             }
         }
 
-        if let DefinitionKind::StructDefinition(ref definition1) = self {
-            if let DefinitionKind::StructDefinition(ref definition2) = other {
-                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
-            }
-        }
-
-        if let DefinitionKind::FunctionDefinition(ref definition1) = self {
-            if let DefinitionKind::FunctionDefinition(ref definition2) = other {
-                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
-            }
-        }
-
-        if let DefinitionKind::FunctionParameter(ref definition1) = self {
-            if let DefinitionKind::FunctionParameter(ref definition2) = other {
-                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
-            }
-        }
-
-        if let DefinitionKind::Pattern(ref definition1) = self {
-            if let DefinitionKind::Pattern(ref definition2) = other {
-                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
+        if let DefinitionKind::Node(node_id1) = self {
+            if let DefinitionKind::Node(node_id2) = other {
+                return node_id1 == node_id2;
             }
         }
 
@@ -411,7 +436,7 @@ impl Code {
         }
     }
 
-    pub fn with_node(node: NodeKind) -> Self {
+    pub fn with_node(node: NodeId) -> Self {
         Self {
             code: vec![CodeKind::Node(node)],
         }
@@ -442,7 +467,7 @@ impl Code {
     }
 
     // children
-    pub fn node(&mut self, node: NodeKind) -> &mut Self {
+    pub fn node(&mut self, node: NodeId) -> &mut Self {
         self.code.push(CodeKind::Node(node));
         self
     }
@@ -450,14 +475,14 @@ impl Code {
 
 #[derive(Debug)]
 pub enum CodeKind {
-    Node(NodeKind),
+    Node(NodeId),
     SyntaxToken(SyntaxToken),
 }
 
 impl CodeKind {
-    pub fn range(&self) -> EffectiveRange {
+    pub fn range(&self, tree: &AST) -> EffectiveRange {
         match self {
-            CodeKind::Node(kind) => kind.range(),
+            CodeKind::Node(node_id) => tree.get(*node_id).unwrap().range(tree),
             CodeKind::SyntaxToken(token) => token.range(),
         }
     }
@@ -465,14 +490,14 @@ impl CodeKind {
 
 #[derive(Debug)]
 pub struct Program {
-    pub body: Vec<TopLevelKind>,
+    pub body: Vec<NodeId>,
     declarations: Rc<RefCell<Scope>>,
     main_scope: Rc<RefCell<Scope>>,
     code: Code,
 }
 
 impl Program {
-    pub fn new(body: Vec<TopLevelKind>, code: Code) -> Self {
+    pub fn new(body: Vec<NodeId>, code: Code) -> Self {
         let declarations = wrap(Scope::prelude());
         let main_scope = wrap(Scope::new());
 
@@ -549,14 +574,14 @@ impl fmt::Display for Identifier {
 ///
 #[derive(Debug)]
 pub struct StructDefinition {
-    pub name: Option<Rc<Identifier>>,
-    pub fields: Vec<Rc<TypeField>>,
+    pub name: Option<NodeId>,
+    pub fields: Vec<NodeId>,
     r#type: Rc<RefCell<sem::Type>>,
     code: Code,
 }
 
 impl StructDefinition {
-    pub fn new(name: Option<Rc<Identifier>>, fields: Vec<Rc<TypeField>>, code: Code) -> Self {
+    pub fn new(name: Option<NodeId>, fields: Vec<NodeId>, code: Code) -> Self {
         Self {
             name,
             fields,
@@ -565,22 +590,31 @@ impl StructDefinition {
         }
     }
 
-    pub fn name(&self) -> Option<&Identifier> {
-        self.name.as_deref()
+    pub fn name<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
+        if let Some(name) = self.name {
+            return tree.get(name).unwrap().identifier();
+        }
+
+        None
+    }
+
+    pub fn fields<'a>(&'a self, tree: &'a AST) -> impl Iterator<Item = &'a TypeField> + 'a {
+        self.fields
+            .iter()
+            .map(move |node_id| tree.get(*node_id).unwrap().type_field().unwrap())
     }
 
     pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
         &self.r#type
     }
 
-    pub fn get_field_type(&self, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
-        self.fields
-            .iter()
+    pub fn get_field_type<'a>(&self, tree: &'a AST, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
+        self.fields(tree)
             .find(|f| {
-                f.name()
+                f.name(tree)
                     .map_or(false, |field_name| field_name.as_str() == name)
             })
-            .and_then(|f| f.type_annotation.clone())
+            .and_then(|f| f.type_annotation(tree))
             .map(|annotation| Rc::clone(&annotation.r#type))
     }
 }
@@ -593,27 +627,19 @@ impl Node for StructDefinition {
 
 impl fmt::Display for StructDefinition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(name) = self.name() {
-            write!(f, "StructDefinition({})", name.as_str())
-        } else {
-            write!(f, "StructDefinition")
-        }
+        write!(f, "StructDefinition")
     }
 }
 
 #[derive(Debug)]
 pub struct TypeField {
-    pub name: Option<Rc<Identifier>>,
-    pub type_annotation: Option<Rc<TypeAnnotation>>,
+    pub name: Option<NodeId>,
+    pub type_annotation: Option<NodeId>,
     code: Code,
 }
 
 impl TypeField {
-    pub fn new(
-        name: Option<Rc<Identifier>>,
-        type_annotation: Option<Rc<TypeAnnotation>>,
-        code: Code,
-    ) -> Self {
+    pub fn new(name: Option<NodeId>, type_annotation: Option<NodeId>, code: Code) -> Self {
         Self {
             name,
             type_annotation,
@@ -621,8 +647,20 @@ impl TypeField {
         }
     }
 
-    pub fn name(&self) -> Option<&Identifier> {
-        self.name.as_deref()
+    pub fn name<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
+        if let Some(name) = self.name {
+            return tree.get(name).unwrap().identifier();
+        }
+
+        None
+    }
+
+    pub fn type_annotation<'a>(&self, tree: &'a AST) -> Option<&'a TypeAnnotation> {
+        if let Some(node_id) = self.type_annotation {
+            return tree.get(node_id).unwrap().type_annotation();
+        }
+
+        None
     }
 }
 
@@ -634,11 +672,7 @@ impl Node for TypeField {
 
 impl fmt::Display for TypeField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(name) = self.name() {
-            write!(f, "TypeField({})", name.as_str())
-        } else {
-            write!(f, "TypeField")
-        }
+        write!(f, "TypeField")
     }
 }
 
@@ -668,19 +702,14 @@ impl fmt::Display for TypeAnnotation {
 
 #[derive(Debug)]
 pub struct FunctionDefinition {
-    pub name: Option<Rc<Identifier>>,
-    pub parameters: Vec<Rc<FunctionParameter>>,
-    pub body: Rc<Block>,
+    pub name: Option<NodeId>,
+    pub parameters: Vec<NodeId>,
+    pub body: NodeId,
     code: Code,
 }
 
 impl FunctionDefinition {
-    pub fn new(
-        name: Option<Rc<Identifier>>,
-        parameters: Vec<Rc<FunctionParameter>>,
-        body: Rc<Block>,
-        code: Code,
-    ) -> Self {
+    pub fn new(name: Option<NodeId>, parameters: Vec<NodeId>, body: NodeId, code: Code) -> Self {
         Self {
             name,
             parameters,
@@ -689,15 +718,19 @@ impl FunctionDefinition {
         }
     }
 
-    pub fn name(&self) -> Option<&Identifier> {
-        self.name.as_deref()
+    pub fn name<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
+        if let Some(node_id) = self.name {
+            return tree.get(node_id).unwrap().identifier();
+        }
+
+        None
     }
 
-    pub fn body(&self) -> &Block {
-        self.body.as_ref()
+    pub fn body<'a>(&self, tree: &'a AST) -> &'a Block {
+        return tree.get(self.body).unwrap().block().unwrap();
     }
 
-    pub fn parameters(&self) -> slice::Iter<Rc<FunctionParameter>> {
+    pub fn parameters(&self) -> slice::Iter<NodeId> {
         self.parameters.iter()
     }
 }
@@ -710,27 +743,23 @@ impl Node for FunctionDefinition {
 
 impl fmt::Display for FunctionDefinition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(name) = self.name() {
-            write!(f, "FunctionDefinition({})", name.as_str())
-        } else {
-            write!(f, "FunctionDefinition")
-        }
+        write!(f, "FunctionDefinition")
     }
 }
 
 #[derive(Debug)]
 pub struct FunctionParameter {
-    pub name: Rc<Identifier>,
+    pub name: NodeId,
     code: Code,
 }
 
 impl FunctionParameter {
-    pub fn new(name: Rc<Identifier>, code: Code) -> Self {
+    pub fn new(name: NodeId, code: Code) -> Self {
         Self { name, code }
     }
 
-    pub fn name(&self) -> &Identifier {
-        self.name.as_ref()
+    pub fn name<'a>(&self, tree: &'a AST) -> &'a Identifier {
+        return tree.get(self.name).unwrap().identifier().unwrap();
     }
 }
 
@@ -742,19 +771,19 @@ impl Node for FunctionParameter {
 
 impl fmt::Display for FunctionParameter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FunctionParameter({})", self.name().as_str())
+        write!(f, "FunctionParameter")
     }
 }
 
 #[derive(Debug)]
 pub struct VariableDeclaration {
-    pub pattern: Option<Rc<Pattern>>,
-    pub init: Option<Rc<Expression>>,
+    pub pattern: Option<NodeId>,
+    pub init: Option<NodeId>,
     code: Code,
 }
 
 impl VariableDeclaration {
-    pub fn new(pattern: Option<Rc<Pattern>>, init: Option<Rc<Expression>>, code: Code) -> Self {
+    pub fn new(pattern: Option<NodeId>, init: Option<NodeId>, code: Code) -> Self {
         Self {
             pattern,
             init,
@@ -783,8 +812,8 @@ pub struct Statement {
 
 #[derive(Debug)]
 pub enum StatementKind {
-    Expression(Rc<Expression>),
-    VariableDeclaration(Rc<VariableDeclaration>),
+    Expression(NodeId),
+    VariableDeclaration(NodeId),
 }
 
 impl Statement {
@@ -792,17 +821,17 @@ impl Statement {
         Self { kind, code }
     }
 
-    pub fn expression(&self) -> Option<&Expression> {
-        if let StatementKind::Expression(ref expr) = self.kind {
-            Some(expr.as_ref())
+    pub fn expression<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+        if let StatementKind::Expression(node_id) = self.kind {
+            return tree.get(node_id).unwrap().expression();
         } else {
             None
         }
     }
 
-    pub fn variable_declaration(&self) -> Option<&VariableDeclaration> {
-        if let StatementKind::VariableDeclaration(ref decl) = self.kind {
-            Some(decl.as_ref())
+    pub fn variable_declaration<'a>(&self, tree: &'a AST) -> Option<&'a VariableDeclaration> {
+        if let StatementKind::Expression(node_id) = self.kind {
+            return tree.get(node_id).unwrap().variable_declaration();
         } else {
             None
         }
@@ -823,13 +852,13 @@ impl fmt::Display for Statement {
 
 #[derive(Debug)]
 pub struct Block {
-    statements: Vec<Rc<Statement>>,
+    statements: Vec<NodeId>,
     scope: Rc<RefCell<Scope>>,
     code: Code,
 }
 
 impl Block {
-    pub fn new(statements: Vec<Rc<Statement>>, code: Code) -> Self {
+    pub fn new(statements: Vec<NodeId>, code: Code) -> Self {
         Self {
             statements,
             scope: wrap(Scope::new()),
@@ -841,7 +870,7 @@ impl Block {
         &self.scope
     }
 
-    pub fn statements(&self) -> slice::Iter<Rc<Statement>> {
+    pub fn statements(&self) -> slice::Iter<NodeId> {
         self.statements.iter()
     }
 }
@@ -894,8 +923,8 @@ impl Expression {
         }
     }
 
-    pub fn variable_expression(&self) -> Option<&Identifier> {
-        if let ExpressionKind::VariableExpression(ref id) = self.kind {
+    pub fn variable_expression(&self) -> Option<NodeId> {
+        if let ExpressionKind::VariableExpression(id) = self.kind {
             Some(id)
         } else {
             None
@@ -993,34 +1022,34 @@ impl fmt::Display for Expression {
 
 #[derive(Debug)]
 pub struct StructLiteral {
-    pub name: Rc<Identifier>,
-    pub fields: Vec<Rc<ValueField>>,
+    pub name: NodeId,
+    pub fields: Vec<NodeId>,
 }
 
 impl StructLiteral {
-    pub fn new(name: Rc<Identifier>, fields: Vec<Rc<ValueField>>) -> Self {
+    pub fn new(name: NodeId, fields: Vec<NodeId>) -> Self {
         Self { name, fields }
     }
 
-    pub fn name(&self) -> &Identifier {
-        self.name.as_ref()
+    pub fn name(&self) -> NodeId {
+        self.name
     }
 }
 
 #[derive(Debug)]
 pub struct ValueField {
-    pub name: Rc<Identifier>,
-    pub value: Option<Rc<Expression>>,
+    pub name: NodeId,
+    pub value: Option<NodeId>,
     pub code: Code,
 }
 
 impl ValueField {
-    pub fn new(name: Rc<Identifier>, value: Option<Rc<Expression>>, code: Code) -> Self {
+    pub fn new(name: NodeId, value: Option<NodeId>, code: Code) -> Self {
         Self { name, value, code }
     }
 
-    pub fn name(&self) -> &Identifier {
-        self.name.as_ref()
+    pub fn name(&self) -> NodeId {
+        self.name
     }
 }
 
@@ -1032,44 +1061,44 @@ impl Node for ValueField {
 
 impl fmt::Display for ValueField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ValueField({})", self.name().as_str())
+        write!(f, "ValueField")
     }
 }
 
 #[derive(Debug)]
 pub struct BinaryExpression {
     pub operator: BinaryOperator,
-    pub lhs: Rc<Expression>,
-    pub rhs: Option<Rc<Expression>>,
+    pub lhs: NodeId,
+    pub rhs: Option<NodeId>,
 }
 
 impl BinaryExpression {
-    pub fn new(operator: BinaryOperator, lhs: Rc<Expression>, rhs: Option<Rc<Expression>>) -> Self {
+    pub fn new(operator: BinaryOperator, lhs: NodeId, rhs: Option<NodeId>) -> Self {
         Self { operator, lhs, rhs }
     }
 
-    pub fn lhs(&self) -> &Expression {
-        self.lhs.as_ref()
+    pub fn lhs(&self) -> NodeId {
+        self.lhs
     }
 
-    pub fn rhs(&self) -> Option<&Expression> {
-        self.rhs.as_deref()
+    pub fn rhs(&self) -> Option<NodeId> {
+        self.rhs
     }
 }
 
 #[derive(Debug)]
 pub struct UnaryExpression {
     pub operator: UnaryOperator,
-    pub operand: Option<Rc<Expression>>,
+    pub operand: Option<NodeId>,
 }
 
 impl UnaryExpression {
-    pub fn new(operator: UnaryOperator, operand: Option<Rc<Expression>>) -> Self {
+    pub fn new(operator: UnaryOperator, operand: Option<NodeId>) -> Self {
         Self { operator, operand }
     }
 
-    pub fn operand(&self) -> Option<&Expression> {
-        self.operand.as_deref()
+    pub fn operand(&self) -> Option<NodeId> {
+        self.operand
     }
 }
 
@@ -1096,84 +1125,80 @@ pub enum UnaryOperator {
 
 #[derive(Debug)]
 pub struct SubscriptExpression {
-    pub callee: Rc<Expression>,
-    pub arguments: Vec<Rc<Expression>>,
+    pub callee: NodeId,
+    pub arguments: Vec<NodeId>,
 }
 
 impl SubscriptExpression {
-    pub fn new(callee: Rc<Expression>, arguments: Vec<Rc<Expression>>) -> Self {
+    pub fn new(callee: NodeId, arguments: Vec<NodeId>) -> Self {
         Self { callee, arguments }
     }
 
-    pub fn callee(&self) -> &Expression {
-        self.callee.as_ref()
+    pub fn callee(&self) -> NodeId {
+        self.callee
     }
 
-    pub fn arguments(&self) -> slice::Iter<Rc<Expression>> {
+    pub fn arguments(&self) -> slice::Iter<NodeId> {
         self.arguments.iter()
     }
 }
 
 #[derive(Debug)]
 pub struct CallExpression {
-    pub callee: Rc<Expression>,
-    pub arguments: Vec<Rc<Expression>>,
+    pub callee: NodeId,
+    pub arguments: Vec<NodeId>,
 }
 
 impl CallExpression {
-    pub fn new(callee: Rc<Expression>, arguments: Vec<Rc<Expression>>) -> Self {
+    pub fn new(callee: NodeId, arguments: Vec<NodeId>) -> Self {
         Self { callee, arguments }
     }
 
-    pub fn callee(&self) -> &Expression {
-        self.callee.as_ref()
+    pub fn callee(&self) -> NodeId {
+        self.callee
     }
 
-    pub fn arguments(&self) -> slice::Iter<Rc<Expression>> {
+    pub fn arguments(&self) -> slice::Iter<NodeId> {
         self.arguments.iter()
     }
 }
 
 #[derive(Debug)]
 pub struct MemberExpression {
-    pub object: Rc<Expression>,
-    pub field: Option<Rc<Identifier>>,
+    pub object: NodeId,
+    pub field: Option<NodeId>,
 }
 
 impl MemberExpression {
-    pub fn new(object: Rc<Expression>, field: Option<Rc<Identifier>>) -> Self {
+    pub fn new(object: NodeId, field: Option<NodeId>) -> Self {
         Self { object, field }
     }
 }
 
 #[derive(Debug)]
 pub struct ArrayExpression {
-    pub elements: Vec<Rc<Expression>>,
+    pub elements: Vec<NodeId>,
 }
 
 impl ArrayExpression {
-    pub fn new(elements: Vec<Rc<Expression>>) -> Self {
+    pub fn new(elements: Vec<NodeId>) -> Self {
         Self { elements }
     }
 
-    pub fn elements(&self) -> slice::Iter<Rc<Expression>> {
+    pub fn elements(&self) -> slice::Iter<NodeId> {
         self.elements.iter()
     }
 }
 
 #[derive(Debug)]
 pub struct IfExpression {
-    pub condition: Option<Rc<Expression>>,
-    pub then_body: Rc<Block>,
-    pub else_body: Option<Rc<Block>>,
+    pub condition: Option<NodeId>,
+    pub then_body: NodeId,
+    pub else_body: Option<NodeId>,
 }
 
 impl IfExpression {
-    pub fn new(
-        condition: Option<Rc<Expression>>,
-        then_body: Rc<Block>,
-        else_body: Option<Rc<Block>>,
-    ) -> Self {
+    pub fn new(condition: Option<NodeId>, then_body: NodeId, else_body: Option<NodeId>) -> Self {
         Self {
             condition,
             then_body,
@@ -1184,17 +1209,13 @@ impl IfExpression {
 
 #[derive(Debug)]
 pub struct CaseExpression {
-    pub head: Option<Rc<Expression>>,
-    pub arms: Vec<Rc<CaseArm>>,
-    pub else_body: Option<Rc<Block>>,
+    pub head: Option<NodeId>,
+    pub arms: Vec<NodeId>,
+    pub else_body: Option<NodeId>,
 }
 
 impl CaseExpression {
-    pub fn new(
-        head: Option<Rc<Expression>>,
-        arms: Vec<Rc<CaseArm>>,
-        else_body: Option<Rc<Block>>,
-    ) -> Self {
+    pub fn new(head: Option<NodeId>, arms: Vec<NodeId>, else_body: Option<NodeId>) -> Self {
         Self {
             head,
             arms,
@@ -1205,9 +1226,9 @@ impl CaseExpression {
 
 #[derive(Debug)]
 pub struct CaseArm {
-    pub pattern: Option<Rc<Pattern>>,
-    pub guard: Option<Rc<Expression>>,
-    pub then_body: Rc<Block>,
+    pub pattern: Option<NodeId>,
+    pub guard: Option<NodeId>,
+    pub then_body: NodeId,
 
     // `CaseArm` is the only syntactic element other than Program and Block that introduces
     // a new scope. This scope is necessary to use the variables introduced in each arm in
@@ -1218,9 +1239,9 @@ pub struct CaseArm {
 
 impl CaseArm {
     pub fn new(
-        pattern: Option<Rc<Pattern>>,
-        guard: Option<Rc<Expression>>,
-        then_body: Rc<Block>,
+        pattern: Option<NodeId>,
+        guard: Option<NodeId>,
+        then_body: NodeId,
         code: Code,
     ) -> Self {
         Self {
@@ -1236,8 +1257,8 @@ impl CaseArm {
         &self.scope
     }
 
-    pub fn pattern(&self) -> Option<&Pattern> {
-        self.pattern.as_deref()
+    pub fn pattern(&self) -> Option<NodeId> {
+        self.pattern
     }
 }
 
@@ -1258,7 +1279,7 @@ pub enum ExpressionKind {
     IntegerLiteral(i32),
     StringLiteral(Option<String>),
     StructLiteral(StructLiteral),
-    VariableExpression(Rc<Identifier>),
+    VariableExpression(NodeId),
     BinaryExpression(BinaryExpression),
     UnaryExpression(UnaryExpression),
     SubscriptExpression(SubscriptExpression),
@@ -1267,7 +1288,7 @@ pub enum ExpressionKind {
     MemberExpression(MemberExpression),
     IfExpression(IfExpression),
     CaseExpression(CaseExpression),
-    Expression(Option<Rc<Expression>>),
+    Expression(Option<NodeId>),
 }
 
 #[derive(Debug)]
@@ -1281,10 +1302,10 @@ impl Pattern {
         Self { kind, code }
     }
 
-    pub fn variable_pattern(identifier: &Rc<Identifier>) -> Self {
+    pub fn variable_pattern(identifier: NodeId) -> Self {
         Self {
-            kind: PatternKind::VariablePattern(Rc::clone(identifier)),
-            code: Code::with_node(NodeKind::Identifier(Rc::clone(identifier))),
+            kind: PatternKind::VariablePattern(identifier),
+            code: Code::with_node(identifier),
         }
     }
 }
@@ -1303,55 +1324,55 @@ impl fmt::Display for Pattern {
 
 #[derive(Debug)]
 pub struct ArrayPattern {
-    elements: Vec<Rc<Pattern>>,
+    elements: Vec<NodeId>,
 }
 
 impl ArrayPattern {
-    pub fn new(elements: Vec<Rc<Pattern>>) -> Self {
+    pub fn new(elements: Vec<NodeId>) -> Self {
         Self { elements }
     }
 
-    pub fn elements(&self) -> slice::Iter<Rc<Pattern>> {
+    pub fn elements(&self) -> slice::Iter<NodeId> {
         self.elements.iter()
     }
 }
 
 #[derive(Debug)]
 pub struct RestPattern {
-    pub id: Option<Rc<Identifier>>,
+    pub id: Option<NodeId>,
 }
 
 impl RestPattern {
-    pub fn new(id: Option<Rc<Identifier>>) -> Self {
+    pub fn new(id: Option<NodeId>) -> Self {
         Self { id }
     }
 }
 
 #[derive(Debug)]
 pub struct StructPattern {
-    pub name: Rc<Identifier>,
-    fields: Vec<Rc<ValueFieldPattern>>,
+    pub name: NodeId,
+    fields: Vec<NodeId>,
 }
 
 impl StructPattern {
-    pub fn new(name: Rc<Identifier>, fields: Vec<Rc<ValueFieldPattern>>) -> Self {
+    pub fn new(name: NodeId, fields: Vec<NodeId>) -> Self {
         Self { name, fields }
     }
 
-    pub fn fields(&self) -> slice::Iter<Rc<ValueFieldPattern>> {
+    pub fn fields(&self) -> slice::Iter<NodeId> {
         self.fields.iter()
     }
 }
 
 #[derive(Debug)]
 pub struct ValueFieldPattern {
-    pub name: Rc<Identifier>,
-    pub value: Option<Rc<Pattern>>,
+    pub name: NodeId,
+    pub value: Option<NodeId>,
     pub code: Code,
 }
 
 impl ValueFieldPattern {
-    pub fn new(name: Rc<Identifier>, value: Option<Rc<Pattern>>, code: Code) -> Self {
+    pub fn new(name: NodeId, value: Option<NodeId>, code: Code) -> Self {
         Self { name, value, code }
     }
 }
@@ -1364,7 +1385,7 @@ impl Node for ValueFieldPattern {
 
 impl fmt::Display for ValueFieldPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ValueFieldPattern({})", self.name)
+        write!(f, "ValueFieldPattern")
     }
 }
 
@@ -1372,7 +1393,7 @@ impl fmt::Display for ValueFieldPattern {
 pub enum PatternKind {
     IntegerPattern(i32),
     StringPattern(Option<String>),
-    VariablePattern(Rc<Identifier>),
+    VariablePattern(NodeId),
     ArrayPattern(ArrayPattern),
     RestPattern(RestPattern),
     StructPattern(StructPattern),
@@ -1405,13 +1426,9 @@ impl fmt::Display for ExpressionKind {
         match self {
             ExpressionKind::IntegerLiteral(i) => write!(f, "IntegerLiteral({})", i),
             ExpressionKind::StringLiteral(s) => {
-                write!(
-                    f,
-                    "StringLiteral({})",
-                    s.as_ref().unwrap_or(&"-".to_string())
-                )
+                write!(f, "StringLiteral({})", s.unwrap_or("-".to_string()))
             }
-            ExpressionKind::VariableExpression(expr) => write!(f, "VariableExpression({})", expr),
+            ExpressionKind::VariableExpression(_) => write!(f, "VariableExpression"),
             ExpressionKind::BinaryExpression(_) => write!(f, "BinaryExpression"),
             ExpressionKind::UnaryExpression(_) => write!(f, "UnaryExpression"),
             ExpressionKind::SubscriptExpression(_) => write!(f, "SubscriptExpression"),
@@ -1421,7 +1438,7 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
             ExpressionKind::MemberExpression(_) => write!(f, "MemberExpression"),
             ExpressionKind::StructLiteral(_) => write!(f, "StructLiteral"),
-            ExpressionKind::Expression(Some(expr)) => write!(f, "({})", expr.kind()),
+            ExpressionKind::Expression(Some(_)) => write!(f, "(Expression)"),
             ExpressionKind::Expression(None) => write!(f, "()"),
         }
     }

@@ -1,56 +1,47 @@
 use super::*;
-use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use crate::{sem, syntax::binding};
-use std::rc::Rc;
 
 const DEBUG: bool = false;
 
-#[derive(Debug)]
 pub struct Parser<'a> {
-    /// The filename, uri of a source code.
-    source: String,
     tokenizer: Tokenizer<'a>,
-    naming: PrefixNaming,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new<S: Into<String>>(tokenizer: Tokenizer<'a>, source: S) -> Self {
-        Self {
-            tokenizer,
-            source: source.into(),
-            naming: PrefixNaming::new("?"),
-        }
+    pub fn new(tokenizer: Tokenizer<'a>) -> Self {
+        Self { tokenizer }
     }
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse_string<S: AsRef<str>>(src: S) -> Rc<Program> {
+    pub fn parse_string<S: 'a + AsRef<str>>(src: S) -> AST {
         let tokenizer = Tokenizer::from_string(&src);
-        let mut parser = Parser::new(tokenizer, "-");
+        let mut parser = Parser::new(tokenizer);
 
         parser.parse()
     }
 
-    pub fn parse(&mut self) -> Rc<Program> {
+    pub fn parse(&mut self) -> AST {
         let mut body = vec![];
         let mut code = Code::new();
+        let mut arena = NodeArena::new();
 
         loop {
             // Type declaration
-            if let Some(node) = self.parse_struct_definition() {
-                code.node(NodeKind::StructDefinition(Rc::clone(&node)));
-                body.push(TopLevelKind::StructDefinition(node));
+            if let Some(node) = self.parse_struct_definition(&mut arena) {
+                code.node(node);
+                body.push(node);
             }
             // Function
-            else if let Some(node) = self.parse_function() {
-                code.node(NodeKind::FunctionDefinition(Rc::clone(&node)));
-                body.push(TopLevelKind::FunctionDefinition(node));
+            else if let Some(node) = self.parse_function(&mut arena) {
+                code.node(node);
+                body.push(node);
             }
             // Body for main function
-            else if let Some(node) = self.parse_stmt() {
-                code.node(NodeKind::Statement(Rc::clone(&node)));
-                body.push(TopLevelKind::Statement(node));
+            else if let Some(node) = self.parse_stmt(&mut arena) {
+                code.node(node);
+                body.push(node);
             }
             // No top level constructs can be consumed. It may be at the end of input or
             // parse error.
@@ -71,14 +62,15 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let program = Rc::new(Program::new(body, code));
+        let program = Program::new(body, code);
+        let node = arena.alloc(NodeKind::Program(program));
 
-        binding::bind(&program);
+        binding::bind(node);
 
-        program
+        AST::new(arena, node)
     }
 
-    fn parse_struct_definition(&mut self) -> Option<Rc<StructDefinition>> {
+    fn parse_struct_definition(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_struct_definition");
 
         let mut code = Code::new();
@@ -92,9 +84,9 @@ impl<'a> Parser<'a> {
         loop {
             match self.tokenizer.peek_kind() {
                 TokenKind::Identifier(_) => {
-                    let name = self.parse_name().unwrap();
+                    let name = self.parse_name(arena).unwrap();
 
-                    code.node(NodeKind::Identifier(Rc::clone(&name)));
+                    code.node(name);
                     struct_name = Some(name);
 
                     break;
@@ -114,20 +106,14 @@ impl<'a> Parser<'a> {
         }
 
         // fields
-        let fields = self._parse_elements(
-            '{',
-            '}',
-            &mut code,
-            Parser::parse_type_field,
-            NodeKind::TypeField,
-        );
+        let fields = self._parse_elements(arena, '{', '}', &mut code, Parser::parse_type_field);
 
         let definition = StructDefinition::new(struct_name, fields, code);
 
-        Some(Rc::new(definition))
+        Some(arena.alloc(NodeKind::StructDefinition(definition)))
     }
 
-    fn parse_function(&mut self) -> Option<Rc<FunctionDefinition>> {
+    fn parse_function(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_function");
 
         let mut code = Code::new();
@@ -150,9 +136,9 @@ impl<'a> Parser<'a> {
             match self.tokenizer.peek_kind() {
                 TokenKind::Identifier(_) => {
                     // Okay, it's a function name.
-                    let name = self.parse_name().unwrap();
+                    let name = self.parse_name(arena).unwrap();
 
-                    code.node(NodeKind::Identifier(Rc::clone(&name)));
+                    code.node(name);
                     function_name = Some(name);
 
                     break;
@@ -174,46 +160,41 @@ impl<'a> Parser<'a> {
         }
 
         // parameters
-        let parameters = self._parse_elements(
-            '(',
-            ')',
-            &mut code,
-            Parser::parse_function_parameter,
-            NodeKind::FunctionParameter,
-        );
+        let parameters =
+            self._parse_elements(arena, '(', ')', &mut code, Parser::parse_function_parameter);
 
         // body
-        let body = self._read_block(&[TokenKind::End]);
+        let body = self._read_block(arena, &[TokenKind::End]);
 
-        code.node(NodeKind::Block(Rc::clone(&body)));
+        code.node(body);
         code.interpret(self.tokenizer.next_token()); // end
 
-        Some(Rc::new(FunctionDefinition::new(
-            function_name,
-            parameters,
-            body,
-            code,
-        )))
+        let definition = FunctionDefinition::new(function_name, parameters, body, code);
+        Some(arena.alloc(NodeKind::FunctionDefinition(definition)))
     }
 
-    fn parse_function_parameter(&mut self) -> Option<Rc<FunctionParameter>> {
-        if let Some(name) = self.parse_name() {
-            let code = Code::with_node(NodeKind::Identifier(Rc::clone(&name)));
-            Some(Rc::new(FunctionParameter::new(name, code)))
+    fn parse_function_parameter(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
+        if let Some(name) = self.parse_name(arena) {
+            let code = Code::with_node(name);
+            Some(
+                arena.alloc(NodeKind::FunctionParameter(FunctionParameter::new(
+                    name, code,
+                ))),
+            )
         } else {
             None
         }
     }
 
-    fn parse_type_field(&mut self) -> Option<Rc<TypeField>> {
+    fn parse_type_field(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         // To prevent reading too many unnecessary tokens,
         // we should not skip tokens here.
         let mut code = Code::new();
 
-        let name = self.parse_name();
+        let name = self.parse_name(arena);
 
-        if let Some(ref name) = name {
-            code.node(NodeKind::Identifier(Rc::clone(name)));
+        if let Some(name) = name {
+            code.node(name);
         } else {
             code.missing(
                 self.tokenizer.current_insertion_range(),
@@ -223,10 +204,10 @@ impl<'a> Parser<'a> {
 
         code.interpret(self.expect_token(TokenKind::Char(':'))?);
 
-        let annotation = self.parse_type_annotation();
+        let annotation = self.parse_type_annotation(arena);
 
-        if let Some(ref annotation) = annotation {
-            code.node(NodeKind::TypeAnnotation(Rc::clone(annotation)));
+        if let Some(annotation) = annotation {
+            code.node(annotation);
         } else {
             code.missing(
                 self.tokenizer.current_insertion_range(),
@@ -235,22 +216,21 @@ impl<'a> Parser<'a> {
         }
 
         let field = TypeField::new(name, annotation, code);
-
-        Some(Rc::new(field))
+        Some(arena.alloc(NodeKind::TypeField(field)))
     }
 
-    fn parse_struct_field(&mut self) -> Option<Rc<ValueField>> {
-        let name = self.parse_name()?;
-        let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&name)));
+    fn parse_value_field(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
+        let name = self.parse_name(arena)?;
+        let mut code = Code::with_node(name);
 
         // value can be omitted for struct literal.
         let field = if let Some(separator) = self.expect_token(TokenKind::Char(':')) {
             code.interpret(separator);
 
-            let value = self.parse_expr();
+            let value = self.parse_expr(arena);
 
-            if let Some(ref value) = value {
-                code.node(NodeKind::Expression(Rc::clone(value)));
+            if let Some(value) = value {
+                code.node(value);
             } else {
                 code.missing(
                     self.tokenizer.current_insertion_range(),
@@ -263,21 +243,21 @@ impl<'a> Parser<'a> {
             ValueField::new(name, None, code)
         };
 
-        Some(Rc::new(field))
+        Some(arena.alloc(NodeKind::ValueField(field)))
     }
 
-    fn parse_struct_field_pattern(&mut self) -> Option<Rc<ValueFieldPattern>> {
-        let name = self.parse_name()?;
-        let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&name)));
+    fn parse_value_field_pattern(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
+        let name = self.parse_name(arena)?;
+        let mut code = Code::with_node(name);
 
         // value can be omitted for struct literal.
         let field = if let Some(separator) = self.expect_token(TokenKind::Char(':')) {
             code.interpret(separator);
 
-            let value = self.parse_pattern();
+            let value = self.parse_pattern(arena);
 
-            if let Some(ref value) = value {
-                code.node(NodeKind::Pattern(Rc::clone(value)));
+            if let Some(value) = value {
+                code.node(value);
             } else {
                 code.missing(
                     self.tokenizer.current_insertion_range(),
@@ -290,46 +270,47 @@ impl<'a> Parser<'a> {
             ValueFieldPattern::new(name, None, code)
         };
 
-        Some(Rc::new(field))
+        Some(arena.alloc(NodeKind::ValueFieldPattern(field)))
     }
 
-    fn parse_name(&mut self) -> Option<Rc<Identifier>> {
+    fn parse_name(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         if let TokenKind::Identifier(name) = self.tokenizer.peek_kind() {
             let name = name.clone();
             let code = Code::with_interpreted(self.tokenizer.next_token());
+            let id = arena.alloc(NodeKind::Identifier(Identifier::new(name, code)));
 
-            Some(Rc::new(Identifier::new(name, code)))
+            Some(id)
         } else {
             None
         }
     }
 
-    fn parse_type_annotation(&mut self) -> Option<Rc<TypeAnnotation>> {
+    fn parse_type_annotation(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         let code = Code::with_interpreted(self.expect_token(TokenKind::I32)?);
 
         let ty = TypeAnnotation::new(wrap(sem::Type::Int32), code);
-        Some(Rc::new(ty))
+        Some(arena.alloc(NodeKind::TypeAnnotation(ty)))
     }
 
-    fn parse_stmt(&mut self) -> Option<Rc<Statement>> {
+    fn parse_stmt(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_stmt");
 
         match self.tokenizer.peek_kind() {
-            TokenKind::Let => self.parse_variable_declaration_stmt(),
-            _ => self.parse_stmt_expr(),
+            TokenKind::Let => self.parse_variable_declaration_stmt(arena),
+            _ => self.parse_stmt_expr(arena),
         }
     }
 
-    fn parse_variable_declaration(&mut self) -> Option<Rc<VariableDeclaration>> {
+    fn parse_variable_declaration(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_variable_declaration");
 
         let mut code = Code::with_interpreted(self.tokenizer.next_token()); // let
         let mut pattern = None;
         let mut init = None;
 
-        if let Some(ref pat) = self.parse_pattern() {
-            code.node(NodeKind::Pattern(Rc::clone(pat)));
-            pattern = Some(Rc::clone(pat));
+        if let Some(pat) = self.parse_pattern(arena) {
+            code.node(pat);
+            pattern = Some(pat);
         } else {
             code.missing(
                 self.tokenizer.current_insertion_range(),
@@ -339,9 +320,9 @@ impl<'a> Parser<'a> {
 
         code.interpret(self.expect_token(TokenKind::Char('='))?);
 
-        if let Some(ref expr) = self.parse_expr() {
-            code.node(NodeKind::Expression(Rc::clone(expr)));
-            init = Some(Rc::clone(expr));
+        if let Some(expr) = self.parse_expr(arena) {
+            code.node(expr);
+            init = Some(expr);
         } else {
             code.missing(
                 self.tokenizer.current_insertion_range(),
@@ -350,42 +331,38 @@ impl<'a> Parser<'a> {
         }
 
         let decl = VariableDeclaration::new(pattern, init, code);
-
-        Some(Rc::new(decl))
+        Some(arena.alloc(NodeKind::VariableDeclaration(decl)))
     }
 
-    fn parse_variable_declaration_stmt(&mut self) -> Option<Rc<Statement>> {
+    fn parse_variable_declaration_stmt(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_variable_declaration_stmt");
 
-        let decl = self.parse_variable_declaration()?;
-        let code = Code::with_node(NodeKind::VariableDeclaration(Rc::clone(&decl)));
+        let decl = self.parse_variable_declaration(arena)?;
+        let code = Code::with_node(decl);
+        let stmt = Statement::new(StatementKind::VariableDeclaration(decl), code);
 
-        Some(Rc::new(Statement::new(
-            StatementKind::VariableDeclaration(decl),
-            code,
-        )))
+        Some(arena.alloc(NodeKind::Statement(stmt)))
     }
 
-    fn parse_stmt_expr(&mut self) -> Option<Rc<Statement>> {
+    fn parse_stmt_expr(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_stmt_expr");
 
-        let expr = self.parse_expr()?;
-        let code = Code::with_node(NodeKind::Expression(Rc::clone(&expr)));
+        let expr = self.parse_expr(arena)?;
+        let code = Code::with_node(expr);
+        let stmt = Statement::new(StatementKind::Expression(expr), code);
 
-        Some(Rc::new(Statement::new(
-            StatementKind::Expression(expr),
-            code,
-        )))
+        Some(arena.alloc(NodeKind::Statement(stmt)))
     }
 
-    fn parse_expr(&mut self) -> Option<Rc<Expression>> {
+    fn parse_expr(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_expr");
-        self.parse_rel_op1()
+        self.parse_rel_op1(arena)
     }
 
-    fn parse_rel_op1(&mut self) -> Option<Rc<Expression>> {
+    fn parse_rel_op1(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_rel_op1");
         self._parse_binary_op(
+            arena,
             Parser::parse_rel_op2,
             &[
                 (TokenKind::Eq, BinaryOperator::Eq),
@@ -394,9 +371,10 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_rel_op2(&mut self) -> Option<Rc<Expression>> {
+    fn parse_rel_op2(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_rel_op2");
         self._parse_binary_op(
+            arena,
             Parser::parse_binary_op1,
             &[
                 (TokenKind::Le, BinaryOperator::Le),
@@ -407,9 +385,10 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_binary_op1(&mut self) -> Option<Rc<Expression>> {
+    fn parse_binary_op1(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_binary_op1");
         self._parse_binary_op(
+            arena,
             Parser::parse_binary_op2,
             &[
                 (TokenKind::Char('+'), BinaryOperator::Add),
@@ -419,9 +398,10 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_binary_op2(&mut self) -> Option<Rc<Expression>> {
+    fn parse_binary_op2(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_binary_op2");
         self._parse_binary_op(
+            arena,
             Parser::parse_unary_op,
             &[
                 (TokenKind::Char('*'), BinaryOperator::Mul),
@@ -430,13 +410,13 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_unary_op(&mut self) -> Option<Rc<Expression>> {
+    fn parse_unary_op(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_unary_op");
 
         let operator = match self.tokenizer.peek_kind() {
             TokenKind::Char('+') => UnaryOperator::Plus,
             TokenKind::Char('-') => UnaryOperator::Minus,
-            _ => return self.parse_access(),
+            _ => return self.parse_access(arena),
         };
 
         // unary operators are right associative.
@@ -444,8 +424,8 @@ impl<'a> Parser<'a> {
         let mut operand = None;
 
         loop {
-            if let Some(node) = self.parse_unary_op() {
-                code.node(NodeKind::Expression(Rc::clone(&node)));
+            if let Some(node) = self.parse_unary_op(arena) {
+                code.node(node);
                 operand = Some(node);
                 break;
             } else {
@@ -462,17 +442,18 @@ impl<'a> Parser<'a> {
         // node
         let expr = UnaryExpression::new(operator, operand);
         let kind = ExpressionKind::UnaryExpression(expr);
+        let expr = Expression::new(kind, code);
 
-        Some(Rc::new(Expression::new(kind, code)))
+        Some(arena.alloc(NodeKind::Expression(expr)))
     }
 
-    fn parse_access(&mut self) -> Option<Rc<Expression>> {
+    fn parse_access(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_access");
 
-        let mut operand = self.parse_primary()?;
+        let mut operand = self.parse_primary(arena)?;
 
         loop {
-            let mut code = Code::with_node(NodeKind::Expression(Rc::clone(&operand)));
+            let mut code = Code::with_node(operand);
 
             // To distinguish `x\n[...]` and `x[...]`, we have to capture
             // `tokenizer.is_newline_seen()`, so try to advance tokenizer.
@@ -486,36 +467,26 @@ impl<'a> Parser<'a> {
 
             let kind = match token.kind {
                 TokenKind::Char('[') => {
-                    let arguments = self._parse_elements(
-                        '[',
-                        ']',
-                        &mut code,
-                        Parser::parse_expr,
-                        NodeKind::Expression,
-                    );
+                    let arguments =
+                        self._parse_elements(arena, '[', ']', &mut code, Parser::parse_expr);
 
                     ExpressionKind::SubscriptExpression(SubscriptExpression::new(
                         operand, arguments,
                     ))
                 }
                 TokenKind::Char('(') => {
-                    let arguments = self._parse_elements(
-                        '(',
-                        ')',
-                        &mut code,
-                        Parser::parse_expr,
-                        NodeKind::Expression,
-                    );
+                    let arguments =
+                        self._parse_elements(arena, '(', ')', &mut code, Parser::parse_expr);
 
                     ExpressionKind::CallExpression(CallExpression::new(operand, arguments))
                 }
                 TokenKind::Char('.') => {
                     code.interpret(self.tokenizer.next_token());
 
-                    let field = self.parse_name();
+                    let field = self.parse_name(arena);
 
-                    if let Some(ref field) = field {
-                        code.node(NodeKind::Identifier(Rc::clone(field)));
+                    if let Some(field) = field {
+                        code.node(field);
                     } else {
                         code.missing(
                             self.tokenizer.current_insertion_range(),
@@ -528,47 +499,47 @@ impl<'a> Parser<'a> {
                 _ => break,
             };
 
-            operand = Rc::new(Expression::new(kind, code));
+            operand = arena.alloc(NodeKind::Expression(Expression::new(kind, code)));
         }
 
         Some(operand)
     }
 
-    fn parse_primary(&mut self) -> Option<Rc<Expression>> {
+    fn parse_primary(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_primary");
 
         let token = self.tokenizer.peek();
         let node = match token.kind {
-            TokenKind::Integer(_) => self.read_integer(),
-            TokenKind::Identifier(_) => self.read_identifier(),
-            TokenKind::StringStart => self.read_string(),
-            TokenKind::Char('(') => self.read_paren(),
-            TokenKind::Char('[') => self.read_array(),
-            TokenKind::If => self.read_if_expression(),
-            TokenKind::Case => self.read_case_expression(),
+            TokenKind::Integer(_) => self.read_integer(arena),
+            TokenKind::Identifier(_) => self.read_identifier(arena),
+            TokenKind::StringStart => self.read_string(arena),
+            TokenKind::Char('(') => self.read_paren(arena),
+            TokenKind::Char('[') => self.read_array(arena),
+            TokenKind::If => self.read_if_expression(arena),
+            TokenKind::Case => self.read_case_expression(arena),
             _ => return None,
         };
 
-        Some(node)
+        Some(arena.alloc(NodeKind::Expression(node)))
     }
 
-    fn parse_pattern(&mut self) -> Option<Rc<Pattern>> {
+    fn parse_pattern(&mut self, arena: &mut NodeArena) -> Option<NodeId> {
         self.debug_trace("parse_pattern");
 
         let token = self.tokenizer.peek();
         let pattern = match token.kind {
-            TokenKind::Integer(_) => self.read_integer_pattern(),
-            TokenKind::Identifier(_) => self.read_identifier_pattern(),
-            TokenKind::StringStart => self.read_string_pattern(),
-            TokenKind::Char('[') => self.read_array_pattern(),
-            TokenKind::Rest => self.read_rest_pattern(),
+            TokenKind::Integer(_) => self.read_integer_pattern(arena),
+            TokenKind::Identifier(_) => self.read_identifier_pattern(arena),
+            TokenKind::StringStart => self.read_string_pattern(arena),
+            TokenKind::Char('[') => self.read_array_pattern(arena),
+            TokenKind::Rest => self.read_rest_pattern(arena),
             _ => return None,
         };
 
-        Some(pattern)
+        Some(arena.alloc(NodeKind::Pattern(pattern)))
     }
 
-    fn _read_integer(&mut self) -> (i32, Code) {
+    fn _read_integer(&mut self, arena: &mut NodeArena) -> (i32, Code) {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
@@ -580,53 +551,44 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn read_integer(&mut self) -> Rc<Expression> {
-        let (literal, code) = self._read_integer();
-
-        Rc::new(Expression::new(
-            ExpressionKind::IntegerLiteral(literal),
-            code,
-        ))
+    fn read_integer(&mut self, arena: &mut NodeArena) -> Expression {
+        let (literal, code) = self._read_integer(arena);
+        Expression::new(ExpressionKind::IntegerLiteral(literal), code)
     }
 
-    fn read_integer_pattern(&mut self) -> Rc<Pattern> {
-        let (literal, code) = self._read_integer();
+    fn read_integer_pattern(&mut self, arena: &mut NodeArena) -> Pattern {
+        let (literal, code) = self._read_integer(arena);
 
-        Rc::new(Pattern::new(PatternKind::IntegerPattern(literal), code))
+        Pattern::new(PatternKind::IntegerPattern(literal), code)
     }
 
-    fn read_identifier(&mut self) -> Rc<Expression> {
-        let id = self.parse_name().unwrap();
-        let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&id)));
+    fn read_identifier(&mut self, arena: &mut NodeArena) -> Expression {
+        let id = self.parse_name(arena).unwrap();
+        let mut code = Code::with_node(id);
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
-            let fields = self._parse_elements(
-                '{',
-                '}',
-                &mut code,
-                Parser::parse_struct_field,
-                NodeKind::ValueField,
-            );
+            let fields =
+                self._parse_elements(arena, '{', '}', &mut code, Parser::parse_value_field);
 
             ExpressionKind::StructLiteral(StructLiteral::new(id, fields))
         } else {
             ExpressionKind::VariableExpression(id)
         };
 
-        Rc::new(Expression::new(kind, code))
+        Expression::new(kind, code)
     }
 
-    fn read_identifier_pattern(&mut self) -> Rc<Pattern> {
-        let id = self.parse_name().unwrap();
-        let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&id)));
+    fn read_identifier_pattern(&mut self, arena: &mut NodeArena) -> Pattern {
+        let id = self.parse_name(arena).unwrap();
+        let mut code = Code::with_node(id);
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
             let fields = self._parse_elements(
+                arena,
                 '{',
                 '}',
                 &mut code,
-                Parser::parse_struct_field_pattern,
-                NodeKind::ValueFieldPattern,
+                Parser::parse_value_field_pattern,
             );
 
             PatternKind::StructPattern(StructPattern::new(id, fields))
@@ -634,10 +596,10 @@ impl<'a> Parser<'a> {
             PatternKind::VariablePattern(id)
         };
 
-        Rc::new(Pattern::new(kind, code))
+        Pattern::new(kind, code)
     }
 
-    fn _read_string(&mut self) -> (Option<String>, Code) {
+    fn _read_string(&mut self, arena: &mut NodeArena) -> (Option<String>, Code) {
         let start_token = self.tokenizer.next_token(); // StringStart
         let mut code = Code::with_interpreted(start_token);
         let mut string = String::new();
@@ -684,23 +646,23 @@ impl<'a> Parser<'a> {
         (literal, code)
     }
 
-    fn read_string(&mut self) -> Rc<Expression> {
-        let (string, code) = self._read_string();
+    fn read_string(&mut self, arena: &mut NodeArena) -> Expression {
+        let (string, code) = self._read_string(arena);
 
-        Rc::new(Expression::new(ExpressionKind::StringLiteral(string), code))
+        Expression::new(ExpressionKind::StringLiteral(string), code)
     }
 
-    fn read_string_pattern(&mut self) -> Rc<Pattern> {
-        let (string, code) = self._read_string();
-        Rc::new(Pattern::new(PatternKind::StringPattern(string), code))
+    fn read_string_pattern(&mut self, arena: &mut NodeArena) -> Pattern {
+        let (string, code) = self._read_string(arena);
+        Pattern::new(PatternKind::StringPattern(string), code)
     }
 
-    fn read_paren(&mut self) -> Rc<Expression> {
+    fn read_paren(&mut self, arena: &mut NodeArena) -> Expression {
         let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "("
-        let node = self.parse_expr();
+        let node = self.parse_expr(arena);
 
-        if let Some(ref node) = node {
-            code.node(NodeKind::Expression(Rc::clone(node)));
+        if let Some(node) = node {
+            code.node(node);
         } else {
             code.missing(
                 self.tokenizer.current_insertion_range(),
@@ -729,81 +691,60 @@ impl<'a> Parser<'a> {
 
         // Because parentheses which groups an expression is not part of
         // AST, we have to incorporate it into another node.
-        if let Some(ref expr) = node {
-            Rc::new(Expression::new(
-                ExpressionKind::Expression(Some(Rc::clone(&expr))),
-                code,
-            ))
+        if let Some(expr) = node {
+            Expression::new(ExpressionKind::Expression(Some(expr)), code)
         } else {
-            Rc::new(Expression::new(ExpressionKind::Expression(None), code))
+            Expression::new(ExpressionKind::Expression(None), code)
         }
     }
 
-    fn read_array(&mut self) -> Rc<Expression> {
+    fn read_array(&mut self, arena: &mut NodeArena) -> Expression {
         let mut code = Code::new();
-        let elements = self._parse_elements(
-            '[',
-            ']',
-            &mut code,
-            Parser::parse_expr,
-            NodeKind::Expression,
-        );
+        let elements = self._parse_elements(arena, '[', ']', &mut code, Parser::parse_expr);
 
         let expr = ArrayExpression::new(elements);
 
-        Rc::new(Expression::new(ExpressionKind::ArrayExpression(expr), code))
+        Expression::new(ExpressionKind::ArrayExpression(expr), code)
     }
 
-    fn read_array_pattern(&mut self) -> Rc<Pattern> {
+    fn read_array_pattern(&mut self, arena: &mut NodeArena) -> Pattern {
         let mut code = Code::new();
-        let elements = self._parse_elements(
-            '[',
-            ']',
-            &mut code,
-            Parser::parse_pattern,
-            NodeKind::Pattern,
-        );
+        let elements = self._parse_elements(arena, '[', ']', &mut code, Parser::parse_pattern);
 
-        Rc::new(Pattern::new(
-            PatternKind::ArrayPattern(ArrayPattern::new(elements)),
-            code,
-        ))
+        Pattern::new(PatternKind::ArrayPattern(ArrayPattern::new(elements)), code)
     }
 
-    fn read_rest_pattern(&mut self) -> Rc<Pattern> {
+    fn read_rest_pattern(&mut self, arena: &mut NodeArena) -> Pattern {
         let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "..."
-        let name = self.parse_name();
+        let name = self.parse_name(arena);
 
-        if let Some(ref node) = name {
-            code.node(NodeKind::Identifier(Rc::clone(node)));
+        if let Some(node) = name {
+            code.node(node);
         }
 
-        Rc::new(Pattern::new(
-            PatternKind::RestPattern(RestPattern::new(name)),
-            code,
-        ))
+        Pattern::new(PatternKind::RestPattern(RestPattern::new(name)), code)
     }
 
-    fn read_if_expression(&mut self) -> Rc<Expression> {
+    fn read_if_expression(&mut self, arena: &mut NodeArena) -> Expression {
         let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "if"
         let condition = self._parse_optional_item(
+            arena,
             &mut code,
             Parser::parse_expr,
-            NodeKind::Expression,
             MissingTokenKind::Expression,
         );
 
         // body
-        let then_body = self._read_block(&[TokenKind::End, TokenKind::Else]);
+        let then_body = self._read_block(arena, &[TokenKind::End, TokenKind::Else]);
         let has_else = *self.tokenizer.peek_kind() == TokenKind::Else;
 
-        code.node(NodeKind::Block(Rc::clone(&then_body)));
+        code.node(then_body);
         code.interpret(self.tokenizer.next_token()); // "else" or "end"
 
         let else_body = if has_else {
-            let else_body = self._read_block(&[TokenKind::End]);
+            let else_body = self._read_block(arena, &[TokenKind::End]);
 
-            code.node(NodeKind::Block(Rc::clone(&else_body)));
+            code.node(else_body);
             code.interpret(self.tokenizer.next_token()); //  "end"
 
             Some(else_body)
@@ -813,16 +754,16 @@ impl<'a> Parser<'a> {
 
         let expr = IfExpression::new(condition, then_body, else_body);
 
-        Rc::new(Expression::new(ExpressionKind::IfExpression(expr), code))
+        Expression::new(ExpressionKind::IfExpression(expr), code)
     }
 
-    fn read_case_expression(&mut self) -> Rc<Expression> {
+    fn read_case_expression(&mut self, arena: &mut NodeArena) -> Expression {
         // case ...
         let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "case"
         let head = self._parse_optional_item(
+            arena,
             &mut code,
             Parser::parse_expr,
-            NodeKind::Expression,
             MissingTokenKind::Expression,
         );
 
@@ -833,16 +774,16 @@ impl<'a> Parser<'a> {
         loop {
             match self.tokenizer.peek_kind() {
                 TokenKind::When => {
-                    let arm = self.read_case_arm();
+                    let arm = self._read_case_arm(arena);
 
-                    code.node(NodeKind::CaseArm(Rc::clone(&arm)));
+                    code.node(arm);
                     arms.push(arm);
                 }
                 TokenKind::Else => {
                     code.interpret(self.tokenizer.next_token());
 
-                    let block = self._read_block(&[TokenKind::End]);
-                    code.node(NodeKind::Block(Rc::clone(&block)));
+                    let block = self._read_block(arena, &[TokenKind::End]);
+                    code.node(block);
 
                     else_body = Some(block);
                 }
@@ -866,10 +807,10 @@ impl<'a> Parser<'a> {
 
         let expr = CaseExpression::new(head, arms, else_body);
 
-        Rc::new(Expression::new(ExpressionKind::CaseExpression(expr), code))
+        Expression::new(ExpressionKind::CaseExpression(expr), code)
     }
 
-    fn read_case_arm(&mut self) -> Rc<CaseArm> {
+    fn _read_case_arm(&mut self, arena: &mut NodeArena) -> NodeId {
         let mut code = Code::new();
 
         // when
@@ -885,9 +826,9 @@ impl<'a> Parser<'a> {
             None
         } else {
             self._parse_optional_item(
+                arena,
                 &mut code,
                 Parser::parse_pattern,
-                NodeKind::Pattern,
                 MissingTokenKind::Pattern,
             )
         };
@@ -898,23 +839,25 @@ impl<'a> Parser<'a> {
         if *self.tokenizer.peek_kind() == TokenKind::If {
             code.interpret(self.tokenizer.next_token());
             guard = self._parse_optional_item(
+                arena,
                 &mut code,
                 Parser::parse_expr,
-                NodeKind::Expression,
                 MissingTokenKind::Expression,
             );
         }
 
-        let then_body = self._read_block(&[TokenKind::When, TokenKind::Else, TokenKind::End]);
-        code.node(NodeKind::Block(Rc::clone(&then_body)));
+        let then_body =
+            self._read_block(arena, &[TokenKind::When, TokenKind::Else, TokenKind::End]);
+        code.node(then_body);
 
-        Rc::new(CaseArm::new(pattern, guard, then_body, code))
+        let arm = CaseArm::new(pattern, guard, then_body, code);
+        arena.alloc(NodeKind::CaseArm(arm))
     }
 
     /// Reads statements until it meets a token listed in `stop_tokens`.
     /// But this function doesn't consume a stop token itself, consuming
     /// a stop token is caller's responsibility.
-    fn _read_block(&mut self, stop_tokens: &[TokenKind]) -> Rc<Block> {
+    fn _read_block(&mut self, arena: &mut NodeArena, stop_tokens: &[TokenKind]) -> NodeId {
         let mut code = Code::new();
 
         // body
@@ -928,14 +871,14 @@ impl<'a> Parser<'a> {
         loop {
             let mut stmt_seen = false;
 
-            if let Some(stmt) = self.parse_stmt() {
+            if let Some(stmt) = self.parse_stmt(arena) {
                 stmt_seen = true;
 
                 if !newline_seen {
                     code.missing(insertion_range, MissingTokenKind::Separator);
                 }
 
-                code.node(NodeKind::Statement(Rc::clone(&stmt)));
+                code.node(stmt);
                 body.push(stmt);
             }
 
@@ -958,8 +901,8 @@ impl<'a> Parser<'a> {
                     newline_seen = self.tokenizer.is_newline_seen();
                     insertion_range = self.tokenizer.current_insertion_range();
 
-                    // `parse_stmt()` should consume at least one token.
-                    // However, in case `parse_stmt()` have not been able to consume a single token,
+                    // `parse_stmt(arena)` should consume at least one token.
+                    // However, in case `parse_stmt(arena)` have not been able to consume a single token,
                     // we have to skip the current token.
                     if !stmt_seen {
                         code.skip(self.tokenizer.next_token(), MissingTokenKind::Statement);
@@ -968,20 +911,20 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Rc::new(Block::new(body, code))
+        arena.alloc(NodeKind::Block(Block::new(body, code)))
     }
 
-    fn _parse_optional_item<T>(
+    fn _parse_optional_item(
         &mut self,
+        arena: &mut NodeArena,
         code: &mut Code,
-        node_parser: fn(&mut Parser<'a>) -> Option<Rc<T>>,
-        kind_builder: fn(Rc<T>) -> NodeKind,
+        node_parser: fn(&mut Parser<'a>, &mut NodeArena) -> Option<NodeId>,
         missing_token: MissingTokenKind,
-    ) -> Option<Rc<T>> {
-        let node = node_parser(self);
+    ) -> Option<NodeId> {
+        let node = node_parser(self, arena);
 
-        if let Some(ref node) = node {
-            code.node(kind_builder(Rc::clone(node)));
+        if let Some(node) = node {
+            code.node(node);
         } else {
             code.missing(self.tokenizer.current_insertion_range(), missing_token);
         }
@@ -991,14 +934,14 @@ impl<'a> Parser<'a> {
 
     /// Read comma-separated elements from the start character token specified by `open_char` to
     /// the end character token or EOF specified by `close_char`.
-    fn _parse_elements<T>(
+    fn _parse_elements(
         &mut self,
+        arena: &mut NodeArena,
         open_char: char,
         close_char: char,
         code: &mut Code,
-        element_parser: fn(&mut Parser<'a>) -> Option<Rc<T>>,
-        kind_builder: fn(Rc<T>) -> NodeKind,
-    ) -> Vec<Rc<T>> {
+        element_parser: fn(&mut Parser<'a>, &mut NodeArena) -> Option<NodeId>,
+    ) -> Vec<NodeId> {
         let mut arguments = vec![];
         let mut consumed = false; // An argument already read.
 
@@ -1030,12 +973,12 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 _ => {
-                    if let Some(expr) = element_parser(self) {
+                    if let Some(expr) = element_parser(self, arena) {
                         // Maybe user forgot opening token before a param.
                         //     # (
                         //         a ...
                         //     )
-                        arguments.push(Rc::clone(&expr));
+                        arguments.push(expr);
                         consumed = true;
 
                         code.missing(
@@ -1043,7 +986,7 @@ impl<'a> Parser<'a> {
                             MissingTokenKind::Char(open_char),
                         );
 
-                        code.node(kind_builder(Rc::clone(&expr)));
+                        code.node(expr);
                         break;
                     } else {
                         // Continue until read an opening token.
@@ -1058,12 +1001,12 @@ impl<'a> Parser<'a> {
 
         loop {
             if !consumed {
-                let argument = element_parser(self);
+                let argument = element_parser(self, arena);
 
                 if let Some(argument) = argument {
                     consumed = true;
-                    arguments.push(Rc::clone(&argument));
-                    code.node(kind_builder(Rc::clone(&argument)));
+                    arguments.push(argument);
+                    code.node(argument);
                 } else {
                     consumed = false;
                 }
@@ -1104,10 +1047,11 @@ impl<'a> Parser<'a> {
 
     fn _parse_binary_op(
         &mut self,
-        next_parser: fn(&mut Parser<'a>) -> Option<Rc<Expression>>,
+        arena: &mut NodeArena,
+        next_parser: fn(&mut Parser<'a>, &mut NodeArena) -> Option<NodeId>,
         operators: &[(TokenKind, BinaryOperator)],
-    ) -> Option<Rc<Expression>> {
-        let mut lhs = next_parser(self)?;
+    ) -> Option<NodeId> {
+        let mut lhs = next_parser(self, arena)?;
 
         loop {
             let kind = self.tokenizer.peek_kind();
@@ -1131,14 +1075,13 @@ impl<'a> Parser<'a> {
             let mut rhs;
             let mut code = Code::new();
 
-            code.node(NodeKind::Expression(Rc::clone(&lhs)))
-                .interpret(op_token);
+            code.node(lhs).interpret(op_token);
 
             loop {
-                rhs = next_parser(self);
+                rhs = next_parser(self, arena);
 
-                if let Some(ref rhs) = rhs {
-                    code.node(NodeKind::Expression(Rc::clone(rhs)));
+                if let Some(rhs) = rhs {
+                    code.node(rhs);
                     break;
                 } else {
                     // If we couldn't parse the right hand expression, retry
@@ -1154,11 +1097,9 @@ impl<'a> Parser<'a> {
 
             // node
             let expr = BinaryExpression::new(operator, lhs, rhs);
+            let expr = Expression::new(ExpressionKind::BinaryExpression(expr), code);
 
-            lhs = Rc::new(Expression::new(
-                ExpressionKind::BinaryExpression(expr),
-                code,
-            ));
+            lhs = arena.alloc(NodeKind::Expression(expr));
         }
 
         Some(lhs)
@@ -1194,7 +1135,8 @@ mod tests {
 
     #[test]
     fn number_integer() {
-        let stmt = parse_statement("42");
+        let tree = Parser::parse_string("42");
+        let stmt = get_statement(&tree);
 
         assert_matches!(
             stmt.expression().unwrap().kind(),
@@ -1211,7 +1153,8 @@ mod tests {
     #[test]
     fn incomplete_string() {
         for src in vec!["\"Fizz\\\"", "\"Fizz\\\"\n"] {
-            let stmt = parse_statement(src);
+            let tree = Parser::parse_string(src);
+            let stmt = get_statement(&tree);
             let expr = stmt.expression().unwrap();
 
             assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
@@ -1240,7 +1183,8 @@ mod tests {
     #[test]
     fn incomplete_string_in_paren() {
         for src in vec!["(\"Fizz\\\")", "(\"Fizz\\\")\n"] {
-            let stmt = parse_statement(src);
+            let tree = Parser::parse_string(src);
+            let stmt = get_statement(&tree);
             let expr = stmt.expression().unwrap();
 
             assert_matches!(expr.kind(), ExpressionKind::Expression(Some(expr)) => {
@@ -1263,7 +1207,8 @@ mod tests {
 
     #[test]
     fn add_integer() {
-        let stmt = parse_statement("1+2");
+        let tree = Parser::parse_string("1+2");
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator, BinaryOperator::Add);
@@ -1288,7 +1233,8 @@ mod tests {
 
     #[test]
     fn add_integer_missing_node() {
-        let stmt = parse_statement("1+");
+        let tree = Parser::parse_string("1+");
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator, BinaryOperator::Add);
@@ -1311,7 +1257,8 @@ mod tests {
 
     #[test]
     fn add_integer_skipped_tokens() {
-        let stmt = parse_statement("1 + % ? 2");
+        let tree = Parser::parse_string("1 + % ? 2");
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator, BinaryOperator::Add);
@@ -1344,7 +1291,8 @@ mod tests {
 
     #[test]
     fn unary_op() {
-        let stmt = parse_statement("-1");
+        let tree = Parser::parse_string("-1");
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().unary_expression().unwrap();
 
         assert_eq!(expr.operator, UnaryOperator::Minus);
@@ -1365,7 +1313,8 @@ mod tests {
 
     #[test]
     fn unary_op_nested() {
-        let stmt = parse_statement("-+1");
+        let tree = Parser::parse_string("-+1");
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().unary_expression().unwrap();
 
         assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
@@ -1388,7 +1337,8 @@ mod tests {
 
     #[test]
     fn subscript_index() {
-        let stmt = parse_statement("a[0]");
+        let tree = Parser::parse_string("a[0]");
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1421,7 +1371,8 @@ mod tests {
 
     #[test]
     fn subscript_empty() {
-        let stmt = parse_statement("a[]");
+        let tree = Parser::parse_string("a[]");
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1450,7 +1401,8 @@ mod tests {
 
     #[test]
     fn subscript_not_closed() {
-        let stmt = parse_statement("a[1\nb");
+        let tree = Parser::parse_string("a[1\nb");
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1481,7 +1433,8 @@ mod tests {
     #[test]
     fn subscript_incomplete_string() {
         for src in vec!["a[\"", "a[\"\n"] {
-            let stmt = parse_statement(src);
+            let tree = Parser::parse_string(src);
+            let stmt = get_statement(&tree);
             let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
             assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1506,7 +1459,8 @@ mod tests {
 
     #[test]
     fn array_empty() {
-        let stmt = parse_statement("[]");
+        let tree = Parser::parse_string("[]");
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().array_expression().unwrap();
 
         assert_matches!(expr, ArrayExpression{ .. } => {
@@ -1526,7 +1480,8 @@ mod tests {
 
     #[test]
     fn array_one_element_and_trailing_comma() {
-        let stmt = parse_statement("[1,]");
+        let tree = Parser::parse_string("[1,]");
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().array_expression().unwrap();
 
         assert_matches!(expr, ArrayExpression{ .. } => {
@@ -1556,13 +1511,14 @@ mod tests {
     // If expression
     #[test]
     fn if_expression() {
-        let stmt = parse_statement(
+        let tree = Parser::parse_string(
             "if x > 0
                 10
             else
                 20
             end",
         );
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().if_expression().unwrap();
 
         assert_matches!(expr, IfExpression { ref condition, ref else_body, .. } => {
@@ -1575,7 +1531,8 @@ mod tests {
 
     #[test]
     fn if_expression_missing_condition() {
-        let stmt = parse_statement("if\nend");
+        let tree = Parser::parse_string("if\nend");
+        let stmt = get_statement(&tree);
         let expr = stmt.expression().unwrap().if_expression().unwrap();
 
         assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
@@ -1589,7 +1546,8 @@ mod tests {
 
     #[test]
     fn if_expression_missing_newline() {
-        let stmt = parse_statement("if b x end");
+        let tree = Parser::parse_string("if b x end");
+        let stmt = get_statement(&tree);
 
         assert!(stmt.expression().unwrap().if_expression().is_some());
 
@@ -1629,7 +1587,7 @@ mod tests {
     // If expression
     #[test]
     fn case_expression() {
-        let stmt = parse_statement(
+        let tree = Parser::parse_string(
             "
             case x
             when 123
@@ -1646,7 +1604,8 @@ mod tests {
                 6
             end",
         );
-        let expr = stmt.expression().unwrap().case_expression().unwrap();
+        let stmt = get_statement(&tree);
+        let expr = stmt.expression(&tree).unwrap().case_expression().unwrap();
 
         assert_matches!(expr, CaseExpression { head, arms, else_body } => {
             assert!(head.is_some());
@@ -1683,11 +1642,11 @@ mod tests {
 
     // --- helpers
 
-    fn parse_statement(src: &str) -> Rc<Statement> {
-        let module = Parser::parse_string(src);
+    fn get_statement(tree: &AST) -> &Statement {
+        let program = tree.root();
 
-        assert!(!module.body.is_empty());
-        module.body[0].statement().unwrap()
+        assert!(!program.body.is_empty());
+        tree.get(program.body[0]).unwrap().statement().unwrap()
     }
 
     fn next_node<'a>(tokens: &'a mut slice::Iter<CodeKind>) -> &'a NodeKind {
@@ -1710,7 +1669,7 @@ mod tests {
         unwrap_skipped_token(tokens.next().unwrap())
     }
 
-    fn unwrap_node(kind: &CodeKind) -> &NodeKind {
+    fn unwrap_node<'a>(kind: &'a CodeKind) -> &'a NodeKind {
         if let CodeKind::Node(node) = kind {
             return node;
         }
@@ -1718,7 +1677,7 @@ mod tests {
         panic!("expected child node");
     }
 
-    fn unwrap_interpreted_token(kind: &CodeKind) -> &Token {
+    fn unwrap_interpreted_token<'a>(kind: &'a CodeKind) -> &'a Token {
         if let CodeKind::SyntaxToken(token) = kind {
             if let SyntaxToken::Interpreted(token) = token {
                 return token;
@@ -1738,7 +1697,7 @@ mod tests {
         panic!("expected missing token");
     }
 
-    fn unwrap_skipped_token(kind: &CodeKind) -> (&Token, MissingTokenKind) {
+    fn unwrap_skipped_token<'a>(kind: &'a CodeKind) -> (&Token, MissingTokenKind) {
         if let CodeKind::SyntaxToken(token) = kind {
             if let SyntaxToken::Skipped { token, expected } = token {
                 return (token, *expected);
