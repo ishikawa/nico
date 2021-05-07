@@ -15,27 +15,6 @@ pub trait Node: fmt::Display {
         let init = it.next().unwrap();
         it.fold(init.range(), |acc, kind| kind.range().union(&acc))
     }
-
-    fn find_identifier_at(&self, position: Position) -> Option<&Identifier> {
-        for code in self.code() {
-            if let CodeKind::Node(node) = code {
-                match node {
-                    NodeKind::Identifier(id) => {
-                        if id.range().contains(position) {
-                            return Some(id);
-                        }
-                    }
-                    _ => {
-                        if let Some(id) = node.find_identifier_at(position) {
-                            return Some(id);
-                        }
-                    }
-                }
-            }
-        }
-
-        None
-    }
 }
 
 #[derive(Debug, Clone)]
