@@ -1,4 +1,4 @@
-use super::{EffectiveRange, MissingTokenKind, Position, Scope, SyntaxToken, Token};
+use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::{sem, util::wrap};
 use std::rc::Rc;
 use std::slice;
@@ -15,27 +15,6 @@ pub trait Node: fmt::Display {
         let init = it.next().unwrap();
         it.fold(init.range(), |acc, kind| kind.range().union(&acc))
     }
-
-    fn find_identifier_at(&self, position: Position) -> Option<&Identifier> {
-        for code in self.code() {
-            if let CodeKind::Node(node) = code {
-                match node {
-                    NodeKind::Identifier(id) => {
-                        if id.range().contains(position) {
-                            return Some(id);
-                        }
-                    }
-                    _ => {
-                        if let Some(id) = node.find_identifier_at(position) {
-                            return Some(id);
-                        }
-                    }
-                }
-            }
-        }
-
-        None
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -48,8 +27,8 @@ pub enum NodeKind {
     FunctionParameter(Rc<FunctionParameter>),
     TypeField(Rc<TypeField>),
     TypeAnnotation(Rc<TypeAnnotation>),
-    StructField(Rc<ValueField>),
-    StructFieldPattern(Rc<ValueFieldPattern>),
+    ValueField(Rc<ValueField>),
+    ValueFieldPattern(Rc<ValueFieldPattern>),
     Statement(Rc<Statement>),
     VariableDeclaration(Rc<VariableDeclaration>),
     Expression(Rc<Expression>),
@@ -147,7 +126,7 @@ impl NodeKind {
     }
 
     pub fn struct_field(&self) -> Option<&Rc<ValueField>> {
-        if let NodeKind::StructField(node) = self {
+        if let NodeKind::ValueField(node) = self {
             Some(node)
         } else {
             None
@@ -155,7 +134,7 @@ impl NodeKind {
     }
 
     pub fn struct_field_pattern(&self) -> Option<&Rc<ValueFieldPattern>> {
-        if let NodeKind::StructFieldPattern(node) = self {
+        if let NodeKind::ValueFieldPattern(node) = self {
             Some(node)
         } else {
             None
@@ -212,7 +191,7 @@ impl NodeKind {
     }
 
     pub fn is_struct_field(&self) -> bool {
-        matches!(self, Self::StructField(..))
+        matches!(self, Self::ValueField(..))
     }
 
     pub fn is_function_definition(&self) -> bool {
@@ -253,8 +232,8 @@ impl Node for NodeKind {
             NodeKind::StructDefinition(kind) => kind.code(),
             NodeKind::FunctionDefinition(kind) => kind.code(),
             NodeKind::TypeField(kind) => kind.code(),
-            NodeKind::StructField(kind) => kind.code(),
-            NodeKind::StructFieldPattern(kind) => kind.code(),
+            NodeKind::ValueField(kind) => kind.code(),
+            NodeKind::ValueFieldPattern(kind) => kind.code(),
             NodeKind::TypeAnnotation(kind) => kind.code(),
             NodeKind::FunctionParameter(kind) => kind.code(),
             NodeKind::Statement(kind) => kind.code(),
@@ -572,19 +551,29 @@ impl fmt::Display for Identifier {
 pub struct StructDefinition {
     pub name: Option<Rc<Identifier>>,
     pub fields: Vec<Rc<TypeField>>,
+    r#type: Rc<RefCell<sem::Type>>,
     code: Code,
 }
 
 impl StructDefinition {
     pub fn new(name: Option<Rc<Identifier>>, fields: Vec<Rc<TypeField>>, code: Code) -> Self {
-        Self { name, fields, code }
+        Self {
+            name,
+            fields,
+            code,
+            r#type: wrap(sem::Type::Unknown),
+        }
     }
 
     pub fn name(&self) -> Option<&Identifier> {
         self.name.as_deref()
     }
 
-    pub fn get_type(&self, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
+    pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
+        &self.r#type
+    }
+
+    pub fn get_field_type(&self, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
         self.fields
             .iter()
             .find(|f| {
@@ -877,8 +866,12 @@ pub struct Expression {
 }
 
 impl Expression {
-    pub fn new(kind: ExpressionKind, code: Code, r#type: Rc<RefCell<sem::Type>>) -> Self {
-        Self { kind, code, r#type }
+    pub fn new(kind: ExpressionKind, code: Code) -> Self {
+        Self {
+            kind,
+            code,
+            r#type: wrap(sem::Type::Unknown),
+        }
     }
 
     pub fn kind(&self) -> &ExpressionKind {
@@ -887,6 +880,10 @@ impl Expression {
 
     pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
         &self.r#type
+    }
+
+    pub fn replace_type(&mut self, ty: &Rc<RefCell<sem::Type>>) {
+        self.r#type = Rc::clone(ty);
     }
 
     pub fn struct_literal(&self) -> Option<&StructLiteral> {
@@ -1035,7 +1032,7 @@ impl Node for ValueField {
 
 impl fmt::Display for ValueField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "StructField({})", self.name().as_str())
+        write!(f, "ValueField({})", self.name().as_str())
     }
 }
 
@@ -1367,7 +1364,7 @@ impl Node for ValueFieldPattern {
 
 impl fmt::Display for ValueFieldPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "StructFieldPattern")
+        write!(f, "ValueFieldPattern({})", self.name)
     }
 }
 
@@ -1391,8 +1388,8 @@ impl fmt::Display for NodeKind {
             NodeKind::FunctionDefinition(definition) => definition.fmt(f),
             NodeKind::TypeField(field) => field.fmt(f),
             NodeKind::TypeAnnotation(ty) => ty.fmt(f),
-            NodeKind::StructField(field) => field.fmt(f),
-            NodeKind::StructFieldPattern(pattern) => pattern.fmt(f),
+            NodeKind::ValueField(field) => field.fmt(f),
+            NodeKind::ValueFieldPattern(pattern) => pattern.fmt(f),
             NodeKind::FunctionParameter(param) => param.fmt(f),
             NodeKind::Statement(stmt) => stmt.fmt(f),
             NodeKind::VariableDeclaration(declaration) => declaration.fmt(f),

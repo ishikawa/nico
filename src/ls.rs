@@ -1,3 +1,6 @@
-pub mod hover;
-pub mod rename;
+mod hover;
+mod rename;
 pub mod server;
+
+pub use hover::Hover;
+pub use rename::Rename;

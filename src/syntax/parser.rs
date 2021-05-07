@@ -1,8 +1,7 @@
 use super::*;
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
-use crate::{sem, syntax::binding::bind_scopes};
-use std::cell::RefCell;
+use crate::{sem, syntax::binding};
 use std::rc::Rc;
 
 const DEBUG: bool = false;
@@ -74,7 +73,7 @@ impl<'a> Parser<'a> {
 
         let program = Rc::new(Program::new(body, code));
 
-        bind_scopes(&program);
+        binding::bind(&program);
 
         program
     }
@@ -464,7 +463,7 @@ impl<'a> Parser<'a> {
         let expr = UnaryExpression::new(operator, operand);
         let kind = ExpressionKind::UnaryExpression(expr);
 
-        Some(Rc::new(Expression::new(kind, code, self.new_type_var())))
+        Some(Rc::new(Expression::new(kind, code)))
     }
 
     fn parse_access(&mut self) -> Option<Rc<Expression>> {
@@ -529,7 +528,7 @@ impl<'a> Parser<'a> {
                 _ => break,
             };
 
-            operand = Rc::new(Expression::new(kind, code, self.new_type_var()));
+            operand = Rc::new(Expression::new(kind, code));
         }
 
         Some(operand)
@@ -587,7 +586,6 @@ impl<'a> Parser<'a> {
         Rc::new(Expression::new(
             ExpressionKind::IntegerLiteral(literal),
             code,
-            wrap(sem::Type::Int32),
         ))
     }
 
@@ -607,7 +605,7 @@ impl<'a> Parser<'a> {
                 '}',
                 &mut code,
                 Parser::parse_struct_field,
-                NodeKind::StructField,
+                NodeKind::ValueField,
             );
 
             ExpressionKind::StructLiteral(StructLiteral::new(id, fields))
@@ -615,7 +613,7 @@ impl<'a> Parser<'a> {
             ExpressionKind::VariableExpression(id)
         };
 
-        Rc::new(Expression::new(kind, code, self.new_type_var()))
+        Rc::new(Expression::new(kind, code))
     }
 
     fn read_identifier_pattern(&mut self) -> Rc<Pattern> {
@@ -628,7 +626,7 @@ impl<'a> Parser<'a> {
                 '}',
                 &mut code,
                 Parser::parse_struct_field_pattern,
-                NodeKind::StructFieldPattern,
+                NodeKind::ValueFieldPattern,
             );
 
             PatternKind::StructPattern(StructPattern::new(id, fields))
@@ -689,11 +687,7 @@ impl<'a> Parser<'a> {
     fn read_string(&mut self) -> Rc<Expression> {
         let (string, code) = self._read_string();
 
-        Rc::new(Expression::new(
-            ExpressionKind::StringLiteral(string),
-            code,
-            wrap(sem::Type::String),
-        ))
+        Rc::new(Expression::new(ExpressionKind::StringLiteral(string), code))
     }
 
     fn read_string_pattern(&mut self) -> Rc<Pattern> {
@@ -739,14 +733,9 @@ impl<'a> Parser<'a> {
             Rc::new(Expression::new(
                 ExpressionKind::Expression(Some(Rc::clone(&expr))),
                 code,
-                Rc::clone(expr.r#type()),
             ))
         } else {
-            Rc::new(Expression::new(
-                ExpressionKind::Expression(None),
-                code,
-                wrap(sem::Type::Void),
-            ))
+            Rc::new(Expression::new(ExpressionKind::Expression(None), code))
         }
     }
 
@@ -762,11 +751,7 @@ impl<'a> Parser<'a> {
 
         let expr = ArrayExpression::new(elements);
 
-        Rc::new(Expression::new(
-            ExpressionKind::ArrayExpression(expr),
-            code,
-            self.new_type_var(),
-        ))
+        Rc::new(Expression::new(ExpressionKind::ArrayExpression(expr), code))
     }
 
     fn read_array_pattern(&mut self) -> Rc<Pattern> {
@@ -828,11 +813,7 @@ impl<'a> Parser<'a> {
 
         let expr = IfExpression::new(condition, then_body, else_body);
 
-        Rc::new(Expression::new(
-            ExpressionKind::IfExpression(expr),
-            code,
-            self.new_type_var(),
-        ))
+        Rc::new(Expression::new(ExpressionKind::IfExpression(expr), code))
     }
 
     fn read_case_expression(&mut self) -> Rc<Expression> {
@@ -885,11 +866,7 @@ impl<'a> Parser<'a> {
 
         let expr = CaseExpression::new(head, arms, else_body);
 
-        Rc::new(Expression::new(
-            ExpressionKind::CaseExpression(expr),
-            code,
-            self.new_type_var(),
-        ))
+        Rc::new(Expression::new(ExpressionKind::CaseExpression(expr), code))
     }
 
     fn read_case_arm(&mut self) -> Rc<CaseArm> {
@@ -1181,7 +1158,6 @@ impl<'a> Parser<'a> {
             lhs = Rc::new(Expression::new(
                 ExpressionKind::BinaryExpression(expr),
                 code,
-                self.new_type_var(),
             ));
         }
 
@@ -1199,12 +1175,6 @@ impl<'a> Parser<'a> {
         } else {
             None
         }
-    }
-
-    /// Returns a new type variable.
-    fn new_type_var(&mut self) -> Rc<RefCell<sem::Type>> {
-        let name = self.naming.next();
-        wrap(sem::Type::new_type_var(&name))
     }
 
     fn debug_trace(&self, name: &str) {

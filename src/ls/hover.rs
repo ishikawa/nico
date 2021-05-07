@@ -45,7 +45,7 @@ impl Hover {
         definition: &Rc<StructDefinition>,
         field: &Rc<ValueField>,
     ) -> String {
-        let ty = definition.get_type(field.name().as_str());
+        let ty = definition.get_field_type(field.name().as_str());
 
         format!(
             "```nico\n{}.{}: {}\n```",
