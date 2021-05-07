@@ -159,7 +159,6 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
     fn enter_struct_definition(&mut self, _path: &mut NodePath, struct_def: &Rc<StructDefinition>) {
         if let DefinitionKind::StructDefinition(definition) = self.definition {
             if std::ptr::eq(definition.as_ref(), struct_def.as_ref()) {
-                eprintln!("Found: {}", struct_def);
                 if let Some(ref name) = struct_def.name {
                     self.ranges.push(name.range());
                 }
