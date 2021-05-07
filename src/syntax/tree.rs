@@ -1,4 +1,4 @@
-use super::{EffectiveRange, MissingTokenKind, Position, Scope, SyntaxToken, Token};
+use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::{sem, util::wrap};
 use std::rc::Rc;
 use std::slice;
