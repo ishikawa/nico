@@ -212,9 +212,9 @@ impl NodeKind {
         None
     }
 
-    pub fn variable_expression(&self) -> Option<NodeId> {
+    pub fn variable_expression<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
         if let NodeKind::Expression(node) = self {
-            return node.variable_expression();
+            return node.variable_expression(tree);
         }
         None
     }
@@ -262,8 +262,8 @@ impl NodeKind {
         self.struct_literal().is_some()
     }
 
-    pub fn is_variable_expression(&self) -> bool {
-        self.variable_expression().is_some()
+    pub fn is_variable_expression<'a>(&self, tree: &'a AST) -> bool {
+        self.variable_expression(tree).is_some()
     }
 
     pub fn is_member_expression(&self) -> bool {
@@ -923,9 +923,9 @@ impl Expression {
         }
     }
 
-    pub fn variable_expression(&self) -> Option<NodeId> {
-        if let ExpressionKind::VariableExpression(id) = self.kind {
-            Some(id)
+    pub fn variable_expression<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
+        if let ExpressionKind::VariableExpression(node_id) = self.kind {
+            tree.get(node_id).unwrap().identifier()
         } else {
             None
         }
@@ -1077,12 +1077,16 @@ impl BinaryExpression {
         Self { operator, lhs, rhs }
     }
 
-    pub fn lhs(&self) -> NodeId {
-        self.lhs
+    pub fn lhs<'a>(&self, tree: &'a AST) -> &'a Expression {
+        tree.get(self.lhs).unwrap().expression().unwrap()
     }
 
-    pub fn rhs(&self) -> Option<NodeId> {
-        self.rhs
+    pub fn rhs<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+        if let Some(node_id) = self.rhs {
+            Some(tree.get(node_id).unwrap().expression().unwrap())
+        } else {
+            None
+        }
     }
 }
 
@@ -1097,8 +1101,12 @@ impl UnaryExpression {
         Self { operator, operand }
     }
 
-    pub fn operand(&self) -> Option<NodeId> {
-        self.operand
+    pub fn operand<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+        if let Some(node_id) = self.operand {
+            Some(tree.get(node_id).unwrap().expression().unwrap())
+        } else {
+            None
+        }
     }
 }
 
@@ -1134,12 +1142,12 @@ impl SubscriptExpression {
         Self { callee, arguments }
     }
 
-    pub fn callee(&self) -> NodeId {
-        self.callee
+    pub fn callee<'a>(&self, tree: &'a AST) -> &'a Expression {
+        tree.get(self.callee).unwrap().expression().unwrap()
     }
 
-    pub fn arguments(&self) -> slice::Iter<NodeId> {
-        self.arguments.iter()
+    pub fn arguments<'a>(&'a self, tree: &'a AST) -> Expressions<'a> {
+        Expressions::new(tree, self.arguments.iter())
     }
 }
 
@@ -1158,8 +1166,8 @@ impl CallExpression {
         self.callee
     }
 
-    pub fn arguments(&self) -> slice::Iter<NodeId> {
-        self.arguments.iter()
+    pub fn arguments<'a>(&'a self, tree: &'a AST) -> Expressions<'a> {
+        Expressions::new(tree, self.arguments.iter())
     }
 }
 
@@ -1185,8 +1193,8 @@ impl ArrayExpression {
         Self { elements }
     }
 
-    pub fn elements(&self) -> slice::Iter<NodeId> {
-        self.elements.iter()
+    pub fn elements<'a>(&'a self, tree: &'a AST) -> Expressions<'a> {
+        Expressions::new(tree, self.elements.iter())
     }
 }
 
@@ -1203,6 +1211,26 @@ impl IfExpression {
             condition,
             then_body,
             else_body,
+        }
+    }
+
+    pub fn condition<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+        if let Some(node_id) = self.condition {
+            return tree.get(node_id).unwrap().expression();
+        } else {
+            None
+        }
+    }
+
+    pub fn then_body<'a>(&self, tree: &'a AST) -> &'a Block {
+        tree.get(self.then_body).unwrap().block().unwrap()
+    }
+
+    pub fn else_body<'a>(&self, tree: &'a AST) -> Option<&'a Block> {
+        if let Some(node_id) = self.else_body {
+            return tree.get(node_id).unwrap().block();
+        } else {
+            None
         }
     }
 }
@@ -1441,5 +1469,30 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::Expression(Some(_)) => write!(f, "(Expression)"),
             ExpressionKind::Expression(None) => write!(f, "()"),
         }
+    }
+}
+
+// Iterators
+pub struct Expressions<'a> {
+    tree: &'a AST,
+    nodes: slice::Iter<'a, NodeId>,
+}
+
+impl<'a> Expressions<'a> {
+    fn new(tree: &'a AST, nodes: slice::Iter<'a, NodeId>) -> Self {
+        Self { tree, nodes }
+    }
+}
+
+impl<'a> Iterator for Expressions<'a> {
+    type Item = &'a Expression;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(node_id) = self.nodes.next() {
+            let kind = self.tree.get(*node_id).unwrap();
+            return Some(kind.expression().unwrap());
+        }
+
+        None
     }
 }

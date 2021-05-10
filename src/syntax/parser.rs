@@ -1139,11 +1139,11 @@ mod tests {
         let stmt = get_statement(&tree);
 
         assert_matches!(
-            stmt.expression().unwrap().kind(),
+            stmt.expression(&tree).unwrap().kind(),
             ExpressionKind::IntegerLiteral(42)
         );
 
-        let mut code = stmt.expression().unwrap().code();
+        let mut code = stmt.expression(&tree).unwrap().code();
         assert_eq!(code.len(), 1);
 
         let token = next_interpreted_token(&mut code);
@@ -1155,11 +1155,11 @@ mod tests {
         for src in vec!["\"Fizz\\\"", "\"Fizz\\\"\n"] {
             let tree = Parser::parse_string(src);
             let stmt = get_statement(&tree);
-            let expr = stmt.expression().unwrap();
+            let expr = stmt.expression(&tree).unwrap();
 
             assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
 
-            let mut tokens = stmt.expression().unwrap().code();
+            let mut tokens = stmt.expression(&tree).unwrap().code();
             assert_eq!(tokens.len(), 4);
 
             let token = next_interpreted_token(&mut tokens);
@@ -1185,19 +1185,20 @@ mod tests {
         for src in vec!["(\"Fizz\\\")", "(\"Fizz\\\")\n"] {
             let tree = Parser::parse_string(src);
             let stmt = get_statement(&tree);
-            let expr = stmt.expression().unwrap();
+            let expr = stmt.expression(&tree).unwrap();
 
-            assert_matches!(expr.kind(), ExpressionKind::Expression(Some(expr)) => {
+            assert_matches!(expr.kind(), ExpressionKind::Expression(Some(node_id)) => {
+                let expr = tree.get(*node_id).unwrap().expression().unwrap();
                 assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
             });
 
-            let mut tokens = stmt.expression().unwrap().code();
+            let mut tokens = stmt.expression(&tree).unwrap().code();
             assert_eq!(tokens.len(), 3);
 
             let token = next_interpreted_token(&mut tokens);
             assert_matches!(token.kind, TokenKind::Char('('));
 
-            let node = next_node(&mut tokens);
+            let node = next_node(&tree, &mut tokens);
             assert_matches!(node, NodeKind::Expression(..));
 
             let (_, item) = next_missing_token(&mut tokens);
@@ -1209,25 +1210,25 @@ mod tests {
     fn add_integer() {
         let tree = Parser::parse_string("1+2");
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().binary_expression().unwrap();
+        let expr = stmt.expression(&tree).unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator, BinaryOperator::Add);
-        assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(1));
+        assert_matches!(expr.lhs(&tree).kind(), ExpressionKind::IntegerLiteral(1));
         assert_matches!(
-            expr.rhs().unwrap().kind(),
+            expr.rhs(&tree).unwrap().kind(),
             ExpressionKind::IntegerLiteral(2)
         );
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression(&tree).unwrap().code();
         assert_eq!(tokens.len(), 3);
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
 
         let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('+'));
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
     }
 
@@ -1235,16 +1236,16 @@ mod tests {
     fn add_integer_missing_node() {
         let tree = Parser::parse_string("1+");
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().binary_expression().unwrap();
+        let expr = stmt.expression(&tree).unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator, BinaryOperator::Add);
-        assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(1));
-        assert!(expr.rhs().is_none());
+        assert_matches!(expr.lhs(&tree).kind(), ExpressionKind::IntegerLiteral(1));
+        assert!(expr.rhs(&tree).is_none());
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression(&tree).unwrap().code();
         assert_eq!(tokens.len(), 3);
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
 
         let token = next_interpreted_token(&mut tokens);
@@ -1259,19 +1260,19 @@ mod tests {
     fn add_integer_skipped_tokens() {
         let tree = Parser::parse_string("1 + % ? 2");
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().binary_expression().unwrap();
+        let expr = stmt.expression(&tree).unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator, BinaryOperator::Add);
-        assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(1));
+        assert_matches!(expr.lhs(&tree).kind(), ExpressionKind::IntegerLiteral(1));
         assert_matches!(
-            expr.rhs().unwrap().kind(),
+            expr.rhs(&tree).unwrap().kind(),
             ExpressionKind::IntegerLiteral(2)
         );
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression(&tree).unwrap().code();
         assert_eq!(tokens.len(), 5);
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
 
         let token = next_interpreted_token(&mut tokens);
@@ -1285,7 +1286,7 @@ mod tests {
         assert_eq!(token.kind, TokenKind::Char('?'));
         assert_eq!(expected, MissingTokenKind::Expression);
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
     }
 
@@ -1293,21 +1294,21 @@ mod tests {
     fn unary_op() {
         let tree = Parser::parse_string("-1");
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().unary_expression().unwrap();
+        let expr = stmt.expression(&tree).unwrap().unary_expression().unwrap();
 
         assert_eq!(expr.operator, UnaryOperator::Minus);
         assert_matches!(
-            expr.operand().unwrap().kind(),
+            expr.operand(&tree).unwrap().kind(),
             ExpressionKind::IntegerLiteral(1)
         );
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression(&tree).unwrap().code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('-'));
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
     }
 
@@ -1315,23 +1316,25 @@ mod tests {
     fn unary_op_nested() {
         let tree = Parser::parse_string("-+1");
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().unary_expression().unwrap();
+        let expr = stmt.expression(&tree).unwrap().unary_expression().unwrap();
 
-        assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
-            let operand = operand.unary_expression().unwrap();
+        assert_eq!(expr.operator, UnaryOperator::Minus);
 
-            assert_matches!(operand, UnaryExpression { operator: UnaryOperator::Plus, operand: Some(operand) } => {
-                assert_matches!(operand.kind(), ExpressionKind::IntegerLiteral(1));
-            });
-        });
+        let operand = expr.operand(&tree).unwrap();
+        let operand = operand.unary_expression().unwrap();
 
-        let mut tokens = stmt.expression().unwrap().code();
+        assert_eq!(operand.operator, UnaryOperator::Plus);
+
+        let operand = operand.operand(&tree).unwrap();
+        assert_matches!(operand.kind(), ExpressionKind::IntegerLiteral(1));
+
+        let mut tokens = stmt.expression(&tree).unwrap().code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('-'));
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
     }
 
@@ -1339,30 +1342,34 @@ mod tests {
     fn subscript_index() {
         let tree = Parser::parse_string("a[0]");
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().subscript_expression().unwrap();
+        let expr = stmt
+            .expression(&tree)
+            .unwrap()
+            .subscript_expression()
+            .unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
-            let id = expr.callee().variable_expression();
+            let id = expr.callee(&tree).variable_expression(&tree);
             assert!(id.is_some());
 
             let id = id.unwrap();
             assert_eq!(id.to_string(), "a");
 
-            let arguments = expr.arguments().collect::<Vec<_>>();
+            let arguments = expr.arguments(&tree).collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
             assert_matches!(arguments[0].kind(), ExpressionKind::IntegerLiteral(0));
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression(&tree).unwrap().code();
         assert_eq!(tokens.len(), 4);
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
 
         let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('['));
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
 
         let token = next_interpreted_token(&mut tokens);
@@ -1373,23 +1380,27 @@ mod tests {
     fn subscript_empty() {
         let tree = Parser::parse_string("a[]");
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().subscript_expression().unwrap();
+        let expr = stmt
+            .expression(&tree)
+            .unwrap()
+            .subscript_expression()
+            .unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
-            let id = expr.callee().variable_expression();
+            let id = expr.callee(&tree).variable_expression(&tree);
             assert!(id.is_some());
 
             let id = id.unwrap();
             assert_eq!(id.to_string(), "a");
 
-            let arguments = expr.arguments().collect::<Vec<_>>();
+            let arguments = expr.arguments(&tree).collect::<Vec<_>>();
             assert_eq!(arguments.len(), 0);
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression(&tree).unwrap().code();
         assert_eq!(tokens.len(), 3);
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
 
         let token = next_interpreted_token(&mut tokens);
@@ -1403,21 +1414,25 @@ mod tests {
     fn subscript_not_closed() {
         let tree = Parser::parse_string("a[1\nb");
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().subscript_expression().unwrap();
+        let expr = stmt
+            .expression(&tree)
+            .unwrap()
+            .subscript_expression()
+            .unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
-            let id = expr.callee().variable_expression();
+            let id = expr.callee(&tree).variable_expression(&tree);
             assert!(id.is_some());
 
             let id = id.unwrap();
             assert_eq!(id.to_string(), "a");
 
-            let arguments = expr.arguments().collect::<Vec<_>>();
+            let arguments = expr.arguments(&tree).collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
             assert_matches!(arguments[0].kind(), ExpressionKind::IntegerLiteral(1));
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression(&tree).unwrap().code();
         assert_eq!(tokens.len(), 4);
 
         tokens.next();
@@ -1435,15 +1450,19 @@ mod tests {
         for src in vec!["a[\"", "a[\"\n"] {
             let tree = Parser::parse_string(src);
             let stmt = get_statement(&tree);
-            let expr = stmt.expression().unwrap().subscript_expression().unwrap();
+            let expr = stmt
+                .expression(&tree)
+                .unwrap()
+                .subscript_expression()
+                .unwrap();
 
             assert_matches!(expr, SubscriptExpression{ .. } => {
-                let arguments = expr.arguments().collect::<Vec<_>>();
+                let arguments = expr.arguments(&tree).collect::<Vec<_>>();
                 assert_eq!(arguments.len(), 1);
                 assert_matches!(arguments[0].kind(), ExpressionKind::StringLiteral(..));
             });
 
-            let mut tokens = stmt.expression().unwrap().code();
+            let mut tokens = stmt.expression(&tree).unwrap().code();
             assert_eq!(tokens.len(), 4);
 
             tokens.next();
@@ -1461,14 +1480,14 @@ mod tests {
     fn array_empty() {
         let tree = Parser::parse_string("[]");
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().array_expression().unwrap();
+        let expr = stmt.expression(&tree).unwrap().array_expression().unwrap();
 
         assert_matches!(expr, ArrayExpression{ .. } => {
-            let elements = expr.elements().collect::<Vec<_>>();
+            let elements = expr.elements(&tree).collect::<Vec<_>>();
             assert_eq!(elements.len(), 0);
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression(&tree).unwrap().code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1482,23 +1501,23 @@ mod tests {
     fn array_one_element_and_trailing_comma() {
         let tree = Parser::parse_string("[1,]");
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().array_expression().unwrap();
+        let expr = stmt.expression(&tree).unwrap().array_expression().unwrap();
 
         assert_matches!(expr, ArrayExpression{ .. } => {
-            let elements = expr.elements().collect::<Vec<_>>();
+            let elements = expr.elements(&tree).collect::<Vec<_>>();
             assert_eq!(elements.len(), 1);
 
             assert_eq!(elements.len(), 1);
             assert_matches!(elements[0].kind(), ExpressionKind::IntegerLiteral(1));
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression(&tree).unwrap().code();
         assert_eq!(tokens.len(), 4);
 
         let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::Char('['));
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
 
         let token = next_interpreted_token(&mut tokens);
@@ -1519,27 +1538,26 @@ mod tests {
             end",
         );
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().if_expression().unwrap();
+        let expr = stmt.expression(&tree).unwrap().if_expression().unwrap();
 
-        assert_matches!(expr, IfExpression { ref condition, ref else_body, .. } => {
-            let condition = condition.as_ref().unwrap();
+        let condition = expr.condition(&tree).unwrap();
+        assert_matches!(condition.kind(), ExpressionKind::BinaryExpression(..));
 
-            assert_matches!(condition.kind(), ExpressionKind::BinaryExpression(..));
-            assert!(else_body.is_some());
-        });
+        let else_body = expr.else_body(&tree);
+        assert!(else_body.is_some());
     }
 
     #[test]
     fn if_expression_missing_condition() {
         let tree = Parser::parse_string("if\nend");
         let stmt = get_statement(&tree);
-        let expr = stmt.expression().unwrap().if_expression().unwrap();
+        let expr = stmt.expression(&tree).unwrap().if_expression().unwrap();
 
         assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
             assert!(condition.is_none());
             assert!(else_body.is_none());
 
-            let stmts = then_body.statements();
+            let stmts = then_body.statements(&tree);
             assert_eq!(stmts.len(), 0);
         });
     }
@@ -1549,19 +1567,19 @@ mod tests {
         let tree = Parser::parse_string("if b x end");
         let stmt = get_statement(&tree);
 
-        assert!(stmt.expression().unwrap().if_expression().is_some());
+        assert!(stmt.expression(&tree).unwrap().if_expression().is_some());
 
         // tokens
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression(&tree).unwrap().code();
         assert_eq!(tokens.len(), 4);
 
         let token = next_interpreted_token(&mut tokens);
         assert_matches!(token.kind, TokenKind::If);
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_expression());
 
-        let node = next_node(&mut tokens);
+        let node = next_node(&tree, &mut tokens);
         assert!(node.is_block());
 
         {
@@ -1576,7 +1594,7 @@ mod tests {
             assert_eq!(range.end.line, 0);
             assert_eq!(range.end.character, 6);
 
-            let node = next_node(&mut tokens);
+            let node = next_node(&tree, &mut tokens);
             assert!(node.is_statement());
         }
 
@@ -1649,8 +1667,8 @@ mod tests {
         tree.get(program.body[0]).unwrap().statement().unwrap()
     }
 
-    fn next_node<'a>(tokens: &'a mut slice::Iter<CodeKind>) -> &'a NodeKind {
-        unwrap_node(tokens.next().unwrap())
+    fn next_node<'a>(tree: &'a AST, tokens: &'a mut slice::Iter<CodeKind>) -> &'a NodeKind {
+        unwrap_node(tree, tokens.next().unwrap())
     }
 
     fn next_interpreted_token<'a>(tokens: &'a mut slice::Iter<CodeKind>) -> &'a Token {
@@ -1669,9 +1687,9 @@ mod tests {
         unwrap_skipped_token(tokens.next().unwrap())
     }
 
-    fn unwrap_node<'a>(kind: &'a CodeKind) -> &'a NodeKind {
-        if let CodeKind::Node(node) = kind {
-            return node;
+    fn unwrap_node<'a>(tree: &'a AST, kind: &'a CodeKind) -> &'a NodeKind {
+        if let CodeKind::Node(node_id) = kind {
+            return tree.get(*node_id).unwrap();
         }
 
         panic!("expected child node");
