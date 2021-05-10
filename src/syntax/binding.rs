@@ -2,8 +2,8 @@
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
     traverse, Block, Builtin, CaseArm, DefinitionKind, Expression, FunctionDefinition,
-    FunctionParameter, NodeKind, NodePath, Pattern, Program, StructDefinition, VariableDeclaration,
-    Visitor, AST,
+    FunctionParameter, NodeId, NodeKind, NodePath, Pattern, Program, StructDefinition,
+    VariableDeclaration, Visitor, AST,
 };
 use crate::sem::{self, Type};
 use crate::util::wrap;

@@ -322,108 +322,6 @@ impl Builtin {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum DefinitionKind {
-    // Builtin functions, variables
-    Builtin(Builtin),
-    // Declaration node
-    Node(NodeId),
-}
-
-impl DefinitionKind {
-    pub fn builtin(&self) -> Option<&Builtin> {
-        if let DefinitionKind::Builtin(node) = self {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn struct_definition<'a>(&self, tree: &'a AST) -> Option<&'a StructDefinition> {
-        if let DefinitionKind::Node(node) = self {
-            if let Some(kind) = tree.get(*node) {
-                if let NodeKind::StructDefinition(definition) = kind {
-                    return Some(definition);
-                }
-            }
-        }
-
-        None
-    }
-
-    pub fn function_definition<'a>(&self, tree: &'a AST) -> Option<&'a FunctionDefinition> {
-        if let DefinitionKind::Node(node_id) = self {
-            if let Some(kind) = tree.get(*node_id) {
-                if let NodeKind::FunctionDefinition(node) = kind {
-                    return Some(node);
-                }
-            }
-        }
-
-        None
-    }
-
-    pub fn function_parameter<'a>(&self, tree: &'a AST) -> Option<&'a FunctionParameter> {
-        if let DefinitionKind::Node(node_id) = self {
-            if let Some(kind) = tree.get(*node_id) {
-                if let NodeKind::FunctionParameter(node) = kind {
-                    return Some(node);
-                }
-            }
-        }
-
-        None
-    }
-
-    pub fn pattern<'a>(&self, tree: &'a AST) -> Option<&'a Pattern> {
-        if let DefinitionKind::Node(node_id) = self {
-            if let Some(kind) = tree.get(*node_id) {
-                if let NodeKind::Pattern(node) = kind {
-                    return Some(node);
-                }
-            }
-        }
-
-        None
-    }
-
-    pub fn is_builtin(&self) -> bool {
-        matches!(self, Self::Builtin(..))
-    }
-
-    pub fn is_struct_definition(&self, tree: &AST) -> bool {
-        self.struct_definition(tree).is_some()
-    }
-
-    pub fn is_function_definition(&self, tree: &AST) -> bool {
-        self.function_definition(tree).is_some()
-    }
-
-    pub fn is_function_parameter(&self, tree: &AST) -> bool {
-        self.function_parameter(tree).is_some()
-    }
-
-    pub fn is_pattern(&self, tree: &AST) -> bool {
-        self.pattern(tree).is_some()
-    }
-
-    pub fn ptr_eq(&self, other: &DefinitionKind) -> bool {
-        if let DefinitionKind::Builtin(ref definition1) = self {
-            if let DefinitionKind::Builtin(definition2) = other {
-                return std::ptr::eq(definition1, definition2);
-            }
-        }
-
-        if let DefinitionKind::Node(node_id1) = self {
-            if let DefinitionKind::Node(node_id2) = other {
-                return node_id1 == node_id2;
-            }
-        }
-
-        false
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct Code {
     code: Vec<CodeKind>,
@@ -578,20 +476,14 @@ impl fmt::Display for Identifier {
 ///
 #[derive(Debug)]
 pub struct StructDefinition {
-    pub name: Option<NodeId>,
-    pub fields: Vec<NodeId>,
-    r#type: Rc<RefCell<sem::Type>>,
+    name: Option<NodeId>, // Identifier
+    fields: Vec<NodeId>,  // TypeField
     code: Code,
 }
 
 impl StructDefinition {
     pub fn new(name: Option<NodeId>, fields: Vec<NodeId>, code: Code) -> Self {
-        Self {
-            name,
-            fields,
-            code,
-            r#type: wrap(sem::Type::Unknown),
-        }
+        Self { name, fields, code }
     }
 
     pub fn name<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
@@ -604,10 +496,6 @@ impl StructDefinition {
 
     pub fn fields<'a>(&'a self, tree: &'a AST) -> TypeFields<'a> {
         TypeFields::new(tree, self.fields.iter())
-    }
-
-    pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
-        &self.r#type
     }
 
     pub fn get_field_type<'a>(&self, tree: &'a AST, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
@@ -635,8 +523,8 @@ impl fmt::Display for StructDefinition {
 
 #[derive(Debug)]
 pub struct TypeField {
-    pub name: Option<NodeId>,
-    pub type_annotation: Option<NodeId>,
+    name: Option<NodeId>,            // Identifier
+    type_annotation: Option<NodeId>, // TypeAnnotation
     code: Code,
 }
 
@@ -704,9 +592,9 @@ impl fmt::Display for TypeAnnotation {
 
 #[derive(Debug)]
 pub struct FunctionDefinition {
-    pub name: Option<NodeId>,    // Identifier
-    pub parameters: Vec<NodeId>, // FunctionParameter
-    pub body: NodeId,            // Block
+    name: Option<NodeId>,    // Identifier
+    parameters: Vec<NodeId>, // FunctionParameter
+    body: NodeId,            // Block
     code: Code,
 }
 
@@ -751,7 +639,7 @@ impl fmt::Display for FunctionDefinition {
 
 #[derive(Debug)]
 pub struct FunctionParameter {
-    pub name: NodeId,
+    name: NodeId,
     code: Code,
 }
 
@@ -779,8 +667,8 @@ impl fmt::Display for FunctionParameter {
 
 #[derive(Debug)]
 pub struct VariableDeclaration {
-    pub pattern: Option<NodeId>,
-    pub init: Option<NodeId>,
+    pattern: Option<NodeId>, // Pattern
+    init: Option<NodeId>,    // Expression
     code: Code,
 }
 
@@ -790,6 +678,22 @@ impl VariableDeclaration {
             pattern,
             init,
             code,
+        }
+    }
+
+    pub fn pattern<'a>(&self, tree: &'a AST) -> Option<&'a Pattern> {
+        if let Some(node_id) = self.pattern {
+            Some(tree.get(node_id).unwrap().pattern().unwrap())
+        } else {
+            None
+        }
+    }
+
+    pub fn init<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+        if let Some(node_id) = self.init {
+            Some(tree.get(node_id).unwrap().expression().unwrap())
+        } else {
+            None
         }
     }
 }
@@ -808,7 +712,7 @@ impl fmt::Display for VariableDeclaration {
 
 #[derive(Debug)]
 pub struct Statement {
-    pub kind: StatementKind,
+    kind: StatementKind,
     code: Code,
 }
 

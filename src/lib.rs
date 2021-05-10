@@ -2,6 +2,7 @@ pub mod asm;
 pub mod ls;
 pub mod parser;
 pub mod sem;
+pub mod semantic;
 pub mod syntax;
 
 mod util;
