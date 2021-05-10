@@ -64,10 +64,11 @@ impl<'a> Parser<'a> {
 
         let program = Program::new(body, code);
         let node = arena.alloc(NodeKind::Program(program));
+        let mut tree = AST::new(arena, node);
 
-        binding::bind(node);
+        binding::bind(&mut tree);
 
-        AST::new(arena, node)
+        tree
     }
 
     fn parse_struct_definition(&mut self, arena: &mut NodeArena) -> Option<NodeId> {

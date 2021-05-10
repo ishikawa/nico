@@ -1,17 +1,15 @@
+use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Trivia, TriviaKind};
+use crate::syntax::Token;
+use crate::{syntax::tree::*, util::wrap};
 use std::{
     cell::RefCell,
     rc::{Rc, Weak},
 };
 
-use crate::syntax::Token;
-use crate::{syntax::tree::*, util::wrap};
-
-use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Trivia, TriviaKind};
-
 pub struct NodePath<'a> {
     skipped: bool,
     stopped: bool,
-    node: NodeId,
+    node_id: NodeId,
     tree: &'a mut AST,
     scope: Weak<RefCell<Scope>>,
     main_scope: Weak<RefCell<Scope>>,
@@ -20,12 +18,12 @@ pub struct NodePath<'a> {
 }
 
 impl<'a> NodePath<'a> {
-    pub fn new(tree: &'a mut AST, node: NodeId) -> Self {
+    pub fn new(tree: &'a mut AST, node_id: NodeId) -> Self {
         Self {
             skipped: false,
             stopped: false,
             tree,
-            node,
+            node_id,
             parent: None,
             declarations: Weak::new(),
             scope: Weak::new(),
@@ -33,14 +31,14 @@ impl<'a> NodePath<'a> {
         }
     }
 
-    pub fn child_path(node: NodeId, parent: &'a Rc<RefCell<NodePath<'a>>>) -> Self {
+    pub fn child_path(node_id: NodeId, parent: &'a Rc<RefCell<NodePath<'a>>>) -> Self {
         let borrowed_parent = parent.borrow();
 
         Self {
             skipped: false,
             stopped: false,
             tree: borrowed_parent.tree_mut(),
-            node,
+            node_id,
             parent: Some(Rc::clone(parent)),
             scope: Weak::clone(&borrowed_parent.scope),
             main_scope: Weak::clone(&borrowed_parent.main_scope),
@@ -56,12 +54,16 @@ impl<'a> NodePath<'a> {
         self.tree
     }
 
+    pub fn node_id(&self) -> NodeId {
+        self.node_id
+    }
+
     pub fn node(&self) -> &NodeKind {
-        self.tree.get(self.node).unwrap()
+        self.tree.get(self.node_id).unwrap()
     }
 
     pub fn node_mut(&mut self) -> &mut NodeKind {
-        self.tree.get_mut(self.node).unwrap()
+        self.tree.get_mut(self.node_id).unwrap()
     }
 
     /// Returns `true` if `skip()` or `stop()` invoked.

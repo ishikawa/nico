@@ -704,9 +704,9 @@ impl fmt::Display for TypeAnnotation {
 
 #[derive(Debug)]
 pub struct FunctionDefinition {
-    pub name: Option<NodeId>,
-    pub parameters: Vec<NodeId>,
-    pub body: NodeId,
+    pub name: Option<NodeId>,    // Identifier
+    pub parameters: Vec<NodeId>, // FunctionParameter
+    pub body: NodeId,            // Block
     code: Code,
 }
 

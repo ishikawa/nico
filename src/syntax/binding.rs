@@ -30,7 +30,7 @@ impl Binding {
 
         Self {
             id: name.clone(),
-            kind: DefinitionKind::Builtin(Rc::new(Builtin::new(name, function_type))),
+            kind: DefinitionKind::Builtin(Builtin::new(name, function_type)),
         }
     }
 
