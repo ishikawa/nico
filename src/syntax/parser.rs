@@ -1557,7 +1557,8 @@ mod tests {
             assert!(condition.is_none());
             assert!(else_body.is_none());
 
-            let stmts = then_body.statements(&tree);
+            let block = expr.then_body(&tree);
+            let stmts = block.statements(&tree);
             assert_eq!(stmts.len(), 0);
         });
     }
@@ -1625,37 +1626,63 @@ mod tests {
         let stmt = get_statement(&tree);
         let expr = stmt.expression(&tree).unwrap().case_expression().unwrap();
 
-        assert_matches!(expr, CaseExpression { head, arms, else_body } => {
-            assert!(head.is_some());
-            assert!(!arms.is_empty());
+        assert!(expr.head(&tree).is_some());
 
-            // when 123
-            assert!(arms[0].pattern.is_some());
-            assert!(arms[0].guard.is_none());
-            assert_matches!(arms[0].pattern().unwrap().kind, PatternKind::IntegerPattern(..));
+        let mut arms = expr.arms(&tree);
 
-            // when \"string\"
-            assert!(arms[1].pattern.is_some());
-            assert!(arms[1].guard.is_none());
-            assert_matches!(arms[1].pattern().unwrap().kind, PatternKind::StringPattern(..));
+        assert!(!arms.is_empty());
 
-            // when y
-            assert!(arms[2].pattern.is_some());
-            assert!(arms[2].guard.is_none());
-            assert_matches!(arms[2].pattern().unwrap().kind, PatternKind::VariablePattern(..));
+        // when 123
+        let arm = arms.next().unwrap();
 
-            // when [1, x]
-            assert!(arms[3].pattern.is_some());
-            assert!(arms[3].guard.is_none());
-            assert_matches!(arms[3].pattern().unwrap().kind, PatternKind::ArrayPattern(..));
+        assert!(arm.pattern(&tree).is_some());
+        assert!(arm.guard(&tree).is_none());
+        assert_matches!(
+            arm.pattern(&tree).unwrap().kind(),
+            PatternKind::IntegerPattern(..)
+        );
 
-            // when x if x > 10
-            assert!(arms[4].pattern.is_some());
-            assert!(arms[4].guard.is_some());
-            assert_matches!(arms[4].pattern().unwrap().kind, PatternKind::VariablePattern(..));
+        // when \"string\"
+        let arm = arms.next().unwrap();
 
-            assert!(else_body.is_some());
-        });
+        assert!(arm.pattern(&tree).is_some());
+        assert!(arm.guard(&tree).is_none());
+        assert_matches!(
+            arm.pattern(&tree).unwrap().kind(),
+            PatternKind::StringPattern(..)
+        );
+
+        // when y
+        let arm = arms.next().unwrap();
+
+        assert!(arm.pattern(&tree).is_some());
+        assert!(arm.guard(&tree).is_none());
+        assert_matches!(
+            arm.pattern(&tree).unwrap().kind(),
+            PatternKind::VariablePattern(..)
+        );
+
+        // when [1, x]
+        let arm = arms.next().unwrap();
+
+        assert!(arm.pattern(&tree).is_some());
+        assert!(arm.guard(&tree).is_none());
+        assert_matches!(
+            arm.pattern(&tree).unwrap().kind(),
+            PatternKind::ArrayPattern(..)
+        );
+
+        // when x if x > 10
+        let arm = arms.next().unwrap();
+
+        assert!(arm.pattern(&tree).is_some());
+        assert!(arm.guard(&tree).is_some());
+        assert_matches!(
+            arm.pattern(&tree).unwrap().kind(),
+            PatternKind::VariablePattern(..)
+        );
+
+        assert!(expr.else_body(&tree).is_some());
     }
 
     // --- helpers

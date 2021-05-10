@@ -870,8 +870,8 @@ impl Block {
         &self.scope
     }
 
-    pub fn statements(&self) -> slice::Iter<NodeId> {
-        self.statements.iter()
+    pub fn statements<'a>(&'a self, tree: &'a AST) -> Statements {
+        Statements::new(tree, self.statements.iter())
     }
 }
 
@@ -1200,9 +1200,9 @@ impl ArrayExpression {
 
 #[derive(Debug)]
 pub struct IfExpression {
-    pub condition: Option<NodeId>,
-    pub then_body: NodeId,
-    pub else_body: Option<NodeId>,
+    pub condition: Option<NodeId>, // Expression
+    pub then_body: NodeId,         // Block
+    pub else_body: Option<NodeId>, // Block
 }
 
 impl IfExpression {
@@ -1237,9 +1237,9 @@ impl IfExpression {
 
 #[derive(Debug)]
 pub struct CaseExpression {
-    pub head: Option<NodeId>,
-    pub arms: Vec<NodeId>,
-    pub else_body: Option<NodeId>,
+    pub head: Option<NodeId>,      // Expression
+    pub arms: Vec<NodeId>,         // CaseArm
+    pub else_body: Option<NodeId>, // Block
 }
 
 impl CaseExpression {
@@ -1250,13 +1250,33 @@ impl CaseExpression {
             else_body,
         }
     }
+
+    pub fn head<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+        if let Some(node_id) = self.head {
+            return tree.get(node_id).unwrap().expression();
+        } else {
+            None
+        }
+    }
+
+    pub fn arms<'a>(&'a self, tree: &'a AST) -> CaseArms<'a> {
+        CaseArms::new(tree, self.arms.iter())
+    }
+
+    pub fn else_body<'a>(&self, tree: &'a AST) -> Option<&'a Block> {
+        if let Some(node_id) = self.else_body {
+            return tree.get(node_id).unwrap().block();
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct CaseArm {
-    pub pattern: Option<NodeId>,
-    pub guard: Option<NodeId>,
-    pub then_body: NodeId,
+    pub pattern: Option<NodeId>, // Pattern
+    pub guard: Option<NodeId>,   // Expression
+    pub then_body: NodeId,       // Block
 
     // `CaseArm` is the only syntactic element other than Program and Block that introduces
     // a new scope. This scope is necessary to use the variables introduced in each arm in
@@ -1285,8 +1305,24 @@ impl CaseArm {
         &self.scope
     }
 
-    pub fn pattern(&self) -> Option<NodeId> {
-        self.pattern
+    pub fn pattern<'a>(&self, tree: &'a AST) -> Option<&'a Pattern> {
+        if let Some(node_id) = self.pattern {
+            return tree.get(node_id).unwrap().pattern();
+        } else {
+            None
+        }
+    }
+
+    pub fn guard<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+        if let Some(node_id) = self.pattern {
+            return tree.get(node_id).unwrap().expression();
+        } else {
+            None
+        }
+    }
+
+    pub fn then_body<'a>(&self, tree: &'a AST) -> &'a Block {
+        tree.get(self.then_body).unwrap().block().unwrap()
     }
 }
 
@@ -1321,13 +1357,17 @@ pub enum ExpressionKind {
 
 #[derive(Debug)]
 pub struct Pattern {
-    pub kind: PatternKind,
-    pub code: Code,
+    kind: PatternKind,
+    code: Code,
 }
 
 impl Pattern {
     pub fn new(kind: PatternKind, code: Code) -> Self {
         Self { kind, code }
+    }
+
+    pub fn kind(&self) -> &PatternKind {
+        &self.kind
     }
 
     pub fn variable_pattern(identifier: NodeId) -> Self {
@@ -1471,7 +1511,6 @@ impl fmt::Display for ExpressionKind {
         }
     }
 }
-
 // Iterators
 pub struct Expressions<'a> {
     tree: &'a AST,
@@ -1482,6 +1521,14 @@ impl<'a> Expressions<'a> {
     fn new(tree: &'a AST, nodes: slice::Iter<'a, NodeId>) -> Self {
         Self { tree, nodes }
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.nodes.len() == 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.nodes.len()
+    }
 }
 
 impl<'a> Iterator for Expressions<'a> {
@@ -1491,6 +1538,70 @@ impl<'a> Iterator for Expressions<'a> {
         if let Some(node_id) = self.nodes.next() {
             let kind = self.tree.get(*node_id).unwrap();
             return Some(kind.expression().unwrap());
+        }
+
+        None
+    }
+}
+
+pub struct Statements<'a> {
+    tree: &'a AST,
+    nodes: slice::Iter<'a, NodeId>,
+}
+
+impl<'a> Statements<'a> {
+    fn new(tree: &'a AST, nodes: slice::Iter<'a, NodeId>) -> Self {
+        Self { tree, nodes }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.nodes.len() == 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.nodes.len()
+    }
+}
+
+impl<'a> Iterator for Statements<'a> {
+    type Item = &'a Statement;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(node_id) = self.nodes.next() {
+            let kind = self.tree.get(*node_id).unwrap();
+            return Some(kind.statement().unwrap());
+        }
+
+        None
+    }
+}
+
+pub struct CaseArms<'a> {
+    tree: &'a AST,
+    nodes: slice::Iter<'a, NodeId>,
+}
+
+impl<'a> CaseArms<'a> {
+    fn new(tree: &'a AST, nodes: slice::Iter<'a, NodeId>) -> Self {
+        Self { tree, nodes }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.nodes.len() == 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.nodes.len()
+    }
+}
+
+impl<'a> Iterator for CaseArms<'a> {
+    type Item = &'a CaseArm;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(node_id) = self.nodes.next() {
+            let kind = self.tree.get(*node_id).unwrap();
+            return Some(kind.case_arm().unwrap());
         }
 
         None
