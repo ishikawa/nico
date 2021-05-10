@@ -1,8 +1,8 @@
 use crate::{
     sem,
     syntax::{
-        self, DefinitionKind, EffectiveRange, Node, NodePath, Position, Program, StructDefinition,
-        TypeAnnotation, ValueField,
+        self, DefinitionKind, EffectiveRange, Node, NodePath, Position, StructDefinition,
+        TypeAnnotation, ValueField, AST,
     },
 };
 use std::{cell::RefCell, fmt, rc::Rc};
@@ -21,8 +21,8 @@ impl Hover {
         }
     }
 
-    pub fn describe(&mut self, program: &Rc<Program>) -> Option<(&str, EffectiveRange)> {
-        syntax::traverse(self, program);
+    pub fn describe(&mut self, tree: &mut AST) -> Option<(&str, EffectiveRange)> {
+        syntax::traverse(self, tree);
         self.result.as_ref().map(|(s, r)| (s.as_str(), *r))
     }
 
@@ -42,33 +42,40 @@ impl Hover {
 
     fn describe_value_field(
         &self,
-        definition: &Rc<StructDefinition>,
-        field: &Rc<ValueField>,
+        tree: &AST,
+        definition: &mut StructDefinition,
+        field: &mut ValueField,
     ) -> String {
-        let ty = definition.get_field_type(field.name().as_str());
+        let ty = definition.get_field_type(tree, field.name(tree).as_str());
 
         format!(
             "```nico\n{}.{}: {}\n```",
-            self.describe_optional(definition.name()),
-            field.name(),
+            self.describe_optional(definition.name(tree)),
+            field.name(tree),
             self.describe_optional(ty.map(|x| x.borrow().to_string())),
         )
     }
 }
 
-impl syntax::Visitor for Hover {
-    fn enter_type_annotation(&mut self, path: &mut NodePath, annotation: &Rc<TypeAnnotation>) {
-        if !annotation.range().contains(self.position) {
+impl<'a> syntax::Visitor<'a> for Hover {
+    fn enter_type_annotation(&mut self, path: &mut NodePath, annotation: &mut TypeAnnotation) {
+        if !annotation.range(path.tree()).contains(self.position) {
             return;
         }
 
-        self.result
-            .replace((self.describe_type(&annotation.r#type), annotation.range()));
+        self.result.replace((
+            self.describe_type(&annotation.r#type),
+            annotation.range(path.tree()),
+        ));
         path.stop();
     }
 
-    fn enter_value_field(&mut self, path: &mut NodePath, field: &Rc<ValueField>) {
-        if !field.name().range().contains(self.position) {
+    fn enter_value_field(&mut self, path: &mut NodePath, field: &mut ValueField) {
+        if !field
+            .name(path.tree())
+            .range(path.tree())
+            .contains(self.position)
+        {
             return;
         }
 
@@ -80,13 +87,16 @@ impl syntax::Visitor for Hover {
         let literal = parent.expression().unwrap().struct_literal().unwrap();
 
         // TODO: Use type info
-        if let Some(binding) = scope.borrow().get_binding(literal.name().as_str()) {
+        if let Some(binding) = scope
+            .borrow()
+            .get_binding(literal.name(path.tree()).as_str())
+        {
             let binding = binding.borrow();
 
             if let DefinitionKind::StructDefinition(ref definition) = binding.kind() {
                 self.result.replace((
-                    self.describe_value_field(definition, field),
-                    field.name().range(),
+                    self.describe_value_field(path.tree(), definition, field),
+                    field.name(path.tree()).range(path.tree()),
                 ));
             }
         }

@@ -1688,7 +1688,7 @@ mod tests {
     // --- helpers
 
     fn get_statement(tree: &AST) -> &Statement {
-        let program = tree.root();
+        let program = tree.program();
 
         assert!(!program.body.is_empty());
         tree.get(program.body[0]).unwrap().statement().unwrap()

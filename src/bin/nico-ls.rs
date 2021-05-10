@@ -210,8 +210,8 @@ impl DiagnosticsCollector {
     }
 }
 
-impl syntax::Visitor for DiagnosticsCollector {
-    fn enter_variable(&mut self, path: &mut NodePath, expr: &Rc<Expression>, id: &Rc<Identifier>) {
+impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
+    fn enter_variable(&mut self, path: &mut NodePath, expr: &mut Expression, id: &mut Identifier) {
         // Undefined variable
         if path.scope().borrow().get_binding(id.as_str()).is_none() {
             self.add_diagnostic(expr.range(), format!("Cannot find name '{}'.", id));
@@ -221,7 +221,7 @@ impl syntax::Visitor for DiagnosticsCollector {
     fn enter_struct_literal(
         &mut self,
         path: &mut NodePath,
-        _expr: &Rc<Expression>,
+        _expr: &mut Expression,
         value: &StructLiteral,
     ) {
         // Expected struct for name
@@ -456,7 +456,7 @@ impl SemanticTokenizer {
     }
 }
 
-impl syntax::Visitor for SemanticTokenizer {
+impl<'a> syntax::Visitor<'a> for SemanticTokenizer {
     fn enter_line_comment(
         &mut self,
         _path: &mut NodePath,
