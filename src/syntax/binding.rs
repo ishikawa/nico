@@ -1,12 +1,12 @@
 //! This module contains implementations of `Visitor` that assigns meta information that can be
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
-    traverse, Block, Builtin, CaseArm, Expression, FunctionDefinition, FunctionParameter, NodeId,
-    NodeKind, NodePath, Pattern, Program, StructDefinition, VariableDeclaration, Visitor, AST,
+    traverse, Block, CaseArm, Expression, FunctionDefinition, FunctionParameter, NodeKind,
+    NodePath, Pattern, Program, StructDefinition, VariableDeclaration, Visitor, AST,
 };
 use crate::sem::Type;
 use crate::semantic::{Function, SemanticValue, SemanticValueKind};
-use crate::{semantic, util::wrap};
+use crate::util::wrap;
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -17,51 +17,38 @@ use std::{
 #[derive(Debug)]
 pub struct Binding {
     id: String,
-    value: SemanticValue,
+    value: Rc<RefCell<SemanticValue>>,
 }
 
 impl Binding {
-    pub fn define_function<S: Into<String>>(
-        name: S,
-        parameters: &[(&str, Type)],
-        return_type: Type,
-    ) -> Self {
-        let function_type = Type::Function {
-            params: parameters.iter().map(|(_, ty)| wrap(*ty)).collect(),
-            return_type: wrap(return_type),
-        };
-        let name = name.into();
-        let parameters = parameters
-            .iter()
-            .map(|(param, _)| param.to_string())
-            .collect();
-        let fun = semantic::Function::new(name, parameters);
-        let value = SemanticValue::new(
-            SemanticValueKind::Function(fun),
-            None,
-            Some(&wrap(function_type)),
-        );
-
-        Self { id: name, value }
+    pub fn new<S: Into<String>>(id: S, value: &Rc<RefCell<SemanticValue>>) -> Self {
+        Self {
+            id: id.into(),
+            value: Rc::clone(value),
+        }
     }
 
     pub fn id(&self) -> &str {
         &self.id
     }
 
-    pub fn kind(&self) -> &DefinitionKind {
-        &self.kind
+    pub fn value(&self) -> &Rc<RefCell<SemanticValue>> {
+        &self.value
     }
 }
 
 impl fmt::Display for Binding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            DefinitionKind::Builtin(_) => write!(f, "builtin `{}`", self.id),
-            DefinitionKind::StructDefinition(_) => write!(f, "struct `{}`", self.id),
-            DefinitionKind::FunctionDefinition(_) => write!(f, "function `{}`", self.id),
-            DefinitionKind::FunctionParameter(_) => write!(f, "function parameter `{}`", self.id),
-            DefinitionKind::Pattern(_) => write!(f, "local variable `{}`", self.id),
+        match self.value.borrow().kind() {
+            SemanticValueKind::Function(_) => {
+                write!(f, "function `{}`", self.id)
+            }
+            SemanticValueKind::Struct(_) => {
+                write!(f, "struct `{}`", self.id)
+            }
+            SemanticValueKind::Variable(_) => {
+                write!(f, "local variable `{}`", self.id)
+            }
         }
     }
 }
@@ -76,24 +63,28 @@ impl Scope {
     pub fn prelude() -> Self {
         let mut scope = Self::new();
 
-        // print
-        scope.insert(Binding::define_function(
+        // print functions
+        scope.define_semantic_value(SemanticValue::define_function(
             "println_str",
             &[("str", Type::String)],
             Type::Int32,
         ));
-        scope.insert(Binding::define_function(
+        scope.define_semantic_value(SemanticValue::define_function(
             "println_i32",
             &[("i", Type::Int32)],
             Type::Int32,
         ));
-        scope.insert(Binding::define_function(
+        scope.define_semantic_value(SemanticValue::define_function(
             "debug_i32",
             &[("i", Type::Int32)],
             Type::Int32,
         ));
 
         scope
+    }
+
+    fn define_semantic_value(&mut self, value: SemanticValue) {
+        self.insert(value.name().unwrap(), &wrap(value));
     }
 
     pub fn new() -> Self {
@@ -104,17 +95,17 @@ impl Scope {
         &self.parent
     }
 
-    fn insert(&mut self, binding: Binding) {
-        self.bindings.insert(binding.id.to_string(), wrap(binding));
+    pub fn insert<S: AsRef<str>>(&mut self, id: S, value: &Rc<RefCell<SemanticValue>>) {
+        let id = id.as_ref().to_string();
+
+        let binding = Binding::new(id.clone(), value);
+        self.bindings.insert(id, wrap(binding));
     }
 
-    pub fn register_declaration(&mut self, declaration: &NodeKind) {
+    fn register_declaration(&mut self, tree: &AST, declaration: &NodeKind) {
         if let Some(fun) = declaration.function_definition() {
-            if let Some(name) = fun.name() {
-                self.insert(Binding {
-                    id: name.to_string(),
-                    kind: DefinitionKind::FunctionDefinition(Rc::clone(&fun)),
-                });
+            if let Some(value) = fun.semantic_value() {
+                self.insert(fun.name(tree).unwrap().as_str(), value);
             }
         } else if let Some(param) = declaration.function_parameter() {
             self.insert(Binding {
@@ -128,13 +119,13 @@ impl Scope {
                     kind: DefinitionKind::StructDefinition(Rc::clone(&def)),
                 });
             }
-        } else if let Some(ref pattern) = declaration.pattern() {
-            self.register_pattern(pattern);
+        } else if let Some(pattern) = declaration.pattern() {
+            self.register_pattern(tree, pattern);
         }
     }
 
-    pub fn register_pattern(&mut self, pattern: &mut Pattern) {
-        match &pattern.kind {
+    pub fn register_pattern(&mut self, tree: &AST, pattern: &Pattern) {
+        match &pattern.kind() {
             super::PatternKind::IntegerPattern(_) => {}
             super::PatternKind::StringPattern(_) => {}
             super::PatternKind::VariablePattern(id) => {
@@ -145,7 +136,7 @@ impl Scope {
             }
             super::PatternKind::ArrayPattern(pat) => {
                 for pat in pat.elements() {
-                    self.register_pattern(pat);
+                    self.register_pattern(tree, pat);
                 }
             }
             super::PatternKind::RestPattern(pat) => {
@@ -157,9 +148,9 @@ impl Scope {
                 }
             }
             super::PatternKind::StructPattern(pat) => {
-                for field in pat.fields() {
-                    if let Some(ref value) = field.value {
-                        self.register_pattern(value);
+                for field in pat.fields(tree) {
+                    if let Some(value) = field.value(tree) {
+                        self.register_pattern(tree, value);
                     } else {
                         // omitted
                         let pattern = Pattern::variable_pattern(&field.name);
@@ -198,10 +189,12 @@ impl TopLevelDeclarationBinder {
         Self::default()
     }
 
-    fn register_declaration(&mut self, node: &NodeKind) {
-        if let Some(ref declarations) = self.declarations {
-            declarations.borrow_mut().register_declaration(node);
-        }
+    fn register_declaration(&mut self, path: &NodePath) {
+        let declarations = self.declarations.unwrap();
+
+        declarations
+            .borrow_mut()
+            .register_declaration(path.tree(), path.node());
     }
 }
 
@@ -211,7 +204,7 @@ impl<'a> Visitor<'a> for TopLevelDeclarationBinder {
     }
 
     fn enter_struct_definition(&mut self, path: &mut NodePath, _definition: &mut StructDefinition) {
-        self.register_declaration(path.node());
+        self.register_declaration(path);
     }
 
     fn enter_function_definition(
@@ -219,7 +212,7 @@ impl<'a> Visitor<'a> for TopLevelDeclarationBinder {
         path: &mut NodePath,
         _definition: &mut FunctionDefinition,
     ) {
-        self.register_declaration(path.node());
+        self.register_declaration(path);
     }
 }
 
@@ -287,8 +280,8 @@ impl<'a> Visitor<'a> for VariableBinder {
         let parent_path = parent_path.borrow();
         let fun = parent_path.node().function_definition().unwrap();
 
-        let mut scope = fun.body().scope().borrow_mut();
-        scope.register_declaration(node);
+        let mut scope = fun.body(path.tree()).scope().borrow_mut();
+        scope.register_declaration(path.tree(), path.node());
     }
 
     fn enter_variable_declaration(
@@ -296,19 +289,20 @@ impl<'a> Visitor<'a> for VariableBinder {
         path: &mut NodePath,
         declaration: &mut VariableDeclaration,
     ) {
-        if let Some(ref pattern) = declaration.pattern {
-            let scope = path.scope();
+        let tree = path.tree();
 
-            scope
-                .borrow_mut()
-                .register_declaration(&NodeKind::Pattern(Rc::clone(pattern)));
+        if let Some(pattern) = declaration.pattern(tree) {
+            let scope = path.scope().borrow_mut();
+            scope.register_pattern(tree, pattern);
         }
     }
 
-    fn enter_case_arm(&mut self, _path: &mut NodePath, arm: &mut CaseArm) {
-        if let Some(ref pattern) = arm.pattern {
+    fn enter_case_arm(&mut self, path: &mut NodePath, arm: &mut CaseArm) {
+        let tree = path.tree();
+
+        if let Some(pattern) = arm.pattern(tree) {
             let mut scope = arm.scope().borrow_mut();
-            scope.register_declaration(&NodeKind::Pattern(Rc::clone(pattern)));
+            scope.register_pattern(tree, pattern);
         }
     }
 }

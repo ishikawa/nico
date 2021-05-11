@@ -1,5 +1,5 @@
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
-use crate::{sem, util::wrap};
+use crate::{sem, semantic::SemanticValue, util::wrap};
 use id_arena;
 use std::rc::Rc;
 use std::slice;
@@ -297,31 +297,6 @@ impl Node for NodeKind {
     }
 }
 
-/// `Builtin` is where a binding to "built-in" primitives/functions are defined.
-/// It's not a part of an AST, so it doesn't have tokens.
-#[derive(Debug, Clone)]
-pub struct Builtin {
-    name: String,
-    r#type: Rc<RefCell<sem::Type>>,
-}
-
-impl Builtin {
-    pub fn new<S: Into<String>>(name: S, r#type: &Rc<RefCell<sem::Type>>) -> Self {
-        Self {
-            name: name.into(),
-            r#type: Rc::clone(r#type),
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        self.name.as_str()
-    }
-
-    pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
-        &self.r#type
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct Code {
     code: Vec<CodeKind>,
@@ -494,8 +469,13 @@ impl StructDefinition {
         None
     }
 
-    pub fn fields<'a>(&'a self, tree: &'a AST) -> TypeFields<'a> {
-        TypeFields::new(tree, self.fields.iter())
+    pub fn fields<'a>(
+        &'a self,
+        tree: &'a AST,
+    ) -> impl ExactSizeIterator<Item = &'a TypeField> + 'a {
+        self.fields
+            .iter()
+            .map(move |node| tree.get(*node).unwrap().type_field().unwrap())
     }
 
     pub fn get_field_type<'a>(&self, tree: &'a AST, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
@@ -596,6 +576,7 @@ pub struct FunctionDefinition {
     parameters: Vec<NodeId>, // FunctionParameter
     body: NodeId,            // Block
     code: Code,
+    semantic_value: Option<Rc<RefCell<SemanticValue>>>,
 }
 
 impl FunctionDefinition {
@@ -605,6 +586,7 @@ impl FunctionDefinition {
             parameters,
             body,
             code,
+            semantic_value: None,
         }
     }
 
@@ -620,8 +602,17 @@ impl FunctionDefinition {
         return tree.get(self.body).unwrap().block().unwrap();
     }
 
-    pub fn parameters<'a>(&'a self, tree: &'a AST) -> FunctionParameters<'a> {
-        FunctionParameters::new(tree, self.parameters.iter())
+    pub fn parameters<'a>(
+        &'a self,
+        tree: &'a AST,
+    ) -> impl ExactSizeIterator<Item = &'a FunctionParameter> + 'a {
+        self.parameters
+            .iter()
+            .map(move |node| tree.get(*node).unwrap().function_parameter().unwrap())
+    }
+
+    pub fn semantic_value(&self) -> Option<&Rc<RefCell<SemanticValue>>> {
+        self.semantic_value.as_ref()
     }
 }
 
@@ -776,8 +767,13 @@ impl Block {
         &self.scope
     }
 
-    pub fn statements<'a>(&'a self, tree: &'a AST) -> Statements {
-        Statements::new(tree, self.statements.iter())
+    pub fn statements<'a>(
+        &'a self,
+        tree: &'a AST,
+    ) -> impl ExactSizeIterator<Item = &'a Statement> + 'a {
+        self.statements
+            .iter()
+            .map(move |node| tree.get(*node).unwrap().statement().unwrap())
     }
 }
 
@@ -941,8 +937,13 @@ impl StructLiteral {
         tree.get(self.name).unwrap().identifier().unwrap()
     }
 
-    pub fn fields<'a>(&'a self, tree: &'a AST) -> ValueFields<'a> {
-        ValueFields::new(tree, self.fields.iter())
+    pub fn fields<'a>(
+        &'a self,
+        tree: &'a AST,
+    ) -> impl ExactSizeIterator<Item = &'a ValueField> + 'a {
+        self.fields
+            .iter()
+            .map(move |node| tree.get(*node).unwrap().value_field().unwrap())
     }
 }
 
@@ -1064,8 +1065,13 @@ impl SubscriptExpression {
         tree.get(self.callee).unwrap().expression().unwrap()
     }
 
-    pub fn arguments<'a>(&'a self, tree: &'a AST) -> Expressions<'a> {
-        Expressions::new(tree, self.arguments.iter())
+    pub fn arguments<'a>(
+        &'a self,
+        tree: &'a AST,
+    ) -> impl ExactSizeIterator<Item = &'a Expression> + 'a {
+        self.arguments
+            .iter()
+            .map(move |node| tree.get(*node).unwrap().expression().unwrap())
     }
 }
 
@@ -1084,8 +1090,13 @@ impl CallExpression {
         self.callee
     }
 
-    pub fn arguments<'a>(&'a self, tree: &'a AST) -> Expressions<'a> {
-        Expressions::new(tree, self.arguments.iter())
+    pub fn arguments<'a>(
+        &'a self,
+        tree: &'a AST,
+    ) -> impl ExactSizeIterator<Item = &'a Expression> + 'a {
+        self.arguments
+            .iter()
+            .map(move |node| tree.get(*node).unwrap().expression().unwrap())
     }
 }
 
@@ -1111,8 +1122,13 @@ impl ArrayExpression {
         Self { elements }
     }
 
-    pub fn elements<'a>(&'a self, tree: &'a AST) -> Expressions<'a> {
-        Expressions::new(tree, self.elements.iter())
+    pub fn elements<'a>(
+        &'a self,
+        tree: &'a AST,
+    ) -> impl ExactSizeIterator<Item = &'a Expression> + 'a {
+        self.elements
+            .iter()
+            .map(move |node| tree.get(*node).unwrap().expression().unwrap())
     }
 }
 
@@ -1177,8 +1193,10 @@ impl CaseExpression {
         }
     }
 
-    pub fn arms<'a>(&'a self, tree: &'a AST) -> CaseArms<'a> {
-        CaseArms::new(tree, self.arms.iter())
+    pub fn arms<'a>(&'a self, tree: &'a AST) -> impl ExactSizeIterator<Item = &'a CaseArm> + 'a {
+        self.arms
+            .iter()
+            .map(move |node| tree.get(*node).unwrap().case_arm().unwrap())
     }
 
     pub fn else_body<'a>(&self, tree: &'a AST) -> Option<&'a Block> {
@@ -1310,7 +1328,7 @@ impl fmt::Display for Pattern {
 
 #[derive(Debug)]
 pub struct ArrayPattern {
-    elements: Vec<NodeId>,
+    elements: Vec<NodeId>, // Pattern
 }
 
 impl ArrayPattern {
@@ -1318,8 +1336,13 @@ impl ArrayPattern {
         Self { elements }
     }
 
-    pub fn elements(&self) -> slice::Iter<NodeId> {
-        self.elements.iter()
+    pub fn elements<'a>(
+        &'a self,
+        tree: &'a AST,
+    ) -> impl ExactSizeIterator<Item = &'a Pattern> + 'a {
+        self.elements
+            .iter()
+            .map(move |node| tree.get(*node).unwrap().pattern().unwrap())
     }
 }
 
@@ -1336,8 +1359,8 @@ impl RestPattern {
 
 #[derive(Debug)]
 pub struct StructPattern {
-    pub name: NodeId,
-    fields: Vec<NodeId>,
+    pub name: NodeId,    // Identifier
+    fields: Vec<NodeId>, // ValueFieldPattern
 }
 
 impl StructPattern {
@@ -1345,21 +1368,42 @@ impl StructPattern {
         Self { name, fields }
     }
 
-    pub fn fields(&self) -> slice::Iter<NodeId> {
-        self.fields.iter()
+    pub fn name<'a>(&self, tree: &'a AST) -> &'a Identifier {
+        tree.get(self.name).unwrap().identifier().unwrap()
+    }
+
+    pub fn fields<'a>(
+        &'a self,
+        tree: &'a AST,
+    ) -> impl ExactSizeIterator<Item = &'a ValueFieldPattern> + 'a {
+        self.fields
+            .iter()
+            .map(move |node| tree.get(*node).unwrap().value_field_pattern().unwrap())
     }
 }
 
 #[derive(Debug)]
 pub struct ValueFieldPattern {
-    pub name: NodeId,
-    pub value: Option<NodeId>,
-    pub code: Code,
+    name: NodeId,          // Identifier
+    value: Option<NodeId>, // Pattern
+    code: Code,
 }
 
 impl ValueFieldPattern {
     pub fn new(name: NodeId, value: Option<NodeId>, code: Code) -> Self {
         Self { name, value, code }
+    }
+
+    pub fn name<'a>(&self, tree: &'a AST) -> &'a Identifier {
+        tree.get(self.name).unwrap().identifier().unwrap()
+    }
+
+    pub fn value<'a>(&self, tree: &'a AST) -> Option<&'a Pattern> {
+        if let Some(node_id) = self.value {
+            Some(tree.get(node_id).unwrap().pattern().unwrap())
+        } else {
+            None
+        }
     }
 }
 
@@ -1427,197 +1471,5 @@ impl fmt::Display for ExpressionKind {
             ExpressionKind::Expression(Some(_)) => write!(f, "(Expression)"),
             ExpressionKind::Expression(None) => write!(f, "()"),
         }
-    }
-}
-// Iterators
-pub struct Expressions<'a> {
-    tree: &'a AST,
-    nodes: slice::Iter<'a, NodeId>,
-}
-
-impl<'a> Expressions<'a> {
-    fn new(tree: &'a AST, nodes: slice::Iter<'a, NodeId>) -> Self {
-        Self { tree, nodes }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.nodes.len() == 0
-    }
-
-    pub fn len(&self) -> usize {
-        self.nodes.len()
-    }
-}
-
-impl<'a> Iterator for Expressions<'a> {
-    type Item = &'a Expression;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(node_id) = self.nodes.next() {
-            let kind = self.tree.get(*node_id).unwrap();
-            return Some(kind.expression().unwrap());
-        }
-
-        None
-    }
-}
-
-pub struct TypeFields<'a> {
-    tree: &'a AST,
-    nodes: slice::Iter<'a, NodeId>,
-}
-
-impl<'a> TypeFields<'a> {
-    fn new(tree: &'a AST, nodes: slice::Iter<'a, NodeId>) -> Self {
-        Self { tree, nodes }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.nodes.len() == 0
-    }
-
-    pub fn len(&self) -> usize {
-        self.nodes.len()
-    }
-}
-
-impl<'a> Iterator for TypeFields<'a> {
-    type Item = &'a TypeField;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(node_id) = self.nodes.next() {
-            let kind = self.tree.get(*node_id).unwrap();
-            return Some(kind.type_field().unwrap());
-        }
-
-        None
-    }
-}
-
-pub struct ValueFields<'a> {
-    tree: &'a AST,
-    nodes: slice::Iter<'a, NodeId>,
-}
-
-impl<'a> ValueFields<'a> {
-    fn new(tree: &'a AST, nodes: slice::Iter<'a, NodeId>) -> Self {
-        Self { tree, nodes }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.nodes.len() == 0
-    }
-
-    pub fn len(&self) -> usize {
-        self.nodes.len()
-    }
-}
-
-impl<'a> Iterator for ValueFields<'a> {
-    type Item = &'a ValueField;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(node_id) = self.nodes.next() {
-            let kind = self.tree.get(*node_id).unwrap();
-            return Some(kind.value_field().unwrap());
-        }
-
-        None
-    }
-}
-
-pub struct FunctionParameters<'a> {
-    tree: &'a AST,
-    nodes: slice::Iter<'a, NodeId>,
-}
-
-impl<'a> FunctionParameters<'a> {
-    fn new(tree: &'a AST, nodes: slice::Iter<'a, NodeId>) -> Self {
-        Self { tree, nodes }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.nodes.len() == 0
-    }
-
-    pub fn len(&self) -> usize {
-        self.nodes.len()
-    }
-}
-
-impl<'a> Iterator for FunctionParameters<'a> {
-    type Item = &'a FunctionParameter;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(node_id) = self.nodes.next() {
-            let kind = self.tree.get(*node_id).unwrap();
-            return Some(kind.function_parameter().unwrap());
-        }
-
-        None
-    }
-}
-
-pub struct Statements<'a> {
-    tree: &'a AST,
-    nodes: slice::Iter<'a, NodeId>,
-}
-
-impl<'a> Statements<'a> {
-    fn new(tree: &'a AST, nodes: slice::Iter<'a, NodeId>) -> Self {
-        Self { tree, nodes }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.nodes.len() == 0
-    }
-
-    pub fn len(&self) -> usize {
-        self.nodes.len()
-    }
-}
-
-impl<'a> Iterator for Statements<'a> {
-    type Item = &'a Statement;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(node_id) = self.nodes.next() {
-            let kind = self.tree.get(*node_id).unwrap();
-            return Some(kind.statement().unwrap());
-        }
-
-        None
-    }
-}
-
-pub struct CaseArms<'a> {
-    tree: &'a AST,
-    nodes: slice::Iter<'a, NodeId>,
-}
-
-impl<'a> CaseArms<'a> {
-    fn new(tree: &'a AST, nodes: slice::Iter<'a, NodeId>) -> Self {
-        Self { tree, nodes }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.nodes.len() == 0
-    }
-
-    pub fn len(&self) -> usize {
-        self.nodes.len()
-    }
-}
-
-impl<'a> Iterator for CaseArms<'a> {
-    type Item = &'a CaseArm;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(node_id) = self.nodes.next() {
-            let kind = self.tree.get(*node_id).unwrap();
-            return Some(kind.case_arm().unwrap());
-        }
-
-        None
     }
 }
