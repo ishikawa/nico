@@ -1,12 +1,12 @@
 //! This module contains implementations of `Visitor` that assigns meta information that can be
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
-    traverse, Block, Builtin, CaseArm, DefinitionKind, Expression, FunctionDefinition,
-    FunctionParameter, NodeId, NodeKind, NodePath, Pattern, Program, StructDefinition,
-    VariableDeclaration, Visitor, AST,
+    traverse, Block, Builtin, CaseArm, Expression, FunctionDefinition, FunctionParameter, NodeId,
+    NodeKind, NodePath, Pattern, Program, StructDefinition, VariableDeclaration, Visitor, AST,
 };
-use crate::sem::{self, Type};
-use crate::util::wrap;
+use crate::sem::Type;
+use crate::semantic::{Function, SemanticValue, SemanticValueKind};
+use crate::{semantic, util::wrap};
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -14,24 +14,35 @@ use std::{
     rc::{Rc, Weak},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Binding {
     id: String,
-    kind: DefinitionKind,
+    value: SemanticValue,
 }
 
 impl Binding {
-    pub fn builtin_function<S: Into<String>>(name: S, function_type: Type) -> Self {
-        Self::defined_function(name, &wrap(function_type))
-    }
-
-    pub fn defined_function<S: Into<String>>(name: S, function_type: &Rc<RefCell<Type>>) -> Self {
+    pub fn define_function<S: Into<String>>(
+        name: S,
+        parameters: &[(&str, Type)],
+        return_type: Type,
+    ) -> Self {
+        let function_type = Type::Function {
+            params: parameters.iter().map(|(_, ty)| wrap(*ty)).collect(),
+            return_type: wrap(return_type),
+        };
         let name = name.into();
+        let parameters = parameters
+            .iter()
+            .map(|(param, _)| param.to_string())
+            .collect();
+        let fun = semantic::Function::new(name, parameters);
+        let value = SemanticValue::new(
+            SemanticValueKind::Function(fun),
+            None,
+            Some(&wrap(function_type)),
+        );
 
-        Self {
-            id: name.clone(),
-            kind: DefinitionKind::Builtin(Builtin::new(name, function_type)),
-        }
+        Self { id: name, value }
     }
 
     pub fn id(&self) -> &str {
@@ -66,26 +77,20 @@ impl Scope {
         let mut scope = Self::new();
 
         // print
-        scope.insert(Binding::builtin_function(
+        scope.insert(Binding::define_function(
             "println_str",
-            Type::Function {
-                params: vec![wrap(Type::String)],
-                return_type: wrap(Type::Int32),
-            },
+            &[("str", Type::String)],
+            Type::Int32,
         ));
-        scope.insert(Binding::builtin_function(
+        scope.insert(Binding::define_function(
             "println_i32",
-            Type::Function {
-                params: vec![wrap(Type::Int32)],
-                return_type: wrap(Type::Int32),
-            },
+            &[("i", Type::Int32)],
+            Type::Int32,
         ));
-        scope.insert(Binding::builtin_function(
+        scope.insert(Binding::define_function(
             "debug_i32",
-            Type::Function {
-                params: vec![wrap(Type::String), wrap(Type::Int32)],
-                return_type: wrap(Type::Int32),
-            },
+            &[("i", Type::Int32)],
+            Type::Int32,
         ));
 
         scope
