@@ -1,4 +1,4 @@
-use crate::syntax::NodeId;
+use crate::syntax::{self, NodeId};
 use crate::{sem::Type, util::wrap};
 use std::{cell::RefCell, rc::Rc};
 
@@ -41,13 +41,10 @@ impl SemanticValue {
             .iter()
             .map(|(param, _)| param.to_string())
             .collect();
-        let fun = Function::new(name, parameters);
+        let ty = wrap(function_type);
+        let fun = Function::new(name, parameters, None, Some(Rc::clone(&ty)));
 
-        Self::new(
-            SemanticValueKind::Function(fun),
-            None,
-            Some(wrap(function_type)),
-        )
+        Self::new(SemanticValueKind::Function(fun), None, Some(Rc::clone(&ty)))
     }
 
     pub fn kind(&self) -> &SemanticValueKind {
@@ -121,15 +118,35 @@ impl SemanticValueKind {
 pub struct Function {
     name: String,
     parameters: Vec<String>,
+    node_id: Option<NodeId>, // syntax::FunctionDefinition. None for builtin.
+    r#type: Option<Rc<RefCell<Type>>>,
 }
 
 impl Function {
-    pub fn new(name: String, parameters: Vec<String>) -> Self {
-        Self { name, parameters }
+    pub fn new(
+        name: String,
+        parameters: Vec<String>,
+        node_id: Option<NodeId>,
+        r#type: Option<Rc<RefCell<Type>>>,
+    ) -> Self {
+        Self {
+            name,
+            parameters,
+            node_id,
+            r#type,
+        }
     }
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn function_definition<'a>(
+        &self,
+        tree: &'a syntax::AST,
+    ) -> Option<&'a syntax::FunctionDefinition> {
+        self.node_id
+            .map(|node_id| tree.get(node_id).unwrap().function_definition().unwrap())
     }
 }
 
