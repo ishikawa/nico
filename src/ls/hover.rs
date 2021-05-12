@@ -1,8 +1,9 @@
 use crate::{
     sem,
+    semantic::Struct,
     syntax::{
-        self, DefinitionKind, EffectiveRange, Node, NodePath, Position, StructDefinition,
-        TypeAnnotation, ValueField, AST,
+        self, EffectiveRange, Node, NodePath, Position, StructDefinition, TypeAnnotation,
+        ValueField, AST,
     },
 };
 use std::{cell::RefCell, fmt, rc::Rc};
@@ -40,17 +41,12 @@ impl Hover {
         format!("```nico\n{}\n```\n---\n{}", r#type.borrow(), description)
     }
 
-    fn describe_value_field(
-        &self,
-        tree: &AST,
-        definition: &mut StructDefinition,
-        field: &mut ValueField,
-    ) -> String {
+    fn describe_value_field(&self, tree: &AST, definition: &Struct, field: &ValueField) -> String {
         let ty = definition.get_field_type(tree, field.name(tree).as_str());
 
         format!(
             "```nico\n{}.{}: {}\n```",
-            self.describe_optional(definition.name(tree)),
+            definition.name(),
             field.name(tree),
             self.describe_optional(ty.map(|x| x.borrow().to_string())),
         )
@@ -92,10 +88,11 @@ impl<'a> syntax::Visitor<'a> for Hover {
             .get_binding(literal.name(path.tree()).as_str())
         {
             let binding = binding.borrow();
+            let value = binding.value().borrow();
 
-            if let DefinitionKind::StructDefinition(ref definition) = binding.kind() {
+            if let Some(struct_value) = value.kind().r#struct() {
                 self.result.replace((
-                    self.describe_value_field(path.tree(), definition, field),
+                    self.describe_value_field(path.tree(), struct_value, field),
                     field.name(path.tree()).range(path.tree()),
                 ));
             }

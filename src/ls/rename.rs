@@ -97,12 +97,12 @@ impl<'a> syntax::Visitor<'a> for Rename {
             }
             // Renaming function parameter
             else if let Some(param) = parent.function_parameter() {
-                self.operation = Some(RenameOperation::new(
-                    id,
-                    RenameOperationKind::Definition(DefinitionKind::FunctionParameter(Rc::clone(
-                        param,
-                    ))),
-                ));
+                if let Some(value) = param.semantic_value() {
+                    self.operation = Some(RenameOperation::new(
+                        id,
+                        RenameOperationKind::Definition(Rc::clone(value)),
+                    ));
+                }
             }
             // Renaming pattern
             else if let Some(pattern) = parent.pattern() {
