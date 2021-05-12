@@ -1,9 +1,12 @@
 //! Rename operation
-use crate::syntax::{
-    self, DefinitionKind, EffectiveRange, Expression, FunctionDefinition, FunctionParameter,
-    Identifier, Node, NodePath, Pattern, Position, StructDefinition, StructLiteral, AST,
+use crate::{
+    semantic::SemanticValue,
+    syntax::{
+        self, EffectiveRange, Expression, FunctionDefinition, FunctionParameter, Identifier, Node,
+        NodeId, NodePath, Pattern, Position, StructDefinition, StructLiteral, AST,
+    },
 };
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug)]
 pub struct Rename {
@@ -28,8 +31,8 @@ impl Rename {
     pub fn rename(&mut self, tree: &mut AST) -> Option<Vec<EffectiveRange>> {
         if let Some(RenameOperation { kind, .. }) = self.operation.as_ref() {
             match kind {
-                RenameOperationKind::Definition(definition) => {
-                    let mut visitor = RenameDefinition::new(definition);
+                RenameOperationKind::Definition(value) => {
+                    let mut visitor = RenameDefinition::new(Rc::clone(value));
                     syntax::traverse(&mut visitor, tree);
 
                     return Some(visitor.ranges);
@@ -58,7 +61,7 @@ impl<'a> syntax::Visitor<'a> for Rename {
 
                     self.operation = Some(RenameOperation::new(
                         id,
-                        RenameOperationKind::Definition(binding.kind().clone()),
+                        RenameOperationKind::Definition(Rc::clone(binding.value())),
                     ));
                 }
             }
@@ -68,29 +71,29 @@ impl<'a> syntax::Visitor<'a> for Rename {
                 if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
                     let binding = binding.borrow();
 
-                    if let DefinitionKind::StructDefinition(_) = binding.kind() {
+                    if binding.value().borrow().kind().is_struct() {
                         self.operation = Some(RenameOperation::new(
                             id,
-                            RenameOperationKind::Definition(binding.kind().clone()),
+                            RenameOperationKind::Definition(Rc::clone(binding.value())),
                         ));
                     }
                 }
             } else if let Some(struct_def) = parent.struct_definition() {
-                self.operation = Some(RenameOperation::new(
-                    id,
-                    RenameOperationKind::Definition(DefinitionKind::StructDefinition(Rc::clone(
-                        struct_def,
-                    ))),
-                ));
+                if let Some(value) = struct_def.semantic_value() {
+                    self.operation = Some(RenameOperation::new(
+                        id,
+                        RenameOperationKind::Definition(Rc::clone(value)),
+                    ));
+                }
             }
             // Renaming function name
             else if let Some(function) = parent.function_definition() {
-                self.operation = Some(RenameOperation::new(
-                    id,
-                    RenameOperationKind::Definition(DefinitionKind::FunctionDefinition(Rc::clone(
-                        function,
-                    ))),
-                ));
+                if let Some(value) = function.semantic_value() {
+                    self.operation = Some(RenameOperation::new(
+                        id,
+                        RenameOperationKind::Definition(Rc::clone(value)),
+                    ));
+                }
             }
             // Renaming function parameter
             else if let Some(param) = parent.function_parameter() {
@@ -136,79 +139,102 @@ impl RenameOperation {
 
 #[derive(Debug, Clone)]
 enum RenameOperationKind {
-    Definition(DefinitionKind),
+    Definition(Rc<RefCell<SemanticValue>>),
     Unknown,
 }
 
 #[derive(Debug)]
-struct RenameDefinition<'a> {
-    definition: &'a DefinitionKind,
+struct RenameDefinition {
+    value: Rc<RefCell<SemanticValue>>,
     ranges: Vec<EffectiveRange>,
 }
 
-impl<'a> RenameDefinition<'a> {
-    fn new(definition: &'a DefinitionKind) -> Self {
+impl RenameDefinition {
+    fn new(value: Rc<RefCell<SemanticValue>>) -> Self {
         Self {
-            definition,
+            value,
             ranges: vec![],
+        }
+    }
+
+    fn matches_node(&self, node: NodeId) -> bool {
+        let value = self.value.borrow();
+
+        if let Some(node_id) = value.node_id() {
+            node == node_id
+        } else {
+            false
         }
     }
 }
 
-impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
-    fn enter_struct_definition(&mut self, _path: &mut NodePath, struct_def: &mut StructDefinition) {
-        if let DefinitionKind::StructDefinition(definition) = self.definition {
-            if std::ptr::eq(definition.as_ref(), struct_def.as_ref()) {
-                if let Some(ref name) = struct_def.name {
-                    self.ranges.push(name.range());
-                }
+impl<'a> syntax::Visitor<'a> for RenameDefinition {
+    // definition
+
+    fn enter_struct_definition(&mut self, path: &mut NodePath, struct_def: &mut StructDefinition) {
+        if self.matches_node(path.node_id()) {
+            let tree = path.tree();
+
+            if let Some(ref name) = struct_def.name(tree) {
+                self.ranges.push(name.range(tree));
             }
-        }
-    }
-
-    fn enter_struct_literal(
-        &mut self,
-        path: &mut NodePath,
-        _expr: &mut Expression,
-        value: &StructLiteral,
-    ) {
-        let scope = path.scope();
-        let scope = scope.borrow();
-
-        let binding = match scope.get_binding(value.name().as_str()) {
-            None => return,
-            Some(binding) => binding,
-        };
-        let binding = binding.borrow();
-
-        if binding.kind().ptr_eq(self.definition) {
-            self.ranges.push(value.name().range());
         }
     }
 
     fn enter_function_definition(
         &mut self,
-        _path: &mut NodePath,
+        path: &mut NodePath,
         function: &mut FunctionDefinition,
     ) {
-        if let DefinitionKind::FunctionDefinition(definition) = self.definition {
-            if std::ptr::eq(definition.as_ref(), function.as_ref()) {
-                if let Some(ref name) = function.name {
-                    self.ranges.push(name.range());
-                }
+        if self.matches_node(path.node_id()) {
+            let tree = path.tree();
+
+            if let Some(ref name) = function.name(tree) {
+                self.ranges.push(name.range(tree));
             }
         }
     }
 
-    fn enter_function_parameter(&mut self, _path: &mut NodePath, param: &mut FunctionParameter) {
-        if let DefinitionKind::FunctionParameter(definition) = self.definition {
-            if std::ptr::eq(definition.as_ref(), param.as_ref()) {
-                self.ranges.push(param.name().range());
+    fn enter_function_parameter(&mut self, path: &mut NodePath, param: &mut FunctionParameter) {
+        if self.matches_node(param.name_id()) {
+            let tree = path.tree();
+            self.ranges.push(param.name(tree).range(tree));
+        }
+    }
+
+    fn enter_pattern(&mut self, _path: &mut NodePath, pattern: &mut Pattern) {
+        if let DefinitionKind::Pattern(definition) = self.definition {
+            if std::ptr::eq(definition.as_ref(), pattern.as_ref()) {
+                self.ranges.push(pattern.range());
             }
         }
     }
 
-    fn enter_variable(&mut self, path: &mut NodePath, _expr: &mut Expression, id: &mut Identifier) {
+    // reference
+
+    fn enter_struct_literal(
+        &mut self,
+        path: &mut NodePath,
+        _expr: &mut Expression,
+        literal: &StructLiteral,
+    ) {
+        let tree = path.tree();
+        let scope = path.scope();
+        let scope = scope.borrow();
+
+        let binding = match scope.get_binding(literal.name(tree).as_str()) {
+            None => return,
+            Some(binding) => binding,
+        };
+        let binding = binding.borrow();
+
+        if binding.value().borrow().node_id() == self.value.borrow().node_id() {
+            self.ranges.push(literal.name(tree).range(tree));
+        }
+    }
+
+    fn enter_variable(&mut self, path: &mut NodePath, _expr: &mut Expression, id: &Identifier) {
+        let tree = path.tree();
         let scope = path.scope();
         let scope = scope.borrow();
 
@@ -218,16 +244,8 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         };
         let binding = binding.borrow();
 
-        if binding.kind().ptr_eq(self.definition) {
-            self.ranges.push(id.range());
-        }
-    }
-
-    fn enter_pattern(&mut self, _path: &mut NodePath, pattern: &mut Pattern) {
-        if let DefinitionKind::Pattern(definition) = self.definition {
-            if std::ptr::eq(definition.as_ref(), pattern.as_ref()) {
-                self.ranges.push(pattern.range());
-            }
+        if binding.value().borrow().node_id() == self.value.borrow().node_id() {
+            self.ranges.push(id.range(tree));
         }
     }
 }

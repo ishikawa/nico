@@ -79,6 +79,44 @@ pub enum SemanticValueKind {
     Variable(Variable),
 }
 
+impl SemanticValueKind {
+    pub fn function(&self) -> Option<&Function> {
+        if let SemanticValueKind::Function(function) = self {
+            Some(function)
+        } else {
+            None
+        }
+    }
+
+    pub fn r#struct(&self) -> Option<&Struct> {
+        if let SemanticValueKind::Struct(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn variable(&self) -> Option<&Variable> {
+        if let SemanticValueKind::Variable(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    pub fn is_function(&self) -> bool {
+        matches!(self, SemanticValueKind::Function(_))
+    }
+
+    pub fn is_struct(&self) -> bool {
+        matches!(self, SemanticValueKind::Struct(_))
+    }
+
+    pub fn is_variable(&self) -> bool {
+        matches!(self, SemanticValueKind::Variable(_))
+    }
+}
+
 #[derive(Debug)]
 pub struct Function {
     name: String,

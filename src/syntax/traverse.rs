@@ -322,14 +322,14 @@ pub trait Visitor<'a> {
         &mut self,
         path: &mut NodePath<'a>,
         expr: &mut Expression,
-        value: &StructLiteral,
+        literal: &StructLiteral,
     ) {
     }
     fn exit_struct_literal(
         &mut self,
         path: &mut NodePath<'a>,
         expr: &mut Expression,
-        value: &StructLiteral,
+        literal: &StructLiteral,
     ) {
     }
 

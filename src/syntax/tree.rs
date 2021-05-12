@@ -668,6 +668,10 @@ impl FunctionParameter {
         }
     }
 
+    pub fn name_id(&self) -> NodeId {
+        self.name
+    }
+
     pub fn name<'a>(&self, tree: &'a AST) -> &'a Identifier {
         return tree.get(self.name).unwrap().identifier().unwrap();
     }
