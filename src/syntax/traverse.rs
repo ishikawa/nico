@@ -6,6 +6,7 @@ use std::{
     rc::{Rc, Weak},
 };
 
+#[derive(Debug)]
 pub struct NodePath<'a> {
     skipped: bool,
     stopped: bool,

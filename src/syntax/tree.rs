@@ -14,6 +14,12 @@ pub struct AST {
     root: NodeId,
 }
 
+impl fmt::Debug for AST {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AST").field("root", &self.root).finish()
+    }
+}
+
 impl AST {
     pub fn new(arena: NodeArena, root: NodeId) -> Self {
         Self { arena, root }
