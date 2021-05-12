@@ -594,7 +594,7 @@ impl<'a> Parser<'a> {
 
             PatternKind::StructPattern(StructPattern::new(id, fields))
         } else {
-            PatternKind::VariablePattern(id)
+            PatternKind::VariablePattern(VariablePattern::new(id))
         };
 
         Pattern::new(kind, code)
@@ -1631,7 +1631,7 @@ mod tests {
 
         let mut arms = expr.arms(&tree);
 
-        assert!(!arms.is_empty());
+        assert!(arms.len() != 0);
 
         // when 123
         let arm = arms.next().unwrap();

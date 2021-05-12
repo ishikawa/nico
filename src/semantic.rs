@@ -18,12 +18,12 @@ impl SemanticValue {
     pub fn new(
         kind: SemanticValueKind,
         node_id: Option<NodeId>,
-        r#type: Option<&Rc<RefCell<Type>>>,
+        r#type: Option<Rc<RefCell<Type>>>,
     ) -> Self {
         Self {
             kind,
             node_id,
-            r#type: r#type.map(Rc::clone),
+            r#type,
         }
     }
 
@@ -46,7 +46,7 @@ impl SemanticValue {
         Self::new(
             SemanticValueKind::Function(fun),
             None,
-            Some(&wrap(function_type)),
+            Some(wrap(function_type)),
         )
     }
 

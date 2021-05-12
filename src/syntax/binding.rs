@@ -5,7 +5,7 @@ use super::{
     NodePath, Pattern, Program, StructDefinition, VariableDeclaration, Visitor, AST,
 };
 use crate::sem::Type;
-use crate::semantic::{Function, SemanticValue, SemanticValueKind};
+use crate::semantic::{SemanticValue, SemanticValueKind};
 use crate::util::wrap;
 use std::{
     cell::RefCell,
@@ -108,16 +108,12 @@ impl Scope {
                 self.insert(fun.name(tree).unwrap().as_str(), value);
             }
         } else if let Some(param) = declaration.function_parameter() {
-            self.insert(Binding {
-                id: param.name().to_string(),
-                kind: DefinitionKind::FunctionParameter(Rc::clone(&param)),
-            });
+            if let Some(value) = param.semantic_value() {
+                self.insert(param.name(tree).as_str(), value);
+            }
         } else if let Some(def) = declaration.struct_definition() {
-            if let Some(name) = def.name() {
-                self.insert(Binding {
-                    id: name.to_string(),
-                    kind: DefinitionKind::StructDefinition(Rc::clone(&def)),
-                });
+            if let Some(value) = def.semantic_value() {
+                self.insert(def.name(tree).unwrap().as_str(), value);
             }
         } else if let Some(pattern) = declaration.pattern() {
             self.register_pattern(tree, pattern);
@@ -129,22 +125,20 @@ impl Scope {
             super::PatternKind::IntegerPattern(_) => {}
             super::PatternKind::StringPattern(_) => {}
             super::PatternKind::VariablePattern(id) => {
-                self.insert(Binding {
-                    id: id.to_string(),
-                    kind: DefinitionKind::Pattern(Rc::clone(pattern)),
-                });
+                if let Some(value) = id.semantic_value() {
+                    self.insert(id.id(tree).as_str(), value);
+                }
             }
             super::PatternKind::ArrayPattern(pat) => {
-                for pat in pat.elements() {
+                for pat in pat.elements(tree) {
                     self.register_pattern(tree, pat);
                 }
             }
             super::PatternKind::RestPattern(pat) => {
-                if let Some(ref id) = pat.id {
-                    self.insert(Binding {
-                        id: id.to_string(),
-                        kind: DefinitionKind::Pattern(Rc::clone(pattern)),
-                    });
+                if let Some(ref id) = pat.id(tree) {
+                    if let Some(value) = pat.semantic_value() {
+                        self.insert(pat.id(tree).unwrap().as_str(), value);
+                    }
                 }
             }
             super::PatternKind::StructPattern(pat) => {
@@ -153,12 +147,11 @@ impl Scope {
                         self.register_pattern(tree, value);
                     } else {
                         // omitted
-                        let pattern = Pattern::variable_pattern(&field.name);
+                        let pattern = field.variable().unwrap();
 
-                        self.insert(Binding {
-                            id: field.name.to_string(),
-                            kind: DefinitionKind::Pattern(Rc::new(pattern)),
-                        });
+                        if let Some(value) = pattern.semantic_value() {
+                            self.insert(pattern.id(tree).as_str(), value);
+                        }
                     }
                 }
             }
@@ -325,7 +318,7 @@ impl<'a> Visitor<'a> for TypeBinder {
         _literal: i32,
     ) {
         let ty = expr.r#type();
-        ty.replace(sem::Type::Int32);
+        ty.replace(Type::Int32);
     }
 
     fn enter_string_literal(
@@ -335,7 +328,7 @@ impl<'a> Visitor<'a> for TypeBinder {
         _literal: Option<&str>,
     ) {
         let ty = expr.r#type();
-        ty.replace(sem::Type::String);
+        ty.replace(Type::String);
     }
 }
 
