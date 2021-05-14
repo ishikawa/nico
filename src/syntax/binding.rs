@@ -5,7 +5,7 @@ use super::{
     NodePath, Pattern, Program, StructDefinition, VariableDeclaration, Visitor, AST,
 };
 use crate::sem::Type;
-use crate::semantic::{SemanticValue, SemanticValueKind};
+use crate::semantic::{self, SemanticValueKind};
 use crate::util::wrap;
 use std::{
     cell::RefCell,
@@ -17,14 +17,14 @@ use std::{
 #[derive(Debug)]
 pub struct Binding {
     id: String,
-    value: Rc<RefCell<SemanticValue>>,
+    value: SemanticValueKind,
 }
 
 impl Binding {
-    pub fn new<S: Into<String>>(id: S, value: &Rc<RefCell<SemanticValue>>) -> Self {
+    pub fn new<S: Into<String>>(id: S, value: SemanticValueKind) -> Self {
         Self {
             id: id.into(),
-            value: Rc::clone(value),
+            value: value,
         }
     }
 
@@ -32,14 +32,14 @@ impl Binding {
         &self.id
     }
 
-    pub fn value(&self) -> &Rc<RefCell<SemanticValue>> {
+    pub fn value(&self) -> &SemanticValueKind {
         &self.value
     }
 }
 
 impl fmt::Display for Binding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.value.borrow().kind() {
+        match self.value {
             SemanticValueKind::Function(_) => {
                 write!(f, "function `{}`", self.id)
             }
@@ -64,27 +64,23 @@ impl Scope {
         let mut scope = Self::new();
 
         // print functions
-        scope.define_semantic_value(SemanticValue::define_function(
+        scope.define_function(semantic::Function::define_function(
             "println_str",
             &[("str", Type::String)],
             Type::Int32,
         ));
-        scope.define_semantic_value(SemanticValue::define_function(
+        scope.define_function(semantic::Function::define_function(
             "println_i32",
             &[("i", Type::Int32)],
             Type::Int32,
         ));
-        scope.define_semantic_value(SemanticValue::define_function(
+        scope.define_function(semantic::Function::define_function(
             "debug_i32",
             &[("i", Type::Int32)],
             Type::Int32,
         ));
 
         scope
-    }
-
-    fn define_semantic_value(&mut self, value: SemanticValue) {
-        self.insert(value.name().unwrap(), &wrap(value));
     }
 
     pub fn new() -> Self {
@@ -95,7 +91,7 @@ impl Scope {
         &self.parent
     }
 
-    pub fn insert<S: AsRef<str>>(&mut self, id: S, value: &Rc<RefCell<SemanticValue>>) {
+    pub fn insert<S: AsRef<str>>(&mut self, id: S, value: SemanticValueKind) {
         let id = id.as_ref().to_string();
 
         let binding = Binding::new(id.clone(), value);
@@ -105,15 +101,15 @@ impl Scope {
     fn register_declaration(&mut self, tree: &AST, declaration: &NodeKind) {
         if let Some(fun) = declaration.function_definition() {
             if let Some(value) = fun.semantic_value() {
-                self.insert(fun.name(tree).unwrap().as_str(), value);
+                self.insert_function(Rc::clone(value));
             }
         } else if let Some(param) = declaration.function_parameter() {
             if let Some(value) = param.semantic_value() {
-                self.insert(param.name(tree).as_str(), value);
+                self.insert_variable(Rc::clone(value));
             }
         } else if let Some(def) = declaration.struct_definition() {
             if let Some(value) = def.semantic_value() {
-                self.insert(def.name(tree).unwrap().as_str(), value);
+                self.insert_struct(Rc::clone(value));
             }
         } else if let Some(pattern) = declaration.pattern() {
             self.register_pattern(tree, pattern);
@@ -126,7 +122,7 @@ impl Scope {
             super::PatternKind::StringPattern(_) => {}
             super::PatternKind::VariablePattern(id) => {
                 if let Some(value) = id.semantic_value() {
-                    self.insert(id.id(tree).as_str(), value);
+                    self.insert_variable(Rc::clone(value));
                 }
             }
             super::PatternKind::ArrayPattern(pat) => {
@@ -137,7 +133,7 @@ impl Scope {
             super::PatternKind::RestPattern(pat) => {
                 if let Some(ref id) = pat.id(tree) {
                     if let Some(value) = pat.semantic_value() {
-                        self.insert(pat.id(tree).unwrap().as_str(), value);
+                        self.insert_variable(Rc::clone(value));
                     }
                 }
             }
@@ -150,7 +146,7 @@ impl Scope {
                         let pattern = field.variable().unwrap();
 
                         if let Some(value) = pattern.semantic_value() {
-                            self.insert(pattern.id(tree).as_str(), value);
+                            self.insert_variable(Rc::clone(value));
                         }
                     }
                 }
@@ -168,6 +164,22 @@ impl Scope {
         }
 
         None
+    }
+
+    fn define_function(&mut self, fun: semantic::Function) {
+        self.insert_function(wrap(fun));
+    }
+
+    fn insert_function(&mut self, fun: Rc<RefCell<semantic::Function>>) {
+        self.insert(fun.borrow().name(), SemanticValueKind::Function(fun));
+    }
+
+    fn insert_struct(&mut self, value: Rc<RefCell<semantic::Struct>>) {
+        self.insert(value.borrow().name(), SemanticValueKind::Struct(value));
+    }
+
+    fn insert_variable(&mut self, value: Rc<RefCell<semantic::Variable>>) {
+        self.insert(value.borrow().name(), SemanticValueKind::Variable(value));
     }
 }
 

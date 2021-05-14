@@ -1,5 +1,5 @@
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
-use crate::{sem, semantic::SemanticValue, util::wrap};
+use crate::{sem, semantic, util::wrap};
 use id_arena;
 use std::rc::Rc;
 use std::slice;
@@ -460,7 +460,7 @@ pub struct StructDefinition {
     name: Option<NodeId>, // Identifier
     fields: Vec<NodeId>,  // TypeField
     code: Code,
-    semantic_value: Option<Rc<RefCell<SemanticValue>>>,
+    semantic_value: Option<Rc<RefCell<semantic::Struct>>>,
 }
 
 impl StructDefinition {
@@ -500,11 +500,11 @@ impl StructDefinition {
             .map(|annotation| Rc::clone(&annotation.r#type))
     }
 
-    pub fn semantic_value(&self) -> Option<&Rc<RefCell<SemanticValue>>> {
+    pub fn semantic_value(&self) -> Option<&Rc<RefCell<semantic::Struct>>> {
         self.semantic_value.as_ref()
     }
 
-    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<SemanticValue>>) {
+    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<semantic::Struct>>) {
         self.semantic_value.replace(value);
     }
 }
@@ -596,7 +596,7 @@ pub struct FunctionDefinition {
     parameters: Vec<NodeId>, // FunctionParameter
     body: NodeId,            // Block
     code: Code,
-    semantic_value: Option<Rc<RefCell<SemanticValue>>>,
+    semantic_value: Option<Rc<RefCell<semantic::Function>>>,
 }
 
 impl FunctionDefinition {
@@ -631,11 +631,11 @@ impl FunctionDefinition {
             .map(move |node| tree.get(*node).unwrap().function_parameter().unwrap())
     }
 
-    pub fn semantic_value(&self) -> Option<&Rc<RefCell<SemanticValue>>> {
+    pub fn semantic_value(&self) -> Option<&Rc<RefCell<semantic::Function>>> {
         self.semantic_value.as_ref()
     }
 
-    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<SemanticValue>>) {
+    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<semantic::Function>>) {
         self.semantic_value.replace(value);
     }
 }
@@ -656,7 +656,7 @@ impl fmt::Display for FunctionDefinition {
 pub struct FunctionParameter {
     name: NodeId, // Identifier
     code: Code,
-    semantic_value: Option<Rc<RefCell<SemanticValue>>>,
+    semantic_value: Option<Rc<RefCell<semantic::Variable>>>,
 }
 
 impl FunctionParameter {
@@ -676,11 +676,11 @@ impl FunctionParameter {
         return tree.get(self.name).unwrap().identifier().unwrap();
     }
 
-    pub fn semantic_value(&self) -> Option<&Rc<RefCell<SemanticValue>>> {
+    pub fn semantic_value(&self) -> Option<&Rc<RefCell<semantic::Variable>>> {
         self.semantic_value.as_ref()
     }
 
-    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<SemanticValue>>) {
+    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<semantic::Variable>>) {
         self.semantic_value.replace(value);
     }
 }
@@ -1363,7 +1363,7 @@ impl fmt::Display for Pattern {
 #[derive(Debug)]
 pub struct VariablePattern {
     id: NodeId, // Identifier
-    semantic_value: Option<Rc<RefCell<SemanticValue>>>,
+    semantic_value: Option<Rc<RefCell<semantic::Variable>>>,
 }
 
 impl VariablePattern {
@@ -1378,11 +1378,11 @@ impl VariablePattern {
         tree.get(self.id).unwrap().identifier().unwrap()
     }
 
-    pub fn semantic_value(&self) -> Option<&Rc<RefCell<SemanticValue>>> {
+    pub fn semantic_value(&self) -> Option<&Rc<RefCell<semantic::Variable>>> {
         self.semantic_value.as_ref()
     }
 
-    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<SemanticValue>>) {
+    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<semantic::Variable>>) {
         self.semantic_value.replace(value);
     }
 }
@@ -1410,7 +1410,7 @@ impl ArrayPattern {
 #[derive(Debug)]
 pub struct RestPattern {
     id: Option<NodeId>, // Identifier
-    semantic_value: Option<Rc<RefCell<SemanticValue>>>,
+    semantic_value: Option<Rc<RefCell<semantic::Variable>>>,
 }
 
 impl RestPattern {
@@ -1426,11 +1426,11 @@ impl RestPattern {
             .map(|id| tree.get(id).unwrap().identifier().unwrap())
     }
 
-    pub fn semantic_value(&self) -> Option<&Rc<RefCell<SemanticValue>>> {
+    pub fn semantic_value(&self) -> Option<&Rc<RefCell<semantic::Variable>>> {
         self.semantic_value.as_ref()
     }
 
-    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<SemanticValue>>) {
+    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<semantic::Variable>>) {
         self.semantic_value.replace(value);
     }
 }

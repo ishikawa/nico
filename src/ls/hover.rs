@@ -1,10 +1,7 @@
 use crate::{
     sem,
     semantic::Struct,
-    syntax::{
-        self, EffectiveRange, Node, NodePath, Position, StructDefinition, TypeAnnotation,
-        ValueField, AST,
-    },
+    syntax::{self, EffectiveRange, Node, NodePath, Position, TypeAnnotation, ValueField, AST},
 };
 use std::{cell::RefCell, fmt, rc::Rc};
 
@@ -41,13 +38,19 @@ impl Hover {
         format!("```nico\n{}\n```\n---\n{}", r#type.borrow(), description)
     }
 
-    fn describe_value_field(&self, tree: &AST, definition: &Struct, field: &ValueField) -> String {
-        let ty = definition.get_field_type(tree, field.name(tree).as_str());
+    fn describe_value_field(
+        &self,
+        tree: &AST,
+        definition: &Rc<RefCell<Struct>>,
+        field: &ValueField,
+    ) -> String {
+        let field_name = field.name(tree);
+        let ty = definition.borrow().get_field_type(field_name.as_str());
 
         format!(
             "```nico\n{}.{}: {}\n```",
-            definition.name(),
-            field.name(tree),
+            definition.borrow().name(),
+            field_name,
             self.describe_optional(ty.map(|x| x.borrow().to_string())),
         )
     }
@@ -88,9 +91,9 @@ impl<'a> syntax::Visitor<'a> for Hover {
             .get_binding(literal.name(path.tree()).as_str())
         {
             let binding = binding.borrow();
-            let value = binding.value().borrow();
+            let value = binding.value();
 
-            if let Some(struct_value) = value.kind().r#struct() {
+            if let Some(struct_value) = value.r#struct() {
                 self.result.replace((
                     self.describe_value_field(path.tree(), struct_value, field),
                     field.name(path.tree()).range(path.tree()),
