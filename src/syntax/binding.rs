@@ -171,15 +171,18 @@ impl Scope {
     }
 
     fn insert_function(&mut self, fun: Rc<RefCell<semantic::Function>>) {
-        self.insert(fun.borrow().name(), SemanticValueKind::Function(fun));
+        let name = fun.borrow().name().to_string();
+        self.insert(name, SemanticValueKind::Function(fun));
     }
 
     fn insert_struct(&mut self, value: Rc<RefCell<semantic::Struct>>) {
-        self.insert(value.borrow().name(), SemanticValueKind::Struct(value));
+        let name = value.borrow().name().to_string();
+        self.insert(name, SemanticValueKind::Struct(value));
     }
 
     fn insert_variable(&mut self, value: Rc<RefCell<semantic::Variable>>) {
-        self.insert(value.borrow().name(), SemanticValueKind::Variable(value));
+        let name = value.borrow().name().to_string();
+        self.insert(name, SemanticValueKind::Variable(value));
     }
 }
 
@@ -279,8 +282,6 @@ impl VariableBinder {
 
 impl<'a> Visitor<'a> for VariableBinder {
     fn enter_function_parameter(&mut self, path: &mut NodePath, _param: &mut FunctionParameter) {
-        let node = path.node();
-
         let parent_path = path.expect_parent();
         let parent_path = parent_path.borrow();
         let fun = parent_path.node().function_definition().unwrap();
@@ -297,7 +298,9 @@ impl<'a> Visitor<'a> for VariableBinder {
         let tree = path.tree();
 
         if let Some(pattern) = declaration.pattern(tree) {
-            let scope = path.scope().borrow_mut();
+            let scope = path.scope();
+            let mut scope = scope.borrow_mut();
+
             scope.register_pattern(tree, pattern);
         }
     }
