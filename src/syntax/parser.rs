@@ -1554,9 +1554,8 @@ mod tests {
         let stmt = get_statement(&tree);
         let expr = stmt.expression(&tree).unwrap().if_expression().unwrap();
 
-        assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
+        assert_matches!(expr, IfExpression { condition, else_body, .. } => {
             assert!(condition.is_none());
-            assert!(tree.get(*then_body).is_none());
             assert!(else_body.is_none());
 
             let block = expr.then_body(&tree);

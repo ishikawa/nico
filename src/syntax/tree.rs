@@ -1308,7 +1308,7 @@ impl CaseArm {
     }
 
     pub fn guard<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
-        if let Some(node_id) = self.pattern {
+        if let Some(node_id) = self.guard {
             return tree.get(node_id).unwrap().expression();
         } else {
             None
