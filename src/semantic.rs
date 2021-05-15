@@ -121,7 +121,9 @@ impl SemanticValueKind {
     }
 
     pub fn is_function_parameter(&self) -> bool {
-        todo!()
+        self.variable()
+            .filter(|v| v.borrow().is_function_parameter())
+            .is_some()
     }
 }
 
@@ -236,14 +238,21 @@ impl Struct {
 #[derive(Debug)]
 pub struct Variable {
     name: String,
+    is_function_parameter: bool,
     node_id: Option<NodeId>, // syntax::Identifier. None for builtin.
     r#type: Option<Rc<RefCell<Type>>>,
 }
 
 impl Variable {
-    pub fn new(name: String, node_id: Option<NodeId>, r#type: Option<Rc<RefCell<Type>>>) -> Self {
+    pub fn new(
+        name: String,
+        is_function_parameter: bool,
+        node_id: Option<NodeId>,
+        r#type: Option<Rc<RefCell<Type>>>,
+    ) -> Self {
         Self {
             name,
+            is_function_parameter,
             node_id,
             r#type,
         }
@@ -255,6 +264,10 @@ impl Variable {
 
     pub fn node_id(&self) -> Option<NodeId> {
         self.node_id
+    }
+
+    pub fn is_function_parameter(&self) -> bool {
+        self.is_function_parameter
     }
 
     pub fn r#type(&self) -> Option<&Rc<RefCell<Type>>> {
