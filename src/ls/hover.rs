@@ -57,10 +57,10 @@ impl Hover {
     }
 }
 
-impl<'a> syntax::Visitor<'a> for Hover {
+impl syntax::Visitor for Hover {
     fn enter_type_annotation(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
         annotation: &TypeAnnotation,
     ) {
@@ -75,7 +75,7 @@ impl<'a> syntax::Visitor<'a> for Hover {
         path.stop();
     }
 
-    fn enter_value_field(&mut self, tree: &'a AST, path: &mut NodePath, field: &ValueField) {
+    fn enter_value_field(&mut self, tree: &AST, path: &mut NodePath, field: &ValueField) {
         if !field.name(tree).range(tree).contains(self.position) {
             return;
         }

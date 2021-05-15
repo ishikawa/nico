@@ -17,7 +17,7 @@ pub struct NodePath {
     parent: Option<Rc<RefCell<NodePath>>>,
 }
 
-impl<'a> NodePath {
+impl NodePath {
     pub fn new(node_id: NodeId) -> Self {
         Self {
             skipped: false,
@@ -48,7 +48,7 @@ impl<'a> NodePath {
         self.node_id
     }
 
-    pub fn node(&self, tree: &'a AST) -> &'a NodeKind {
+    pub fn node<'a>(&self, tree: &'a AST) -> &'a NodeKind {
         tree.get(self.node_id).unwrap()
     }
 
@@ -82,7 +82,7 @@ impl<'a> NodePath {
             .unwrap_or_else(|| panic!("scope must live."))
     }
 
-    fn on_enter(&mut self, tree: &'a AST) {
+    fn on_enter(&mut self, tree: &AST) {
         match self.node(tree) {
             NodeKind::Program(ref program) => {
                 self.main_scope = Rc::downgrade(program.main_scope());
@@ -106,7 +106,7 @@ impl<'a> NodePath {
         }
     }
 
-    fn on_exit(&mut self, tree: &'a AST) {
+    fn on_exit(&mut self, tree: &AST) {
         match self.node(tree) {
             NodeKind::Program(_) => {
                 self.main_scope = Weak::new();
@@ -131,28 +131,22 @@ impl<'a> NodePath {
 }
 
 #[allow(unused_variables, unused_mut)]
-pub trait Visitor<'a> {
+pub trait Visitor {
     // Token
     fn enter_whitespace(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
         token: &Token,
         trivia: &Trivia,
     ) {
     }
-    fn exit_whitespace(
-        &mut self,
-        tree: &'a AST,
-        path: &mut NodePath,
-        token: &Token,
-        trivia: &Trivia,
-    ) {
+    fn exit_whitespace(&mut self, tree: &AST, path: &mut NodePath, token: &Token, trivia: &Trivia) {
     }
 
     fn enter_line_comment(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
         token: &Token,
         trivia: &Trivia,
@@ -161,7 +155,7 @@ pub trait Visitor<'a> {
     }
     fn exit_line_comment(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
         token: &Token,
         trivia: &Trivia,
@@ -169,12 +163,12 @@ pub trait Visitor<'a> {
     ) {
     }
 
-    fn enter_interpreted_token(&mut self, tree: &'a AST, path: &mut NodePath, token: &Token) {}
-    fn exit_interpreted_token(&mut self, tree: &'a AST, path: &mut NodePath, token: &Token) {}
+    fn enter_interpreted_token(&mut self, tree: &AST, path: &mut NodePath, token: &Token) {}
+    fn exit_interpreted_token(&mut self, tree: &AST, path: &mut NodePath, token: &Token) {}
 
     fn enter_missing_token(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
         range: EffectiveRange,
         item: MissingTokenKind,
@@ -182,7 +176,7 @@ pub trait Visitor<'a> {
     }
     fn exit_missing_token(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
         range: EffectiveRange,
         item: MissingTokenKind,
@@ -191,7 +185,7 @@ pub trait Visitor<'a> {
 
     fn enter_skipped_token(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
         token: &Token,
         expected: MissingTokenKind,
@@ -199,7 +193,7 @@ pub trait Visitor<'a> {
     }
     fn exit_skipped_token(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
         token: &Token,
         expected: MissingTokenKind,
@@ -207,335 +201,334 @@ pub trait Visitor<'a> {
     }
 
     // Node
-    fn enter_program(&mut self, tree: &'a AST, path: &mut NodePath, program: &'a Program) {}
-    fn exit_program(&mut self, tree: &'a AST, path: &mut NodePath, program: &'a Program) {}
+    fn enter_program(&mut self, tree: &AST, path: &mut NodePath, program: &Program) {}
+    fn exit_program(&mut self, tree: &AST, path: &mut NodePath, program: &Program) {}
 
-    fn enter_block(&mut self, tree: &'a AST, path: &mut NodePath, block: &'a Block) {}
-    fn exit_block(&mut self, tree: &'a AST, path: &mut NodePath, block: &'a Block) {}
+    fn enter_block(&mut self, tree: &AST, path: &mut NodePath, block: &Block) {}
+    fn exit_block(&mut self, tree: &AST, path: &mut NodePath, block: &Block) {}
 
-    fn enter_identifier(&mut self, tree: &'a AST, path: &mut NodePath, id: &'a Identifier) {}
-    fn exit_identifier(&mut self, tree: &'a AST, path: &mut NodePath, id: &'a Identifier) {}
+    fn enter_identifier(&mut self, tree: &AST, path: &mut NodePath, id: &Identifier) {}
+    fn exit_identifier(&mut self, tree: &AST, path: &mut NodePath, id: &Identifier) {}
 
     fn enter_struct_definition(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        definition: &'a StructDefinition,
+        definition: &StructDefinition,
     ) {
     }
     fn exit_struct_definition(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        definition: &'a StructDefinition,
+        definition: &StructDefinition,
     ) {
     }
 
     fn enter_function_definition(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        definition: &'a FunctionDefinition,
+        definition: &FunctionDefinition,
     ) {
     }
     fn exit_function_definition(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        definition: &'a FunctionDefinition,
+        definition: &FunctionDefinition,
     ) {
     }
 
     fn enter_function_parameter(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        param: &'a FunctionParameter,
+        param: &FunctionParameter,
     ) {
     }
     fn exit_function_parameter(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        param: &'a FunctionParameter,
+        param: &FunctionParameter,
     ) {
     }
 
-    fn enter_type_field(&mut self, tree: &'a AST, path: &mut NodePath, field: &'a TypeField) {}
-    fn exit_type_field(&mut self, tree: &'a AST, path: &mut NodePath, field: &'a TypeField) {}
+    fn enter_type_field(&mut self, tree: &AST, path: &mut NodePath, field: &TypeField) {}
+    fn exit_type_field(&mut self, tree: &AST, path: &mut NodePath, field: &TypeField) {}
 
     fn enter_type_annotation(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        annotation: &'a TypeAnnotation,
+        annotation: &TypeAnnotation,
     ) {
     }
     fn exit_type_annotation(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        annotation: &'a TypeAnnotation,
+        annotation: &TypeAnnotation,
     ) {
     }
 
-    fn enter_statement(&mut self, tree: &'a AST, path: &mut NodePath, statement: &'a Statement) {}
-    fn exit_statement(&mut self, tree: &'a AST, path: &mut NodePath, statement: &'a Statement) {}
+    fn enter_statement(&mut self, tree: &AST, path: &mut NodePath, statement: &Statement) {}
+    fn exit_statement(&mut self, tree: &AST, path: &mut NodePath, statement: &Statement) {}
 
     fn enter_variable_declaration(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        declaration: &'a VariableDeclaration,
+        declaration: &VariableDeclaration,
     ) {
     }
     fn exit_variable_declaration(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        declaration: &'a VariableDeclaration,
+        declaration: &VariableDeclaration,
     ) {
     }
 
-    fn enter_case_arm(&mut self, tree: &'a AST, path: &mut NodePath, arm: &'a CaseArm) {}
-    fn exit_case_arm(&mut self, tree: &'a AST, path: &mut NodePath, arm: &'a CaseArm) {}
+    fn enter_case_arm(&mut self, tree: &AST, path: &mut NodePath, arm: &CaseArm) {}
+    fn exit_case_arm(&mut self, tree: &AST, path: &mut NodePath, arm: &CaseArm) {}
 
-    fn enter_pattern(&mut self, tree: &'a AST, path: &mut NodePath, pattern: &'a Pattern) {}
-    fn exit_pattern(&mut self, tree: &'a AST, path: &mut NodePath, pattern: &'a Pattern) {}
+    fn enter_pattern(&mut self, tree: &AST, path: &mut NodePath, pattern: &Pattern) {}
+    fn exit_pattern(&mut self, tree: &AST, path: &mut NodePath, pattern: &Pattern) {}
 
-    fn enter_value_field(&mut self, tree: &'a AST, path: &mut NodePath, field: &'a ValueField) {}
-    fn exit_value_field(&mut self, tree: &'a AST, path: &mut NodePath, field: &'a ValueField) {}
+    fn enter_value_field(&mut self, tree: &AST, path: &mut NodePath, field: &ValueField) {}
+    fn exit_value_field(&mut self, tree: &AST, path: &mut NodePath, field: &ValueField) {}
 
     fn enter_value_field_pattern(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        pattern: &'a ValueFieldPattern,
+        pattern: &ValueFieldPattern,
     ) {
     }
     fn exit_value_field_pattern(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        pattern: &'a ValueFieldPattern,
+        pattern: &ValueFieldPattern,
     ) {
     }
 
-    fn enter_expression(&mut self, tree: &'a AST, path: &mut NodePath, expression: &'a Expression) {
-    }
-    fn exit_expression(&mut self, tree: &'a AST, path: &mut NodePath, expression: &'a Expression) {}
+    fn enter_expression(&mut self, tree: &AST, path: &mut NodePath, expression: &Expression) {}
+    fn exit_expression(&mut self, tree: &AST, path: &mut NodePath, expression: &Expression) {}
 
     fn enter_integer_literal(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
+        expr: &Expression,
         literal: i32,
     ) {
     }
     fn exit_integer_literal(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
+        expr: &Expression,
         literal: i32,
     ) {
     }
 
     fn enter_string_literal(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
+        expr: &Expression,
         literal: Option<&str>,
     ) {
     }
     fn exit_string_literal(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
+        expr: &Expression,
         literal: Option<&str>,
     ) {
     }
 
     fn enter_struct_literal(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        literal: &'a StructLiteral,
+        expr: &Expression,
+        literal: &StructLiteral,
     ) {
     }
     fn exit_struct_literal(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        literal: &'a StructLiteral,
+        expr: &Expression,
+        literal: &StructLiteral,
     ) {
     }
 
     fn enter_variable(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        id: &'a Identifier,
+        expr: &Expression,
+        id: &Identifier,
     ) {
     }
     fn exit_variable(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        id: &'a Identifier,
+        expr: &Expression,
+        id: &Identifier,
     ) {
     }
 
     fn enter_binary_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        bin_expr: &'a BinaryExpression,
+        expr: &Expression,
+        bin_expr: &BinaryExpression,
     ) {
     }
     fn exit_binary_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        bin_expr: &'a BinaryExpression,
+        expr: &Expression,
+        bin_expr: &BinaryExpression,
     ) {
     }
 
     fn enter_unary_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        unary_expr: &'a UnaryExpression,
+        expr: &Expression,
+        unary_expr: &UnaryExpression,
     ) {
     }
     fn exit_unary_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        unary_expr: &'a UnaryExpression,
+        expr: &Expression,
+        unary_expr: &UnaryExpression,
     ) {
     }
 
     fn enter_subscript_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        subscript_expr: &'a SubscriptExpression,
+        expr: &Expression,
+        subscript_expr: &SubscriptExpression,
     ) {
     }
     fn exit_subscript_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        subscript_expr: &'a SubscriptExpression,
+        expr: &Expression,
+        subscript_expr: &SubscriptExpression,
     ) {
     }
 
     fn enter_call_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        call_expr: &'a CallExpression,
+        expr: &Expression,
+        call_expr: &CallExpression,
     ) {
     }
     fn exit_call_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        call_expr: &'a CallExpression,
+        expr: &Expression,
+        call_expr: &CallExpression,
     ) {
     }
 
     fn enter_access_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        member_expr: &'a MemberExpression,
+        expr: &Expression,
+        member_expr: &MemberExpression,
     ) {
     }
     fn exit_access_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        member_expr: &'a MemberExpression,
+        expr: &Expression,
+        member_expr: &MemberExpression,
     ) {
     }
 
     fn enter_array_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        array_expr: &'a ArrayExpression,
+        expr: &Expression,
+        array_expr: &ArrayExpression,
     ) {
     }
     fn exit_array_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        array_expr: &'a ArrayExpression,
+        expr: &Expression,
+        array_expr: &ArrayExpression,
     ) {
     }
 
     fn enter_if_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        if_expr: &'a IfExpression,
+        expr: &Expression,
+        if_expr: &IfExpression,
     ) {
     }
     fn exit_if_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        if_expr: &'a IfExpression,
+        expr: &Expression,
+        if_expr: &IfExpression,
     ) {
     }
 
     fn enter_case_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        case_expr: &'a CaseExpression,
+        expr: &Expression,
+        case_expr: &CaseExpression,
     ) {
     }
     fn exit_case_expression(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         path: &mut NodePath,
-        expr: &'a Expression,
-        case_expr: &'a CaseExpression,
+        expr: &Expression,
+        case_expr: &CaseExpression,
     ) {
     }
 }
 
-pub fn traverse<'a>(visitor: &mut dyn Visitor<'a>, tree: &'a AST) {
+pub fn traverse<'a>(visitor: &mut dyn Visitor, tree: &AST) {
     let path = wrap(NodePath::new(tree.root()));
     traverse_path(visitor, tree, &path);
 }
 
-fn traverse_path<'a>(visitor: &mut dyn Visitor<'a>, tree: &'a AST, path: &Rc<RefCell<NodePath>>) {
+fn traverse_path<'a>(visitor: &mut dyn Visitor, tree: &AST, path: &Rc<RefCell<NodePath>>) {
     path.borrow_mut().on_enter(tree);
 
     if !path.borrow().skipped() {
@@ -551,7 +544,7 @@ fn traverse_path<'a>(visitor: &mut dyn Visitor<'a>, tree: &'a AST, path: &Rc<Ref
     path.borrow_mut().on_exit(tree);
 }
 
-fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, tree: &'a AST, path: &Rc<RefCell<NodePath>>) {
+fn dispatch_enter<'a>(visitor: &mut dyn Visitor, tree: &AST, path: &Rc<RefCell<NodePath>>) {
     let mut path = &mut path.borrow_mut();
     let node = path.node(tree);
 
@@ -647,7 +640,7 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, tree: &'a AST, path: &Rc<Re
     }
 }
 
-fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, tree: &'a AST, path: &Rc<RefCell<NodePath>>) {
+fn dispatch_exit<'a>(visitor: &mut dyn Visitor, tree: &AST, path: &Rc<RefCell<NodePath>>) {
     let mut path = &mut path.borrow_mut();
     let node = path.node(tree);
 
@@ -743,11 +736,7 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, tree: &'a AST, path: &Rc<Ref
     }
 }
 
-fn traverse_children<'a>(
-    visitor: &mut dyn Visitor<'a>,
-    tree: &'a AST,
-    path: &Rc<RefCell<NodePath>>,
-) {
+fn traverse_children<'a>(visitor: &mut dyn Visitor, tree: &AST, path: &Rc<RefCell<NodePath>>) {
     let node = path.borrow().node(tree);
 
     for kind in node.code() {
@@ -782,9 +771,9 @@ fn traverse_children<'a>(
     }
 }
 
-fn traverse_token_trivia<'a>(
-    visitor: &mut dyn Visitor<'a>,
-    tree: &'a AST,
+fn traverse_token_trivia(
+    visitor: &mut dyn Visitor,
+    tree: &AST,
     path: &mut NodePath,
     token: &Token,
 ) {
@@ -814,9 +803,9 @@ fn traverse_token_trivia<'a>(
     }
 }
 
-fn traverse_interpreted_token<'a>(
-    visitor: &mut dyn Visitor<'a>,
-    tree: &'a AST,
+fn traverse_interpreted_token(
+    visitor: &mut dyn Visitor,
+    tree: &AST,
     path: &mut NodePath,
     token: &Token,
 ) {
@@ -831,9 +820,9 @@ fn traverse_interpreted_token<'a>(
     }
 }
 
-fn traverse_missing_token<'a>(
-    visitor: &mut dyn Visitor<'a>,
-    tree: &'a AST,
+fn traverse_missing_token(
+    visitor: &mut dyn Visitor,
+    tree: &AST,
     path: &mut NodePath,
     range: EffectiveRange,
     item: MissingTokenKind,
@@ -846,9 +835,9 @@ fn traverse_missing_token<'a>(
     }
 }
 
-fn traverse_skipped_token<'a>(
-    visitor: &mut dyn Visitor<'a>,
-    tree: &'a AST,
+fn traverse_skipped_token(
+    visitor: &mut dyn Visitor,
+    tree: &AST,
     path: &mut NodePath,
     token: &Token,
     expected: MissingTokenKind,
@@ -874,8 +863,8 @@ mod tests {
         number_of_expressions: i32,
     }
 
-    impl<'a> Visitor<'a> for NodeCounter {
-        fn enter_expression(&mut self, _tree: &'a AST, _path: &mut NodePath, _expr: &Expression) {
+    impl Visitor for NodeCounter {
+        fn enter_expression(&mut self, _tree: &AST, _path: &mut NodePath, _expr: &Expression) {
             self.number_of_expressions += 1;
         }
     }

@@ -40,8 +40,8 @@ impl Rename {
     }
 }
 
-impl<'a> syntax::Visitor<'a> for Rename {
-    fn enter_identifier(&mut self, tree: &'a AST, path: &mut NodePath, id: &Identifier) {
+impl syntax::Visitor for Rename {
+    fn enter_identifier(&mut self, tree: &AST, path: &mut NodePath, id: &Identifier) {
         let node_id = path.node_id();
 
         // Prepare
@@ -75,7 +75,7 @@ impl<'a> syntax::Visitor<'a> for Rename {
 }
 
 // --- Operations
-trait RenameVisitor<'a>: syntax::Visitor<'a> + std::fmt::Debug {
+trait RenameVisitor<'a>: syntax::Visitor + std::fmt::Debug {
     fn ranges(&self) -> &[EffectiveRange];
 }
 
@@ -105,10 +105,10 @@ impl<'a> RenameVisitor<'a> for RenameStructNameOperation {
     }
 }
 
-impl<'a> syntax::Visitor<'a> for RenameStructNameOperation {
+impl syntax::Visitor for RenameStructNameOperation {
     fn enter_struct_definition(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         _path: &mut NodePath,
         struct_def: &StructDefinition,
     ) {
@@ -123,7 +123,7 @@ impl<'a> syntax::Visitor<'a> for RenameStructNameOperation {
 
     fn enter_struct_literal(
         &mut self,
-        tree: &'a AST,
+        tree: &AST,
         _path: &mut NodePath,
         _expr: &Expression,
         literal: &StructLiteral,
@@ -136,7 +136,7 @@ impl<'a> syntax::Visitor<'a> for RenameStructNameOperation {
         }
     }
 
-    fn enter_pattern(&mut self, tree: &'a AST, _path: &mut NodePath, pattern: &Pattern) {
+    fn enter_pattern(&mut self, tree: &AST, _path: &mut NodePath, pattern: &Pattern) {
         if let PatternKind::StructPattern(pat) = pattern.kind() {
             if let Some(value) = pat.semantic_value() {
                 if std::ptr::eq(value.as_ref(), self.value.as_ref()) {
@@ -180,7 +180,7 @@ impl RenameOperation {
     }
 }
 
-impl<'a> syntax::Visitor<'a> for RenameOperation {
+impl syntax::Visitor for RenameOperation {
     // definition
 
     fn enter_struct_definition(&mut self, tree: &'a AST, path: &mut NodePath, struct_def: &mut StructDefinition) {
