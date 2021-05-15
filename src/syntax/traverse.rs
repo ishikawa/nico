@@ -32,13 +32,17 @@ impl<'a> NodePath<'a> {
         }
     }
 
-    pub fn child_path(node_id: NodeId, parent: &'a Rc<RefCell<NodePath<'a>>>) -> Self {
+    pub fn child_path(
+        node_id: NodeId,
+        tree: &'a mut AST,
+        parent: &Rc<RefCell<NodePath<'a>>>,
+    ) -> Self {
         let borrowed_parent = parent.borrow();
 
         Self {
             skipped: false,
             stopped: false,
-            tree: borrowed_parent.tree_mut(),
+            tree,
             node_id,
             parent: Some(Rc::clone(parent)),
             scope: Weak::clone(&borrowed_parent.scope),
@@ -51,7 +55,7 @@ impl<'a> NodePath<'a> {
         self.tree
     }
 
-    fn tree_mut(&self) -> &mut AST {
+    fn tree_mut(&mut self) -> &mut AST {
         self.tree
     }
 
@@ -459,17 +463,21 @@ pub trait Visitor<'a> {
 
 pub fn traverse<'a>(visitor: &mut dyn Visitor<'a>, tree: &'a mut AST) {
     let path = wrap(NodePath::new(tree, tree.root()));
-    traverse_path(visitor, &path);
+    traverse_path(visitor, tree, &path);
 }
 
-fn traverse_path<'a>(visitor: &mut dyn Visitor<'a>, path: &'a Rc<RefCell<NodePath<'a>>>) {
+fn traverse_path<'a>(
+    visitor: &mut dyn Visitor<'a>,
+    tree: &'a mut AST,
+    path: &Rc<RefCell<NodePath<'a>>>,
+) {
     path.borrow_mut().on_enter();
 
     if !path.borrow().skipped() {
         dispatch_enter(visitor, path);
     }
     if !path.borrow().skipped() {
-        traverse_children(visitor, path);
+        traverse_children(visitor, tree, path);
     }
     if !path.borrow().skipped() {
         dispatch_exit(visitor, path);
@@ -478,7 +486,7 @@ fn traverse_path<'a>(visitor: &mut dyn Visitor<'a>, path: &'a Rc<RefCell<NodePat
     path.borrow_mut().on_exit();
 }
 
-fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a Rc<RefCell<NodePath<'a>>>) {
+fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<'a>>>) {
     let mut path = &mut path.borrow_mut();
     let node = path.node_mut();
 
@@ -670,7 +678,11 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<'
     }
 }
 
-fn traverse_children<'a>(visitor: &mut dyn Visitor<'a>, path: &'a Rc<RefCell<NodePath<'a>>>) {
+fn traverse_children<'a>(
+    visitor: &mut dyn Visitor<'a>,
+    tree: &'a mut AST,
+    path: &Rc<RefCell<NodePath<'a>>>,
+) {
     let node = path.borrow().node().clone();
 
     for kind in node.code() {
@@ -680,8 +692,8 @@ fn traverse_children<'a>(visitor: &mut dyn Visitor<'a>, path: &'a Rc<RefCell<Nod
 
         match kind {
             CodeKind::Node(node) => {
-                let child_path = wrap(NodePath::child_path(*node, &path));
-                traverse_path(visitor, &child_path);
+                let child_path = wrap(NodePath::child_path(*node, tree, path));
+                traverse_path(visitor, tree, &child_path);
 
                 // Propagates `stop`
                 path.borrow_mut().stopped = child_path.borrow().stopped;

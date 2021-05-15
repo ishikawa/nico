@@ -10,7 +10,7 @@ pub enum SemanticValueKind {
 }
 
 impl SemanticValueKind {
-    fn node_id(&self) -> Option<NodeId> {
+    pub fn node_id(&self) -> Option<NodeId> {
         match self {
             SemanticValueKind::Function(function) => function.borrow().node_id(),
             SemanticValueKind::Struct(r#struct) => r#struct.borrow().node_id(),
@@ -19,7 +19,7 @@ impl SemanticValueKind {
         }
     }
 
-    fn r#type(&self) -> Option<&Rc<RefCell<Type>>> {
+    pub fn r#type(&self) -> Option<&Rc<RefCell<Type>>> {
         match self {
             SemanticValueKind::Function(function) => function.borrow().r#type(),
             SemanticValueKind::Struct(r#struct) => r#struct.borrow().r#type(),
@@ -28,7 +28,7 @@ impl SemanticValueKind {
         }
     }
 
-    fn name(&self) -> Option<&str> {
+    pub fn name(&self) -> Option<&str> {
         match self {
             SemanticValueKind::Function(function) => Some(function.borrow().name()),
             SemanticValueKind::Struct(r#struct) => Some(r#struct.borrow().name()),
@@ -36,9 +36,30 @@ impl SemanticValueKind {
             _ => None,
         }
     }
-}
 
-impl SemanticValueKind {
+    pub fn ptr_eq(&self, other: Self) -> bool {
+        match self {
+            SemanticValueKind::Function(fun) => {
+                if let Some(other) = other.function() {
+                    return std::ptr::eq(fun, other);
+                }
+            }
+            SemanticValueKind::Struct(r#struct) => {
+                if let Some(other) = other.r#struct() {
+                    return std::ptr::eq(r#struct, other);
+                }
+            }
+            SemanticValueKind::Variable(variable) => {
+                if let Some(other) = other.variable() {
+                    return std::ptr::eq(variable, other);
+                }
+            }
+            _ => {}
+        };
+
+        false
+    }
+
     pub fn function(&self) -> Option<&Rc<RefCell<Function>>> {
         if let SemanticValueKind::Function(function) = self {
             Some(function)

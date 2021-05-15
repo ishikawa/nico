@@ -45,11 +45,12 @@ impl Hover {
         field: &ValueField,
     ) -> String {
         let field_name = field.name(tree);
-        let ty = definition.borrow().get_field_type(field_name.as_str());
+        let definition = definition.borrow();
+        let ty = definition.get_field_type(field_name.as_str());
 
         format!(
             "```nico\n{}.{}: {}\n```",
-            definition.borrow().name(),
+            definition.name(),
             field_name,
             self.describe_optional(ty.map(|x| x.borrow().to_string())),
         )

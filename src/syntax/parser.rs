@@ -540,7 +540,7 @@ impl<'a> Parser<'a> {
         Some(arena.alloc(NodeKind::Pattern(pattern)))
     }
 
-    fn _read_integer(&mut self, arena: &mut NodeArena) -> (i32, Code) {
+    fn _read_integer(&mut self, _arena: &mut NodeArena) -> (i32, Code) {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
@@ -600,7 +600,7 @@ impl<'a> Parser<'a> {
         Pattern::new(kind, code)
     }
 
-    fn _read_string(&mut self, arena: &mut NodeArena) -> (Option<String>, Code) {
+    fn _read_string(&mut self, _arena: &mut NodeArena) -> (Option<String>, Code) {
         let start_token = self.tokenizer.next_token(); // StringStart
         let mut code = Code::with_interpreted(start_token);
         let mut string = String::new();
@@ -1556,6 +1556,7 @@ mod tests {
 
         assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
             assert!(condition.is_none());
+            assert!(tree.get(*then_body).is_none());
             assert!(else_body.is_none());
 
             let block = expr.then_body(&tree);

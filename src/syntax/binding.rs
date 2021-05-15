@@ -131,7 +131,7 @@ impl Scope {
                 }
             }
             super::PatternKind::RestPattern(pat) => {
-                if let Some(ref id) = pat.id(tree) {
+                if pat.id(tree).is_some() {
                     if let Some(value) = pat.semantic_value() {
                         self.insert_variable(Rc::clone(value));
                     }
@@ -195,7 +195,7 @@ impl TopLevelDeclarationBinder {
     }
 
     fn register_declaration(&mut self, path: &NodePath) {
-        let declarations = self.declarations.unwrap();
+        let declarations = self.declarations.as_ref().unwrap();
 
         declarations
             .borrow_mut()

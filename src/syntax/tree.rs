@@ -47,7 +47,7 @@ impl AST {
     }
 
     pub fn program_mut(&mut self) -> &mut Program {
-        self.get(self.root)
+        self.get_mut(self.root)
             .unwrap_or_else(|| panic!("root node doesn't exist"))
             .program_mut()
             .unwrap_or_else(|| panic!("root must be a program node."))
@@ -471,6 +471,10 @@ impl StructDefinition {
             code,
             semantic_value: None,
         }
+    }
+
+    pub fn name_id(&self) -> Option<NodeId> {
+        self.name
     }
 
     pub fn name<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
@@ -965,13 +969,18 @@ impl fmt::Display for Expression {
 
 #[derive(Debug)]
 pub struct StructLiteral {
-    pub name: NodeId,        // Identifier
-    pub fields: Vec<NodeId>, // ValueField
+    name: NodeId,        // Identifier
+    fields: Vec<NodeId>, // ValueField
+    semantic_value: Option<Rc<RefCell<semantic::Struct>>>,
 }
 
 impl StructLiteral {
     pub fn new(name: NodeId, fields: Vec<NodeId>) -> Self {
-        Self { name, fields }
+        Self {
+            name,
+            fields,
+            semantic_value: None,
+        }
     }
 
     pub fn name<'a>(&self, tree: &'a AST) -> &'a Identifier {
@@ -985,6 +994,14 @@ impl StructLiteral {
         self.fields
             .iter()
             .map(move |node| tree.get(*node).unwrap().value_field().unwrap())
+    }
+
+    pub fn semantic_value(&self) -> Option<&Rc<RefCell<semantic::Struct>>> {
+        self.semantic_value.as_ref()
+    }
+
+    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<semantic::Struct>>) {
+        self.semantic_value.replace(value);
     }
 }
 
@@ -1346,6 +1363,17 @@ impl Pattern {
     pub fn kind(&self) -> &PatternKind {
         &self.kind
     }
+
+    /// Returns a corresponding semantic value, if the pattern binds a new variables.
+    /// e.g. VariablePattern, RestPattern, ValueFieldPattern without value
+    pub fn variable_semantic_value(&self) -> Option<&Rc<RefCell<semantic::Variable>>> {
+        match self.kind() {
+            PatternKind::VariablePattern(kind) => kind.semantic_value(),
+            PatternKind::RestPattern(kind) => kind.semantic_value(),
+            // TODO: Change ValueFieldPattern to Pattern instead of Node and use variable_semantic_value() to support it
+            _ => None,
+        }
+    }
 }
 
 impl Node for Pattern {
@@ -1437,13 +1465,18 @@ impl RestPattern {
 
 #[derive(Debug)]
 pub struct StructPattern {
-    pub name: NodeId,    // Identifier
+    name: NodeId,        // Identifier
     fields: Vec<NodeId>, // ValueFieldPattern
+    semantic_value: Option<Rc<RefCell<semantic::Struct>>>,
 }
 
 impl StructPattern {
     pub fn new(name: NodeId, fields: Vec<NodeId>) -> Self {
-        Self { name, fields }
+        Self {
+            name,
+            fields,
+            semantic_value: None,
+        }
     }
 
     pub fn name<'a>(&self, tree: &'a AST) -> &'a Identifier {
@@ -1457,6 +1490,14 @@ impl StructPattern {
         self.fields
             .iter()
             .map(move |node| tree.get(*node).unwrap().value_field_pattern().unwrap())
+    }
+
+    pub fn semantic_value(&self) -> Option<&Rc<RefCell<semantic::Struct>>> {
+        self.semantic_value.as_ref()
+    }
+
+    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<semantic::Struct>>) {
+        self.semantic_value.replace(value);
     }
 }
 
@@ -1555,7 +1596,7 @@ impl fmt::Display for ExpressionKind {
         match self {
             ExpressionKind::IntegerLiteral(i) => write!(f, "IntegerLiteral({})", i),
             ExpressionKind::StringLiteral(s) => {
-                write!(f, "StringLiteral({})", s.unwrap_or("-".to_string()))
+                write!(f, "StringLiteral({})", s.as_deref().unwrap_or("-"))
             }
             ExpressionKind::VariableExpression(_) => write!(f, "VariableExpression"),
             ExpressionKind::BinaryExpression(_) => write!(f, "BinaryExpression"),
