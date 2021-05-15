@@ -58,46 +58,44 @@ impl Hover {
 }
 
 impl<'a> syntax::Visitor<'a> for Hover {
-    fn enter_type_annotation(&mut self, path: &mut NodePath, annotation: &mut TypeAnnotation) {
-        if !annotation.range(path.tree()).contains(self.position) {
+    fn enter_type_annotation(
+        &mut self,
+        tree: &'a AST,
+        path: &mut NodePath,
+        annotation: &TypeAnnotation,
+    ) {
+        if !annotation.range(tree).contains(self.position) {
             return;
         }
 
         self.result.replace((
             self.describe_type(&annotation.r#type),
-            annotation.range(path.tree()),
+            annotation.range(tree),
         ));
         path.stop();
     }
 
-    fn enter_value_field(&mut self, path: &mut NodePath, field: &mut ValueField) {
-        if !field
-            .name(path.tree())
-            .range(path.tree())
-            .contains(self.position)
-        {
+    fn enter_value_field(&mut self, tree: &'a AST, path: &mut NodePath, field: &ValueField) {
+        if !field.name(tree).range(tree).contains(self.position) {
             return;
         }
 
         let parent = path.expect_parent();
         let parent = parent.borrow();
         let scope = parent.scope();
-        let parent = parent.node();
+        let parent = parent.node(tree);
 
         let literal = parent.expression().unwrap().struct_literal().unwrap();
 
         // TODO: Use type info
-        if let Some(binding) = scope
-            .borrow()
-            .get_binding(literal.name(path.tree()).as_str())
-        {
+        if let Some(binding) = scope.borrow().get_binding(literal.name(tree).as_str()) {
             let binding = binding.borrow();
             let value = binding.value();
 
             if let Some(struct_value) = value.r#struct() {
                 self.result.replace((
-                    self.describe_value_field(path.tree(), struct_value, field),
-                    field.name(path.tree()).range(path.tree()),
+                    self.describe_value_field(tree, struct_value, field),
+                    field.name(tree).range(tree),
                 ));
             }
         }

@@ -1,6 +1,5 @@
 use log::{info, warn};
 use lsp_types::*;
-use nico::sem;
 use nico::syntax::{
     self, EffectiveRange, Identifier, MissingTokenKind, Node, NodePath, ParseError, Parser,
     StructLiteral, TextToken, Token, TokenKind, Trivia,
@@ -9,6 +8,7 @@ use nico::{
     ls::{self, server::ServerCapabilitiesBuilder},
     syntax::Expression,
 };
+use nico::{sem, syntax::AST};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cell::RefCell;
@@ -211,37 +211,45 @@ impl DiagnosticsCollector {
 }
 
 impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
-    fn enter_variable(&mut self, path: &mut NodePath, expr: &mut Expression, id: &mut Identifier) {
+    fn enter_variable(
+        &mut self,
+        tree: &'a AST,
+        path: &mut NodePath,
+        expr: &'a Expression,
+        id: &'a Identifier,
+    ) {
         // Undefined variable
         if path.scope().borrow().get_binding(id.as_str()).is_none() {
-            self.add_diagnostic(expr.range(), format!("Cannot find name '{}'.", id));
+            self.add_diagnostic(expr.range(tree), format!("Cannot find name '{}'.", id));
         }
     }
 
     fn enter_struct_literal(
         &mut self,
+        tree: &'a AST,
         path: &mut NodePath,
-        _expr: &mut Expression,
-        value: &StructLiteral,
+        _expr: &'a Expression,
+        value: &'a StructLiteral,
     ) {
         // Expected struct for name
-        if let Some(binding) = path.scope().borrow().get_binding(value.name().as_str()) {
+        if let Some(binding) = path.scope().borrow().get_binding(value.name(tree).as_str()) {
             if !binding.borrow().kind().is_struct_definition() {
                 self.add_diagnostic(
-                    value.name().range(),
+                    value.name(tree).range(tree),
                     format!("Expected struct, found '{}'.", binding.borrow()),
                 );
             }
         } else {
             self.add_diagnostic(
-                value.name().range(),
-                format!("Cannot find name '{}'.", value.name()),
+                value.name(tree).range(tree),
+                format!("Cannot find name '{}'.", value.name(tree)),
             );
         }
     }
 
     fn enter_missing_token(
         &mut self,
+        tree: &'a AST,
         _path: &mut NodePath,
         range: EffectiveRange,
         item: MissingTokenKind,
@@ -251,6 +259,7 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
 
     fn enter_skipped_token(
         &mut self,
+        tree: &'a AST,
         _path: &mut NodePath,
         token: &Token,
         expected: MissingTokenKind,
@@ -348,10 +357,11 @@ impl SemanticTokenizer {
 
     fn token_type_and_modifiers_for_identifier(
         &self,
+        tree: &AST,
         path: &NodePath,
         modifiers: &mut u32,
     ) -> SemanticTokenType {
-        let node = path.node();
+        let node = path.node(tree);
 
         // In current AST specification, the corresponding node for an Identifier token is
         // an Identifier node. But in some fragile AST, it may be differ.
@@ -363,7 +373,7 @@ impl SemanticTokenizer {
         let parent = path.expect_parent();
         let parent = parent.borrow();
         let scope = parent.scope();
-        let parent = parent.node();
+        let parent = parent.node(tree);
 
         if parent.is_function_definition() {
             SemanticTokenType::FUNCTION
@@ -373,7 +383,7 @@ impl SemanticTokenizer {
             SemanticTokenType::STRUCT
         } else if parent.is_struct_field() || parent.is_member_expression() {
             SemanticTokenType::PROPERTY
-        } else if parent.is_variable_expression() {
+        } else if parent.is_variable_expression(tree) {
             if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
                 let binding = binding.borrow();
                 let definition = binding.kind();
@@ -459,6 +469,7 @@ impl SemanticTokenizer {
 impl<'a> syntax::Visitor<'a> for SemanticTokenizer {
     fn enter_line_comment(
         &mut self,
+        tree: &'a AST,
         _path: &mut NodePath,
         _token: &Token,
         trivia: &Trivia,
@@ -473,12 +484,13 @@ impl<'a> syntax::Visitor<'a> for SemanticTokenizer {
         })
     }
 
-    fn enter_interpreted_token(&mut self, path: &mut NodePath, token: &Token) {
+    fn enter_interpreted_token(&mut self, tree: &'a AST, path: &mut NodePath, token: &Token) {
         self.add_token_generic(path, token);
     }
 
     fn enter_skipped_token(
         &mut self,
+        tree: &'a AST,
         path: &mut NodePath,
         token: &Token,
         _expected: MissingTokenKind,

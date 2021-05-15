@@ -197,30 +197,36 @@ impl TopLevelDeclarationBinder {
         Self::default()
     }
 
-    fn register_declaration(&mut self, path: &NodePath) {
+    fn register_declaration(&mut self, tree: &AST, path: &NodePath) {
         let declarations = self.declarations.as_ref().unwrap();
 
         declarations
             .borrow_mut()
-            .register_declaration(path.tree(), path.node());
+            .register_declaration(tree, path.node(tree));
     }
 }
 
 impl<'a> Visitor<'a> for TopLevelDeclarationBinder {
-    fn enter_program(&mut self, _path: &mut NodePath, program: &mut Program) {
+    fn enter_program(&mut self, _tree: &'a AST, _path: &mut NodePath, program: &Program) {
         self.declarations = Some(Rc::clone(program.declarations_scope()));
     }
 
-    fn enter_struct_definition(&mut self, path: &mut NodePath, _definition: &mut StructDefinition) {
-        self.register_declaration(path);
+    fn enter_struct_definition(
+        &mut self,
+        tree: &'a AST,
+        path: &mut NodePath,
+        _definition: &StructDefinition,
+    ) {
+        self.register_declaration(tree, path);
     }
 
     fn enter_function_definition(
         &mut self,
+        tree: &'a AST,
         path: &mut NodePath,
-        _definition: &mut FunctionDefinition,
+        _definition: &FunctionDefinition,
     ) {
-        self.register_declaration(path);
+        self.register_declaration(tree, path);
     }
 }
 
@@ -248,24 +254,24 @@ impl ScopeChainBinder {
 }
 
 impl<'a> Visitor<'a> for ScopeChainBinder {
-    fn enter_program(&mut self, _path: &mut NodePath, program: &mut Program) {
+    fn enter_program(&mut self, _tree: &'a AST, _path: &mut NodePath, program: &Program) {
         program.main_scope().borrow_mut().parent = Rc::downgrade(program.declarations_scope());
         self.scope = Rc::downgrade(program.main_scope());
     }
 
-    fn enter_block(&mut self, path: &mut NodePath, block: &mut Block) {
+    fn enter_block(&mut self, _tree: &'a AST, path: &mut NodePath, block: &Block) {
         self._enter_scope(path, block.scope());
     }
 
-    fn exit_block(&mut self, path: &mut NodePath, block: &mut Block) {
+    fn exit_block(&mut self, _tree: &'a AST, path: &mut NodePath, block: &Block) {
         self._exit_scope(path, block.scope());
     }
 
-    fn enter_case_arm(&mut self, path: &mut NodePath, arm: &mut CaseArm) {
+    fn enter_case_arm(&mut self, _tree: &'a AST, path: &mut NodePath, arm: &CaseArm) {
         self._enter_scope(path, arm.scope());
     }
 
-    fn exit_case_arm(&mut self, path: &mut NodePath, arm: &mut CaseArm) {
+    fn exit_case_arm(&mut self, _tree: &'a AST, path: &mut NodePath, arm: &CaseArm) {
         self._exit_scope(path, &arm.scope());
     }
 }
@@ -281,22 +287,26 @@ impl VariableBinder {
 }
 
 impl<'a> Visitor<'a> for VariableBinder {
-    fn enter_function_parameter(&mut self, path: &mut NodePath, _param: &mut FunctionParameter) {
+    fn enter_function_parameter(
+        &mut self,
+        tree: &'a AST,
+        path: &mut NodePath,
+        _param: &FunctionParameter,
+    ) {
         let parent_path = path.expect_parent();
         let parent_path = parent_path.borrow();
-        let fun = parent_path.node().function_definition().unwrap();
+        let fun = parent_path.node(tree).function_definition().unwrap();
 
-        let mut scope = fun.body(path.tree()).scope().borrow_mut();
-        scope.register_declaration(path.tree(), path.node());
+        let mut scope = fun.body(tree).scope().borrow_mut();
+        scope.register_declaration(tree, path.node(tree));
     }
 
     fn enter_variable_declaration(
         &mut self,
+        tree: &'a AST,
         path: &mut NodePath,
-        declaration: &mut VariableDeclaration,
+        declaration: &VariableDeclaration,
     ) {
-        let tree = path.tree();
-
         if let Some(pattern) = declaration.pattern(tree) {
             let scope = path.scope();
             let mut scope = scope.borrow_mut();
@@ -305,9 +315,7 @@ impl<'a> Visitor<'a> for VariableBinder {
         }
     }
 
-    fn enter_case_arm(&mut self, path: &mut NodePath, arm: &mut CaseArm) {
-        let tree = path.tree();
-
+    fn enter_case_arm(&mut self, tree: &'a AST, _path: &mut NodePath, arm: &CaseArm) {
         if let Some(pattern) = arm.pattern(tree) {
             let mut scope = arm.scope().borrow_mut();
             scope.register_pattern(tree, pattern);
@@ -328,8 +336,9 @@ impl TypeBinder {
 impl<'a> Visitor<'a> for TypeBinder {
     fn enter_integer_literal(
         &mut self,
+        _tree: &'a AST,
         _path: &mut NodePath,
-        expr: &mut Expression,
+        expr: &Expression,
         _literal: i32,
     ) {
         let ty = expr.r#type();
@@ -338,8 +347,9 @@ impl<'a> Visitor<'a> for TypeBinder {
 
     fn enter_string_literal(
         &mut self,
+        _tree: &'a AST,
         _path: &mut NodePath,
-        expr: &mut Expression,
+        expr: &Expression,
         _literal: Option<&str>,
     ) {
         let ty = expr.r#type();

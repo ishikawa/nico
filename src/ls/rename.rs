@@ -22,7 +22,7 @@ impl Rename {
         }
     }
 
-    pub fn prepare<'a>(&mut self, tree: &'a mut AST) -> Option<&'a Identifier> {
+    pub fn prepare<'a>(&mut self, tree: &'a AST) -> Option<&'a Identifier> {
         self.operation = None;
         syntax::traverse(self, tree);
 
@@ -41,8 +41,7 @@ impl Rename {
 }
 
 impl<'a> syntax::Visitor<'a> for Rename {
-    fn enter_identifier(&mut self, path: &mut NodePath, id: &mut Identifier) {
-        let tree = path.tree();
+    fn enter_identifier(&mut self, tree: &'a AST, path: &mut NodePath, id: &Identifier) {
         let node_id = path.node_id();
 
         // Prepare
@@ -50,7 +49,7 @@ impl<'a> syntax::Visitor<'a> for Rename {
             let parent = path.expect_parent();
             let parent = parent.borrow();
             let scope = parent.scope();
-            let parent = parent.node();
+            let parent = parent.node(tree);
 
             // Renaming struct name
             if parent.is_struct_literal() {
@@ -107,9 +106,12 @@ impl<'a> RenameVisitor<'a> for RenameStructNameOperation {
 }
 
 impl<'a> syntax::Visitor<'a> for RenameStructNameOperation {
-    fn enter_struct_definition(&mut self, path: &mut NodePath, struct_def: &mut StructDefinition) {
-        let tree = path.tree();
-
+    fn enter_struct_definition(
+        &mut self,
+        tree: &'a AST,
+        _path: &mut NodePath,
+        struct_def: &StructDefinition,
+    ) {
         if let Some(value) = struct_def.semantic_value() {
             if std::ptr::eq(value.as_ref(), self.value.as_ref()) {
                 if let Some(name) = struct_def.name(tree) {
@@ -121,12 +123,11 @@ impl<'a> syntax::Visitor<'a> for RenameStructNameOperation {
 
     fn enter_struct_literal(
         &mut self,
-        path: &mut NodePath,
-        _expr: &mut Expression,
+        tree: &'a AST,
+        _path: &mut NodePath,
+        _expr: &Expression,
         literal: &StructLiteral,
     ) {
-        let tree = path.tree();
-
         if let Some(value) = literal.semantic_value() {
             if std::ptr::eq(value.as_ref(), self.value.as_ref()) {
                 let name = literal.name(tree);
@@ -135,9 +136,7 @@ impl<'a> syntax::Visitor<'a> for RenameStructNameOperation {
         }
     }
 
-    fn enter_pattern(&mut self, path: &mut NodePath<'a>, pattern: &mut Pattern) {
-        let tree = path.tree();
-
+    fn enter_pattern(&mut self, tree: &'a AST, _path: &mut NodePath, pattern: &Pattern) {
         if let PatternKind::StructPattern(pat) = pattern.kind() {
             if let Some(value) = pat.semantic_value() {
                 if std::ptr::eq(value.as_ref(), self.value.as_ref()) {
@@ -184,9 +183,9 @@ impl RenameOperation {
 impl<'a> syntax::Visitor<'a> for RenameOperation {
     // definition
 
-    fn enter_struct_definition(&mut self, path: &mut NodePath, struct_def: &mut StructDefinition) {
+    fn enter_struct_definition(&mut self, tree: &'a AST, path: &mut NodePath, struct_def: &mut StructDefinition) {
         if self.matches_node(path.node_id()) {
-            let tree = path.tree();
+
 
             if let Some(ref name) = struct_def.name(tree) {
                 self.ranges.push(name.range(tree));
@@ -200,7 +199,7 @@ impl<'a> syntax::Visitor<'a> for RenameOperation {
         function: &mut FunctionDefinition,
     ) {
         if self.matches_node(path.node_id()) {
-            let tree = path.tree();
+
 
             if let Some(ref name) = function.name(tree) {
                 self.ranges.push(name.range(tree));
@@ -208,14 +207,14 @@ impl<'a> syntax::Visitor<'a> for RenameOperation {
         }
     }
 
-    fn enter_function_parameter(&mut self, path: &mut NodePath, param: &mut FunctionParameter) {
+    fn enter_function_parameter(&mut self, tree: &'a AST, path: &mut NodePath, param: &mut FunctionParameter) {
         if self.matches_node(param.name_id()) {
-            let tree = path.tree();
+
             self.ranges.push(param.name(tree).range(tree));
         }
     }
 
-    fn enter_pattern(&mut self, _path: &mut NodePath, pattern: &mut Pattern) {
+    fn enter_pattern(&mut self, tree: &'a AST, _path: &mut NodePath, pattern: &mut Pattern) {
         if let Some(value) = pattern.variable_semantic_value() {
             if std::ptr::eq(definition.as_ref(), pattern.as_ref()) {
                 self.ranges.push(pattern.range());
@@ -237,7 +236,7 @@ impl<'a> syntax::Visitor<'a> for RenameOperation {
         _expr: &mut Expression,
         literal: &StructLiteral,
     ) {
-        let tree = path.tree();
+
         let scope = path.scope();
         let scope = scope.borrow();
 
@@ -252,8 +251,8 @@ impl<'a> syntax::Visitor<'a> for RenameOperation {
         }
     }
 
-    fn enter_variable(&mut self, path: &mut NodePath, _expr: &mut Expression, id: &Identifier) {
-        let tree = path.tree();
+    fn enter_variable(&mut self, tree: &'a AST, path: &mut NodePath, _expr: &mut Expression, id: &Identifier) {
+
         let scope = path.scope();
         let scope = scope.borrow();
 
