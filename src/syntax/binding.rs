@@ -66,17 +66,17 @@ impl Scope {
         // print functions
         scope.define_function(semantic::Function::define_function(
             "println_str",
-            &[("str", Type::String)],
+            vec![("str", Type::String)],
             Type::Int32,
         ));
         scope.define_function(semantic::Function::define_function(
             "println_i32",
-            &[("i", Type::Int32)],
+            vec![("i", Type::Int32)],
             Type::Int32,
         ));
         scope.define_function(semantic::Function::define_function(
             "debug_i32",
-            &[("i", Type::Int32)],
+            vec![("i", Type::Int32)],
             Type::Int32,
         ));
 

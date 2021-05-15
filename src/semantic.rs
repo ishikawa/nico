@@ -19,19 +19,18 @@ impl SemanticValueKind {
             SemanticValueKind::Function(function) => function.borrow().node_id(),
             SemanticValueKind::Struct(r#struct) => r#struct.borrow().node_id(),
             SemanticValueKind::Variable(variable) => variable.borrow().node_id(),
-            _ => None,
         }
     }
 
     pub fn r#type(&self) -> Option<impl Deref<Target = Rc<RefCell<Type>>> + '_> {
         match self {
             SemanticValueKind::Function(function) => {
-                let fun = function.borrow();
+                let borrowed = function.borrow();
 
-                if fun.r#type.is_none() {
+                if borrowed.r#type.is_none() {
                     None
                 } else {
-                    Some(Ref::map(fun, |f| f.r#type.as_ref().unwrap()))
+                    Some(Ref::map(borrowed, |b| b.r#type.as_ref().unwrap()))
                 }
             }
             SemanticValueKind::Struct(r#struct) => {
@@ -40,7 +39,7 @@ impl SemanticValueKind {
                 if borrowed.r#type.is_none() {
                     None
                 } else {
-                    Some(Ref::map(borrowed, |f| f.r#type.as_ref().unwrap()))
+                    Some(Ref::map(borrowed, |b| b.r#type.as_ref().unwrap()))
                 }
             }
             SemanticValueKind::Variable(variable) => {
@@ -49,19 +48,17 @@ impl SemanticValueKind {
                 if borrowed.r#type.is_none() {
                     None
                 } else {
-                    Some(Ref::map(borrowed, |f| f.r#type.as_ref().unwrap()))
+                    Some(Ref::map(borrowed, |b| b.r#type.as_ref().unwrap()))
                 }
             }
-            _ => None,
         }
     }
 
-    pub fn name(&self) -> Option<&str> {
+    pub fn name(&self) -> impl Deref<Target = str> + '_ {
         match self {
-            SemanticValueKind::Function(function) => Some(function.borrow().name()),
-            SemanticValueKind::Struct(r#struct) => Some(r#struct.borrow().name()),
-            SemanticValueKind::Variable(variable) => Some(variable.borrow().name()),
-            _ => None,
+            SemanticValueKind::Function(value) => Ref::map(value.borrow(), |b| b.name()),
+            SemanticValueKind::Struct(value) => Ref::map(value.borrow(), |b| b.name()),
+            SemanticValueKind::Variable(value) => Ref::map(value.borrow(), |b| b.name()),
         }
     }
 
@@ -82,7 +79,6 @@ impl SemanticValueKind {
                     return std::ptr::eq(variable, other);
                 }
             }
-            _ => {}
         };
 
         false
@@ -136,20 +132,22 @@ pub struct Function {
 impl Function {
     pub fn define_function<S: Into<String>>(
         name: S,
-        parameters: &[(&str, Type)],
+        parameters: Vec<(&str, Type)>,
         return_type: Type,
     ) -> Self {
+        let (param_names, param_types): (Vec<_>, Vec<_>) = parameters.into_iter().unzip();
+
         let function_type = Type::Function {
-            params: parameters.iter().map(|(_, ty)| wrap(*ty)).collect(),
+            params: param_types.into_iter().map(wrap).collect(),
             return_type: wrap(return_type),
         };
         let name = name.into();
-        let parameters = parameters
-            .iter()
-            .map(|(param, _)| param.to_string())
-            .collect();
-
-        Self::new(name, parameters, None, Some(wrap(function_type)))
+        Self::new(
+            name,
+            param_names.into_iter().map(String::from).collect(),
+            None,
+            Some(wrap(function_type)),
+        )
     }
 
     pub fn new(
@@ -222,11 +220,12 @@ impl Struct {
         self.r#type.as_ref()
     }
 
-    pub fn get_field_type(&self, field: &str) -> Option<&Rc<RefCell<Type>>> {
-        let ty = self.r#type()?;
-        let struct_type = ty.borrow().struct_type()?;
+    pub fn get_field_type(&self, field: &str) -> Option<Rc<RefCell<Type>>> {
+        let ty = self.r#type()?.borrow();
+        let struct_type = ty.struct_type()?;
+        let field = struct_type.fields().get(field)?;
 
-        struct_type.fields().get(field)
+        Some(Rc::clone(field))
     }
 }
 
