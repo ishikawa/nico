@@ -15,14 +15,14 @@ impl<'a> Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse_string<S: 'a + AsRef<str>>(src: S) -> AST {
+    pub fn parse_string<S: 'a + AsRef<str>>(src: S) -> Ast {
         let tokenizer = Tokenizer::from_string(&src);
         let mut parser = Parser::new(tokenizer);
 
         parser.parse()
     }
 
-    pub fn parse(&mut self) -> AST {
+    pub fn parse(&mut self) -> Ast {
         let mut body = vec![];
         let mut code = Code::new();
         let mut arena = NodeArena::new();
@@ -64,7 +64,7 @@ impl<'a> Parser<'a> {
 
         let program = Program::new(body, code);
         let node = arena.alloc(NodeKind::Program(program));
-        let mut tree = AST::new(arena, node);
+        let mut tree = Ast::new(arena, node);
 
         binding::bind(&mut tree);
 
@@ -1688,14 +1688,14 @@ mod tests {
 
     // --- helpers
 
-    fn get_statement(tree: &AST) -> &Statement {
+    fn get_statement(tree: &Ast) -> &Statement {
         let program = tree.program();
 
         assert!(!program.body.is_empty());
         tree.get(program.body[0]).unwrap().statement().unwrap()
     }
 
-    fn next_node<'a>(tree: &'a AST, tokens: &'a mut slice::Iter<CodeKind>) -> &'a NodeKind {
+    fn next_node<'a>(tree: &'a Ast, tokens: &'a mut slice::Iter<CodeKind>) -> &'a NodeKind {
         unwrap_node(tree, tokens.next().unwrap())
     }
 
@@ -1715,7 +1715,7 @@ mod tests {
         unwrap_skipped_token(tokens.next().unwrap())
     }
 
-    fn unwrap_node<'a>(tree: &'a AST, kind: &'a CodeKind) -> &'a NodeKind {
+    fn unwrap_node<'a>(tree: &'a Ast, kind: &'a CodeKind) -> &'a NodeKind {
         if let CodeKind::Node(node_id) = kind {
             return tree.get(*node_id).unwrap();
         }

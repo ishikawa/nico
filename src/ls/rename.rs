@@ -2,8 +2,8 @@
 use crate::{
     semantic,
     syntax::{
-        self, EffectiveRange, Expression, Identifier, Node, NodeId, NodePath, Pattern, PatternKind,
-        Position, StructDefinition, StructLiteral, AST,
+        self, Ast, EffectiveRange, Expression, Identifier, Node, NodeId, NodePath, Pattern,
+        PatternKind, Position, StructDefinition, StructLiteral,
     },
 };
 use std::{cell::RefCell, rc::Rc};
@@ -22,7 +22,7 @@ impl Rename {
         }
     }
 
-    pub fn prepare<'a>(&mut self, tree: &'a AST) -> Option<&'a Identifier> {
+    pub fn prepare<'a>(&mut self, tree: &'a Ast) -> Option<&'a Identifier> {
         self.operation = None;
         syntax::traverse(self, tree);
 
@@ -32,7 +32,7 @@ impl Rename {
             .and_then(|node_kind| node_kind.identifier())
     }
 
-    pub fn rename(&mut self, tree: &mut AST) -> Option<Vec<EffectiveRange>> {
+    pub fn rename(&mut self, tree: &Ast) -> Option<Vec<EffectiveRange>> {
         let operation = self.operation.as_mut()?;
         syntax::traverse(operation, tree);
 
@@ -41,7 +41,7 @@ impl Rename {
 }
 
 impl syntax::Visitor for Rename {
-    fn enter_identifier(&mut self, tree: &AST, path: &mut NodePath, id: &Identifier) {
+    fn enter_identifier(&mut self, tree: &Ast, path: &mut NodePath, id: &Identifier) {
         let node_id = path.node_id();
 
         // Prepare
@@ -108,7 +108,7 @@ impl<'a> RenameVisitor<'a> for RenameStructNameOperation {
 impl syntax::Visitor for RenameStructNameOperation {
     fn enter_struct_definition(
         &mut self,
-        tree: &AST,
+        tree: &Ast,
         _path: &mut NodePath,
         struct_def: &StructDefinition,
     ) {
@@ -123,7 +123,7 @@ impl syntax::Visitor for RenameStructNameOperation {
 
     fn enter_struct_literal(
         &mut self,
-        tree: &AST,
+        tree: &Ast,
         _path: &mut NodePath,
         _expr: &Expression,
         literal: &StructLiteral,
@@ -136,7 +136,7 @@ impl syntax::Visitor for RenameStructNameOperation {
         }
     }
 
-    fn enter_pattern(&mut self, tree: &AST, _path: &mut NodePath, pattern: &Pattern) {
+    fn enter_pattern(&mut self, tree: &Ast, _path: &mut NodePath, pattern: &Pattern) {
         if let PatternKind::StructPattern(pat) = pattern.kind() {
             if let Some(value) = pat.semantic_value() {
                 if std::ptr::eq(value.as_ref(), self.value.as_ref()) {

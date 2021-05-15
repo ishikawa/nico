@@ -1,7 +1,7 @@
 use crate::{
     sem,
     semantic::Struct,
-    syntax::{self, EffectiveRange, Node, NodePath, Position, TypeAnnotation, ValueField, AST},
+    syntax::{self, Ast, EffectiveRange, Node, NodePath, Position, TypeAnnotation, ValueField},
 };
 use std::{cell::RefCell, fmt, rc::Rc};
 
@@ -19,7 +19,7 @@ impl Hover {
         }
     }
 
-    pub fn describe(&mut self, tree: &mut AST) -> Option<(&str, EffectiveRange)> {
+    pub fn describe(&mut self, tree: &Ast) -> Option<(&str, EffectiveRange)> {
         syntax::traverse(self, tree);
         self.result.as_ref().map(|(s, r)| (s.as_str(), *r))
     }
@@ -40,7 +40,7 @@ impl Hover {
 
     fn describe_value_field(
         &self,
-        tree: &AST,
+        tree: &Ast,
         definition: &Rc<RefCell<Struct>>,
         field: &ValueField,
     ) -> String {
@@ -60,7 +60,7 @@ impl Hover {
 impl syntax::Visitor for Hover {
     fn enter_type_annotation(
         &mut self,
-        tree: &AST,
+        tree: &Ast,
         path: &mut NodePath,
         annotation: &TypeAnnotation,
     ) {
@@ -75,7 +75,7 @@ impl syntax::Visitor for Hover {
         path.stop();
     }
 
-    fn enter_value_field(&mut self, tree: &AST, path: &mut NodePath, field: &ValueField) {
+    fn enter_value_field(&mut self, tree: &Ast, path: &mut NodePath, field: &ValueField) {
         if !field.name(tree).range(tree).contains(self.position) {
             return;
         }

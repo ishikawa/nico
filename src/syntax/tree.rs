@@ -1,6 +1,5 @@
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::{sem, semantic, util::wrap};
-use id_arena;
 use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
@@ -9,18 +8,18 @@ pub type NodeArena = id_arena::Arena<NodeKind>;
 
 pub type NodeId = id_arena::Id<NodeKind>;
 
-pub struct AST {
+pub struct Ast {
     arena: NodeArena,
     root: NodeId,
 }
 
-impl fmt::Debug for AST {
+impl fmt::Debug for Ast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AST").field("root", &self.root).finish()
     }
 }
 
-impl AST {
+impl Ast {
     pub fn new(arena: NodeArena, root: NodeId) -> Self {
         Self { arena, root }
     }
@@ -58,7 +57,7 @@ pub trait Node: fmt::Display {
     fn code(&self) -> slice::Iter<CodeKind>;
 
     /// Returns the effective range of this node.
-    fn range(&self, tree: &AST) -> EffectiveRange {
+    fn range(&self, tree: &Ast) -> EffectiveRange {
         let mut it = self.code();
 
         // node must be at least one token.
@@ -222,7 +221,7 @@ impl NodeKind {
         None
     }
 
-    pub fn variable_expression<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
+    pub fn variable_expression<'a>(&self, tree: &'a Ast) -> Option<&'a Identifier> {
         if let NodeKind::Expression(node) = self {
             return node.variable_expression(tree);
         }
@@ -272,7 +271,7 @@ impl NodeKind {
         self.struct_literal().is_some()
     }
 
-    pub fn is_variable_expression<'a>(&self, tree: &'a AST) -> bool {
+    pub fn is_variable_expression(&self, tree: &Ast) -> bool {
         self.variable_expression(tree).is_some()
     }
 
@@ -363,7 +362,7 @@ pub enum CodeKind {
 }
 
 impl CodeKind {
-    pub fn range(&self, tree: &AST) -> EffectiveRange {
+    pub fn range(&self, tree: &Ast) -> EffectiveRange {
         match self {
             CodeKind::Node(node_id) => tree.get(*node_id).unwrap().range(tree),
             CodeKind::SyntaxToken(token) => token.range(),
@@ -477,7 +476,7 @@ impl StructDefinition {
         self.name
     }
 
-    pub fn name<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
+    pub fn name<'a>(&self, tree: &'a Ast) -> Option<&'a Identifier> {
         if let Some(name) = self.name {
             return tree.get(name).unwrap().identifier();
         }
@@ -487,14 +486,14 @@ impl StructDefinition {
 
     pub fn fields<'a>(
         &'a self,
-        tree: &'a AST,
+        tree: &'a Ast,
     ) -> impl ExactSizeIterator<Item = &'a TypeField> + 'a {
         self.fields
             .iter()
             .map(move |node| tree.get(*node).unwrap().type_field().unwrap())
     }
 
-    pub fn get_field_type<'a>(&self, tree: &'a AST, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
+    pub fn get_field_type<'a>(&self, tree: &'a Ast, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
         self.fields(tree)
             .find(|f| {
                 f.name(tree)
@@ -541,7 +540,7 @@ impl TypeField {
         }
     }
 
-    pub fn name<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
+    pub fn name<'a>(&self, tree: &'a Ast) -> Option<&'a Identifier> {
         if let Some(name) = self.name {
             return tree.get(name).unwrap().identifier();
         }
@@ -549,7 +548,7 @@ impl TypeField {
         None
     }
 
-    pub fn type_annotation<'a>(&self, tree: &'a AST) -> Option<&'a TypeAnnotation> {
+    pub fn type_annotation<'a>(&self, tree: &'a Ast) -> Option<&'a TypeAnnotation> {
         if let Some(node_id) = self.type_annotation {
             return tree.get(node_id).unwrap().type_annotation();
         }
@@ -614,7 +613,7 @@ impl FunctionDefinition {
         }
     }
 
-    pub fn name<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
+    pub fn name<'a>(&self, tree: &'a Ast) -> Option<&'a Identifier> {
         if let Some(node_id) = self.name {
             tree.get(node_id).unwrap().identifier()
         } else {
@@ -622,13 +621,13 @@ impl FunctionDefinition {
         }
     }
 
-    pub fn body<'a>(&self, tree: &'a AST) -> &'a Block {
+    pub fn body<'a>(&self, tree: &'a Ast) -> &'a Block {
         return tree.get(self.body).unwrap().block().unwrap();
     }
 
     pub fn parameters<'a>(
         &'a self,
-        tree: &'a AST,
+        tree: &'a Ast,
     ) -> impl ExactSizeIterator<Item = &'a FunctionParameter> + 'a {
         self.parameters
             .iter()
@@ -676,7 +675,7 @@ impl FunctionParameter {
         self.name
     }
 
-    pub fn name<'a>(&self, tree: &'a AST) -> &'a Identifier {
+    pub fn name<'a>(&self, tree: &'a Ast) -> &'a Identifier {
         return tree.get(self.name).unwrap().identifier().unwrap();
     }
 
@@ -717,20 +716,14 @@ impl VariableDeclaration {
         }
     }
 
-    pub fn pattern<'a>(&self, tree: &'a AST) -> Option<&'a Pattern> {
-        if let Some(node_id) = self.pattern {
-            Some(tree.get(node_id).unwrap().pattern().unwrap())
-        } else {
-            None
-        }
+    pub fn pattern<'a>(&self, tree: &'a Ast) -> Option<&'a Pattern> {
+        self.pattern
+            .map(|node_id| tree.get(node_id).unwrap().pattern().unwrap())
     }
 
-    pub fn init<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
-        if let Some(node_id) = self.init {
-            Some(tree.get(node_id).unwrap().expression().unwrap())
-        } else {
-            None
-        }
+    pub fn init<'a>(&self, tree: &'a Ast) -> Option<&'a Expression> {
+        self.init
+            .map(|node_id| tree.get(node_id).unwrap().expression().unwrap())
     }
 }
 
@@ -763,7 +756,7 @@ impl Statement {
         Self { kind, code }
     }
 
-    pub fn expression<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+    pub fn expression<'a>(&self, tree: &'a Ast) -> Option<&'a Expression> {
         if let StatementKind::Expression(node_id) = self.kind {
             return tree.get(node_id).unwrap().expression();
         } else {
@@ -771,7 +764,7 @@ impl Statement {
         }
     }
 
-    pub fn variable_declaration<'a>(&self, tree: &'a AST) -> Option<&'a VariableDeclaration> {
+    pub fn variable_declaration<'a>(&self, tree: &'a Ast) -> Option<&'a VariableDeclaration> {
         if let StatementKind::Expression(node_id) = self.kind {
             return tree.get(node_id).unwrap().variable_declaration();
         } else {
@@ -814,7 +807,7 @@ impl Block {
 
     pub fn statements<'a>(
         &'a self,
-        tree: &'a AST,
+        tree: &'a Ast,
     ) -> impl ExactSizeIterator<Item = &'a Statement> + 'a {
         self.statements
             .iter()
@@ -870,7 +863,7 @@ impl Expression {
         }
     }
 
-    pub fn variable_expression<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
+    pub fn variable_expression<'a>(&self, tree: &'a Ast) -> Option<&'a Identifier> {
         if let ExpressionKind::VariableExpression(node_id) = self.kind {
             tree.get(node_id).unwrap().identifier()
         } else {
@@ -983,13 +976,13 @@ impl StructLiteral {
         }
     }
 
-    pub fn name<'a>(&self, tree: &'a AST) -> &'a Identifier {
+    pub fn name<'a>(&self, tree: &'a Ast) -> &'a Identifier {
         tree.get(self.name).unwrap().identifier().unwrap()
     }
 
     pub fn fields<'a>(
         &'a self,
-        tree: &'a AST,
+        tree: &'a Ast,
     ) -> impl ExactSizeIterator<Item = &'a ValueField> + 'a {
         self.fields
             .iter()
@@ -1017,11 +1010,11 @@ impl ValueField {
         Self { name, value, code }
     }
 
-    pub fn name<'a>(&self, tree: &'a AST) -> &'a Identifier {
+    pub fn name<'a>(&self, tree: &'a Ast) -> &'a Identifier {
         tree.get(self.name).unwrap().identifier().unwrap()
     }
 
-    pub fn value<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+    pub fn value<'a>(&self, tree: &'a Ast) -> Option<&'a Expression> {
         if let Some(node_id) = self.value {
             return tree.get(node_id).unwrap().expression();
         } else {
@@ -1054,16 +1047,13 @@ impl BinaryExpression {
         Self { operator, lhs, rhs }
     }
 
-    pub fn lhs<'a>(&self, tree: &'a AST) -> &'a Expression {
+    pub fn lhs<'a>(&self, tree: &'a Ast) -> &'a Expression {
         tree.get(self.lhs).unwrap().expression().unwrap()
     }
 
-    pub fn rhs<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
-        if let Some(node_id) = self.rhs {
-            Some(tree.get(node_id).unwrap().expression().unwrap())
-        } else {
-            None
-        }
+    pub fn rhs<'a>(&self, tree: &'a Ast) -> Option<&'a Expression> {
+        self.rhs
+            .map(|node_id| tree.get(node_id).unwrap().expression().unwrap())
     }
 }
 
@@ -1078,12 +1068,9 @@ impl UnaryExpression {
         Self { operator, operand }
     }
 
-    pub fn operand<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
-        if let Some(node_id) = self.operand {
-            Some(tree.get(node_id).unwrap().expression().unwrap())
-        } else {
-            None
-        }
+    pub fn operand<'a>(&self, tree: &'a Ast) -> Option<&'a Expression> {
+        self.operand
+            .map(|node_id| tree.get(node_id).unwrap().expression().unwrap())
     }
 }
 
@@ -1119,13 +1106,13 @@ impl SubscriptExpression {
         Self { callee, arguments }
     }
 
-    pub fn callee<'a>(&self, tree: &'a AST) -> &'a Expression {
+    pub fn callee<'a>(&self, tree: &'a Ast) -> &'a Expression {
         tree.get(self.callee).unwrap().expression().unwrap()
     }
 
     pub fn arguments<'a>(
         &'a self,
-        tree: &'a AST,
+        tree: &'a Ast,
     ) -> impl ExactSizeIterator<Item = &'a Expression> + 'a {
         self.arguments
             .iter()
@@ -1150,7 +1137,7 @@ impl CallExpression {
 
     pub fn arguments<'a>(
         &'a self,
-        tree: &'a AST,
+        tree: &'a Ast,
     ) -> impl ExactSizeIterator<Item = &'a Expression> + 'a {
         self.arguments
             .iter()
@@ -1182,7 +1169,7 @@ impl ArrayExpression {
 
     pub fn elements<'a>(
         &'a self,
-        tree: &'a AST,
+        tree: &'a Ast,
     ) -> impl ExactSizeIterator<Item = &'a Expression> + 'a {
         self.elements
             .iter()
@@ -1206,7 +1193,7 @@ impl IfExpression {
         }
     }
 
-    pub fn condition<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+    pub fn condition<'a>(&self, tree: &'a Ast) -> Option<&'a Expression> {
         if let Some(node_id) = self.condition {
             return tree.get(node_id).unwrap().expression();
         } else {
@@ -1214,11 +1201,11 @@ impl IfExpression {
         }
     }
 
-    pub fn then_body<'a>(&self, tree: &'a AST) -> &'a Block {
+    pub fn then_body<'a>(&self, tree: &'a Ast) -> &'a Block {
         tree.get(self.then_body).unwrap().block().unwrap()
     }
 
-    pub fn else_body<'a>(&self, tree: &'a AST) -> Option<&'a Block> {
+    pub fn else_body<'a>(&self, tree: &'a Ast) -> Option<&'a Block> {
         if let Some(node_id) = self.else_body {
             return tree.get(node_id).unwrap().block();
         } else {
@@ -1243,7 +1230,7 @@ impl CaseExpression {
         }
     }
 
-    pub fn head<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+    pub fn head<'a>(&self, tree: &'a Ast) -> Option<&'a Expression> {
         if let Some(node_id) = self.head {
             return tree.get(node_id).unwrap().expression();
         } else {
@@ -1251,13 +1238,13 @@ impl CaseExpression {
         }
     }
 
-    pub fn arms<'a>(&'a self, tree: &'a AST) -> impl ExactSizeIterator<Item = &'a CaseArm> + 'a {
+    pub fn arms<'a>(&'a self, tree: &'a Ast) -> impl ExactSizeIterator<Item = &'a CaseArm> + 'a {
         self.arms
             .iter()
             .map(move |node| tree.get(*node).unwrap().case_arm().unwrap())
     }
 
-    pub fn else_body<'a>(&self, tree: &'a AST) -> Option<&'a Block> {
+    pub fn else_body<'a>(&self, tree: &'a Ast) -> Option<&'a Block> {
         if let Some(node_id) = self.else_body {
             return tree.get(node_id).unwrap().block();
         } else {
@@ -1299,7 +1286,7 @@ impl CaseArm {
         &self.scope
     }
 
-    pub fn pattern<'a>(&self, tree: &'a AST) -> Option<&'a Pattern> {
+    pub fn pattern<'a>(&self, tree: &'a Ast) -> Option<&'a Pattern> {
         if let Some(node_id) = self.pattern {
             return tree.get(node_id).unwrap().pattern();
         } else {
@@ -1307,7 +1294,7 @@ impl CaseArm {
         }
     }
 
-    pub fn guard<'a>(&self, tree: &'a AST) -> Option<&'a Expression> {
+    pub fn guard<'a>(&self, tree: &'a Ast) -> Option<&'a Expression> {
         if let Some(node_id) = self.guard {
             return tree.get(node_id).unwrap().expression();
         } else {
@@ -1315,7 +1302,7 @@ impl CaseArm {
         }
     }
 
-    pub fn then_body<'a>(&self, tree: &'a AST) -> &'a Block {
+    pub fn then_body<'a>(&self, tree: &'a Ast) -> &'a Block {
         tree.get(self.then_body).unwrap().block().unwrap()
     }
 }
@@ -1402,7 +1389,7 @@ impl VariablePattern {
         }
     }
 
-    pub fn id<'a>(&self, tree: &'a AST) -> &'a Identifier {
+    pub fn id<'a>(&self, tree: &'a Ast) -> &'a Identifier {
         tree.get(self.id).unwrap().identifier().unwrap()
     }
 
@@ -1427,7 +1414,7 @@ impl ArrayPattern {
 
     pub fn elements<'a>(
         &'a self,
-        tree: &'a AST,
+        tree: &'a Ast,
     ) -> impl ExactSizeIterator<Item = &'a Pattern> + 'a {
         self.elements
             .iter()
@@ -1449,7 +1436,7 @@ impl RestPattern {
         }
     }
 
-    pub fn id<'a>(&self, tree: &'a AST) -> Option<&'a Identifier> {
+    pub fn id<'a>(&self, tree: &'a Ast) -> Option<&'a Identifier> {
         self.id
             .map(|id| tree.get(id).unwrap().identifier().unwrap())
     }
@@ -1479,13 +1466,13 @@ impl StructPattern {
         }
     }
 
-    pub fn name<'a>(&self, tree: &'a AST) -> &'a Identifier {
+    pub fn name<'a>(&self, tree: &'a Ast) -> &'a Identifier {
         tree.get(self.name).unwrap().identifier().unwrap()
     }
 
     pub fn fields<'a>(
         &'a self,
-        tree: &'a AST,
+        tree: &'a Ast,
     ) -> impl ExactSizeIterator<Item = &'a ValueFieldPattern> + 'a {
         self.fields
             .iter()
@@ -1530,16 +1517,13 @@ impl ValueFieldPattern {
         }
     }
 
-    pub fn name<'a>(&self, tree: &'a AST) -> &'a Identifier {
+    pub fn name<'a>(&self, tree: &'a Ast) -> &'a Identifier {
         tree.get(self.name).unwrap().identifier().unwrap()
     }
 
-    pub fn value<'a>(&self, tree: &'a AST) -> Option<&'a Pattern> {
-        if let Some(node_id) = self.value {
-            Some(tree.get(node_id).unwrap().pattern().unwrap())
-        } else {
-            None
-        }
+    pub fn value<'a>(&self, tree: &'a Ast) -> Option<&'a Pattern> {
+        self.value
+            .map(|node_id| tree.get(node_id).unwrap().pattern().unwrap())
     }
 
     pub fn variable(&self) -> Option<&VariablePattern> {

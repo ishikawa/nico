@@ -119,6 +119,10 @@ impl SemanticValueKind {
     pub fn is_variable(&self) -> bool {
         matches!(self, SemanticValueKind::Variable(_))
     }
+
+    pub fn is_function_parameter(&self) -> bool {
+        todo!()
+    }
 }
 
 #[derive(Debug)]
@@ -178,7 +182,7 @@ impl Function {
 
     pub fn function_definition<'a>(
         &self,
-        tree: &'a syntax::AST,
+        tree: &'a syntax::Ast,
     ) -> Option<&'a syntax::FunctionDefinition> {
         self.node_id
             .map(|node_id| tree.get(node_id).unwrap().function_definition().unwrap())
