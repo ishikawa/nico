@@ -1,6 +1,10 @@
 use crate::syntax::{self, NodeId};
 use crate::{sem::Type, util::wrap};
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Ref, RefCell},
+    ops::Deref,
+    rc::Rc,
+};
 
 #[derive(Debug, Clone)]
 pub enum SemanticValueKind {
@@ -19,11 +23,35 @@ impl SemanticValueKind {
         }
     }
 
-    pub fn r#type(&self) -> Option<&Rc<RefCell<Type>>> {
+    pub fn r#type(&self) -> Option<impl Deref<Target = Rc<RefCell<Type>>> + '_> {
         match self {
-            SemanticValueKind::Function(function) => function.borrow().r#type(),
-            SemanticValueKind::Struct(r#struct) => r#struct.borrow().r#type(),
-            SemanticValueKind::Variable(variable) => variable.borrow().r#type(),
+            SemanticValueKind::Function(function) => {
+                let fun = function.borrow();
+
+                if fun.r#type.is_none() {
+                    None
+                } else {
+                    Some(Ref::map(fun, |f| f.r#type.as_ref().unwrap()))
+                }
+            }
+            SemanticValueKind::Struct(r#struct) => {
+                let borrowed = r#struct.borrow();
+
+                if borrowed.r#type.is_none() {
+                    None
+                } else {
+                    Some(Ref::map(borrowed, |f| f.r#type.as_ref().unwrap()))
+                }
+            }
+            SemanticValueKind::Variable(variable) => {
+                let borrowed = variable.borrow();
+
+                if borrowed.r#type.is_none() {
+                    None
+                } else {
+                    Some(Ref::map(borrowed, |f| f.r#type.as_ref().unwrap()))
+                }
+            }
             _ => None,
         }
     }
