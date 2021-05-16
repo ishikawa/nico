@@ -4,9 +4,9 @@ use super::{
     traverse, Ast, Block, CaseArm, Expression, FunctionDefinition, FunctionParameter, NodeKind,
     NodePath, Pattern, Program, StructDefinition, VariableDeclaration, Visitor,
 };
-use crate::sem::Type;
 use crate::semantic::{self, SemanticValueKind};
 use crate::util::wrap;
+use crate::{sem::Type, util::naming::PrefixNaming};
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -186,6 +186,67 @@ impl Scope {
     }
 }
 
+#[derive(Debug)]
+struct SemanticValueBinder {
+    naming: PrefixNaming,
+}
+
+impl Default for SemanticValueBinder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SemanticValueBinder {
+    pub fn new() -> Self {
+        Self {
+            naming: PrefixNaming::new("?"),
+        }
+    }
+
+    /// Returns a new type variable.
+    fn type_var(&mut self) -> Rc<RefCell<Type>> {
+        let name = self.naming.next();
+        wrap(Type::new_type_var(&name))
+    }
+}
+
+impl Visitor for SemanticValueBinder {
+    fn exit_function_parameter(
+        &mut self,
+        tree: &Ast,
+        _path: &mut NodePath,
+        param: &FunctionParameter,
+    ) {
+        let id = param.name(tree);
+        let ty = self.type_var();
+        let value = semantic::Variable::new(id.to_string(), true, Some(param.name_id()), Some(ty));
+        todo!("Build a semantic value for function parameter");
+    }
+
+    fn exit_function_definition(
+        &mut self,
+        tree: &Ast,
+        _path: &mut NodePath,
+        definition: &FunctionDefinition,
+    ) {
+        todo!("Build a semantic value for function definition");
+        /*
+        let param_names = definition
+            .parameters(tree)
+            .map(|param| param.name(tree).to_string())
+            .collect();
+        let param_types = definition
+            .parameters(tree)
+            .map(|param| param.r#type())
+            .collect();
+
+        let fun = semantic::Function::new(definition.name(tree), param_names, Some(path.node_id().clone()), )
+        self.register_declaration(tree, path);
+         */
+    }
+}
+
 /// A Visitor collects only top-level declarations in order to resolve forward references.
 #[derive(Debug, Default)]
 struct TopLevelDeclarationBinder {
@@ -358,6 +419,9 @@ impl Visitor for TypeBinder {
 }
 
 pub fn bind(tree: &mut Ast) {
+    let mut binder = SemanticValueBinder::new();
+    traverse(&mut binder, tree);
+
     let mut binder = TopLevelDeclarationBinder::new();
     traverse(&mut binder, tree);
 
