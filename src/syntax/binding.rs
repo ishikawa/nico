@@ -108,9 +108,7 @@ impl Scope {
                 self.insert_function(Rc::clone(value));
             }
         } else if let Some(param) = declaration.function_parameter() {
-            if let Some(value) = param.semantic_value() {
-                self.insert_variable(Rc::clone(value));
-            }
+            self.insert_variable(param.semantic_value());
         } else if let Some(def) = declaration.struct_definition() {
             if let Some(value) = def.semantic_value() {
                 self.insert_struct(Rc::clone(value));

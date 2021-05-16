@@ -1,5 +1,9 @@
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
-use crate::{sem, semantic, util::wrap};
+use crate::{
+    sem,
+    semantic::{self, SemanticValueKind},
+    util::wrap,
+};
 use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
@@ -653,7 +657,7 @@ impl fmt::Display for FunctionDefinition {
 pub struct FunctionParameter {
     name: NodeId, // Identifier
     code: Code,
-    semantic_value: Option<Rc<RefCell<semantic::Variable>>>,
+    semantic_value: Rc<RefCell<SemanticValueKind>>,
 }
 
 impl FunctionParameter {
@@ -661,7 +665,7 @@ impl FunctionParameter {
         Self {
             name,
             code,
-            semantic_value: None,
+            semantic_value: wrap(SemanticValueKind::Undefined),
         }
     }
 
@@ -673,12 +677,19 @@ impl FunctionParameter {
         return tree.get(self.name).unwrap().identifier().unwrap();
     }
 
-    pub fn semantic_value(&self) -> Option<&Rc<RefCell<semantic::Variable>>> {
-        self.semantic_value.as_ref()
+    pub fn semantic_value(&self) -> Rc<RefCell<semantic::Variable>> {
+        Rc::clone(
+            self.semantic_value
+                .borrow()
+                .variable()
+                .as_ref()
+                .expect("undefined semantic value"),
+        )
     }
 
     pub fn replace_semantic_value(&mut self, value: Rc<RefCell<semantic::Variable>>) {
-        self.semantic_value.replace(value);
+        self.semantic_value
+            .replace(SemanticValueKind::Variable(value));
     }
 }
 
