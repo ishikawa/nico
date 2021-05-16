@@ -597,7 +597,7 @@ pub struct FunctionDefinition {
     parameters: Vec<NodeId>, // FunctionParameter
     body: NodeId,            // Block
     code: Code,
-    semantic_value: Option<Rc<RefCell<semantic::Function>>>,
+    semantic_value: Rc<RefCell<SemanticValueKind>>,
 }
 
 impl FunctionDefinition {
@@ -607,7 +607,7 @@ impl FunctionDefinition {
             parameters,
             body,
             code,
-            semantic_value: None,
+            semantic_value: wrap(SemanticValueKind::Undefined),
         }
     }
 
@@ -632,12 +632,19 @@ impl FunctionDefinition {
             .map(move |node| tree.get(*node).unwrap().function_parameter().unwrap())
     }
 
-    pub fn semantic_value(&self) -> Option<&Rc<RefCell<semantic::Function>>> {
-        self.semantic_value.as_ref()
+    pub fn semantic_value(&self) -> Rc<RefCell<semantic::Function>> {
+        Rc::clone(
+            self.semantic_value
+                .borrow()
+                .function()
+                .as_ref()
+                .expect("undefined semantic value"),
+        )
     }
 
-    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<semantic::Function>>) {
-        self.semantic_value.replace(value);
+    pub fn replace_semantic_value(&self, value: Rc<RefCell<semantic::Function>>) {
+        self.semantic_value
+            .replace(SemanticValueKind::Function(value));
     }
 }
 
@@ -687,7 +694,7 @@ impl FunctionParameter {
         )
     }
 
-    pub fn replace_semantic_value(&mut self, value: Rc<RefCell<semantic::Variable>>) {
+    pub fn replace_semantic_value(&self, value: Rc<RefCell<semantic::Variable>>) {
         self.semantic_value
             .replace(SemanticValueKind::Variable(value));
     }

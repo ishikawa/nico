@@ -24,35 +24,11 @@ impl SemanticValueKind {
         }
     }
 
-    pub fn r#type(&self) -> Option<impl Deref<Target = Rc<RefCell<Type>>> + '_> {
+    pub fn r#type(&self) -> Option<Rc<RefCell<Type>>> {
         match self {
-            SemanticValueKind::Function(function) => {
-                let borrowed = function.borrow();
-
-                if borrowed.r#type.is_none() {
-                    None
-                } else {
-                    Some(Ref::map(borrowed, |b| b.r#type.as_ref().unwrap()))
-                }
-            }
-            SemanticValueKind::Struct(r#struct) => {
-                let borrowed = r#struct.borrow();
-
-                if borrowed.r#type.is_none() {
-                    None
-                } else {
-                    Some(Ref::map(borrowed, |b| b.r#type.as_ref().unwrap()))
-                }
-            }
-            SemanticValueKind::Variable(variable) => {
-                let borrowed = variable.borrow();
-
-                if borrowed.r#type.is_none() {
-                    None
-                } else {
-                    Some(Ref::map(borrowed, |b| b.r#type.as_ref().unwrap()))
-                }
-            }
+            SemanticValueKind::Function(function) => Some(Rc::clone(function.borrow().r#type())),
+            SemanticValueKind::Struct(r#struct) => Some(Rc::clone(r#struct.borrow().r#type())),
+            SemanticValueKind::Variable(variable) => Some(Rc::clone(variable.borrow().r#type())),
             _ => None,
         }
     }
@@ -60,31 +36,11 @@ impl SemanticValueKind {
     pub fn name(&self) -> Option<impl Deref<Target = str> + '_> {
         match self {
             SemanticValueKind::Function(function) => {
-                let borrowed = function.borrow();
-
-                if borrowed.r#type.is_none() {
-                    None
-                } else {
-                    Some(Ref::map(borrowed, |b| b.name()))
-                }
+                Some(Ref::map(function.borrow(), |b| b.name()))
             }
-            SemanticValueKind::Struct(r#struct) => {
-                let borrowed = r#struct.borrow();
-
-                if borrowed.r#type.is_none() {
-                    None
-                } else {
-                    Some(Ref::map(borrowed, |b| b.name()))
-                }
-            }
+            SemanticValueKind::Struct(r#struct) => Some(Ref::map(r#struct.borrow(), |b| b.name())),
             SemanticValueKind::Variable(variable) => {
-                let borrowed = variable.borrow();
-
-                if borrowed.r#type.is_none() {
-                    None
-                } else {
-                    Some(Ref::map(borrowed, |b| b.name()))
-                }
+                Some(Ref::map(variable.borrow(), |b| b.name()))
             }
             _ => None,
         }
@@ -161,7 +117,7 @@ pub struct Function {
     name: String,
     parameters: Vec<String>,
     node_id: Option<NodeId>, // syntax::FunctionDefinition. None for builtin.
-    r#type: Option<Rc<RefCell<Type>>>,
+    r#type: Rc<RefCell<Type>>,
 }
 
 impl Function {
@@ -181,7 +137,7 @@ impl Function {
             name,
             param_names.into_iter().map(String::from).collect(),
             None,
-            Some(wrap(function_type)),
+            wrap(function_type),
         )
     }
 
@@ -189,7 +145,7 @@ impl Function {
         name: String,
         parameters: Vec<String>,
         node_id: Option<NodeId>,
-        r#type: Option<Rc<RefCell<Type>>>,
+        r#type: Rc<RefCell<Type>>,
     ) -> Self {
         Self {
             name,
@@ -207,8 +163,8 @@ impl Function {
         self.node_id
     }
 
-    pub fn r#type(&self) -> Option<&Rc<RefCell<Type>>> {
-        self.r#type.as_ref()
+    pub fn r#type(&self) -> &Rc<RefCell<Type>> {
+        &self.r#type
     }
 
     pub fn function_definition<'a>(
@@ -225,7 +181,7 @@ pub struct Struct {
     name: String,
     fields: Vec<String>,
     node_id: Option<NodeId>, // syntax::StrutDefinition. None for builtin.
-    r#type: Option<Rc<RefCell<Type>>>,
+    r#type: Rc<RefCell<Type>>,
 }
 
 impl Struct {
@@ -233,7 +189,7 @@ impl Struct {
         name: String,
         fields: Vec<String>,
         node_id: Option<NodeId>,
-        r#type: Option<Rc<RefCell<Type>>>,
+        r#type: Rc<RefCell<Type>>,
     ) -> Self {
         Self {
             name,
@@ -251,12 +207,12 @@ impl Struct {
         self.node_id
     }
 
-    pub fn r#type(&self) -> Option<&Rc<RefCell<Type>>> {
-        self.r#type.as_ref()
+    pub fn r#type(&self) -> &Rc<RefCell<Type>> {
+        &self.r#type
     }
 
     pub fn get_field_type(&self, field: &str) -> Option<Rc<RefCell<Type>>> {
-        let ty = self.r#type()?.borrow();
+        let ty = self.r#type().borrow();
         let struct_type = ty.struct_type()?;
         let field = struct_type.fields().get(field)?;
 
@@ -269,7 +225,7 @@ pub struct Variable {
     name: String,
     is_function_parameter: bool,
     node_id: Option<NodeId>, // syntax::Identifier. None for builtin.
-    r#type: Option<Rc<RefCell<Type>>>,
+    r#type: Rc<RefCell<Type>>,
 }
 
 impl Variable {
@@ -277,7 +233,7 @@ impl Variable {
         name: String,
         is_function_parameter: bool,
         node_id: Option<NodeId>,
-        r#type: Option<Rc<RefCell<Type>>>,
+        r#type: Rc<RefCell<Type>>,
     ) -> Self {
         Self {
             name,
@@ -299,7 +255,7 @@ impl Variable {
         self.is_function_parameter
     }
 
-    pub fn r#type(&self) -> Option<&Rc<RefCell<Type>>> {
-        self.r#type.as_ref()
+    pub fn r#type(&self) -> &Rc<RefCell<Type>> {
+        &self.r#type
     }
 }

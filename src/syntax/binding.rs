@@ -104,9 +104,7 @@ impl Scope {
 
     fn register_declaration(&mut self, tree: &Ast, declaration: &NodeKind) {
         if let Some(fun) = declaration.function_definition() {
-            if let Some(value) = fun.semantic_value() {
-                self.insert_function(Rc::clone(value));
-            }
+            self.insert_function(fun.semantic_value());
         } else if let Some(param) = declaration.function_parameter() {
             self.insert_variable(param.semantic_value());
         } else if let Some(def) = declaration.struct_definition() {
@@ -225,30 +223,41 @@ impl Visitor for SemanticValueBinder {
     ) {
         let id = param.name(tree);
         let ty = self.type_var();
-        let _value = semantic::Variable::new(id.to_string(), true, Some(param.name_id()), Some(ty));
-        todo!("Build a semantic value for function parameter");
+        let value = semantic::Variable::new(id.to_string(), true, Some(param.name_id()), ty);
+
+        param.replace_semantic_value(wrap(value));
     }
 
     fn exit_function_definition(
         &mut self,
-        _tree: &Ast,
-        _path: &mut NodePath,
-        _definition: &FunctionDefinition,
+        tree: &Ast,
+        path: &mut NodePath,
+        definition: &FunctionDefinition,
     ) {
-        todo!("Build a semantic value for function definition");
-        /*
         let param_names = definition
             .parameters(tree)
             .map(|param| param.name(tree).to_string())
             .collect();
         let param_types = definition
             .parameters(tree)
-            .map(|param| param.r#type())
-            .collect();
+            .map(|param| Rc::clone(param.semantic_value().borrow().r#type()))
+            .collect::<Vec<_>>();
+        let return_type = self.type_var();
+        let fun_type = Type::Function {
+            params: param_types,
+            return_type,
+        };
 
-        let fun = semantic::Function::new(definition.name(tree), param_names, Some(path.node_id().clone()), )
-        self.register_declaration(tree, path);
-         */
+        if let Some(name) = definition.name(tree) {
+            let fun = semantic::Function::new(
+                name.to_string(),
+                param_names,
+                Some(path.node_id()),
+                wrap(fun_type),
+            );
+
+            definition.replace_semantic_value(wrap(fun));
+        }
     }
 }
 
