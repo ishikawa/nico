@@ -273,10 +273,6 @@ impl NodeKind {
             None
         }
     }
-
-    pub fn value_field_pattern(&self) -> Option<&ValueFieldPattern> {
-        self.pattern().and_then(|x| x.value_field_pattern())
-    }
 }
 
 impl Node for NodeKind {
@@ -1367,25 +1363,6 @@ impl Pattern {
 
     pub fn kind(&self) -> &PatternKind {
         &self.kind
-    }
-
-    /// Returns a corresponding semantic value, if the pattern binds a new variables.
-    /// e.g. VariablePattern, RestPattern, ValueFieldPattern without value
-    pub fn semantic_variable(&self) -> Option<Rc<RefCell<semantic::Variable>>> {
-        match self.kind() {
-            PatternKind::VariablePattern(kind) => kind.semantic_variable(),
-            PatternKind::RestPattern(kind) => kind.semantic_variable(),
-            // TODO: Change ValueFieldPattern to Pattern instead of Node and use variable_semantic_value() to support it
-            _ => None,
-        }
-    }
-
-    pub fn value_field_pattern(&self) -> Option<&ValueFieldPattern> {
-        if let PatternKind::ValueFieldPattern(pattern) = self.kind() {
-            Some(pattern)
-        } else {
-            None
-        }
     }
 }
 

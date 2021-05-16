@@ -164,16 +164,19 @@ impl Scope {
 
     pub fn register_pattern(&mut self, tree: &Ast, pattern: &Pattern) {
         match &pattern.kind() {
-            PatternKind::IntegerPattern(_) => {}
-            PatternKind::StringPattern(_) => {}
-            PatternKind::VariablePattern(pat) => {
-                let name = pat.id(tree);
-                self.insert(name.to_string(), pat.semantic_value());
-            }
             PatternKind::ArrayPattern(pat) => {
                 for pat in pat.elements(tree) {
                     self.register_pattern(tree, pat);
                 }
+            }
+            PatternKind::StructPattern(pat) => {
+                for field in pat.fields(tree) {
+                    self.register_pattern(tree, field);
+                }
+            }
+            PatternKind::VariablePattern(pat) => {
+                let name = pat.id(tree);
+                self.insert(name.to_string(), pat.semantic_value());
             }
             PatternKind::RestPattern(pat) => {
                 if let Some(name) = pat.id(tree) {
@@ -191,11 +194,7 @@ impl Scope {
                     self.insert(name.to_string(), pat.semantic_value());
                 }
             }
-            PatternKind::StructPattern(pat) => {
-                for field in pat.fields(tree) {
-                    self.register_pattern(tree, field);
-                }
-            }
+            _ => {}
         }
     }
 
