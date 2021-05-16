@@ -843,7 +843,7 @@ impl fmt::Display for Block {
 pub struct Expression {
     kind: ExpressionKind,
     code: Code,
-    r#type: Rc<RefCell<sem::Type>>,
+    semantic_value: Rc<RefCell<SemanticValueKind>>,
 }
 
 impl Expression {
@@ -851,7 +851,7 @@ impl Expression {
         Self {
             kind,
             code,
-            r#type: wrap(sem::Type::Unknown),
+            semantic_value: wrap(SemanticValueKind::Undefined),
         }
     }
 
@@ -859,12 +859,19 @@ impl Expression {
         &self.kind
     }
 
-    pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
-        &self.r#type
+    pub fn semantic_value(&self) -> Rc<RefCell<semantic::Expression>> {
+        Rc::clone(
+            self.semantic_value
+                .borrow()
+                .expression()
+                .as_ref()
+                .expect("undefined semantic value"),
+        )
     }
 
-    pub fn replace_type(&mut self, ty: &Rc<RefCell<sem::Type>>) {
-        self.r#type = Rc::clone(ty);
+    pub fn replace_semantic_value(&self, value: Rc<RefCell<semantic::Expression>>) {
+        self.semantic_value
+            .replace(SemanticValueKind::Expression(value));
     }
 
     pub fn struct_literal(&self) -> Option<&StructLiteral> {

@@ -49,6 +49,9 @@ impl fmt::Display for Binding {
             SemanticValueKind::Variable(_) => {
                 write!(f, "local variable")?;
             }
+            SemanticValueKind::Expression(_) => {
+                write!(f, "expression")?;
+            }
             SemanticValueKind::Undefined => {
                 write!(f, "(undefined)")?;
             }
@@ -189,6 +192,7 @@ impl Scope {
     }
 }
 
+/// Bind semantic values
 #[derive(Debug)]
 struct SemanticValueBinder {
     naming: PrefixNaming,
@@ -214,7 +218,9 @@ impl SemanticValueBinder {
     }
 }
 
+// Use exit_* methods for depth first traversal
 impl Visitor for SemanticValueBinder {
+    // Function
     fn exit_function_parameter(
         &mut self,
         tree: &Ast,
@@ -258,6 +264,20 @@ impl Visitor for SemanticValueBinder {
 
             definition.replace_semantic_value(wrap(fun));
         }
+    }
+
+    // Literal
+    fn exit_integer_literal(
+        &mut self,
+        _tree: &Ast,
+        path: &mut NodePath,
+        expr: &Expression,
+        _literal: i32,
+    ) {
+        let ty = wrap(Type::Int32);
+        let sem_expr = semantic::Expression::new(path.node_id(), ty);
+
+        expr.replace_semantic_value(wrap(sem_expr));
     }
 }
 
@@ -398,40 +418,6 @@ impl Visitor for VariableBinder {
     }
 }
 
-/// Assign types for primitives and declarations
-#[derive(Debug, Default)]
-struct TypeBinder {}
-
-impl TypeBinder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl Visitor for TypeBinder {
-    fn enter_integer_literal(
-        &mut self,
-        _tree: &Ast,
-        _path: &mut NodePath,
-        expr: &Expression,
-        _literal: i32,
-    ) {
-        let ty = expr.r#type();
-        ty.replace(Type::Int32);
-    }
-
-    fn enter_string_literal(
-        &mut self,
-        _tree: &Ast,
-        _path: &mut NodePath,
-        expr: &Expression,
-        _literal: Option<&str>,
-    ) {
-        let ty = expr.r#type();
-        ty.replace(Type::String);
-    }
-}
-
 pub fn bind(tree: &mut Ast) {
     let mut binder = SemanticValueBinder::new();
     traverse(&mut binder, tree);
@@ -443,9 +429,6 @@ pub fn bind(tree: &mut Ast) {
     traverse(&mut binder, tree);
 
     let mut binder = VariableBinder::new();
-    traverse(&mut binder, tree);
-
-    let mut binder = TypeBinder::new();
     traverse(&mut binder, tree);
 }
 

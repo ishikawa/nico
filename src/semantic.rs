@@ -11,6 +11,7 @@ pub enum SemanticValueKind {
     Function(Rc<RefCell<Function>>),
     Struct(Rc<RefCell<Struct>>),
     Variable(Rc<RefCell<Variable>>),
+    Expression(Rc<RefCell<Expression>>),
     Undefined,
 }
 
@@ -20,6 +21,7 @@ impl SemanticValueKind {
             SemanticValueKind::Function(function) => function.borrow().node_id(),
             SemanticValueKind::Struct(r#struct) => r#struct.borrow().node_id(),
             SemanticValueKind::Variable(variable) => variable.borrow().node_id(),
+            SemanticValueKind::Expression(expression) => Some(expression.borrow().node_id()),
             _ => None,
         }
     }
@@ -29,6 +31,9 @@ impl SemanticValueKind {
             SemanticValueKind::Function(function) => Some(Rc::clone(function.borrow().r#type())),
             SemanticValueKind::Struct(r#struct) => Some(Rc::clone(r#struct.borrow().r#type())),
             SemanticValueKind::Variable(variable) => Some(Rc::clone(variable.borrow().r#type())),
+            SemanticValueKind::Expression(expression) => {
+                Some(Rc::clone(expression.borrow().r#type()))
+            }
             _ => None,
         }
     }
@@ -63,7 +68,14 @@ impl SemanticValueKind {
                     return std::ptr::eq(variable, other);
                 }
             }
-            _ => {}
+            SemanticValueKind::Expression(expression) => {
+                if let Some(other) = other.expression() {
+                    return std::ptr::eq(expression, other);
+                }
+            }
+            SemanticValueKind::Undefined => {
+                return false;
+            }
         };
 
         false
@@ -93,6 +105,14 @@ impl SemanticValueKind {
         }
     }
 
+    pub fn expression(&self) -> Option<&Rc<RefCell<Expression>>> {
+        if let SemanticValueKind::Expression(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
     pub fn is_function(&self) -> bool {
         matches!(self, SemanticValueKind::Function(_))
     }
@@ -103,6 +123,14 @@ impl SemanticValueKind {
 
     pub fn is_variable(&self) -> bool {
         matches!(self, SemanticValueKind::Variable(_))
+    }
+
+    pub fn is_expression(&self) -> bool {
+        matches!(self, SemanticValueKind::Expression(_))
+    }
+
+    pub fn is_undefined(&self) -> bool {
+        matches!(self, SemanticValueKind::Undefined)
     }
 
     pub fn is_function_parameter(&self) -> bool {
@@ -253,6 +281,26 @@ impl Variable {
 
     pub fn is_function_parameter(&self) -> bool {
         self.is_function_parameter
+    }
+
+    pub fn r#type(&self) -> &Rc<RefCell<Type>> {
+        &self.r#type
+    }
+}
+
+#[derive(Debug)]
+pub struct Expression {
+    node_id: NodeId, // syntax::Expression
+    r#type: Rc<RefCell<Type>>,
+}
+
+impl Expression {
+    pub fn new(node_id: NodeId, r#type: Rc<RefCell<Type>>) -> Self {
+        Self { node_id, r#type }
+    }
+
+    pub fn node_id(&self) -> NodeId {
+        self.node_id
     }
 
     pub fn r#type(&self) -> &Rc<RefCell<Type>> {
