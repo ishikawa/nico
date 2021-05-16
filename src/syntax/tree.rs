@@ -77,7 +77,6 @@ pub enum NodeKind {
     TypeField(TypeField),
     TypeAnnotation(TypeAnnotation),
     ValueField(ValueField),
-    ValueFieldPattern(ValueFieldPattern),
     Statement(Statement),
     VariableDeclaration(VariableDeclaration),
     Expression(Expression),
@@ -174,24 +173,8 @@ impl NodeKind {
         }
     }
 
-    pub fn pattern(&self) -> Option<&Pattern> {
-        if let NodeKind::Pattern(node) = self {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
     pub fn value_field(&self) -> Option<&ValueField> {
         if let NodeKind::ValueField(node) = self {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn value_field_pattern(&self) -> Option<&ValueFieldPattern> {
-        if let NodeKind::ValueFieldPattern(node) = self {
             Some(node)
         } else {
             None
@@ -278,6 +261,18 @@ impl NodeKind {
     pub fn is_member_expression(&self) -> bool {
         self.member_expression().is_some()
     }
+
+    pub fn pattern(&self) -> Option<&Pattern> {
+        if let NodeKind::Pattern(node) = self {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn value_field_pattern(&self) -> Option<&ValueFieldPattern> {
+        self.pattern().and_then(|x| x.value_field_pattern())
+    }
 }
 
 impl Node for NodeKind {
@@ -290,7 +285,6 @@ impl Node for NodeKind {
             NodeKind::FunctionDefinition(kind) => kind.code(),
             NodeKind::TypeField(kind) => kind.code(),
             NodeKind::ValueField(kind) => kind.code(),
-            NodeKind::ValueFieldPattern(kind) => kind.code(),
             NodeKind::TypeAnnotation(kind) => kind.code(),
             NodeKind::FunctionParameter(kind) => kind.code(),
             NodeKind::Statement(kind) => kind.code(),
@@ -1361,6 +1355,14 @@ impl Pattern {
             _ => None,
         }
     }
+
+    pub fn value_field_pattern(&self) -> Option<&ValueFieldPattern> {
+        if let PatternKind::ValueFieldPattern(pattern) = self.kind() {
+            Some(pattern)
+        } else {
+            None
+        }
+    }
 }
 
 impl Node for Pattern {
@@ -1453,7 +1455,7 @@ impl RestPattern {
 #[derive(Debug)]
 pub struct StructPattern {
     name: NodeId,        // Identifier
-    fields: Vec<NodeId>, // ValueFieldPattern
+    fields: Vec<NodeId>, // Pattern (ValueFieldPattern)
     semantic_value: Option<Rc<RefCell<semantic::Struct>>>,
 }
 
@@ -1470,13 +1472,10 @@ impl StructPattern {
         tree.get(self.name).unwrap().identifier().unwrap()
     }
 
-    pub fn fields<'a>(
-        &'a self,
-        tree: &'a Ast,
-    ) -> impl ExactSizeIterator<Item = &'a ValueFieldPattern> + 'a {
+    pub fn fields<'a>(&'a self, tree: &'a Ast) -> impl ExactSizeIterator<Item = &'a Pattern> + 'a {
         self.fields
             .iter()
-            .map(move |node| tree.get(*node).unwrap().value_field_pattern().unwrap())
+            .map(move |node| tree.get(*node).unwrap().pattern().unwrap())
     }
 
     pub fn semantic_value(&self) -> Option<&Rc<RefCell<semantic::Struct>>> {
@@ -1492,26 +1491,23 @@ impl StructPattern {
 pub struct ValueFieldPattern {
     name: NodeId,          // Identifier
     value: Option<NodeId>, // Pattern
-    code: Code,
 
     // If `value` is omitted, the pattern binds a variable same as `x: x`.
     variable: Option<VariablePattern>,
 }
 
 impl ValueFieldPattern {
-    pub fn new(name: NodeId, value: Option<NodeId>, code: Code) -> Self {
+    pub fn new(name: NodeId, value: Option<NodeId>) -> Self {
         if value.is_some() {
             Self {
                 name,
                 value,
-                code,
                 variable: None,
             }
         } else {
             Self {
                 name,
                 value: None,
-                code,
                 variable: Some(VariablePattern::new(name)),
             }
         }
@@ -1531,18 +1527,6 @@ impl ValueFieldPattern {
     }
 }
 
-impl Node for ValueFieldPattern {
-    fn code(&self) -> slice::Iter<CodeKind> {
-        self.code.iter()
-    }
-}
-
-impl fmt::Display for ValueFieldPattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ValueFieldPattern")
-    }
-}
-
 #[derive(Debug)]
 pub enum PatternKind {
     IntegerPattern(i32),
@@ -1551,6 +1535,7 @@ pub enum PatternKind {
     ArrayPattern(ArrayPattern),
     RestPattern(RestPattern),
     StructPattern(StructPattern),
+    ValueFieldPattern(ValueFieldPattern),
 }
 
 impl fmt::Display for NodeKind {
@@ -1564,7 +1549,6 @@ impl fmt::Display for NodeKind {
             NodeKind::TypeField(field) => field.fmt(f),
             NodeKind::TypeAnnotation(ty) => ty.fmt(f),
             NodeKind::ValueField(field) => field.fmt(f),
-            NodeKind::ValueFieldPattern(pattern) => pattern.fmt(f),
             NodeKind::FunctionParameter(param) => param.fmt(f),
             NodeKind::Statement(stmt) => stmt.fmt(f),
             NodeKind::VariableDeclaration(declaration) => declaration.fmt(f),

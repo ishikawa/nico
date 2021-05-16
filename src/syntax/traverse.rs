@@ -588,9 +588,6 @@ fn dispatch_enter(visitor: &mut dyn Visitor, tree: &Ast, path: &Rc<RefCell<NodeP
         NodeKind::ValueField(kind) => {
             visitor.enter_value_field(tree, &mut path, kind);
         }
-        NodeKind::ValueFieldPattern(kind) => {
-            visitor.enter_value_field_pattern(tree, &mut path, kind);
-        }
         NodeKind::Expression(expr) => {
             visitor.enter_expression(tree, &mut path, expr);
 
@@ -683,9 +680,6 @@ fn dispatch_exit(visitor: &mut dyn Visitor, tree: &Ast, path: &Rc<RefCell<NodePa
         }
         NodeKind::ValueField(kind) => {
             visitor.exit_value_field(tree, &mut path, kind);
-        }
-        NodeKind::ValueFieldPattern(kind) => {
-            visitor.exit_value_field_pattern(tree, &mut path, kind);
         }
         NodeKind::Expression(expr) => {
             visitor.exit_expression(tree, &mut path, expr);

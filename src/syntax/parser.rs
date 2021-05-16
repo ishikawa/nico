@@ -252,7 +252,7 @@ impl<'a> Parser<'a> {
         let mut code = Code::with_node(name);
 
         // value can be omitted for struct literal.
-        let field = if let Some(separator) = self.expect_token(TokenKind::Char(':')) {
+        let field_pattern = if let Some(separator) = self.expect_token(TokenKind::Char(':')) {
             code.interpret(separator);
 
             let value = self.parse_pattern(arena);
@@ -266,12 +266,15 @@ impl<'a> Parser<'a> {
                 );
             }
 
-            ValueFieldPattern::new(name, value, code)
+            ValueFieldPattern::new(name, value)
         } else {
-            ValueFieldPattern::new(name, None, code)
+            ValueFieldPattern::new(name, None)
         };
 
-        Some(arena.alloc(NodeKind::ValueFieldPattern(field)))
+        let kind = PatternKind::ValueFieldPattern(field_pattern);
+        let node = Pattern::new(kind, code);
+
+        Some(arena.alloc(NodeKind::Pattern(node)))
     }
 
     fn parse_name(&mut self, arena: &mut NodeArena) -> Option<NodeId> {

@@ -2,7 +2,7 @@
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
     traverse, Ast, Block, CaseArm, Expression, FunctionDefinition, FunctionParameter, NodeKind,
-    NodePath, Pattern, Program, StructDefinition, VariableDeclaration, Visitor,
+    NodePath, Pattern, PatternKind, Program, StructDefinition, VariableDeclaration, Visitor,
 };
 use crate::semantic::{self, SemanticValueKind};
 use crate::util::wrap;
@@ -118,37 +118,40 @@ impl Scope {
 
     pub fn register_pattern(&mut self, tree: &Ast, pattern: &Pattern) {
         match &pattern.kind() {
-            super::PatternKind::IntegerPattern(_) => {}
-            super::PatternKind::StringPattern(_) => {}
-            super::PatternKind::VariablePattern(id) => {
+            PatternKind::IntegerPattern(_) => {}
+            PatternKind::StringPattern(_) => {}
+            PatternKind::VariablePattern(id) => {
                 if let Some(value) = id.semantic_value() {
                     self.insert_variable(Rc::clone(value));
                 }
             }
-            super::PatternKind::ArrayPattern(pat) => {
+            PatternKind::ArrayPattern(pat) => {
                 for pat in pat.elements(tree) {
                     self.register_pattern(tree, pat);
                 }
             }
-            super::PatternKind::RestPattern(pat) => {
+            PatternKind::RestPattern(pat) => {
                 if pat.id(tree).is_some() {
                     if let Some(value) = pat.semantic_value() {
                         self.insert_variable(Rc::clone(value));
                     }
                 }
             }
-            super::PatternKind::StructPattern(pat) => {
-                for field in pat.fields(tree) {
-                    if let Some(value) = field.value(tree) {
-                        self.register_pattern(tree, value);
-                    } else {
-                        // omitted
-                        let pattern = field.variable().unwrap();
+            PatternKind::ValueFieldPattern(field) => {
+                if let Some(value) = field.value(tree) {
+                    self.register_pattern(tree, value);
+                } else {
+                    // omitted
+                    let pattern = field.variable().unwrap();
 
-                        if let Some(value) = pattern.semantic_value() {
-                            self.insert_variable(Rc::clone(value));
-                        }
+                    if let Some(value) = pattern.semantic_value() {
+                        self.insert_variable(Rc::clone(value));
                     }
+                }
+            }
+            PatternKind::StructPattern(pat) => {
+                for field in pat.fields(tree) {
+                    self.register_pattern(tree, field);
                 }
             }
         }
@@ -220,15 +223,15 @@ impl Visitor for SemanticValueBinder {
     ) {
         let id = param.name(tree);
         let ty = self.type_var();
-        let value = semantic::Variable::new(id.to_string(), true, Some(param.name_id()), Some(ty));
+        let _value = semantic::Variable::new(id.to_string(), true, Some(param.name_id()), Some(ty));
         todo!("Build a semantic value for function parameter");
     }
 
     fn exit_function_definition(
         &mut self,
-        tree: &Ast,
+        _tree: &Ast,
         _path: &mut NodePath,
-        definition: &FunctionDefinition,
+        _definition: &FunctionDefinition,
     ) {
         todo!("Build a semantic value for function definition");
         /*
