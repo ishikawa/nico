@@ -6,6 +6,7 @@ use std::{
     rc::Rc,
 };
 
+/// Semantic value variants.
 #[derive(Debug, Clone)]
 pub enum SemanticValueKind {
     Function(Rc<RefCell<Function>>),
@@ -13,6 +14,12 @@ pub enum SemanticValueKind {
     Variable(Rc<RefCell<Variable>>),
     Expression(Rc<RefCell<Expression>>),
     Undefined,
+}
+
+impl Default for SemanticValueKind {
+    fn default() -> Self {
+        Self::Undefined
+    }
 }
 
 impl SemanticValueKind {
