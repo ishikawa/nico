@@ -11,6 +11,7 @@ pub enum SemanticValueKind {
     Function(Rc<RefCell<Function>>),
     Struct(Rc<RefCell<Struct>>),
     Variable(Rc<RefCell<Variable>>),
+    Undefined,
 }
 
 impl SemanticValueKind {
@@ -19,6 +20,7 @@ impl SemanticValueKind {
             SemanticValueKind::Function(function) => function.borrow().node_id(),
             SemanticValueKind::Struct(r#struct) => r#struct.borrow().node_id(),
             SemanticValueKind::Variable(variable) => variable.borrow().node_id(),
+            _ => None,
         }
     }
 
@@ -51,14 +53,40 @@ impl SemanticValueKind {
                     Some(Ref::map(borrowed, |b| b.r#type.as_ref().unwrap()))
                 }
             }
+            _ => None,
         }
     }
 
-    pub fn name(&self) -> impl Deref<Target = str> + '_ {
+    pub fn name(&self) -> Option<impl Deref<Target = str> + '_> {
         match self {
-            SemanticValueKind::Function(value) => Ref::map(value.borrow(), |b| b.name()),
-            SemanticValueKind::Struct(value) => Ref::map(value.borrow(), |b| b.name()),
-            SemanticValueKind::Variable(value) => Ref::map(value.borrow(), |b| b.name()),
+            SemanticValueKind::Function(function) => {
+                let borrowed = function.borrow();
+
+                if borrowed.r#type.is_none() {
+                    None
+                } else {
+                    Some(Ref::map(borrowed, |b| b.name()))
+                }
+            }
+            SemanticValueKind::Struct(r#struct) => {
+                let borrowed = r#struct.borrow();
+
+                if borrowed.r#type.is_none() {
+                    None
+                } else {
+                    Some(Ref::map(borrowed, |b| b.name()))
+                }
+            }
+            SemanticValueKind::Variable(variable) => {
+                let borrowed = variable.borrow();
+
+                if borrowed.r#type.is_none() {
+                    None
+                } else {
+                    Some(Ref::map(borrowed, |b| b.name()))
+                }
+            }
+            _ => None,
         }
     }
 
@@ -79,6 +107,7 @@ impl SemanticValueKind {
                     return std::ptr::eq(variable, other);
                 }
             }
+            _ => {}
         };
 
         false

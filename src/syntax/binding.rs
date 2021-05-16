@@ -41,15 +41,19 @@ impl fmt::Display for Binding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.value {
             SemanticValueKind::Function(_) => {
-                write!(f, "function `{}`", self.id)
+                write!(f, "function")?;
             }
             SemanticValueKind::Struct(_) => {
-                write!(f, "struct `{}`", self.id)
+                write!(f, "struct")?;
             }
             SemanticValueKind::Variable(_) => {
-                write!(f, "local variable `{}`", self.id)
+                write!(f, "local variable")?;
+            }
+            SemanticValueKind::Undefined => {
+                write!(f, "(undefined)")?;
             }
         }
+        write!(f, " `{}`", self.id)
     }
 }
 
