@@ -55,17 +55,13 @@ impl syntax::Visitor for Rename {
             if parent.is_struct_literal() {
                 // TODO: Use type info
                 if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
-                    let binding = binding.borrow();
-
-                    if let Some(value) = binding.value().r#struct() {
-                        self.operation =
-                            Some(RenameStructNameOperation::new(node_id, Rc::clone(value)));
+                    if let Some(value) = binding.borrow().r#struct() {
+                        self.operation = Some(RenameStructNameOperation::new(node_id, value));
                     }
                 }
             } else if let Some(struct_def) = parent.struct_definition() {
-                if let Some(value) = struct_def.semantic_value() {
-                    self.operation =
-                        Some(RenameStructNameOperation::new(node_id, Rc::clone(value)));
+                if let Some(value) = struct_def.semantic_struct() {
+                    self.operation = Some(RenameStructNameOperation::new(node_id, value));
                 }
             }
 
@@ -112,7 +108,7 @@ impl syntax::Visitor for RenameStructNameOperation {
         _path: &mut NodePath,
         struct_def: &StructDefinition,
     ) {
-        if let Some(value) = struct_def.semantic_value() {
+        if let Some(value) = struct_def.semantic_struct() {
             if std::ptr::eq(value.as_ref(), self.value.as_ref()) {
                 if let Some(name) = struct_def.name(tree) {
                     self.ranges.push(name.range(tree));

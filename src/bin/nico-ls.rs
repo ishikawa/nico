@@ -232,7 +232,7 @@ impl syntax::Visitor for DiagnosticsCollector {
     ) {
         // Expected struct for name
         if let Some(binding) = path.scope().borrow().get_binding(value.name(tree).as_str()) {
-            if !binding.borrow().value().is_struct() {
+            if !binding.borrow().is_struct() {
                 self.add_diagnostic(
                     value.name(tree).range(tree),
                     format!("Expected struct, found '{}'.", binding.borrow()),
@@ -388,19 +388,18 @@ impl SemanticTokenizer {
         } else if parent.is_variable_expression(tree) {
             if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
                 let binding = binding.borrow();
-                let definition = binding.value();
 
-                if definition.is_function() {
-                    if definition.node_id().is_none() {
+                if let Some(fun) = binding.function() {
+                    if fun.borrow().node_id().is_none() {
                         self.add_token_modifiers_bitset(
                             modifiers,
                             SemanticTokenModifier::DEFAULT_LIBRARY,
                         );
                     }
                     return SemanticTokenType::FUNCTION;
-                } else if definition.is_function_parameter() {
+                } else if binding.is_function_parameter() {
                     return SemanticTokenType::PARAMETER;
-                } else if definition.is_struct() {
+                } else if binding.is_struct() {
                     return SemanticTokenType::STRUCT;
                 }
             }

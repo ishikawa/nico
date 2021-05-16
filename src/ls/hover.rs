@@ -89,12 +89,9 @@ impl syntax::Visitor for Hover {
 
         // TODO: Use type info
         if let Some(binding) = scope.borrow().get_binding(literal.name(tree).as_str()) {
-            let binding = binding.borrow();
-            let value = binding.value();
-
-            if let Some(struct_value) = value.r#struct() {
+            if let Some(struct_value) = binding.borrow().r#struct() {
                 self.result.replace((
-                    self.describe_value_field(tree, struct_value, field),
+                    self.describe_value_field(tree, &struct_value, field),
                     field.name(tree).range(tree),
                 ));
             }
