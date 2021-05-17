@@ -483,7 +483,7 @@ mod tests {
     use crate::syntax::Parser;
 
     #[test]
-    fn top_level_declarations() {
+    fn function_definition() {
         let tree = Parser::parse_string("fun foo()\nend");
 
         let program = tree.program();
@@ -493,6 +493,15 @@ mod tests {
         assert!(binding.is_some());
 
         let binding = binding.unwrap();
-        assert_eq!(binding.borrow().id(), "foo");
+        let binding = binding.borrow();
+
+        assert_eq!(binding.id(), "foo");
+
+        assert!(binding.function().is_some());
+
+        let value = binding.function().unwrap();
+        let value = value.borrow();
+
+        assert_eq!(value.name(), "foo");
     }
 }
