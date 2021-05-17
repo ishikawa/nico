@@ -99,6 +99,31 @@ impl fmt::Display for IncompleteStructType {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct ArrayType {
+    element_type: Rc<RefCell<Type>>,
+}
+
+impl ArrayType {
+    pub fn new(element_type: Rc<RefCell<Type>>) -> Self {
+        Self { element_type }
+    }
+
+    pub fn element_type(&self) -> &Rc<RefCell<Type>> {
+        &self.element_type
+    }
+
+    pub fn contains_type(&self, other: &Type) -> bool {
+        self.element_type().borrow().contains(other)
+    }
+}
+
+impl fmt::Display for ArrayType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}[]", self.element_type().borrow())
+    }
+}
+
 #[derive(Debug)]
 pub enum Type {
     /// Unspecified and not yet inferred type.
@@ -108,7 +133,7 @@ pub enum Type {
     /// Unit type. In many functional programming languages, this is
     /// written as `()`, but I am more familiar with `Void`.
     Void,
-    Array(Rc<RefCell<Type>>),
+    Array(ArrayType),
     Struct(StructType),
     /// Access `x.field` and Pattern `{ field, ...}` generates this constraint.
     IncompleteStruct(IncompleteStructType),
@@ -274,7 +299,7 @@ impl fmt::Display for Type {
             Type::Boolean => write!(f, "bool"),
             Type::String => write!(f, "str"),
             Type::Void => write!(f, "void"),
-            Type::Array(element_type) => write!(f, "{}[]", element_type.borrow()),
+            Type::Array(array_type) => array_type.fmt(f),
             Type::Struct(struct_type) => write!(f, "{}", struct_type),
             Type::IncompleteStruct(struct_type) => write!(f, "{}", struct_type),
             Type::Function {
@@ -327,9 +352,9 @@ impl Type {
         }
     }
 
-    pub fn element_type(ty: &Self) -> Option<Rc<RefCell<Self>>> {
-        match ty {
-            Type::Array(ref element_type) => Some(Rc::clone(element_type)),
+    pub fn element_type(&self) -> Option<Rc<RefCell<Self>>> {
+        match self {
+            Type::Array(array_type) => Some(Rc::clone(array_type.element_type())),
             _ => None,
         }
     }
@@ -339,7 +364,7 @@ impl Type {
         F: FnOnce(&Self) -> Rc<RefCell<Self>>,
     {
         match *ty.borrow() {
-            Type::Array(ref element_type) => Rc::clone(element_type),
+            Type::Array(ref array_type) => Rc::clone(array_type.element_type()),
             ref ty => fun(ty),
         }
     }
@@ -350,7 +375,7 @@ impl Type {
             Type::Int32 => matches!(other, Type::Int32),
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),
-            Type::Array(element_type) => element_type.borrow().contains(other),
+            Type::Array(array_type) => array_type.contains_type(other),
             Type::Struct(struct_type) => struct_type.contains_type(other),
             Type::IncompleteStruct(struct_type) => struct_type.contains_type(other),
             Type::Void => matches!(other, Type::Void),
@@ -376,9 +401,9 @@ impl PartialEq for Type {
             Type::Int32 => matches!(other, Type::Int32),
             Type::Boolean => matches!(other, Type::Boolean),
             Type::String => matches!(other, Type::String),
-            Type::Array(element_type1) => {
-                if let Some(element_type2) = Type::element_type(other) {
-                    *element_type1 == element_type2
+            Type::Array(array_type1) => {
+                if let Type::Array(array_type2) = other {
+                    array_type1 == array_type2
                 } else {
                     false
                 }
@@ -739,7 +764,7 @@ mod space_tests {
 
     #[test]
     fn array_exhaustivity() {
-        let array_type = wrap(Type::Array(wrap(Type::Int32)));
+        let array_type = wrap(Type::Array(ArrayType::new(wrap(Type::Int32))));
         let array_space = Space::Everything(Rc::clone(&array_type));
 
         assert!(array_space.is_subspace_of(&array_space));

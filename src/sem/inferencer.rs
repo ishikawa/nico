@@ -5,7 +5,7 @@
 use crate::parser;
 use crate::parser::Expr;
 use crate::sem;
-use crate::sem::{Binding, Type};
+use crate::sem::{ArrayType, Binding, Type};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use std::cell::RefCell;
@@ -140,7 +140,7 @@ impl TypeInferencer {
                         })
                 };
 
-                wrap(Type::Array(element_type))
+                wrap(Type::Array(ArrayType::new(element_type)))
             }
             Expr::Struct {
                 fields: value_fields,
@@ -430,7 +430,7 @@ impl TypeInferencer {
                 // For rest pattern, the target type `T` must be an element type.
                 // And then, the rest pattern's type must be `T[]`.
                 let element_type = self.prune(target_type);
-                let target_type = wrap(Type::Array(element_type));
+                let target_type = wrap(Type::Array(ArrayType::new(element_type)));
 
                 let binding_type = &binding.borrow().r#type;
                 self.unify_and_log("rest pattern (pattern, target)", binding_type, &target_type);
@@ -525,7 +525,7 @@ impl TypeInferencer {
     /// Array<T>
     fn typed_array_constraint(&mut self) -> Type {
         let ty = self.new_type_var();
-        Type::Array(wrap(ty))
+        Type::Array(ArrayType::new(wrap(ty)))
     }
 
     // { field: T }
@@ -617,9 +617,11 @@ impl TypeInferencer {
                     Unification::Done
                 }
             }
-            Type::Array(element_type1) => match &*ty2.borrow() {
-                Type::Array(element_type2) => {
-                    if let Some(error) = self._unify(element_type1, element_type2) {
+            Type::Array(array_type1) => match &*ty2.borrow() {
+                Type::Array(array_type2) => {
+                    if let Some(error) =
+                        self._unify(array_type1.element_type(), array_type2.element_type())
+                    {
                         return Some(error);
                     }
                     Unification::Done
@@ -762,7 +764,9 @@ impl TypeFixer {
     // Prune fixed type variables and remove indirection.
     pub fn fixed_type(&self, ty: &Rc<RefCell<Type>>) -> Rc<RefCell<Type>> {
         match &*ty.borrow() {
-            Type::Array(element_type) => wrap(Type::Array(self.fixed_type(&element_type))),
+            Type::Array(array_type) => wrap(Type::Array(ArrayType::new(
+                self.fixed_type(array_type.element_type()),
+            ))),
             Type::Struct(struct_type) => wrap(Type::Struct(struct_type.clone())),
             Type::Function {
                 params,
