@@ -217,117 +217,21 @@ impl Scope {
     }
 }
 
-/// Bind semantic values.
-#[derive(Debug)]
-struct SemanticValueBinder {
-    naming: PrefixNaming,
+pub fn bind(tree: &mut Ast) {
+    let mut binder = TopLevelDeclarationBinder::new();
+    traverse(&mut binder, tree);
+
+    let mut binder = ScopeChainBinder::new();
+    traverse(&mut binder, tree);
+
+    let mut binder = VariableBinder::new();
+    traverse(&mut binder, tree);
+
+    let mut binder = SemanticValueBinder::new();
+    traverse(&mut binder, tree);
 }
 
-impl Default for SemanticValueBinder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl SemanticValueBinder {
-    pub fn new() -> Self {
-        Self {
-            naming: PrefixNaming::new("?"),
-        }
-    }
-
-    /// Returns a new type variable.
-    fn type_var(&mut self) -> Rc<RefCell<Type>> {
-        let name = self.naming.next();
-        wrap(Type::new_type_var(&name))
-    }
-}
-
-// Use exit_* methods for depth first traversal
-impl Visitor for SemanticValueBinder {
-    // Function
-    fn exit_function_parameter(
-        &mut self,
-        tree: &Ast,
-        _path: &mut NodePath,
-        param: &FunctionParameter,
-    ) {
-        let id = param.name(tree);
-        let ty = self.type_var();
-        let value = semantic::Variable::new(id.to_string(), true, Some(param.name_id()), ty);
-
-        param.replace_semantic_value(wrap(value));
-    }
-
-    fn exit_function_definition(
-        &mut self,
-        tree: &Ast,
-        path: &mut NodePath,
-        definition: &FunctionDefinition,
-    ) {
-        let param_names = definition
-            .parameters(tree)
-            .map(|param| param.name(tree).to_string())
-            .collect();
-        let param_types = definition
-            .parameters(tree)
-            .map(|param| {
-                Rc::clone(
-                    param
-                        .semantic_variable()
-                        .expect("Undefined semantic variable")
-                        .borrow()
-                        .r#type(),
-                )
-            })
-            .collect::<Vec<_>>();
-        let return_type = self.type_var();
-        let fun_type = Type::Function {
-            params: param_types,
-            return_type,
-        };
-
-        if let Some(name) = definition.name(tree) {
-            let fun = semantic::Function::new(
-                name.to_string(),
-                param_names,
-                Some(path.node_id()),
-                wrap(fun_type),
-            );
-
-            definition.replace_semantic_value(wrap(fun));
-        }
-    }
-
-    // Literal
-    fn exit_integer_literal(
-        &mut self,
-        _tree: &Ast,
-        path: &mut NodePath,
-        expr: &Expression,
-        _literal: i32,
-    ) {
-        let ty = Type::Int32;
-        let sem_expr = semantic::Expression::new(path.node_id(), wrap(ty));
-
-        expr.replace_semantic_value(wrap(sem_expr));
-    }
-
-    fn exit_string_literal(
-        &mut self,
-        _tree: &Ast,
-        path: &mut NodePath,
-        expr: &Expression,
-        _literal: Option<&str>,
-    ) {
-        let ty = Type::String;
-        let sem_expr = semantic::Expression::new(path.node_id(), wrap(ty));
-
-        expr.replace_semantic_value(wrap(sem_expr));
-    }
-}
-
-/// A Visitor collects only top-level declarations in order to resolve forward references.
+/// The visitor binds only top-level declarations to scopes in order to resolve forward references.
 #[derive(Debug, Default)]
 struct TopLevelDeclarationBinder {
     declarations: Option<Rc<RefCell<Scope>>>,
@@ -464,18 +368,114 @@ impl Visitor for VariableBinder {
     }
 }
 
-pub fn bind(tree: &mut Ast) {
-    let mut binder = TopLevelDeclarationBinder::new();
-    traverse(&mut binder, tree);
+/// The visitor binds semantic values.
+#[derive(Debug)]
+struct SemanticValueBinder {
+    naming: PrefixNaming,
+}
 
-    let mut binder = SemanticValueBinder::new();
-    traverse(&mut binder, tree);
+impl Default for SemanticValueBinder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
-    let mut binder = ScopeChainBinder::new();
-    traverse(&mut binder, tree);
+impl SemanticValueBinder {
+    pub fn new() -> Self {
+        Self {
+            naming: PrefixNaming::new("?"),
+        }
+    }
 
-    let mut binder = VariableBinder::new();
-    traverse(&mut binder, tree);
+    /// Returns a new type variable.
+    fn type_var(&mut self) -> Rc<RefCell<Type>> {
+        let name = self.naming.next();
+        wrap(Type::new_type_var(&name))
+    }
+}
+
+// Use exit_* methods for depth first traversal
+impl Visitor for SemanticValueBinder {
+    // Function
+    fn exit_function_parameter(
+        &mut self,
+        tree: &Ast,
+        _path: &mut NodePath,
+        param: &FunctionParameter,
+    ) {
+        let id = param.name(tree);
+        let ty = self.type_var();
+        let value = semantic::Variable::new(id.to_string(), true, Some(param.name_id()), ty);
+
+        param.replace_semantic_value(wrap(value));
+    }
+
+    fn exit_function_definition(
+        &mut self,
+        tree: &Ast,
+        path: &mut NodePath,
+        definition: &FunctionDefinition,
+    ) {
+        let param_names = definition
+            .parameters(tree)
+            .map(|param| param.name(tree).to_string())
+            .collect();
+        let param_types = definition
+            .parameters(tree)
+            .map(|param| {
+                Rc::clone(
+                    param
+                        .semantic_variable()
+                        .expect("Undefined semantic variable")
+                        .borrow()
+                        .r#type(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let return_type = self.type_var();
+        let fun_type = Type::Function {
+            params: param_types,
+            return_type,
+        };
+
+        if let Some(name) = definition.name(tree) {
+            let fun = semantic::Function::new(
+                name.to_string(),
+                param_names,
+                Some(path.node_id()),
+                wrap(fun_type),
+            );
+
+            definition.replace_semantic_value(wrap(fun));
+        }
+    }
+
+    // Literal
+    fn exit_integer_literal(
+        &mut self,
+        _tree: &Ast,
+        path: &mut NodePath,
+        expr: &Expression,
+        _literal: i32,
+    ) {
+        let ty = Type::Int32;
+        let sem_expr = semantic::Expression::new(path.node_id(), wrap(ty));
+
+        expr.replace_semantic_value(wrap(sem_expr));
+    }
+
+    fn exit_string_literal(
+        &mut self,
+        _tree: &Ast,
+        path: &mut NodePath,
+        expr: &Expression,
+        _literal: Option<&str>,
+    ) {
+        let ty = Type::String;
+        let sem_expr = semantic::Expression::new(path.node_id(), wrap(ty));
+
+        expr.replace_semantic_value(wrap(sem_expr));
+    }
 }
 
 #[cfg(test)]

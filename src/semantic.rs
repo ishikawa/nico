@@ -12,6 +12,7 @@ pub enum SemanticValueKind {
     Function(Rc<RefCell<Function>>),
     Struct(Rc<RefCell<Struct>>),
     Variable(Rc<RefCell<Variable>>),
+    /// Typed value (e.g. Expression)
     Expression(Rc<RefCell<Expression>>),
     Undefined,
 }
