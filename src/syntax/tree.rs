@@ -643,7 +643,7 @@ impl FunctionDefinition {
 
     pub fn replace_semantic_value(&self, value: Rc<RefCell<semantic::Function>>) {
         self.semantic_value
-            .replace(SemanticValueKind::Function(value));
+            .replace(SemanticValueKind::FunctionDeclaration(value));
     }
 }
 

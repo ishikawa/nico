@@ -80,7 +80,7 @@ impl Binding {
 impl fmt::Display for Binding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self.value.borrow() {
-            SemanticValueKind::Function(_) => {
+            SemanticValueKind::FunctionDeclaration(_) => {
                 write!(f, "function")?;
             }
             SemanticValueKind::Struct(_) => {
@@ -212,7 +212,7 @@ impl Scope {
 
     fn define_function(&mut self, fun: semantic::Function) {
         let name = fun.name().to_string();
-        let kind = SemanticValueKind::Function(wrap(fun));
+        let kind = SemanticValueKind::FunctionDeclaration(wrap(fun));
         self.insert(name, wrap(kind));
     }
 }
