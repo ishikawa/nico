@@ -187,6 +187,10 @@ impl ConstantValue {
     pub fn new(kind: ConstantValueKind) -> Self {
         Self { kind }
     }
+
+    pub fn kind(&self) -> &ConstantValueKind {
+        &self.kind
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone)]

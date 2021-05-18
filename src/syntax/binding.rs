@@ -4,7 +4,7 @@ use super::{
     traverse, Ast, Block, CaseArm, Expression, FunctionDefinition, FunctionParameter, NodeKind,
     NodePath, Pattern, PatternKind, Program, StructDefinition, VariableDeclaration, Visitor,
 };
-use crate::semantic::{self, SemanticValueKind};
+use crate::semantic::{self, SemanticValue, SemanticValueKind};
 use crate::util::wrap;
 use crate::{sem::Type, util::naming::PrefixNaming};
 use std::{
@@ -14,14 +14,14 @@ use std::{
     rc::{Rc, Weak},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Binding {
     id: String,
-    value: Rc<RefCell<SemanticValueKind>>,
+    value: Rc<RefCell<SemanticValue>>,
 }
 
 impl Binding {
-    pub fn new<S: Into<String>>(id: S, value: Rc<RefCell<SemanticValueKind>>) -> Self {
+    pub fn new<S: Into<String>>(id: S, value: Rc<RefCell<SemanticValue>>) -> Self {
         Self {
             id: id.into(),
             value,
@@ -32,68 +32,46 @@ impl Binding {
         &self.id
     }
 
-    pub fn value(&self) -> &Rc<RefCell<SemanticValueKind>> {
+    pub fn value(&self) -> &Rc<RefCell<SemanticValue>> {
         &self.value
-    }
-
-    pub fn function(&self) -> Option<Rc<RefCell<semantic::Function>>> {
-        self.value().borrow().function().map(Rc::clone)
-    }
-
-    pub fn r#struct(&self) -> Option<Rc<RefCell<semantic::Struct>>> {
-        self.value().borrow().r#struct().map(Rc::clone)
-    }
-
-    pub fn variable(&self) -> Option<Rc<RefCell<semantic::Variable>>> {
-        self.value().borrow().variable().map(Rc::clone)
-    }
-
-    pub fn expression(&self) -> Option<Rc<RefCell<semantic::Expression>>> {
-        self.value().borrow().expression().map(Rc::clone)
-    }
-
-    pub fn is_function(&self) -> bool {
-        self.value().borrow().is_function()
-    }
-
-    pub fn is_struct(&self) -> bool {
-        self.value().borrow().is_struct()
-    }
-
-    pub fn is_variable(&self) -> bool {
-        self.value().borrow().is_variable()
-    }
-
-    pub fn is_expression(&self) -> bool {
-        self.value().borrow().is_expression()
-    }
-
-    pub fn is_undefined(&self) -> bool {
-        self.value().borrow().is_undefined()
-    }
-
-    pub fn is_function_parameter(&self) -> bool {
-        self.value().borrow().is_function_parameter()
     }
 }
 
+impl PartialEq for Binding {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && std::ptr::eq(self.value.as_ptr(), other.value.as_ptr())
+    }
+}
+
+impl Eq for Binding {}
+
 impl fmt::Display for Binding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self.value.borrow() {
+        match *self.value.borrow().kind() {
             SemanticValueKind::FunctionDeclaration(_) => {
                 write!(f, "function")?;
             }
-            SemanticValueKind::Struct(_) => {
+            SemanticValueKind::StructDeclaration(_) => {
                 write!(f, "struct")?;
             }
-            SemanticValueKind::Variable(_) => {
-                write!(f, "local variable")?;
+            SemanticValueKind::VariableDeclaration(var) => {
+                if var.is_function_parameter() {
+                    write!(f, "local variable")?;
+                } else {
+                    write!(f, "function parameter")?;
+                }
             }
-            SemanticValueKind::Expression(_) => {
-                write!(f, "expression")?;
+            SemanticValueKind::ConstantValue(value) => {
+                write!(f, "constant ({})", value.kind())?;
+            }
+            SemanticValueKind::Empty => {
+                write!(f, "(empty)")?;
             }
             SemanticValueKind::Undefined => {
                 write!(f, "(undefined)")?;
+            }
+            SemanticValueKind::Binding(binding) => {
+                write!(f, "({}) <-", binding)?;
             }
         }
         write!(f, " `{}`", self.id)
