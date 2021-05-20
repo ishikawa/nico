@@ -1,17 +1,22 @@
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::{sem, util::wrap};
+use bumpalo::{self, collections};
 use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
 
 #[derive(Debug, Default)]
-pub struct AST {
+pub struct Ast {
     arena: bumpalo::Bump,
 }
 
-impl AST {
+impl Ast {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn arena(&self) -> &bumpalo::Bump {
+        &self.arena
     }
 
     pub fn alloc<T>(&self, val: T) -> &mut T {
@@ -19,8 +24,8 @@ impl AST {
     }
 }
 
-pub trait Node: fmt::Display {
-    fn code(&self) -> slice::Iter<CodeKind>;
+pub trait Node<'a>: fmt::Display {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>>;
 
     /// Returns the effective range of this node.
     fn range(&self) -> EffectiveRange {
@@ -34,25 +39,25 @@ pub trait Node: fmt::Display {
 
 #[derive(Debug, Clone)]
 pub enum NodeKind<'a> {
-    Program(&'a Program),
-    Block(&'a Block),
-    Identifier(&'a Identifier),
-    StructDefinition(&'a StructDefinition),
-    FunctionDefinition(&'a FunctionDefinition),
-    FunctionParameter(&'a FunctionParameter),
-    TypeField(&'a TypeField),
-    TypeAnnotation(&'a TypeAnnotation),
-    ValueField(&'a ValueField),
-    ValueFieldPattern(&'a ValueFieldPattern),
-    Statement(&'a Statement),
-    VariableDeclaration(&'a VariableDeclaration),
-    Expression(&'a Expression),
-    CaseArm(&'a CaseArm),
-    Pattern(&'a Pattern),
+    Program(&'a Program<'a>),
+    Block(&'a Block<'a>),
+    Identifier(&'a Identifier<'a>),
+    StructDefinition(&'a StructDefinition<'a>),
+    FunctionDefinition(&'a FunctionDefinition<'a>),
+    FunctionParameter(&'a FunctionParameter<'a>),
+    TypeField(&'a TypeField<'a>),
+    TypeAnnotation(&'a TypeAnnotation<'a>),
+    ValueField(&'a ValueField<'a>),
+    ValueFieldPattern(&'a ValueFieldPattern<'a>),
+    Statement(&'a Statement<'a>),
+    VariableDeclaration(&'a VariableDeclaration<'a>),
+    Expression(&'a Expression<'a>),
+    CaseArm(&'a CaseArm<'a>),
+    Pattern(&'a Pattern<'a>),
 }
 
-impl<'a> NodeKind<'_> {
-    pub fn program(&self) -> Option<&Program> {
+impl<'a> NodeKind<'a> {
+    pub fn program(&self) -> Option<&Program<'a>> {
         if let NodeKind::Program(program) = self {
             Some(program)
         } else {
@@ -60,7 +65,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn struct_definition(&self) -> Option<&StructDefinition> {
+    pub fn struct_definition(&self) -> Option<&'a StructDefinition<'a>> {
         if let NodeKind::StructDefinition(node) = self {
             Some(node)
         } else {
@@ -68,7 +73,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
+    pub fn function_definition(&self) -> Option<&'a FunctionDefinition<'a>> {
         if let NodeKind::FunctionDefinition(node) = self {
             Some(node)
         } else {
@@ -76,7 +81,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
+    pub fn function_parameter(&self) -> Option<&'a FunctionParameter<'a>> {
         if let NodeKind::FunctionParameter(node) = self {
             Some(node)
         } else {
@@ -84,7 +89,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn variable_declaration(&self) -> Option<&VariableDeclaration> {
+    pub fn variable_declaration(&self) -> Option<&'a VariableDeclaration<'a>> {
         if let NodeKind::VariableDeclaration(node) = self {
             Some(node)
         } else {
@@ -92,7 +97,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn block(&self) -> Option<&Block> {
+    pub fn block(&self) -> Option<&'a Block<'a>> {
         if let NodeKind::Block(block) = self {
             Some(block)
         } else {
@@ -100,7 +105,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn identifier(&self) -> Option<&Identifier> {
+    pub fn identifier(&self) -> Option<&'a Identifier<'a>> {
         if let NodeKind::Identifier(node) = self {
             Some(node)
         } else {
@@ -108,7 +113,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn type_field(&self) -> Option<&TypeField> {
+    pub fn type_field(&self) -> Option<&'a TypeField<'a>> {
         if let NodeKind::TypeField(node) = self {
             Some(node)
         } else {
@@ -116,7 +121,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn type_annotation(&self) -> Option<&TypeAnnotation> {
+    pub fn type_annotation(&self) -> Option<&'a TypeAnnotation<'a>> {
         if let NodeKind::TypeAnnotation(node) = self {
             Some(node)
         } else {
@@ -124,7 +129,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn case_arm(&self) -> Option<&CaseArm> {
+    pub fn case_arm(&self) -> Option<&'a CaseArm<'a>> {
         if let NodeKind::CaseArm(node) = self {
             Some(node)
         } else {
@@ -132,7 +137,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn pattern(&self) -> Option<&Pattern> {
+    pub fn pattern(&self) -> Option<&'a Pattern<'a>> {
         if let NodeKind::Pattern(node) = self {
             Some(node)
         } else {
@@ -140,7 +145,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn struct_field(&self) -> Option<&ValueField> {
+    pub fn struct_field(&self) -> Option<&'a ValueField<'a>> {
         if let NodeKind::ValueField(node) = self {
             Some(node)
         } else {
@@ -148,7 +153,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn struct_field_pattern(&self) -> Option<&ValueFieldPattern> {
+    pub fn struct_field_pattern(&self) -> Option<&'a ValueFieldPattern<'a>> {
         if let NodeKind::ValueFieldPattern(node) = self {
             Some(node)
         } else {
@@ -156,7 +161,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn statement(&self) -> Option<&Statement> {
+    pub fn statement(&self) -> Option<&'a Statement<'a>> {
         if let NodeKind::Statement(stmt) = self {
             Some(stmt)
         } else {
@@ -164,7 +169,7 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn expression(&self) -> Option<&Expression> {
+    pub fn expression(&self) -> Option<&'a Expression<'a>> {
         if let NodeKind::Expression(node) = self {
             Some(node)
         } else {
@@ -172,21 +177,21 @@ impl<'a> NodeKind<'_> {
         }
     }
 
-    pub fn struct_literal(&self) -> Option<&StructLiteral> {
+    pub fn struct_literal(&self) -> Option<&'a StructLiteral<'a>> {
         if let NodeKind::Expression(node) = self {
             return node.struct_literal();
         }
         None
     }
 
-    pub fn variable_expression(&self) -> Option<&Identifier> {
+    pub fn variable_expression(&self) -> Option<&'a Identifier<'a>> {
         if let NodeKind::Expression(node) = self {
             return node.variable_expression();
         }
         None
     }
 
-    pub fn member_expression(&self) -> Option<&MemberExpression> {
+    pub fn member_expression(&self) -> Option<&'a MemberExpression<'a>> {
         if let NodeKind::Expression(node) = self {
             return node.member_expression();
         }
@@ -238,8 +243,8 @@ impl<'a> NodeKind<'_> {
     }
 }
 
-impl Node for NodeKind<'_> {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for NodeKind<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         match self {
             NodeKind::Program(kind) => kind.code(),
             NodeKind::Block(kind) => kind.code(),
@@ -261,17 +266,17 @@ impl Node for NodeKind<'_> {
 }
 
 #[derive(Debug)]
-pub enum TopLevelKind {
-    StructDefinition(Rc<StructDefinition>),
-    FunctionDefinition(Rc<FunctionDefinition>),
-    Statement(Rc<Statement>),
-    VariableDeclaration(Rc<VariableDeclaration>),
+pub enum TopLevelKind<'a> {
+    StructDefinition(&'a StructDefinition<'a>),
+    FunctionDefinition(&'a FunctionDefinition<'a>),
+    Statement(&'a Statement<'a>),
+    VariableDeclaration(&'a VariableDeclaration<'a>),
 }
 
-impl TopLevelKind {
-    pub fn statement(&self) -> Option<Rc<Statement>> {
+impl<'a> TopLevelKind<'a> {
+    pub fn statement(&self) -> Option<&'a Statement<'a>> {
         if let TopLevelKind::Statement(stmt) = self {
-            Some(Rc::clone(stmt))
+            Some(stmt)
         } else {
             None
         }
@@ -304,26 +309,26 @@ impl Builtin {
 }
 
 #[derive(Debug, Clone)]
-pub enum DefinitionKind {
+pub enum DefinitionKind<'a> {
     // Builtin functions, variables
     Builtin(Rc<Builtin>),
     // Declaration nodes
-    StructDefinition(Rc<StructDefinition>),
-    FunctionDefinition(Rc<FunctionDefinition>),
-    FunctionParameter(Rc<FunctionParameter>),
-    Pattern(Rc<Pattern>),
+    StructDefinition(&'a StructDefinition<'a>),
+    FunctionDefinition(&'a FunctionDefinition<'a>),
+    FunctionParameter(&'a FunctionParameter<'a>),
+    Pattern(&'a Pattern<'a>),
 }
 
-impl DefinitionKind {
-    pub fn builtin(&self) -> Option<&Rc<Builtin>> {
-        if let DefinitionKind::Builtin(node) = self {
-            Some(node)
+impl<'a> DefinitionKind<'a> {
+    pub fn builtin(&self) -> Option<Rc<Builtin>> {
+        if let DefinitionKind::Builtin(builtin) = self {
+            Some(Rc::clone(builtin))
         } else {
             None
         }
     }
 
-    pub fn struct_definition(&self) -> Option<&Rc<StructDefinition>> {
+    pub fn struct_definition(&self) -> Option<&'a StructDefinition<'a>> {
         if let DefinitionKind::StructDefinition(node) = self {
             Some(node)
         } else {
@@ -331,7 +336,7 @@ impl DefinitionKind {
         }
     }
 
-    pub fn function_definition(&self) -> Option<&Rc<FunctionDefinition>> {
+    pub fn function_definition(&self) -> Option<&'a FunctionDefinition<'a>> {
         if let DefinitionKind::FunctionDefinition(node) = self {
             Some(node)
         } else {
@@ -339,7 +344,7 @@ impl DefinitionKind {
         }
     }
 
-    pub fn function_parameter(&self) -> Option<&Rc<FunctionParameter>> {
+    pub fn function_parameter(&self) -> Option<&'a FunctionParameter<'a>> {
         if let DefinitionKind::FunctionParameter(node) = self {
             Some(node)
         } else {
@@ -347,7 +352,7 @@ impl DefinitionKind {
         }
     }
 
-    pub fn pattern(&self) -> Option<&Rc<Pattern>> {
+    pub fn pattern(&self) -> Option<&'a Pattern<'a>> {
         if let DefinitionKind::Pattern(node) = self {
             Some(node)
         } else {
@@ -375,34 +380,34 @@ impl DefinitionKind {
         matches!(self, Self::Pattern(..))
     }
 
-    pub fn ptr_eq(&self, other: &DefinitionKind) -> bool {
+    pub fn ptr_eq(&self, other: &DefinitionKind<'a>) -> bool {
         if let DefinitionKind::Builtin(ref definition1) = self {
             if let DefinitionKind::Builtin(ref definition2) = other {
                 return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
             }
         }
 
-        if let DefinitionKind::StructDefinition(ref definition1) = self {
-            if let DefinitionKind::StructDefinition(ref definition2) = other {
-                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
+        if let DefinitionKind::StructDefinition(definition1) = self {
+            if let DefinitionKind::StructDefinition(definition2) = other {
+                return std::ptr::eq(definition1, definition2);
             }
         }
 
-        if let DefinitionKind::FunctionDefinition(ref definition1) = self {
-            if let DefinitionKind::FunctionDefinition(ref definition2) = other {
-                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
+        if let DefinitionKind::FunctionDefinition(definition1) = self {
+            if let DefinitionKind::FunctionDefinition(definition2) = other {
+                return std::ptr::eq(definition1, definition2);
             }
         }
 
-        if let DefinitionKind::FunctionParameter(ref definition1) = self {
-            if let DefinitionKind::FunctionParameter(ref definition2) = other {
-                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
+        if let DefinitionKind::FunctionParameter(definition1) = self {
+            if let DefinitionKind::FunctionParameter(definition2) = other {
+                return std::ptr::eq(definition1, definition2);
             }
         }
 
-        if let DefinitionKind::Pattern(ref definition1) = self {
-            if let DefinitionKind::Pattern(ref definition2) = other {
-                return std::ptr::eq(definition1.as_ref(), definition2.as_ref());
+        if let DefinitionKind::Pattern(definition1) = self {
+            if let DefinitionKind::Pattern(definition2) = other {
+                return std::ptr::eq(definition1, definition2);
             }
         }
 
@@ -410,25 +415,27 @@ impl DefinitionKind {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Code<'a> {
-    code: Vec<CodeKind<'a>>,
+    code: collections::Vec<'a, CodeKind<'a>>,
 }
 
 impl<'a> Code<'a> {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_interpreted(token: Token) -> Self {
+    pub fn new(tree: &'a Ast) -> Self {
         Self {
-            code: vec![CodeKind::SyntaxToken(SyntaxToken::Interpreted(token))],
+            code: collections::Vec::new_in(&tree.arena),
         }
     }
 
-    pub fn with_node(node: NodeKind<'a>) -> Code<'a> {
+    pub fn with_interpreted(tree: &'a Ast, token: Token) -> Self {
+        Self {
+            code: bumpalo::vec![in tree.arena(); CodeKind::SyntaxToken(SyntaxToken::Interpreted(token))],
+        }
+    }
+
+    pub fn with_node(tree: &'a Ast, node: NodeKind<'a>) -> Code<'a> {
         Code {
-            code: vec![CodeKind::Node(node)],
+            code: bumpalo::vec![in tree.arena(); CodeKind::Node(node)],
         }
     }
 
@@ -452,7 +459,7 @@ impl<'a> Code<'a> {
         self
     }
 
-    pub fn iter(&self) -> slice::Iter<CodeKind> {
+    pub fn iter(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 
@@ -480,14 +487,14 @@ impl CodeKind<'_> {
 
 #[derive(Debug)]
 pub struct Program<'a> {
-    pub body: Vec<TopLevelKind>,
+    pub body: Vec<TopLevelKind<'a>>,
     declarations: Rc<RefCell<Scope>>,
     main_scope: Rc<RefCell<Scope>>,
     code: Code<'a>,
 }
 
 impl<'a> Program<'a> {
-    pub fn new(body: Vec<TopLevelKind>, code: Code<'a>) -> Program<'a> {
+    pub fn new(body: Vec<TopLevelKind<'a>>, code: Code<'a>) -> Program<'a> {
         let declarations = wrap(Scope::prelude());
         let main_scope = wrap(Scope::new());
 
@@ -508,8 +515,8 @@ impl<'a> Program<'a> {
     }
 }
 
-impl Node for Program<'_> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'_>> {
+impl<'a> Node<'a> for Program<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
@@ -521,13 +528,13 @@ impl fmt::Display for Program<'_> {
 }
 
 #[derive(Debug)]
-pub struct Identifier {
+pub struct Identifier<'a> {
     pub id: String,
-    code: Code,
+    code: Code<'a>,
 }
 
-impl Identifier {
-    pub fn new<S: Into<String>>(name: S, code: Code) -> Self {
+impl<'a> Identifier<'a> {
+    pub fn new<S: Into<String>>(name: S, code: Code<'a>) -> Self {
         Self {
             id: name.into(),
             code,
@@ -539,13 +546,13 @@ impl Identifier {
     }
 }
 
-impl Node for Identifier {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for Identifier<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for Identifier {
+impl fmt::Display for Identifier<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.id.fmt(f)
     }
@@ -563,15 +570,19 @@ impl fmt::Display for Identifier {
 /// ```
 ///
 #[derive(Debug)]
-pub struct StructDefinition {
-    pub name: Option<Rc<Identifier>>,
-    pub fields: Vec<Rc<TypeField>>,
+pub struct StructDefinition<'a> {
+    pub name: Option<&'a Identifier<'a>>,
+    pub fields: Vec<&'a TypeField<'a>>,
     r#type: Rc<RefCell<sem::Type>>,
-    code: Code,
+    code: Code<'a>,
 }
 
-impl StructDefinition {
-    pub fn new(name: Option<Rc<Identifier>>, fields: Vec<Rc<TypeField>>, code: Code) -> Self {
+impl<'a> StructDefinition<'a> {
+    pub fn new(
+        name: Option<&'a Identifier<'a>>,
+        fields: Vec<&'a TypeField<'a>>,
+        code: Code<'a>,
+    ) -> Self {
         Self {
             name,
             fields,
@@ -580,8 +591,8 @@ impl StructDefinition {
         }
     }
 
-    pub fn name(&self) -> Option<&Identifier> {
-        self.name.as_deref()
+    pub fn name(&self) -> Option<&'a Identifier<'a>> {
+        self.name
     }
 
     pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
@@ -600,13 +611,13 @@ impl StructDefinition {
     }
 }
 
-impl Node for StructDefinition {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for StructDefinition<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for StructDefinition {
+impl fmt::Display for StructDefinition<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name() {
             write!(f, "StructDefinition({})", name.as_str())
@@ -617,17 +628,17 @@ impl fmt::Display for StructDefinition {
 }
 
 #[derive(Debug)]
-pub struct TypeField {
-    pub name: Option<Rc<Identifier>>,
-    pub type_annotation: Option<Rc<TypeAnnotation>>,
-    code: Code,
+pub struct TypeField<'a> {
+    pub name: Option<&'a Identifier<'a>>,
+    pub type_annotation: Option<&'a TypeAnnotation<'a>>,
+    code: Code<'a>,
 }
 
-impl TypeField {
+impl<'a> TypeField<'a> {
     pub fn new(
-        name: Option<Rc<Identifier>>,
-        type_annotation: Option<Rc<TypeAnnotation>>,
-        code: Code,
+        name: Option<&'a Identifier<'a>>,
+        type_annotation: Option<&'a TypeAnnotation<'a>>,
+        code: Code<'a>,
     ) -> Self {
         Self {
             name,
@@ -636,18 +647,18 @@ impl TypeField {
         }
     }
 
-    pub fn name(&self) -> Option<&Identifier> {
-        self.name.as_deref()
+    pub fn name(&self) -> Option<&'a Identifier<'a>> {
+        self.name
     }
 }
 
-impl Node for TypeField {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for TypeField<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for TypeField {
+impl fmt::Display for TypeField<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name() {
             write!(f, "TypeField({})", name.as_str())
@@ -658,43 +669,43 @@ impl fmt::Display for TypeField {
 }
 
 #[derive(Debug)]
-pub struct TypeAnnotation {
+pub struct TypeAnnotation<'a> {
     pub r#type: Rc<RefCell<sem::Type>>,
-    code: Code,
+    code: Code<'a>,
 }
 
-impl TypeAnnotation {
-    pub fn new(r#type: Rc<RefCell<sem::Type>>, code: Code) -> Self {
+impl<'a> TypeAnnotation<'a> {
+    pub fn new(r#type: Rc<RefCell<sem::Type>>, code: Code<'a>) -> Self {
         Self { r#type, code }
     }
 }
 
-impl Node for TypeAnnotation {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for TypeAnnotation<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for TypeAnnotation {
+impl fmt::Display for TypeAnnotation<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "TypeAnnotation({:?})", self.r#type)
     }
 }
 
 #[derive(Debug)]
-pub struct FunctionDefinition {
-    pub name: Option<Rc<Identifier>>,
-    pub parameters: Vec<Rc<FunctionParameter>>,
-    pub body: Rc<Block>,
-    code: Code,
+pub struct FunctionDefinition<'a> {
+    pub name: Option<&'a Identifier<'a>>,
+    pub parameters: Vec<&'a FunctionParameter<'a>>,
+    pub body: &'a Block<'a>,
+    code: Code<'a>,
 }
 
-impl FunctionDefinition {
+impl<'a> FunctionDefinition<'a> {
     pub fn new(
-        name: Option<Rc<Identifier>>,
-        parameters: Vec<Rc<FunctionParameter>>,
-        body: Rc<Block>,
-        code: Code,
+        name: Option<&'a Identifier<'a>>,
+        parameters: Vec<&'a FunctionParameter<'a>>,
+        body: &'a Block<'a>,
+        code: Code<'a>,
     ) -> Self {
         Self {
             name,
@@ -704,26 +715,26 @@ impl FunctionDefinition {
         }
     }
 
-    pub fn name(&self) -> Option<&Identifier> {
-        self.name.as_deref()
+    pub fn name(&self) -> Option<&'a Identifier<'a>> {
+        self.name
     }
 
-    pub fn body(&self) -> &Block {
-        self.body.as_ref()
+    pub fn body(&self) -> &'a Block<'a> {
+        self.body
     }
 
-    pub fn parameters(&self) -> slice::Iter<Rc<FunctionParameter>> {
+    pub fn parameters(&self) -> slice::Iter<'_, &FunctionParameter<'a>> {
         self.parameters.iter()
     }
 }
 
-impl Node for FunctionDefinition {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for FunctionDefinition<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for FunctionDefinition {
+impl fmt::Display for FunctionDefinition<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(name) = self.name() {
             write!(f, "FunctionDefinition({})", name.as_str())
@@ -734,42 +745,46 @@ impl fmt::Display for FunctionDefinition {
 }
 
 #[derive(Debug)]
-pub struct FunctionParameter {
-    pub name: Rc<Identifier>,
-    code: Code,
+pub struct FunctionParameter<'a> {
+    pub name: &'a Identifier<'a>,
+    code: Code<'a>,
 }
 
-impl FunctionParameter {
-    pub fn new(name: Rc<Identifier>, code: Code) -> Self {
+impl<'a> FunctionParameter<'a> {
+    pub fn new(name: &'a Identifier<'a>, code: Code<'a>) -> Self {
         Self { name, code }
     }
 
-    pub fn name(&self) -> &Identifier {
-        self.name.as_ref()
+    pub fn name(&self) -> &Identifier<'a> {
+        self.name
     }
 }
 
-impl Node for FunctionParameter {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for FunctionParameter<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for FunctionParameter {
+impl fmt::Display for FunctionParameter<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "FunctionParameter({})", self.name().as_str())
     }
 }
 
 #[derive(Debug)]
-pub struct VariableDeclaration {
-    pub pattern: Option<Rc<Pattern>>,
-    pub init: Option<Rc<Expression>>,
-    code: Code,
+pub struct VariableDeclaration<'a> {
+    pub pattern: Option<&'a Pattern<'a>>,
+    pub init: Option<&'a Expression<'a>>,
+    code: Code<'a>,
 }
 
-impl VariableDeclaration {
-    pub fn new(pattern: Option<Rc<Pattern>>, init: Option<Rc<Expression>>, code: Code) -> Self {
+impl<'a> VariableDeclaration<'a> {
+    pub fn new(
+        pattern: Option<&'a Pattern<'a>>,
+        init: Option<&'a Expression<'a>>,
+        code: Code<'a>,
+    ) -> Self {
         Self {
             pattern,
             init,
@@ -778,73 +793,73 @@ impl VariableDeclaration {
     }
 }
 
-impl Node for VariableDeclaration {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for VariableDeclaration<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for VariableDeclaration {
+impl fmt::Display for VariableDeclaration<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "VariableDeclaration")
     }
 }
 
 #[derive(Debug)]
-pub struct Statement {
-    pub kind: StatementKind,
-    code: Code,
+pub struct Statement<'a> {
+    pub kind: StatementKind<'a>,
+    code: Code<'a>,
 }
 
 #[derive(Debug)]
-pub enum StatementKind {
-    Expression(Rc<Expression>),
-    VariableDeclaration(Rc<VariableDeclaration>),
+pub enum StatementKind<'a> {
+    Expression(&'a Expression<'a>),
+    VariableDeclaration(&'a VariableDeclaration<'a>),
 }
 
-impl Statement {
-    pub fn new(kind: StatementKind, code: Code) -> Self {
+impl<'a> Statement<'a> {
+    pub fn new(kind: StatementKind<'a>, code: Code<'a>) -> Self {
         Self { kind, code }
     }
 
-    pub fn expression(&self) -> Option<&Expression> {
+    pub fn expression(&self) -> Option<&'a Expression<'a>> {
         if let StatementKind::Expression(ref expr) = self.kind {
-            Some(expr.as_ref())
+            Some(expr)
         } else {
             None
         }
     }
 
-    pub fn variable_declaration(&self) -> Option<&VariableDeclaration> {
+    pub fn variable_declaration(&self) -> Option<&'a VariableDeclaration<'a>> {
         if let StatementKind::VariableDeclaration(ref decl) = self.kind {
-            Some(decl.as_ref())
+            Some(decl)
         } else {
             None
         }
     }
 }
 
-impl Node for Statement {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for Statement<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for Statement {
+impl fmt::Display for Statement<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Statement")
     }
 }
 
 #[derive(Debug)]
-pub struct Block {
-    statements: Vec<Rc<Statement>>,
+pub struct Block<'a> {
+    statements: Vec<&'a Statement<'a>>,
     scope: Rc<RefCell<Scope>>,
-    code: Code,
+    code: Code<'a>,
 }
 
-impl Block {
-    pub fn new(statements: Vec<Rc<Statement>>, code: Code) -> Self {
+impl<'a> Block<'a> {
+    pub fn new(statements: Vec<&'a Statement<'a>>, code: Code<'a>) -> Self {
         Self {
             statements,
             scope: wrap(Scope::new()),
@@ -856,32 +871,32 @@ impl Block {
         &self.scope
     }
 
-    pub fn statements(&self) -> slice::Iter<Rc<Statement>> {
+    pub fn statements(&self) -> slice::Iter<'_, &Statement<'a>> {
         self.statements.iter()
     }
 }
 
-impl Node for Block {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for Block<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for Block {
+impl fmt::Display for Block<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Block")
     }
 }
 
 #[derive(Debug)]
-pub struct Expression {
-    kind: ExpressionKind,
-    code: Code,
+pub struct Expression<'a> {
+    kind: ExpressionKind<'a>,
+    code: Code<'a>,
     r#type: Rc<RefCell<sem::Type>>,
 }
 
-impl Expression {
-    pub fn new(kind: ExpressionKind, code: Code) -> Self {
+impl<'a> Expression<'a> {
+    pub fn new(kind: ExpressionKind<'a>, code: Code<'a>) -> Self {
         Self {
             kind,
             code,
@@ -889,7 +904,7 @@ impl Expression {
         }
     }
 
-    pub fn kind(&self) -> &ExpressionKind {
+    pub fn kind(&self) -> &ExpressionKind<'a> {
         &self.kind
     }
 
@@ -901,7 +916,15 @@ impl Expression {
         self.r#type = Rc::clone(ty);
     }
 
-    pub fn struct_literal(&self) -> Option<&StructLiteral> {
+    pub fn variable_expression(&self) -> Option<&'a Identifier<'a>> {
+        if let ExpressionKind::VariableExpression(id) = self.kind {
+            Some(id)
+        } else {
+            None
+        }
+    }
+
+    pub fn struct_literal(&self) -> Option<&StructLiteral<'a>> {
         if let ExpressionKind::StructLiteral(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -909,15 +932,7 @@ impl Expression {
         }
     }
 
-    pub fn variable_expression(&self) -> Option<&Identifier> {
-        if let ExpressionKind::VariableExpression(ref id) = self.kind {
-            Some(id)
-        } else {
-            None
-        }
-    }
-
-    pub fn subscript_expression(&self) -> Option<&SubscriptExpression> {
+    pub fn subscript_expression(&self) -> Option<&SubscriptExpression<'a>> {
         if let ExpressionKind::SubscriptExpression(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -925,7 +940,7 @@ impl Expression {
         }
     }
 
-    pub fn binary_expression(&self) -> Option<&BinaryExpression> {
+    pub fn binary_expression(&self) -> Option<&BinaryExpression<'a>> {
         if let ExpressionKind::BinaryExpression(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -933,7 +948,7 @@ impl Expression {
         }
     }
 
-    pub fn unary_expression(&self) -> Option<&UnaryExpression> {
+    pub fn unary_expression(&self) -> Option<&UnaryExpression<'a>> {
         if let ExpressionKind::UnaryExpression(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -941,7 +956,7 @@ impl Expression {
         }
     }
 
-    pub fn array_expression(&self) -> Option<&ArrayExpression> {
+    pub fn array_expression(&self) -> Option<&ArrayExpression<'a>> {
         if let ExpressionKind::ArrayExpression(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -949,7 +964,7 @@ impl Expression {
         }
     }
 
-    pub fn call_expression(&self) -> Option<&CallExpression> {
+    pub fn call_expression(&self) -> Option<&CallExpression<'a>> {
         if let ExpressionKind::CallExpression(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -957,7 +972,7 @@ impl Expression {
         }
     }
 
-    pub fn member_expression(&self) -> Option<&MemberExpression> {
+    pub fn member_expression(&self) -> Option<&MemberExpression<'a>> {
         if let ExpressionKind::MemberExpression(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -965,7 +980,7 @@ impl Expression {
         }
     }
 
-    pub fn if_expression(&self) -> Option<&IfExpression> {
+    pub fn if_expression(&self) -> Option<&IfExpression<'a>> {
         if let ExpressionKind::IfExpression(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -973,7 +988,7 @@ impl Expression {
         }
     }
 
-    pub fn case_expression(&self) -> Option<&CaseExpression> {
+    pub fn case_expression(&self) -> Option<&CaseExpression<'a>> {
         if let ExpressionKind::CaseExpression(ref expr) = self.kind {
             Some(expr)
         } else {
@@ -994,97 +1009,116 @@ impl Expression {
     }
 }
 
-impl Node for Expression {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for Expression<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for Expression {
+impl fmt::Display for Expression<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.kind)
     }
 }
 
 #[derive(Debug)]
-pub struct StructLiteral {
-    pub name: Rc<Identifier>,
-    pub fields: Vec<Rc<ValueField>>,
+pub struct StructLiteral<'a> {
+    pub name: &'a Identifier<'a>,
+    pub fields: collections::Vec<'a, &'a ValueField<'a>>,
 }
 
-impl StructLiteral {
-    pub fn new(name: Rc<Identifier>, fields: Vec<Rc<ValueField>>) -> Self {
-        Self { name, fields }
+impl<'a> StructLiteral<'a> {
+    pub fn new<I: IntoIterator<Item = &'a ValueField<'a>>>(
+        tree: &'a Ast,
+        name: &'a Identifier<'a>,
+        fields: I,
+    ) -> Self {
+        Self {
+            name,
+            fields: collections::Vec::from_iter_in(fields, tree.arena()),
+        }
     }
 
-    pub fn name(&self) -> &Identifier {
-        self.name.as_ref()
+    pub fn name(&self) -> &'a Identifier<'a> {
+        self.name
+    }
+
+    pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a ValueField<'a>> + '_ {
+        self.fields.iter().copied()
     }
 }
 
 #[derive(Debug)]
-pub struct ValueField {
-    pub name: Rc<Identifier>,
-    pub value: Option<Rc<Expression>>,
-    pub code: Code,
+pub struct ValueField<'a> {
+    pub name: &'a Identifier<'a>,
+    pub value: Option<&'a Expression<'a>>,
+    pub code: Code<'a>,
 }
 
-impl ValueField {
-    pub fn new(name: Rc<Identifier>, value: Option<Rc<Expression>>, code: Code) -> Self {
+impl<'a> ValueField<'a> {
+    pub fn new(
+        name: &'a Identifier<'a>,
+        value: Option<&'a Expression<'a>>,
+        code: Code<'a>,
+    ) -> Self {
         Self { name, value, code }
     }
 
-    pub fn name(&self) -> &Identifier {
-        self.name.as_ref()
+    pub fn name(&self) -> &Identifier<'_> {
+        self.name
     }
 }
 
-impl Node for ValueField {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for ValueField<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for ValueField {
+impl fmt::Display for ValueField<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ValueField({})", self.name().as_str())
     }
 }
 
 #[derive(Debug)]
-pub struct BinaryExpression {
+pub struct BinaryExpression<'a> {
     pub operator: BinaryOperator,
-    pub lhs: Rc<Expression>,
-    pub rhs: Option<Rc<Expression>>,
+    pub lhs: &'a Expression<'a>,
+    pub rhs: Option<&'a Expression<'a>>,
 }
 
-impl BinaryExpression {
-    pub fn new(operator: BinaryOperator, lhs: Rc<Expression>, rhs: Option<Rc<Expression>>) -> Self {
+impl<'a> BinaryExpression<'a> {
+    pub fn new(
+        operator: BinaryOperator,
+        lhs: &'a Expression<'a>,
+        rhs: Option<&'a Expression<'a>>,
+    ) -> Self {
         Self { operator, lhs, rhs }
     }
 
-    pub fn lhs(&self) -> &Expression {
-        self.lhs.as_ref()
+    pub fn lhs(&self) -> &'a Expression<'a> {
+        self.lhs
     }
 
-    pub fn rhs(&self) -> Option<&Expression> {
-        self.rhs.as_deref()
+    pub fn rhs(&self) -> Option<&'a Expression<'a>> {
+        self.rhs
     }
 }
 
 #[derive(Debug)]
-pub struct UnaryExpression {
+pub struct UnaryExpression<'a> {
     pub operator: UnaryOperator,
-    pub operand: Option<Rc<Expression>>,
+    pub operand: Option<&'a Expression<'a>>,
 }
 
-impl UnaryExpression {
-    pub fn new(operator: UnaryOperator, operand: Option<Rc<Expression>>) -> Self {
+impl<'a> UnaryExpression<'a> {
+    pub fn new(operator: UnaryOperator, operand: Option<&'a Expression<'a>>) -> Self {
         Self { operator, operand }
     }
 
-    pub fn operand(&self) -> Option<&Expression> {
-        self.operand.as_deref()
+    pub fn operand(&self) -> Option<&'a Expression<'a>> {
+        self.operand
     }
 }
 
@@ -1110,84 +1144,84 @@ pub enum UnaryOperator {
 }
 
 #[derive(Debug)]
-pub struct SubscriptExpression {
-    pub callee: Rc<Expression>,
-    pub arguments: Vec<Rc<Expression>>,
+pub struct SubscriptExpression<'a> {
+    pub callee: &'a Expression<'a>,
+    pub arguments: Vec<&'a Expression<'a>>,
 }
 
-impl SubscriptExpression {
-    pub fn new(callee: Rc<Expression>, arguments: Vec<Rc<Expression>>) -> Self {
+impl<'a> SubscriptExpression<'a> {
+    pub fn new(callee: &'a Expression<'a>, arguments: Vec<&'a Expression<'a>>) -> Self {
         Self { callee, arguments }
     }
 
-    pub fn callee(&self) -> &Expression {
-        self.callee.as_ref()
+    pub fn callee(&self) -> &'a Expression<'a> {
+        self.callee
     }
 
-    pub fn arguments(&self) -> slice::Iter<Rc<Expression>> {
+    pub fn arguments(&self) -> slice::Iter<'_, &Expression<'_>> {
         self.arguments.iter()
     }
 }
 
 #[derive(Debug)]
-pub struct CallExpression {
-    pub callee: Rc<Expression>,
-    pub arguments: Vec<Rc<Expression>>,
+pub struct CallExpression<'a> {
+    pub callee: &'a Expression<'a>,
+    pub arguments: Vec<&'a Expression<'a>>,
 }
 
-impl CallExpression {
-    pub fn new(callee: Rc<Expression>, arguments: Vec<Rc<Expression>>) -> Self {
+impl<'a> CallExpression<'a> {
+    pub fn new(callee: &'a Expression<'a>, arguments: Vec<&'a Expression<'a>>) -> Self {
         Self { callee, arguments }
     }
 
-    pub fn callee(&self) -> &Expression {
-        self.callee.as_ref()
+    pub fn callee(&self) -> &Expression<'a> {
+        self.callee
     }
 
-    pub fn arguments(&self) -> slice::Iter<Rc<Expression>> {
+    pub fn arguments(&self) -> slice::Iter<'_, &Expression<'a>> {
         self.arguments.iter()
     }
 }
 
 #[derive(Debug)]
-pub struct MemberExpression {
-    pub object: Rc<Expression>,
-    pub field: Option<Rc<Identifier>>,
+pub struct MemberExpression<'a> {
+    pub object: &'a Expression<'a>,
+    pub field: Option<&'a Identifier<'a>>,
 }
 
-impl MemberExpression {
-    pub fn new(object: Rc<Expression>, field: Option<Rc<Identifier>>) -> Self {
+impl<'a> MemberExpression<'a> {
+    pub fn new(object: &'a Expression<'a>, field: Option<&'a Identifier<'a>>) -> Self {
         Self { object, field }
     }
 }
 
 #[derive(Debug)]
-pub struct ArrayExpression {
-    pub elements: Vec<Rc<Expression>>,
+pub struct ArrayExpression<'a> {
+    pub elements: Vec<&'a Expression<'a>>,
 }
 
-impl ArrayExpression {
-    pub fn new(elements: Vec<Rc<Expression>>) -> Self {
+impl<'a> ArrayExpression<'a> {
+    pub fn new(elements: Vec<&'a Expression<'a>>) -> Self {
         Self { elements }
     }
 
-    pub fn elements(&self) -> slice::Iter<Rc<Expression>> {
+    pub fn elements(&self) -> slice::Iter<'_, &Expression<'a>> {
         self.elements.iter()
     }
 }
 
 #[derive(Debug)]
-pub struct IfExpression {
-    pub condition: Option<Rc<Expression>>,
-    pub then_body: Rc<Block>,
-    pub else_body: Option<Rc<Block>>,
+pub struct IfExpression<'a> {
+    pub condition: Option<&'a Expression<'a>>,
+    pub then_body: &'a Block<'a>,
+    pub else_body: Option<&'a Block<'a>>,
 }
 
-impl IfExpression {
+impl<'a> IfExpression<'a> {
     pub fn new(
-        condition: Option<Rc<Expression>>,
-        then_body: Rc<Block>,
-        else_body: Option<Rc<Block>>,
+        condition: Option<&'a Expression<'a>>,
+        then_body: &'a Block<'a>,
+        else_body: Option<&'a Block<'a>>,
     ) -> Self {
         Self {
             condition,
@@ -1198,17 +1232,17 @@ impl IfExpression {
 }
 
 #[derive(Debug)]
-pub struct CaseExpression {
-    pub head: Option<Rc<Expression>>,
-    pub arms: Vec<Rc<CaseArm>>,
-    pub else_body: Option<Rc<Block>>,
+pub struct CaseExpression<'a> {
+    pub head: Option<&'a Expression<'a>>,
+    pub arms: Vec<&'a CaseArm<'a>>,
+    pub else_body: Option<&'a Block<'a>>,
 }
 
-impl CaseExpression {
+impl<'a> CaseExpression<'a> {
     pub fn new(
-        head: Option<Rc<Expression>>,
-        arms: Vec<Rc<CaseArm>>,
-        else_body: Option<Rc<Block>>,
+        head: Option<&'a Expression<'a>>,
+        arms: Vec<&'a CaseArm<'a>>,
+        else_body: Option<&'a Block<'a>>,
     ) -> Self {
         Self {
             head,
@@ -1219,24 +1253,24 @@ impl CaseExpression {
 }
 
 #[derive(Debug)]
-pub struct CaseArm {
-    pub pattern: Option<Rc<Pattern>>,
-    pub guard: Option<Rc<Expression>>,
-    pub then_body: Rc<Block>,
+pub struct CaseArm<'a> {
+    pub pattern: Option<&'a Pattern<'a>>,
+    pub guard: Option<&'a Expression<'a>>,
+    pub then_body: &'a Block<'a>,
 
     // `CaseArm` is the only syntactic element other than Program and Block that introduces
     // a new scope. This scope is necessary to use the variables introduced in each arm in
     // the guard clause.
     scope: Rc<RefCell<Scope>>,
-    code: Code,
+    code: Code<'a>,
 }
 
-impl CaseArm {
+impl<'a> CaseArm<'a> {
     pub fn new(
-        pattern: Option<Rc<Pattern>>,
-        guard: Option<Rc<Expression>>,
-        then_body: Rc<Block>,
-        code: Code,
+        pattern: Option<&'a Pattern<'a>>,
+        guard: Option<&'a Expression<'a>>,
+        then_body: &'a Block<'a>,
+        code: Code<'a>,
     ) -> Self {
         Self {
             pattern,
@@ -1251,29 +1285,29 @@ impl CaseArm {
         &self.scope
     }
 
-    pub fn pattern(&self) -> Option<&Pattern> {
+    pub fn pattern(&self) -> Option<&'a Pattern<'a>> {
         self.pattern.as_deref()
     }
 }
 
-impl Node for CaseArm {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for CaseArm<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for CaseArm {
+impl fmt::Display for CaseArm<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CaseArm")
     }
 }
 
 #[derive(Debug)]
-pub enum ExpressionKind {
+pub enum ExpressionKind<'a> {
     IntegerLiteral(i32),
     StringLiteral(Option<String>),
     StructLiteral(StructLiteral),
-    VariableExpression(Rc<Identifier>),
+    VariableExpression(&'a Identifier<'a>),
     BinaryExpression(BinaryExpression),
     UnaryExpression(UnaryExpression),
     SubscriptExpression(SubscriptExpression),
@@ -1282,21 +1316,21 @@ pub enum ExpressionKind {
     MemberExpression(MemberExpression),
     IfExpression(IfExpression),
     CaseExpression(CaseExpression),
-    Expression(Option<Rc<Expression>>),
+    Expression(Option<&'a Expression<'a>>),
 }
 
 #[derive(Debug)]
-pub struct Pattern {
+pub struct Pattern<'a> {
     pub kind: PatternKind,
-    pub code: Code,
+    pub code: Code<'a>,
 }
 
-impl Pattern {
-    pub fn new(kind: PatternKind, code: Code) -> Self {
+impl<'a> Pattern<'a> {
+    pub fn new(kind: PatternKind, code: Code<'a>) -> Self {
         Self { kind, code }
     }
 
-    pub fn variable_pattern(identifier: &Rc<Identifier>) -> Self {
+    pub fn variable_pattern(identifier: &'a Identifier<'a>) -> Self {
         Self {
             kind: PatternKind::VariablePattern(Rc::clone(identifier)),
             code: Code::with_node(NodeKind::Identifier(Rc::clone(identifier))),
@@ -1304,90 +1338,90 @@ impl Pattern {
     }
 }
 
-impl Node for Pattern {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for Pattern<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for Pattern {
+impl fmt::Display for Pattern<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Pattern")
     }
 }
 
 #[derive(Debug)]
-pub struct ArrayPattern {
-    elements: Vec<Rc<Pattern>>,
+pub struct ArrayPattern<'a> {
+    elements: Vec<&'a Pattern<'a>>,
 }
 
-impl ArrayPattern {
-    pub fn new(elements: Vec<Rc<Pattern>>) -> Self {
+impl<'a> ArrayPattern<'a> {
+    pub fn new(elements: Vec<&'a Pattern<'a>>) -> Self {
         Self { elements }
     }
 
-    pub fn elements(&self) -> slice::Iter<Rc<Pattern>> {
+    pub fn elements(&self) -> slice::Iter<'_, &Pattern<'a>> {
         self.elements.iter()
     }
 }
 
 #[derive(Debug)]
-pub struct RestPattern {
-    pub id: Option<Rc<Identifier>>,
+pub struct RestPattern<'a> {
+    pub id: Option<&'a Identifier<'a>>,
 }
 
-impl RestPattern {
-    pub fn new(id: Option<Rc<Identifier>>) -> Self {
+impl<'a> RestPattern<'a> {
+    pub fn new(id: Option<&'a Identifier<'a>>) -> Self {
         Self { id }
     }
 }
 
 #[derive(Debug)]
-pub struct StructPattern {
-    pub name: Rc<Identifier>,
-    fields: Vec<Rc<ValueFieldPattern>>,
+pub struct StructPattern<'a> {
+    pub name: &'a Identifier<'a>,
+    fields: Vec<&'a ValueFieldPattern<'a>>,
 }
 
-impl StructPattern {
-    pub fn new(name: Rc<Identifier>, fields: Vec<Rc<ValueFieldPattern>>) -> Self {
+impl<'a> StructPattern<'a> {
+    pub fn new(name: &'a Identifier<'a>, fields: Vec<&'a ValueFieldPattern<'a>>) -> Self {
         Self { name, fields }
     }
 
-    pub fn fields(&self) -> slice::Iter<Rc<ValueFieldPattern>> {
+    pub fn fields(&self) -> slice::Iter<'_, &ValueFieldPattern<'a>> {
         self.fields.iter()
     }
 }
 
 #[derive(Debug)]
-pub struct ValueFieldPattern {
-    pub name: Rc<Identifier>,
-    pub value: Option<Rc<Pattern>>,
-    pub code: Code,
+pub struct ValueFieldPattern<'a> {
+    pub name: &'a Identifier<'a>,
+    pub value: Option<&'a Pattern<'a>>,
+    pub code: Code<'a>,
 }
 
-impl ValueFieldPattern {
-    pub fn new(name: Rc<Identifier>, value: Option<Rc<Pattern>>, code: Code) -> Self {
+impl<'a> ValueFieldPattern<'a> {
+    pub fn new(name: &'a Identifier<'a>, value: Option<&'a Pattern<'a>>, code: Code<'a>) -> Self {
         Self { name, value, code }
     }
 }
 
-impl Node for ValueFieldPattern {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl<'a> Node<'a> for ValueFieldPattern<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for ValueFieldPattern {
+impl fmt::Display for ValueFieldPattern<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ValueFieldPattern({})", self.name)
     }
 }
 
 #[derive(Debug)]
-pub enum PatternKind {
+pub enum PatternKind<'a> {
     IntegerPattern(i32),
     StringPattern(Option<String>),
-    VariablePattern(Rc<Identifier>),
+    VariablePattern(&'a Identifier<'a>),
     ArrayPattern(ArrayPattern),
     RestPattern(RestPattern),
     StructPattern(StructPattern),
@@ -1415,7 +1449,7 @@ impl fmt::Display for NodeKind<'_> {
     }
 }
 
-impl fmt::Display for ExpressionKind {
+impl fmt::Display for ExpressionKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ExpressionKind::IntegerLiteral(i) => write!(f, "IntegerLiteral({})", i),
