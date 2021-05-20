@@ -4,6 +4,21 @@ use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
 
+#[derive(Debug, Default)]
+pub struct AST {
+    arena: bumpalo::Bump,
+}
+
+impl AST {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn alloc<T>(&self, val: T) -> &mut T {
+        self.arena.alloc(val)
+    }
+}
+
 pub trait Node: fmt::Display {
     fn code(&self) -> slice::Iter<CodeKind>;
 
@@ -18,26 +33,26 @@ pub trait Node: fmt::Display {
 }
 
 #[derive(Debug, Clone)]
-pub enum NodeKind {
-    Program(Rc<Program>),
-    Block(Rc<Block>),
-    Identifier(Rc<Identifier>),
-    StructDefinition(Rc<StructDefinition>),
-    FunctionDefinition(Rc<FunctionDefinition>),
-    FunctionParameter(Rc<FunctionParameter>),
-    TypeField(Rc<TypeField>),
-    TypeAnnotation(Rc<TypeAnnotation>),
-    ValueField(Rc<ValueField>),
-    ValueFieldPattern(Rc<ValueFieldPattern>),
-    Statement(Rc<Statement>),
-    VariableDeclaration(Rc<VariableDeclaration>),
-    Expression(Rc<Expression>),
-    CaseArm(Rc<CaseArm>),
-    Pattern(Rc<Pattern>),
+pub enum NodeKind<'a> {
+    Program(&'a Program),
+    Block(&'a Block),
+    Identifier(&'a Identifier),
+    StructDefinition(&'a StructDefinition),
+    FunctionDefinition(&'a FunctionDefinition),
+    FunctionParameter(&'a FunctionParameter),
+    TypeField(&'a TypeField),
+    TypeAnnotation(&'a TypeAnnotation),
+    ValueField(&'a ValueField),
+    ValueFieldPattern(&'a ValueFieldPattern),
+    Statement(&'a Statement),
+    VariableDeclaration(&'a VariableDeclaration),
+    Expression(&'a Expression),
+    CaseArm(&'a CaseArm),
+    Pattern(&'a Pattern),
 }
 
-impl NodeKind {
-    pub fn program(&self) -> Option<&Rc<Program>> {
+impl<'a> NodeKind<'_> {
+    pub fn program(&self) -> Option<&Program> {
         if let NodeKind::Program(program) = self {
             Some(program)
         } else {
@@ -45,7 +60,7 @@ impl NodeKind {
         }
     }
 
-    pub fn struct_definition(&self) -> Option<&Rc<StructDefinition>> {
+    pub fn struct_definition(&self) -> Option<&StructDefinition> {
         if let NodeKind::StructDefinition(node) = self {
             Some(node)
         } else {
@@ -53,7 +68,7 @@ impl NodeKind {
         }
     }
 
-    pub fn function_definition(&self) -> Option<&Rc<FunctionDefinition>> {
+    pub fn function_definition(&self) -> Option<&FunctionDefinition> {
         if let NodeKind::FunctionDefinition(node) = self {
             Some(node)
         } else {
@@ -61,7 +76,7 @@ impl NodeKind {
         }
     }
 
-    pub fn function_parameter(&self) -> Option<&Rc<FunctionParameter>> {
+    pub fn function_parameter(&self) -> Option<&FunctionParameter> {
         if let NodeKind::FunctionParameter(node) = self {
             Some(node)
         } else {
@@ -69,7 +84,7 @@ impl NodeKind {
         }
     }
 
-    pub fn variable_declaration(&self) -> Option<&Rc<VariableDeclaration>> {
+    pub fn variable_declaration(&self) -> Option<&VariableDeclaration> {
         if let NodeKind::VariableDeclaration(node) = self {
             Some(node)
         } else {
@@ -77,7 +92,7 @@ impl NodeKind {
         }
     }
 
-    pub fn block(&self) -> Option<&Rc<Block>> {
+    pub fn block(&self) -> Option<&Block> {
         if let NodeKind::Block(block) = self {
             Some(block)
         } else {
@@ -85,7 +100,7 @@ impl NodeKind {
         }
     }
 
-    pub fn identifier(&self) -> Option<&Rc<Identifier>> {
+    pub fn identifier(&self) -> Option<&Identifier> {
         if let NodeKind::Identifier(node) = self {
             Some(node)
         } else {
@@ -93,7 +108,7 @@ impl NodeKind {
         }
     }
 
-    pub fn type_field(&self) -> Option<&Rc<TypeField>> {
+    pub fn type_field(&self) -> Option<&TypeField> {
         if let NodeKind::TypeField(node) = self {
             Some(node)
         } else {
@@ -101,7 +116,7 @@ impl NodeKind {
         }
     }
 
-    pub fn type_annotation(&self) -> Option<&Rc<TypeAnnotation>> {
+    pub fn type_annotation(&self) -> Option<&TypeAnnotation> {
         if let NodeKind::TypeAnnotation(node) = self {
             Some(node)
         } else {
@@ -109,7 +124,7 @@ impl NodeKind {
         }
     }
 
-    pub fn case_arm(&self) -> Option<&Rc<CaseArm>> {
+    pub fn case_arm(&self) -> Option<&CaseArm> {
         if let NodeKind::CaseArm(node) = self {
             Some(node)
         } else {
@@ -117,7 +132,7 @@ impl NodeKind {
         }
     }
 
-    pub fn pattern(&self) -> Option<&Rc<Pattern>> {
+    pub fn pattern(&self) -> Option<&Pattern> {
         if let NodeKind::Pattern(node) = self {
             Some(node)
         } else {
@@ -125,7 +140,7 @@ impl NodeKind {
         }
     }
 
-    pub fn struct_field(&self) -> Option<&Rc<ValueField>> {
+    pub fn struct_field(&self) -> Option<&ValueField> {
         if let NodeKind::ValueField(node) = self {
             Some(node)
         } else {
@@ -133,7 +148,7 @@ impl NodeKind {
         }
     }
 
-    pub fn struct_field_pattern(&self) -> Option<&Rc<ValueFieldPattern>> {
+    pub fn struct_field_pattern(&self) -> Option<&ValueFieldPattern> {
         if let NodeKind::ValueFieldPattern(node) = self {
             Some(node)
         } else {
@@ -141,7 +156,7 @@ impl NodeKind {
         }
     }
 
-    pub fn statement(&self) -> Option<&Rc<Statement>> {
+    pub fn statement(&self) -> Option<&Statement> {
         if let NodeKind::Statement(stmt) = self {
             Some(stmt)
         } else {
@@ -149,7 +164,7 @@ impl NodeKind {
         }
     }
 
-    pub fn expression(&self) -> Option<&Rc<Expression>> {
+    pub fn expression(&self) -> Option<&Expression> {
         if let NodeKind::Expression(node) = self {
             Some(node)
         } else {
@@ -223,7 +238,7 @@ impl NodeKind {
     }
 }
 
-impl Node for NodeKind {
+impl Node for NodeKind<'_> {
     fn code(&self) -> slice::Iter<CodeKind> {
         match self {
             NodeKind::Program(kind) => kind.code(),
@@ -396,11 +411,11 @@ impl DefinitionKind {
 }
 
 #[derive(Debug, Default)]
-pub struct Code {
-    code: Vec<CodeKind>,
+pub struct Code<'a> {
+    code: Vec<CodeKind<'a>>,
 }
 
-impl Code {
+impl<'a> Code<'a> {
     pub fn new() -> Self {
         Self::default()
     }
@@ -411,8 +426,8 @@ impl Code {
         }
     }
 
-    pub fn with_node(node: NodeKind) -> Self {
-        Self {
+    pub fn with_node(node: NodeKind<'a>) -> Code<'a> {
+        Code {
             code: vec![CodeKind::Node(node)],
         }
     }
@@ -442,19 +457,19 @@ impl Code {
     }
 
     // children
-    pub fn node(&mut self, node: NodeKind) -> &mut Self {
+    pub fn node(&mut self, node: NodeKind<'a>) -> &mut Code<'a> {
         self.code.push(CodeKind::Node(node));
         self
     }
 }
 
 #[derive(Debug)]
-pub enum CodeKind {
-    Node(NodeKind),
+pub enum CodeKind<'a> {
+    Node(NodeKind<'a>),
     SyntaxToken(SyntaxToken),
 }
 
-impl CodeKind {
+impl CodeKind<'_> {
     pub fn range(&self) -> EffectiveRange {
         match self {
             CodeKind::Node(kind) => kind.range(),
@@ -464,19 +479,19 @@ impl CodeKind {
 }
 
 #[derive(Debug)]
-pub struct Program {
+pub struct Program<'a> {
     pub body: Vec<TopLevelKind>,
     declarations: Rc<RefCell<Scope>>,
     main_scope: Rc<RefCell<Scope>>,
-    code: Code,
+    code: Code<'a>,
 }
 
-impl Program {
-    pub fn new(body: Vec<TopLevelKind>, code: Code) -> Self {
+impl<'a> Program<'a> {
+    pub fn new(body: Vec<TopLevelKind>, code: Code<'a>) -> Program<'a> {
         let declarations = wrap(Scope::prelude());
         let main_scope = wrap(Scope::new());
 
-        Self {
+        Program {
             body,
             declarations,
             main_scope,
@@ -493,13 +508,13 @@ impl Program {
     }
 }
 
-impl Node for Program {
-    fn code(&self) -> slice::Iter<CodeKind> {
+impl Node for Program<'_> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'_>> {
         self.code.iter()
     }
 }
 
-impl fmt::Display for Program {
+impl fmt::Display for Program<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Program")
     }
@@ -1378,7 +1393,7 @@ pub enum PatternKind {
     StructPattern(StructPattern),
 }
 
-impl fmt::Display for NodeKind {
+impl fmt::Display for NodeKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NodeKind::Program(program) => program.fmt(f),
