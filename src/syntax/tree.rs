@@ -1302,7 +1302,7 @@ impl<'a> CaseArm<'a> {
     }
 
     pub fn pattern(&self) -> Option<&'a Pattern<'a>> {
-        self.pattern.as_deref()
+        self.pattern
     }
 }
 
@@ -1322,34 +1322,34 @@ impl fmt::Display for CaseArm<'_> {
 pub enum ExpressionKind<'a> {
     IntegerLiteral(i32),
     StringLiteral(Option<String>),
-    StructLiteral(StructLiteral),
+    StructLiteral(StructLiteral<'a>),
     VariableExpression(&'a Identifier<'a>),
-    BinaryExpression(BinaryExpression),
-    UnaryExpression(UnaryExpression),
-    SubscriptExpression(SubscriptExpression),
-    CallExpression(CallExpression),
-    ArrayExpression(ArrayExpression),
-    MemberExpression(MemberExpression),
-    IfExpression(IfExpression),
-    CaseExpression(CaseExpression),
+    BinaryExpression(BinaryExpression<'a>),
+    UnaryExpression(UnaryExpression<'a>),
+    SubscriptExpression(SubscriptExpression<'a>),
+    CallExpression(CallExpression<'a>),
+    ArrayExpression(ArrayExpression<'a>),
+    MemberExpression(MemberExpression<'a>),
+    IfExpression(IfExpression<'a>),
+    CaseExpression(CaseExpression<'a>),
     Expression(Option<&'a Expression<'a>>),
 }
 
 #[derive(Debug)]
 pub struct Pattern<'a> {
-    pub kind: PatternKind,
+    pub kind: PatternKind<'a>,
     pub code: Code<'a>,
 }
 
 impl<'a> Pattern<'a> {
-    pub fn new(kind: PatternKind, code: Code<'a>) -> Self {
+    pub fn new(kind: PatternKind<'a>, code: Code<'a>) -> Self {
         Self { kind, code }
     }
 
-    pub fn variable_pattern(identifier: &'a Identifier<'a>) -> Self {
+    pub fn variable_pattern(tree: &'a Ast, identifier: &'a Identifier<'a>) -> Self {
         Self {
-            kind: PatternKind::VariablePattern(Rc::clone(identifier)),
-            code: Code::with_node(NodeKind::Identifier(Rc::clone(identifier))),
+            kind: PatternKind::VariablePattern(identifier),
+            code: Code::with_node(tree, NodeKind::Identifier(identifier)),
         }
     }
 }
@@ -1438,9 +1438,9 @@ pub enum PatternKind<'a> {
     IntegerPattern(i32),
     StringPattern(Option<String>),
     VariablePattern(&'a Identifier<'a>),
-    ArrayPattern(ArrayPattern),
-    RestPattern(RestPattern),
-    StructPattern(StructPattern),
+    ArrayPattern(ArrayPattern<'a>),
+    RestPattern(RestPattern<'a>),
+    StructPattern(StructPattern<'a>),
 }
 
 impl fmt::Display for NodeKind<'_> {
