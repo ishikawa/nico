@@ -1023,8 +1023,8 @@ impl fmt::Display for Expression<'_> {
 
 #[derive(Debug)]
 pub struct StructLiteral<'a> {
-    pub name: &'a Identifier<'a>,
-    pub fields: collections::Vec<'a, &'a ValueField<'a>>,
+    name: &'a Identifier<'a>,
+    fields: collections::Vec<'a, &'a ValueField<'a>>,
 }
 
 impl<'a> StructLiteral<'a> {
@@ -1145,41 +1145,55 @@ pub enum UnaryOperator {
 
 #[derive(Debug)]
 pub struct SubscriptExpression<'a> {
-    pub callee: &'a Expression<'a>,
-    pub arguments: Vec<&'a Expression<'a>>,
+    callee: &'a Expression<'a>,
+    arguments: collections::Vec<'a, &'a Expression<'a>>,
 }
 
 impl<'a> SubscriptExpression<'a> {
-    pub fn new(callee: &'a Expression<'a>, arguments: Vec<&'a Expression<'a>>) -> Self {
-        Self { callee, arguments }
+    pub fn new<I: IntoIterator<Item = &'a Expression<'a>>>(
+        tree: &'a Ast,
+        callee: &'a Expression<'a>,
+        arguments: I,
+    ) -> Self {
+        Self {
+            callee,
+            arguments: collections::Vec::from_iter_in(arguments, tree.arena()),
+        }
     }
 
     pub fn callee(&self) -> &'a Expression<'a> {
         self.callee
     }
 
-    pub fn arguments(&self) -> slice::Iter<'_, &Expression<'_>> {
-        self.arguments.iter()
+    pub fn arguments(&self) -> impl ExactSizeIterator<Item = &'a Expression<'a>> + '_ {
+        self.arguments.iter().copied()
     }
 }
 
 #[derive(Debug)]
 pub struct CallExpression<'a> {
-    pub callee: &'a Expression<'a>,
-    pub arguments: Vec<&'a Expression<'a>>,
+    callee: &'a Expression<'a>,
+    arguments: collections::Vec<'a, &'a Expression<'a>>,
 }
 
 impl<'a> CallExpression<'a> {
-    pub fn new(callee: &'a Expression<'a>, arguments: Vec<&'a Expression<'a>>) -> Self {
-        Self { callee, arguments }
+    pub fn new<I: IntoIterator<Item = &'a Expression<'a>>>(
+        tree: &'a Ast,
+        callee: &'a Expression<'a>,
+        arguments: I,
+    ) -> Self {
+        Self {
+            callee,
+            arguments: collections::Vec::from_iter_in(arguments, tree.arena()),
+        }
     }
 
-    pub fn callee(&self) -> &Expression<'a> {
+    pub fn callee(&self) -> &'a Expression<'a> {
         self.callee
     }
 
-    pub fn arguments(&self) -> slice::Iter<'_, &Expression<'a>> {
-        self.arguments.iter()
+    pub fn arguments(&self) -> impl ExactSizeIterator<Item = &'a Expression<'a>> + '_ {
+        self.arguments.iter().copied()
     }
 }
 
