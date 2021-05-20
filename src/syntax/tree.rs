@@ -1211,16 +1211,18 @@ impl<'a> MemberExpression<'a> {
 
 #[derive(Debug)]
 pub struct ArrayExpression<'a> {
-    pub elements: Vec<&'a Expression<'a>>,
+    elements: collections::Vec<'a, &'a Expression<'a>>,
 }
 
 impl<'a> ArrayExpression<'a> {
-    pub fn new(elements: Vec<&'a Expression<'a>>) -> Self {
-        Self { elements }
+    pub fn new<I: IntoIterator<Item = &'a Expression<'a>>>(tree: &'a Ast, elements: I) -> Self {
+        Self {
+            elements: collections::Vec::from_iter_in(elements, tree.arena()),
+        }
     }
 
-    pub fn elements(&self) -> slice::Iter<'_, &Expression<'a>> {
-        self.elements.iter()
+    pub fn elements(&self) -> impl ExactSizeIterator<Item = &'a Expression<'a>> + '_ {
+        self.elements.iter().copied()
     }
 }
 
