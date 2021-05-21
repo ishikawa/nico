@@ -1,3 +1,43 @@
+//! Grammar
+//! -------
+//!
+//! ```ignore
+//! Program             := TopLevel*
+//! TopLevel            := Statement | FunctionDeclaration | StructDeclaration
+//! FunctionDeclaration := "export"? "fun" Id "(" (Parameter ",")* Parameter? ")" Block "end"
+//! Id                   := <Identifier>
+//! Block                := Statement*
+//! Statement           := VariableDeclaration | Expression
+//! VariableDeclaration := "let" Pattern "=" Expression
+//! Expression          := IntegerLiteral | StringLiteral | StructLiteral | VariableExpression
+//!                      | BinaryExpression | UnaryExpression | SubscriptExpression | CallExpression
+//!                      | ArrayExpression | MemberExpression | IfExpression | CaseExpression
+//!                      | ExpressionGroup
+//! ExpressionGroup.    := "(" Expression ")"
+//! IntegerLiteral      := <Integer>
+//! StringLiteral       := <String>
+//! VariableExpression  := Id
+//! StructLiteral       := Id "{" ValueField* "}"
+//! ValueField          := Id (":" Expression)?
+//! BinaryExpression    := Expression ("+" | "-" | "*" | "/"| "%") Expression
+//! UnaryExpression     := ("!" | "-") Expression
+//! SubscriptExpression := Expression "[" Expression "]"
+//! CallExpression      := Expression "(" (Expression ",")* Expression?* "]"
+//! ArrayExpression     := "[" (Expression ",")* Expression? "]"
+//! MemberExpression    := Expression "." Id
+//! IfExpression        := "if" Expression Block ("else" Block)? "end"
+//! CaseExpression      := "case" Expression CaseArm* ("else" Block)? "end"
+//! CaseArm             := "when" Pattern ("if" Expression)? Block
+//! Pattern             := IntegerPattern | StringPattern | VariablePattern | ArrayPattern | RestPattern
+//!                      | StructPattern
+//! IntegerPattern      := <Integer>
+//! StringPattern       := <String>
+//! VariablePattern     := Id
+//! StructPattern       := Id "{" ValueFieldPattern* "}"
+//! ValueFieldPattern   := Id (":" Pattern)?
+//! ArrayPattern        := "[" (Pattern ",")* Pattern? "]"
+//! RestPattern.        := "..." Id?
+//! ```
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::{sem, util::wrap};
 use bumpalo;
@@ -1588,9 +1628,41 @@ impl fmt::Display for ValueFieldPattern<'_> {
 }
 
 #[derive(Debug)]
+pub struct IntegerPattern {
+    value: i32,
+}
+
+impl IntegerPattern {
+    pub fn new(value: i32) -> Self {
+        Self { value }
+    }
+
+    pub fn value(&self) -> i32 {
+        self.value
+    }
+}
+
+#[derive(Debug)]
+pub struct StringPattern<'a> {
+    value: Option<BumpaloString<'a>>,
+}
+
+impl<'a> StringPattern<'a> {
+    pub fn new<S: AsRef<str>>(tree: &'a Ast, value: Option<S>) -> Self {
+        Self {
+            value: value.map(|x| BumpaloString::from_str_in(x.as_ref(), tree.arena())),
+        }
+    }
+
+    pub fn value(&self) -> Option<&str> {
+        self.value.as_deref()
+    }
+}
+
+#[derive(Debug)]
 pub enum PatternKind<'a> {
-    IntegerPattern(i32),
-    StringPattern(Option<String>),
+    IntegerPattern(IntegerPattern),
+    StringPattern(StringPattern<'a>),
     VariablePattern(&'a Identifier<'a>),
     ArrayPattern(ArrayPattern<'a>),
     RestPattern(RestPattern<'a>),
