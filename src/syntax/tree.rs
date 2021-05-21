@@ -1,6 +1,7 @@
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::{sem, util::wrap};
 use bumpalo;
+use bumpalo::collections::String as BumpaloString;
 use bumpalo::collections::Vec as BumpaloVec;
 use std::rc::Rc;
 use std::slice;
@@ -538,20 +539,20 @@ impl fmt::Display for Program<'_> {
 
 #[derive(Debug)]
 pub struct Identifier<'a> {
-    id: String,
+    id: BumpaloString<'a>,
     code: Code<'a>,
 }
 
 impl<'a> Identifier<'a> {
-    pub fn new<S: Into<String>>(name: S, code: Code<'a>) -> Self {
+    pub fn new<S: AsRef<str>>(tree: &'a Ast, id: S, code: Code<'a>) -> Self {
         Self {
-            id: name.into(),
+            id: BumpaloString::from_str_in(id.as_ref(), tree.arena()),
             code,
         }
     }
 
     pub fn as_str(&self) -> &str {
-        &self.id
+        self.id.as_str()
     }
 }
 
@@ -1411,9 +1412,41 @@ impl fmt::Display for CaseArm<'_> {
 }
 
 #[derive(Debug)]
+pub struct IntegerLiteral {
+    value: i32,
+}
+
+impl IntegerLiteral {
+    pub fn new(value: i32) -> Self {
+        Self { value }
+    }
+
+    pub fn value(&self) -> i32 {
+        self.value
+    }
+}
+
+#[derive(Debug)]
+pub struct StringLiteral<'a> {
+    value: Option<BumpaloString<'a>>,
+}
+
+impl<'a> StringLiteral<'a> {
+    pub fn new<S: AsRef<str>>(tree: &'a Ast, value: Option<S>) -> Self {
+        Self {
+            value: value.map(|x| BumpaloString::from_str_in(x.as_ref(), tree.arena())),
+        }
+    }
+
+    pub fn value(&self) -> Option<&str> {
+        self.value.as_deref()
+    }
+}
+
+#[derive(Debug)]
 pub enum ExpressionKind<'a> {
-    IntegerLiteral(i32),
-    StringLiteral(Option<String>),
+    IntegerLiteral(IntegerLiteral),
+    StringLiteral(StringLiteral<'a>),
     StructLiteral(StructLiteral<'a>),
     VariableExpression(&'a Identifier<'a>),
     BinaryExpression(BinaryExpression<'a>),
@@ -1589,12 +1622,12 @@ impl fmt::Display for NodeKind<'_> {
 impl fmt::Display for ExpressionKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExpressionKind::IntegerLiteral(i) => write!(f, "IntegerLiteral({})", i),
+            ExpressionKind::IntegerLiteral(i) => write!(f, "IntegerLiteral({})", i.value()),
             ExpressionKind::StringLiteral(s) => {
                 write!(
                     f,
                     "StringLiteral({})",
-                    s.as_ref().unwrap_or(&"-".to_string())
+                    s.value().unwrap_or(&"-".to_string())
                 )
             }
             ExpressionKind::VariableExpression(expr) => write!(f, "VariableExpression({})", expr),
