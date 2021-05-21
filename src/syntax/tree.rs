@@ -487,23 +487,31 @@ impl CodeKind<'_> {
 
 #[derive(Debug)]
 pub struct Program<'a> {
-    pub body: Vec<TopLevelKind<'a>>,
+    body: collections::Vec<'a, TopLevelKind<'a>>,
     declarations: Rc<RefCell<Scope>>,
     main_scope: Rc<RefCell<Scope>>,
     code: Code<'a>,
 }
 
 impl<'a> Program<'a> {
-    pub fn new(body: Vec<TopLevelKind<'a>>, code: Code<'a>) -> Program<'a> {
+    pub fn new<I: IntoIterator<Item = TopLevelKind<'a>>>(
+        tree: &'a Ast,
+        body: I,
+        code: Code<'a>,
+    ) -> Program<'a> {
         let declarations = wrap(Scope::prelude());
         let main_scope = wrap(Scope::new());
 
         Program {
-            body,
+            body: collections::Vec::from_iter_in(body, tree.arena()),
             declarations,
             main_scope,
             code,
         }
+    }
+
+    pub fn body(&self) -> impl ExactSizeIterator<Item = &TopLevelKind<'a>> + '_ {
+        self.body.iter()
     }
 
     pub fn declarations_scope(&self) -> &Rc<RefCell<Scope>> {
@@ -529,7 +537,7 @@ impl fmt::Display for Program<'_> {
 
 #[derive(Debug)]
 pub struct Identifier<'a> {
-    pub id: String,
+    id: String,
     code: Code<'a>,
 }
 
@@ -571,28 +579,33 @@ impl fmt::Display for Identifier<'_> {
 ///
 #[derive(Debug)]
 pub struct StructDefinition<'a> {
-    pub name: Option<&'a Identifier<'a>>,
-    pub fields: Vec<&'a TypeField<'a>>,
+    name: Option<&'a Identifier<'a>>,
+    fields: collections::Vec<'a, &'a TypeField<'a>>,
     r#type: Rc<RefCell<sem::Type>>,
     code: Code<'a>,
 }
 
 impl<'a> StructDefinition<'a> {
-    pub fn new(
+    pub fn new<I: IntoIterator<Item = &'a TypeField<'a>>>(
+        tree: &'a Ast,
         name: Option<&'a Identifier<'a>>,
-        fields: Vec<&'a TypeField<'a>>,
+        fields: I,
         code: Code<'a>,
     ) -> Self {
         Self {
             name,
-            fields,
+            fields: collections::Vec::from_iter_in(fields, tree.arena()),
             code,
             r#type: wrap(sem::Type::Unknown),
         }
     }
 
     pub fn name(&self) -> Option<&'a Identifier<'a>> {
-        self.name
+        self.name.clone()
+    }
+
+    pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
+        self.fields.iter().copied()
     }
 
     pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
@@ -629,8 +642,8 @@ impl fmt::Display for StructDefinition<'_> {
 
 #[derive(Debug)]
 pub struct TypeField<'a> {
-    pub name: Option<&'a Identifier<'a>>,
-    pub type_annotation: Option<&'a TypeAnnotation<'a>>,
+    name: Option<&'a Identifier<'a>>,
+    type_annotation: Option<&'a TypeAnnotation<'a>>,
     code: Code<'a>,
 }
 
@@ -648,7 +661,11 @@ impl<'a> TypeField<'a> {
     }
 
     pub fn name(&self) -> Option<&'a Identifier<'a>> {
-        self.name
+        self.name.clone()
+    }
+
+    pub fn type_annotation(&self) -> Option<&'a TypeAnnotation<'a>> {
+        self.type_annotation.clone()
     }
 }
 
@@ -670,13 +687,17 @@ impl fmt::Display for TypeField<'_> {
 
 #[derive(Debug)]
 pub struct TypeAnnotation<'a> {
-    pub r#type: Rc<RefCell<sem::Type>>,
+    r#type: Rc<RefCell<sem::Type>>,
     code: Code<'a>,
 }
 
 impl<'a> TypeAnnotation<'a> {
     pub fn new(r#type: Rc<RefCell<sem::Type>>, code: Code<'a>) -> Self {
         Self { r#type, code }
+    }
+
+    pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
+        &self.r#type
     }
 }
 
@@ -694,37 +715,38 @@ impl fmt::Display for TypeAnnotation<'_> {
 
 #[derive(Debug)]
 pub struct FunctionDefinition<'a> {
-    pub name: Option<&'a Identifier<'a>>,
-    pub parameters: Vec<&'a FunctionParameter<'a>>,
-    pub body: &'a Block<'a>,
+    name: Option<&'a Identifier<'a>>,
+    parameters: collections::Vec<'a, &'a FunctionParameter<'a>>,
+    body: &'a Block<'a>,
     code: Code<'a>,
 }
 
 impl<'a> FunctionDefinition<'a> {
-    pub fn new(
+    pub fn new<I: IntoIterator<Item = &'a FunctionParameter<'a>>>(
+        tree: &'a Ast,
         name: Option<&'a Identifier<'a>>,
-        parameters: Vec<&'a FunctionParameter<'a>>,
+        parameters: I,
         body: &'a Block<'a>,
         code: Code<'a>,
     ) -> Self {
         Self {
             name,
-            parameters,
+            parameters: collections::Vec::from_iter_in(parameters, tree.arena()),
             body,
             code,
         }
     }
 
     pub fn name(&self) -> Option<&'a Identifier<'a>> {
-        self.name
+        self.name.clone()
     }
 
     pub fn body(&self) -> &'a Block<'a> {
         self.body
     }
 
-    pub fn parameters(&self) -> slice::Iter<'_, &FunctionParameter<'a>> {
-        self.parameters.iter()
+    pub fn parameters(&self) -> impl ExactSizeIterator<Item = &'a FunctionParameter<'a>> + '_ {
+        self.parameters.iter().copied()
     }
 }
 
@@ -746,7 +768,7 @@ impl fmt::Display for FunctionDefinition<'_> {
 
 #[derive(Debug)]
 pub struct FunctionParameter<'a> {
-    pub name: &'a Identifier<'a>,
+    name: &'a Identifier<'a>,
     code: Code<'a>,
 }
 
@@ -755,7 +777,7 @@ impl<'a> FunctionParameter<'a> {
         Self { name, code }
     }
 
-    pub fn name(&self) -> &Identifier<'a> {
+    pub fn name(&self) -> &'a Identifier<'a> {
         self.name
     }
 }
@@ -774,8 +796,8 @@ impl fmt::Display for FunctionParameter<'_> {
 
 #[derive(Debug)]
 pub struct VariableDeclaration<'a> {
-    pub pattern: Option<&'a Pattern<'a>>,
-    pub init: Option<&'a Expression<'a>>,
+    pattern: Option<&'a Pattern<'a>>,
+    init: Option<&'a Expression<'a>>,
     code: Code<'a>,
 }
 
@@ -790,6 +812,14 @@ impl<'a> VariableDeclaration<'a> {
             init,
             code,
         }
+    }
+
+    pub fn pattern(&self) -> Option<&'a Pattern<'a>> {
+        self.pattern.clone()
+    }
+
+    pub fn init(&self) -> Option<&'a Expression<'a>> {
+        self.init.clone()
     }
 }
 
@@ -807,7 +837,7 @@ impl fmt::Display for VariableDeclaration<'_> {
 
 #[derive(Debug)]
 pub struct Statement<'a> {
-    pub kind: StatementKind<'a>,
+    kind: StatementKind<'a>,
     code: Code<'a>,
 }
 
@@ -820,6 +850,10 @@ pub enum StatementKind<'a> {
 impl<'a> Statement<'a> {
     pub fn new(kind: StatementKind<'a>, code: Code<'a>) -> Self {
         Self { kind, code }
+    }
+
+    pub fn kind(&self) -> &StatementKind<'a> {
+        &self.kind
     }
 
     pub fn expression(&self) -> Option<&'a Expression<'a>> {
@@ -853,15 +887,19 @@ impl fmt::Display for Statement<'_> {
 
 #[derive(Debug)]
 pub struct Block<'a> {
-    statements: Vec<&'a Statement<'a>>,
+    statements: collections::Vec<'a, &'a Statement<'a>>,
     scope: Rc<RefCell<Scope>>,
     code: Code<'a>,
 }
 
 impl<'a> Block<'a> {
-    pub fn new(statements: Vec<&'a Statement<'a>>, code: Code<'a>) -> Self {
+    pub fn new<I: IntoIterator<Item = &'a Statement<'a>>>(
+        tree: &'a Ast,
+        statements: I,
+        code: Code<'a>,
+    ) -> Self {
         Self {
-            statements,
+            statements: collections::Vec::from_iter_in(statements, tree.arena()),
             scope: wrap(Scope::new()),
             code,
         }
@@ -871,8 +909,8 @@ impl<'a> Block<'a> {
         &self.scope
     }
 
-    pub fn statements(&self) -> slice::Iter<'_, &Statement<'a>> {
-        self.statements.iter()
+    pub fn statements(&self) -> impl ExactSizeIterator<Item = &'a Statement<'a>> + '_ {
+        self.statements.iter().copied()
     }
 }
 
@@ -1050,9 +1088,9 @@ impl<'a> StructLiteral<'a> {
 
 #[derive(Debug)]
 pub struct ValueField<'a> {
-    pub name: &'a Identifier<'a>,
-    pub value: Option<&'a Expression<'a>>,
-    pub code: Code<'a>,
+    name: &'a Identifier<'a>,
+    value: Option<&'a Expression<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> ValueField<'a> {
@@ -1066,6 +1104,10 @@ impl<'a> ValueField<'a> {
 
     pub fn name(&self) -> &Identifier<'_> {
         self.name
+    }
+
+    pub fn value(&self) -> Option<&'a Expression<'a>> {
+        self.value.clone()
     }
 }
 
@@ -1083,9 +1125,9 @@ impl fmt::Display for ValueField<'_> {
 
 #[derive(Debug)]
 pub struct BinaryExpression<'a> {
-    pub operator: BinaryOperator,
-    pub lhs: &'a Expression<'a>,
-    pub rhs: Option<&'a Expression<'a>>,
+    operator: BinaryOperator,
+    lhs: &'a Expression<'a>,
+    rhs: Option<&'a Expression<'a>>,
 }
 
 impl<'a> BinaryExpression<'a> {
@@ -1097,19 +1139,23 @@ impl<'a> BinaryExpression<'a> {
         Self { operator, lhs, rhs }
     }
 
+    pub fn operator(&self) -> BinaryOperator {
+        self.operator
+    }
+
     pub fn lhs(&self) -> &'a Expression<'a> {
         self.lhs
     }
 
     pub fn rhs(&self) -> Option<&'a Expression<'a>> {
-        self.rhs
+        self.rhs.clone()
     }
 }
 
 #[derive(Debug)]
 pub struct UnaryExpression<'a> {
-    pub operator: UnaryOperator,
-    pub operand: Option<&'a Expression<'a>>,
+    operator: UnaryOperator,
+    operand: Option<&'a Expression<'a>>,
 }
 
 impl<'a> UnaryExpression<'a> {
@@ -1117,8 +1163,12 @@ impl<'a> UnaryExpression<'a> {
         Self { operator, operand }
     }
 
+    pub fn operator(&self) -> UnaryOperator {
+        self.operator
+    }
+
     pub fn operand(&self) -> Option<&'a Expression<'a>> {
-        self.operand
+        self.operand.clone()
     }
 }
 
@@ -1199,13 +1249,21 @@ impl<'a> CallExpression<'a> {
 
 #[derive(Debug)]
 pub struct MemberExpression<'a> {
-    pub object: &'a Expression<'a>,
-    pub field: Option<&'a Identifier<'a>>,
+    object: &'a Expression<'a>,
+    field: Option<&'a Identifier<'a>>,
 }
 
 impl<'a> MemberExpression<'a> {
     pub fn new(object: &'a Expression<'a>, field: Option<&'a Identifier<'a>>) -> Self {
         Self { object, field }
+    }
+
+    pub fn object(&self) -> &'a Expression<'a> {
+        self.object
+    }
+
+    pub fn field(&self) -> Option<&'a Identifier<'a>> {
+        self.field.clone()
     }
 }
 
@@ -1228,9 +1286,9 @@ impl<'a> ArrayExpression<'a> {
 
 #[derive(Debug)]
 pub struct IfExpression<'a> {
-    pub condition: Option<&'a Expression<'a>>,
-    pub then_body: &'a Block<'a>,
-    pub else_body: Option<&'a Block<'a>>,
+    condition: Option<&'a Expression<'a>>,
+    then_body: &'a Block<'a>,
+    else_body: Option<&'a Block<'a>>,
 }
 
 impl<'a> IfExpression<'a> {
@@ -1245,34 +1303,59 @@ impl<'a> IfExpression<'a> {
             else_body,
         }
     }
+
+    pub fn condition(&self) -> Option<&'a Expression<'a>> {
+        self.condition.clone()
+    }
+
+    pub fn then_body(&self) -> &'a Block<'a> {
+        self.then_body
+    }
+
+    pub fn else_body(&self) -> Option<&'a Block<'a>> {
+        self.else_body.clone()
+    }
 }
 
 #[derive(Debug)]
 pub struct CaseExpression<'a> {
-    pub head: Option<&'a Expression<'a>>,
-    pub arms: Vec<&'a CaseArm<'a>>,
-    pub else_body: Option<&'a Block<'a>>,
+    head: Option<&'a Expression<'a>>,
+    arms: collections::Vec<'a, &'a CaseArm<'a>>,
+    else_body: Option<&'a Block<'a>>,
 }
 
 impl<'a> CaseExpression<'a> {
-    pub fn new(
+    pub fn new<I: IntoIterator<Item = &'a CaseArm<'a>>>(
+        tree: &'a Ast,
         head: Option<&'a Expression<'a>>,
-        arms: Vec<&'a CaseArm<'a>>,
+        arms: I,
         else_body: Option<&'a Block<'a>>,
     ) -> Self {
         Self {
             head,
-            arms,
+            arms: collections::Vec::from_iter_in(arms, tree.arena()),
             else_body,
         }
+    }
+
+    pub fn head(&self) -> Option<&'a Expression<'a>> {
+        self.head.clone()
+    }
+
+    pub fn arms(&self) -> impl ExactSizeIterator<Item = &'a CaseArm<'a>> + '_ {
+        self.arms.iter().copied()
+    }
+
+    pub fn else_body(&self) -> Option<&'a Block<'a>> {
+        self.else_body.clone()
     }
 }
 
 #[derive(Debug)]
 pub struct CaseArm<'a> {
-    pub pattern: Option<&'a Pattern<'a>>,
-    pub guard: Option<&'a Expression<'a>>,
-    pub then_body: &'a Block<'a>,
+    pattern: Option<&'a Pattern<'a>>,
+    guard: Option<&'a Expression<'a>>,
+    then_body: &'a Block<'a>,
 
     // `CaseArm` is the only syntactic element other than Program and Block that introduces
     // a new scope. This scope is necessary to use the variables introduced in each arm in
@@ -1302,7 +1385,15 @@ impl<'a> CaseArm<'a> {
     }
 
     pub fn pattern(&self) -> Option<&'a Pattern<'a>> {
-        self.pattern
+        self.pattern.clone()
+    }
+
+    pub fn guard(&self) -> Option<&'a Expression<'a>> {
+        self.guard.clone()
+    }
+
+    pub fn then_body(&self) -> &'a Block<'a> {
+        self.then_body
     }
 }
 
@@ -1337,13 +1428,17 @@ pub enum ExpressionKind<'a> {
 
 #[derive(Debug)]
 pub struct Pattern<'a> {
-    pub kind: PatternKind<'a>,
-    pub code: Code<'a>,
+    kind: PatternKind<'a>,
+    code: Code<'a>,
 }
 
 impl<'a> Pattern<'a> {
     pub fn new(kind: PatternKind<'a>, code: Code<'a>) -> Self {
         Self { kind, code }
+    }
+
+    pub fn kind(&self) -> &PatternKind<'a> {
+        &self.kind
     }
 
     pub fn variable_pattern(tree: &'a Ast, identifier: &'a Identifier<'a>) -> Self {
@@ -1368,56 +1463,81 @@ impl fmt::Display for Pattern<'_> {
 
 #[derive(Debug)]
 pub struct ArrayPattern<'a> {
-    elements: Vec<&'a Pattern<'a>>,
+    elements: collections::Vec<'a, &'a Pattern<'a>>,
 }
 
 impl<'a> ArrayPattern<'a> {
-    pub fn new(elements: Vec<&'a Pattern<'a>>) -> Self {
-        Self { elements }
+    pub fn new<I: IntoIterator<Item = &'a Pattern<'a>>>(tree: &'a Ast, elements: I) -> Self {
+        Self {
+            elements: collections::Vec::from_iter_in(elements, tree.arena()),
+        }
     }
 
-    pub fn elements(&self) -> slice::Iter<'_, &Pattern<'a>> {
-        self.elements.iter()
+    pub fn elements(&self) -> impl ExactSizeIterator<Item = &'a Pattern<'a>> + '_ {
+        self.elements.iter().copied()
     }
 }
 
 #[derive(Debug)]
 pub struct RestPattern<'a> {
-    pub id: Option<&'a Identifier<'a>>,
+    id: Option<&'a Identifier<'a>>,
 }
 
 impl<'a> RestPattern<'a> {
     pub fn new(id: Option<&'a Identifier<'a>>) -> Self {
         Self { id }
     }
+
+    pub fn id(&self) -> Option<&'a Identifier<'a>> {
+        self.id.clone()
+    }
 }
 
 #[derive(Debug)]
 pub struct StructPattern<'a> {
-    pub name: &'a Identifier<'a>,
-    fields: Vec<&'a ValueFieldPattern<'a>>,
+    name: &'a Identifier<'a>,
+    fields: collections::Vec<'a, &'a ValueFieldPattern<'a>>,
 }
 
 impl<'a> StructPattern<'a> {
-    pub fn new(name: &'a Identifier<'a>, fields: Vec<&'a ValueFieldPattern<'a>>) -> Self {
-        Self { name, fields }
+    pub fn new<I: IntoIterator<Item = &'a ValueFieldPattern<'a>>>(
+        tree: &'a Ast,
+        name: &'a Identifier<'a>,
+        fields: I,
+    ) -> Self {
+        Self {
+            name,
+            fields: collections::Vec::from_iter_in(fields, tree.arena()),
+        }
     }
 
-    pub fn fields(&self) -> slice::Iter<'_, &ValueFieldPattern<'a>> {
-        self.fields.iter()
+    pub fn name(&self) -> &'a Identifier<'a> {
+        self.name
+    }
+
+    pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a ValueFieldPattern<'a>> + '_ {
+        self.fields.iter().copied()
     }
 }
 
 #[derive(Debug)]
 pub struct ValueFieldPattern<'a> {
-    pub name: &'a Identifier<'a>,
-    pub value: Option<&'a Pattern<'a>>,
-    pub code: Code<'a>,
+    name: &'a Identifier<'a>,
+    value: Option<&'a Pattern<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> ValueFieldPattern<'a> {
     pub fn new(name: &'a Identifier<'a>, value: Option<&'a Pattern<'a>>, code: Code<'a>) -> Self {
         Self { name, value, code }
+    }
+
+    pub fn name(&self) -> &'a Identifier<'a> {
+        self.name
+    }
+
+    pub fn value(&self) -> Option<&'a Pattern<'a>> {
+        self.value.clone()
     }
 }
 
