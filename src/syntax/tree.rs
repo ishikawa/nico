@@ -1,6 +1,7 @@
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::{sem, util::wrap};
-use bumpalo::{self, collections};
+use bumpalo;
+use bumpalo::collections::Vec as BumpaloVec;
 use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
@@ -417,13 +418,13 @@ impl<'a> DefinitionKind<'a> {
 
 #[derive(Debug)]
 pub struct Code<'a> {
-    code: collections::Vec<'a, CodeKind<'a>>,
+    code: BumpaloVec<'a, CodeKind<'a>>,
 }
 
 impl<'a> Code<'a> {
     pub fn new(tree: &'a Ast) -> Self {
         Self {
-            code: collections::Vec::new_in(&tree.arena),
+            code: BumpaloVec::new_in(&tree.arena),
         }
     }
 
@@ -487,7 +488,7 @@ impl CodeKind<'_> {
 
 #[derive(Debug)]
 pub struct Program<'a> {
-    body: collections::Vec<'a, TopLevelKind<'a>>,
+    body: BumpaloVec<'a, TopLevelKind<'a>>,
     declarations: Rc<RefCell<Scope>>,
     main_scope: Rc<RefCell<Scope>>,
     code: Code<'a>,
@@ -503,7 +504,7 @@ impl<'a> Program<'a> {
         let main_scope = wrap(Scope::new());
 
         Program {
-            body: collections::Vec::from_iter_in(body, tree.arena()),
+            body: BumpaloVec::from_iter_in(body, tree.arena()),
             declarations,
             main_scope,
             code,
@@ -580,7 +581,7 @@ impl fmt::Display for Identifier<'_> {
 #[derive(Debug)]
 pub struct StructDefinition<'a> {
     name: Option<&'a Identifier<'a>>,
-    fields: collections::Vec<'a, &'a TypeField<'a>>,
+    fields: BumpaloVec<'a, &'a TypeField<'a>>,
     r#type: Rc<RefCell<sem::Type>>,
     code: Code<'a>,
 }
@@ -594,7 +595,7 @@ impl<'a> StructDefinition<'a> {
     ) -> Self {
         Self {
             name,
-            fields: collections::Vec::from_iter_in(fields, tree.arena()),
+            fields: BumpaloVec::from_iter_in(fields, tree.arena()),
             code,
             r#type: wrap(sem::Type::Unknown),
         }
@@ -716,7 +717,7 @@ impl fmt::Display for TypeAnnotation<'_> {
 #[derive(Debug)]
 pub struct FunctionDefinition<'a> {
     name: Option<&'a Identifier<'a>>,
-    parameters: collections::Vec<'a, &'a FunctionParameter<'a>>,
+    parameters: BumpaloVec<'a, &'a FunctionParameter<'a>>,
     body: &'a Block<'a>,
     code: Code<'a>,
 }
@@ -731,7 +732,7 @@ impl<'a> FunctionDefinition<'a> {
     ) -> Self {
         Self {
             name,
-            parameters: collections::Vec::from_iter_in(parameters, tree.arena()),
+            parameters: BumpaloVec::from_iter_in(parameters, tree.arena()),
             body,
             code,
         }
@@ -887,7 +888,7 @@ impl fmt::Display for Statement<'_> {
 
 #[derive(Debug)]
 pub struct Block<'a> {
-    statements: collections::Vec<'a, &'a Statement<'a>>,
+    statements: BumpaloVec<'a, &'a Statement<'a>>,
     scope: Rc<RefCell<Scope>>,
     code: Code<'a>,
 }
@@ -899,7 +900,7 @@ impl<'a> Block<'a> {
         code: Code<'a>,
     ) -> Self {
         Self {
-            statements: collections::Vec::from_iter_in(statements, tree.arena()),
+            statements: BumpaloVec::from_iter_in(statements, tree.arena()),
             scope: wrap(Scope::new()),
             code,
         }
@@ -1062,7 +1063,7 @@ impl fmt::Display for Expression<'_> {
 #[derive(Debug)]
 pub struct StructLiteral<'a> {
     name: &'a Identifier<'a>,
-    fields: collections::Vec<'a, &'a ValueField<'a>>,
+    fields: BumpaloVec<'a, &'a ValueField<'a>>,
 }
 
 impl<'a> StructLiteral<'a> {
@@ -1073,7 +1074,7 @@ impl<'a> StructLiteral<'a> {
     ) -> Self {
         Self {
             name,
-            fields: collections::Vec::from_iter_in(fields, tree.arena()),
+            fields: BumpaloVec::from_iter_in(fields, tree.arena()),
         }
     }
 
@@ -1196,7 +1197,7 @@ pub enum UnaryOperator {
 #[derive(Debug)]
 pub struct SubscriptExpression<'a> {
     callee: &'a Expression<'a>,
-    arguments: collections::Vec<'a, &'a Expression<'a>>,
+    arguments: BumpaloVec<'a, &'a Expression<'a>>,
 }
 
 impl<'a> SubscriptExpression<'a> {
@@ -1207,7 +1208,7 @@ impl<'a> SubscriptExpression<'a> {
     ) -> Self {
         Self {
             callee,
-            arguments: collections::Vec::from_iter_in(arguments, tree.arena()),
+            arguments: BumpaloVec::from_iter_in(arguments, tree.arena()),
         }
     }
 
@@ -1223,7 +1224,7 @@ impl<'a> SubscriptExpression<'a> {
 #[derive(Debug)]
 pub struct CallExpression<'a> {
     callee: &'a Expression<'a>,
-    arguments: collections::Vec<'a, &'a Expression<'a>>,
+    arguments: BumpaloVec<'a, &'a Expression<'a>>,
 }
 
 impl<'a> CallExpression<'a> {
@@ -1234,7 +1235,7 @@ impl<'a> CallExpression<'a> {
     ) -> Self {
         Self {
             callee,
-            arguments: collections::Vec::from_iter_in(arguments, tree.arena()),
+            arguments: BumpaloVec::from_iter_in(arguments, tree.arena()),
         }
     }
 
@@ -1269,13 +1270,13 @@ impl<'a> MemberExpression<'a> {
 
 #[derive(Debug)]
 pub struct ArrayExpression<'a> {
-    elements: collections::Vec<'a, &'a Expression<'a>>,
+    elements: BumpaloVec<'a, &'a Expression<'a>>,
 }
 
 impl<'a> ArrayExpression<'a> {
     pub fn new<I: IntoIterator<Item = &'a Expression<'a>>>(tree: &'a Ast, elements: I) -> Self {
         Self {
-            elements: collections::Vec::from_iter_in(elements, tree.arena()),
+            elements: BumpaloVec::from_iter_in(elements, tree.arena()),
         }
     }
 
@@ -1320,7 +1321,7 @@ impl<'a> IfExpression<'a> {
 #[derive(Debug)]
 pub struct CaseExpression<'a> {
     head: Option<&'a Expression<'a>>,
-    arms: collections::Vec<'a, &'a CaseArm<'a>>,
+    arms: BumpaloVec<'a, &'a CaseArm<'a>>,
     else_body: Option<&'a Block<'a>>,
 }
 
@@ -1333,7 +1334,7 @@ impl<'a> CaseExpression<'a> {
     ) -> Self {
         Self {
             head,
-            arms: collections::Vec::from_iter_in(arms, tree.arena()),
+            arms: BumpaloVec::from_iter_in(arms, tree.arena()),
             else_body,
         }
     }
@@ -1463,13 +1464,13 @@ impl fmt::Display for Pattern<'_> {
 
 #[derive(Debug)]
 pub struct ArrayPattern<'a> {
-    elements: collections::Vec<'a, &'a Pattern<'a>>,
+    elements: BumpaloVec<'a, &'a Pattern<'a>>,
 }
 
 impl<'a> ArrayPattern<'a> {
     pub fn new<I: IntoIterator<Item = &'a Pattern<'a>>>(tree: &'a Ast, elements: I) -> Self {
         Self {
-            elements: collections::Vec::from_iter_in(elements, tree.arena()),
+            elements: BumpaloVec::from_iter_in(elements, tree.arena()),
         }
     }
 
@@ -1496,7 +1497,7 @@ impl<'a> RestPattern<'a> {
 #[derive(Debug)]
 pub struct StructPattern<'a> {
     name: &'a Identifier<'a>,
-    fields: collections::Vec<'a, &'a ValueFieldPattern<'a>>,
+    fields: BumpaloVec<'a, &'a ValueFieldPattern<'a>>,
 }
 
 impl<'a> StructPattern<'a> {
@@ -1507,7 +1508,7 @@ impl<'a> StructPattern<'a> {
     ) -> Self {
         Self {
             name,
-            fields: collections::Vec::from_iter_in(fields, tree.arena()),
+            fields: BumpaloVec::from_iter_in(fields, tree.arena()),
         }
     }
 
