@@ -5,8 +5,10 @@
 //! Program             := TopLevel*
 //! TopLevel            := Statement | FunctionDeclaration | StructDeclaration
 //! FunctionDeclaration := "export"? "fun" Id "(" (Parameter ",")* Parameter? ")" Block "end"
-//! Id                   := <Identifier>
-//! Block                := Statement*
+//! Parameter           := Id
+//! StructDeclaration   := "export"? "struct" Id "{" (TypeField ",")* TypeField? "}"
+//! TypeField           := Id ":" TypeAnnotation
+//! Block               := Statement*
 //! Statement           := VariableDeclaration | Expression
 //! VariableDeclaration := "let" Pattern "=" Expression
 //! Expression          := IntegerLiteral | StringLiteral | StructLiteral | VariableExpression
@@ -14,10 +16,12 @@
 //!                      | ArrayExpression | MemberExpression | IfExpression | CaseExpression
 //!                      | ExpressionGroup
 //! ExpressionGroup.    := "(" Expression ")"
+//! TypeAnnotation      := <Int32>
+//! Id                  := <Identifier>
 //! IntegerLiteral      := <Integer>
 //! StringLiteral       := <String>
 //! VariableExpression  := Id
-//! StructLiteral       := Id "{" ValueField* "}"
+//! StructLiteral       := Id "{" (ValueField ",")* ValueField? "}"
 //! ValueField          := Id (":" Expression)?
 //! BinaryExpression    := Expression ("+" | "-" | "*" | "/"| "%") Expression
 //! UnaryExpression     := ("!" | "-") Expression
@@ -33,7 +37,7 @@
 //! IntegerPattern      := <Integer>
 //! StringPattern       := <String>
 //! VariablePattern     := Id
-//! StructPattern       := Id "{" ValueFieldPattern* "}"
+//! StructPattern       := Id "{" (ValueFieldPattern ",")* ValueFieldPattern? "}"
 //! ValueFieldPattern   := Id (":" Pattern)?
 //! ArrayPattern        := "[" (Pattern ",")* Pattern? "]"
 //! RestPattern.        := "..." Id?
