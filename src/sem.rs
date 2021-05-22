@@ -263,7 +263,7 @@ impl Environment {
         }
     }
 
-    pub fn bindings(&self) -> hash_map::Values<String, Rc<RefCell<Binding>>> {
+    pub fn bindings(&self) -> hash_map::Values<'_, String, Rc<RefCell<Binding>>> {
         self.bindings.values()
     }
 }

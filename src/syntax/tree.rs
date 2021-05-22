@@ -16,8 +16,8 @@
 //!                      | ArrayExpression | MemberExpression | IfExpression | CaseExpression
 //!                      | ExpressionGroup
 //! ExpressionGroup.    := "(" Expression ")"
-//! TypeAnnotation      := <Int32>
 //! Id                  := <Identifier>
+//! TypeAnnotation      := <Int32>
 //! IntegerLiteral      := <Integer>
 //! StringLiteral       := <String>
 //! VariableExpression  := Id

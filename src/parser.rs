@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 const DEBUG: bool = false;
 
-fn debug_trace(name: &str, tokenizer: &Tokenizer) {
+fn debug_trace(name: &str, tokenizer: &Tokenizer<'_>) {
     if DEBUG {
         eprintln!("[{}] position: {}", name, tokenizer.current_position());
     }
@@ -245,7 +245,7 @@ impl Parser {
         Self::default()
     }
 
-    pub fn parse(&self, tokenizer: &mut Tokenizer) -> Result<Box<Module>, ParseError> {
+    pub fn parse(&self, tokenizer: &mut Tokenizer<'_>) -> Result<Box<Module>, ParseError> {
         let mut context = ParserContext {
             naming: PrefixNaming::new("?"),
         };
@@ -320,7 +320,7 @@ impl Parser {
 
     fn parse_struct_definition(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<StructDefinition>, ParseError> {
         debug_trace("parse_struct_definition", tokenizer);
@@ -345,7 +345,7 @@ impl Parser {
 
     fn parse_type_field(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<TypeField>, ParseError> {
         debug_trace("parse_type_field", tokenizer);
@@ -372,7 +372,7 @@ impl Parser {
 
     fn parse_value_field(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<ValueField>, ParseError> {
         debug_trace("parse_value_field", tokenizer);
@@ -400,7 +400,7 @@ impl Parser {
 
     fn parse_type_annotation(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         _context: &mut ParserContext,
     ) -> Option<TypeAnnotation> {
         debug_trace("parse_type_annotation", tokenizer);
@@ -418,7 +418,7 @@ impl Parser {
 
     fn parse_function(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<Function>, ParseError> {
         debug_trace("parse_function", tokenizer);
@@ -500,7 +500,7 @@ impl Parser {
     /// Returns `Stmt` if the result of `parse_stmt_expr()` is a variable binding.
     fn parse_stmt(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
         debug_trace("parse_stmt", tokenizer);
@@ -522,7 +522,7 @@ impl Parser {
     /// Variable binding or `Expr`
     fn parse_stmt_expr(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
         debug_trace("parse_stmt_expr", tokenizer);
@@ -553,7 +553,7 @@ impl Parser {
 
     fn parse_expr(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
         self.parse_rel_op1(tokenizer, context)
@@ -562,7 +562,7 @@ impl Parser {
     // "==", "!="
     fn parse_rel_op1(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
         debug_trace("parse_rel_op1", tokenizer);
@@ -595,7 +595,7 @@ impl Parser {
     // ">", "<", ">=", "<="
     fn parse_rel_op2(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
         debug_trace("parse_rel_op2", tokenizer);
@@ -629,7 +629,7 @@ impl Parser {
 
     fn parse_binary_op1(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
         debug_trace("parse_binary_op1", tokenizer);
@@ -668,7 +668,7 @@ impl Parser {
 
     fn parse_binary_op2(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
         debug_trace("parse_binary_op2", tokenizer);
@@ -700,7 +700,7 @@ impl Parser {
 
     fn parse_unary_op(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
         debug_trace("parse_unary_op", tokenizer);
@@ -729,7 +729,7 @@ impl Parser {
     // `x[...]`, `x(...)`, `x.y`
     fn parse_access(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
         debug_trace("parse_access", tokenizer);
@@ -797,7 +797,7 @@ impl Parser {
 
     fn parse_primary(
         &self,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<Option<Node>, ParseError> {
         debug_trace("parse_primary", tokenizer);
@@ -1076,7 +1076,7 @@ impl Parser {
     fn expect_stmt_push(
         &self,
         stmts: &mut Vec<Option<Node>>,
-        tokenizer: &mut Tokenizer,
+        tokenizer: &mut Tokenizer<'_>,
         context: &mut ParserContext,
     ) -> Result<(), ParseError> {
         if !tokenizer.is_newline_seen() {
@@ -1096,7 +1096,7 @@ impl Parser {
 }
 
 fn parse_pattern(
-    tokenizer: &mut Tokenizer,
+    tokenizer: &mut Tokenizer<'_>,
     context: &mut ParserContext,
 ) -> Result<Option<Pattern>, ParseError> {
     debug_trace("parse_pattern", tokenizer);
@@ -1115,7 +1115,7 @@ fn parse_pattern(
 }
 
 fn parse_pattern_element(
-    tokenizer: &mut Tokenizer,
+    tokenizer: &mut Tokenizer<'_>,
     context: &mut ParserContext,
 ) -> Result<Option<Pattern>, ParseError> {
     debug_trace("parse_pattern_element", tokenizer);
@@ -1198,7 +1198,7 @@ fn parse_pattern_element(
 
 fn parse_struct_pattern(
     name: Option<String>,
-    tokenizer: &mut Tokenizer,
+    tokenizer: &mut Tokenizer<'_>,
     context: &mut ParserContext,
 ) -> Result<Pattern, ParseError> {
     debug_trace("parse_struct_pattern", tokenizer);
@@ -1219,7 +1219,7 @@ fn parse_struct_pattern(
 }
 
 fn parse_struct_pattern_field(
-    tokenizer: &mut Tokenizer,
+    tokenizer: &mut Tokenizer<'_>,
     context: &mut ParserContext,
 ) -> Result<Option<PatternField>, ParseError> {
     debug_trace("parse_struct_pattern_field", tokenizer);
@@ -1243,13 +1243,13 @@ fn parse_struct_pattern_field(
 }
 
 fn parse_elements<F, T>(
-    tokenizer: &mut Tokenizer,
+    tokenizer: &mut Tokenizer<'_>,
     context: &mut ParserContext,
     stop_char: char,
     parser: &mut F,
 ) -> Result<Vec<T>, ParseError>
 where
-    F: Fn(&mut Tokenizer, &mut ParserContext) -> Result<T, ParseError>,
+    F: Fn(&mut Tokenizer<'_>, &mut ParserContext) -> Result<T, ParseError>,
 {
     debug_trace("parse_elements", tokenizer);
 
@@ -1285,7 +1285,7 @@ fn build_variable_pattern(name: String, context: &mut ParserContext) -> Pattern 
     Pattern::Variable(name, binding)
 }
 
-fn match_token(tokenizer: &mut Tokenizer, expected: TokenKind) -> Option<Token> {
+fn match_token(tokenizer: &mut Tokenizer<'_>, expected: TokenKind) -> Option<Token> {
     if *tokenizer.peek_kind() == expected {
         Some(tokenizer.next_token())
     } else {
@@ -1293,22 +1293,25 @@ fn match_token(tokenizer: &mut Tokenizer, expected: TokenKind) -> Option<Token> 
     }
 }
 
-fn match_identifier(tokenizer: &mut Tokenizer, node_kind: &str) -> Option<String> {
+fn match_identifier(tokenizer: &mut Tokenizer<'_>, node_kind: &str) -> Option<String> {
     match tokenizer.peek_kind() {
         TokenKind::Identifier(_) => Some(expect_identifier(tokenizer, node_kind).unwrap()),
         _ => None,
     }
 }
 
-fn match_char(tokenizer: &mut Tokenizer, expected: char) -> Option<Token> {
+fn match_char(tokenizer: &mut Tokenizer<'_>, expected: char) -> Option<Token> {
     match_token(tokenizer, TokenKind::Char(expected))
 }
 
-fn expect_char(tokenizer: &mut Tokenizer, expected: char) -> Result<Token, ParseError> {
+fn expect_char(tokenizer: &mut Tokenizer<'_>, expected: char) -> Result<Token, ParseError> {
     expect_token_with(tokenizer, TokenKind::Char(expected))
 }
 
-fn expect_token_with(tokenizer: &mut Tokenizer, expected: TokenKind) -> Result<Token, ParseError> {
+fn expect_token_with(
+    tokenizer: &mut Tokenizer<'_>,
+    expected: TokenKind,
+) -> Result<Token, ParseError> {
     let token = tokenizer.next_token();
 
     match token {
@@ -1317,7 +1320,7 @@ fn expect_token_with(tokenizer: &mut Tokenizer, expected: TokenKind) -> Result<T
     }
 }
 
-fn expect_identifier(tokenizer: &mut Tokenizer, node_kind: &str) -> Result<String, ParseError> {
+fn expect_identifier(tokenizer: &mut Tokenizer<'_>, node_kind: &str) -> Result<String, ParseError> {
     let token = tokenizer.next_token();
 
     if let TokenKind::Identifier(name) = token.kind {
@@ -1327,7 +1330,7 @@ fn expect_identifier(tokenizer: &mut Tokenizer, node_kind: &str) -> Result<Strin
     }
 }
 
-fn expect_string(tokenizer: &mut Tokenizer, node_kind: &str) -> Result<String, ParseError> {
+fn expect_string(tokenizer: &mut Tokenizer<'_>, node_kind: &str) -> Result<String, ParseError> {
     let token = tokenizer.next_token();
 
     if let TokenKind::StringStart = token.kind {
