@@ -194,7 +194,7 @@ impl<'a> TopLevelDeclarationBinder<'a> {
     }
 
     fn register_declaration(&mut self, node: &NodeKind<'a>) {
-        if let Some(declarations) = self.declarations {
+        if let Some(ref declarations) = self.declarations {
             declarations.borrow_mut().register_declaration(node);
         }
     }

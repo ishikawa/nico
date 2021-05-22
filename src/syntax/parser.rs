@@ -29,7 +29,7 @@ impl<'a> Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse_string<S: AsRef<str> + 'a>(tree: &'a Ast, src: S) -> &'a Program<'a> {
+    pub fn parse_string<S: AsRef<str> + ?Sized>(tree: &'a Ast, src: &'a S) -> &'a Program<'a> {
         let tokenizer = Tokenizer::from_string(src);
         let mut parser = Parser::new(tree, tokenizer, "-");
 
@@ -1418,12 +1418,16 @@ mod tests {
         let stmt = parse_statement(&tree, "-+1");
         let expr = stmt.expression().unwrap().unary_expression().unwrap();
 
-        assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
-            let operand = operand.unary_expression().unwrap();
+        assert_matches!(expr, UnaryExpression { .. } => {
+            assert_eq!(expr.operator(), UnaryOperator::Minus);
 
-            assert_matches!(operand, UnaryExpression { operator: UnaryOperator::Plus, operand: Some(operand) } => {
+            let operand = expr.operand().unwrap().unary_expression().unwrap();
+
+            assert_matches!(operand, UnaryExpression { .. } => {
+                assert_eq!(operand.operator(), UnaryOperator::Plus);
+
                 assert_matches!(
-                    operand.kind(),
+                    expr.operand().unwrap().kind(),
                     ExpressionKind::IntegerLiteral(n) => {
                         assert_eq!(*n, IntegerLiteral::new(1));
                     }
@@ -1643,7 +1647,10 @@ mod tests {
         );
         let expr = stmt.expression().unwrap().if_expression().unwrap();
 
-        assert_matches!(expr, IfExpression { ref condition, ref else_body, .. } => {
+        assert_matches!(expr, IfExpression { .. } => {
+            let condition = expr.condition();
+            let else_body = expr.else_body();
+
             let condition = condition.as_ref().unwrap();
 
             assert_matches!(condition.kind(), ExpressionKind::BinaryExpression(..));
@@ -1657,7 +1664,11 @@ mod tests {
         let stmt = parse_statement(&tree, "if\nend");
         let expr = stmt.expression().unwrap().if_expression().unwrap();
 
-        assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
+        assert_matches!(expr, IfExpression { .. } => {
+            let condition = expr.condition();
+            let then_body = expr.then_body();
+            let else_body = expr.else_body();
+
             assert!(condition.is_none());
             assert!(else_body.is_none());
 
@@ -1730,7 +1741,11 @@ mod tests {
         );
         let expr = stmt.expression().unwrap().case_expression().unwrap();
 
-        assert_matches!(expr, CaseExpression { head, arms, else_body } => {
+        assert_matches!(expr, CaseExpression { .. } => {
+            let head = expr.head();
+            let arms: Vec<_> = expr.arms().collect();
+            let else_body = expr.else_body();
+
             assert!(head.is_some());
             assert!(!arms.is_empty());
 
@@ -1772,11 +1787,11 @@ mod tests {
         module.body().next().unwrap().statement().unwrap()
     }
 
-    fn next_node<'a>(tokens: &'a mut slice::Iter<'_, CodeKind<'a>>) -> &'a NodeKind<'a> {
+    fn next_node<'a, 'b>(tokens: &'a mut slice::Iter<'_, CodeKind<'b>>) -> &'a NodeKind<'b> {
         unwrap_node(tokens.next().unwrap())
     }
 
-    fn next_interpreted_token<'a>(tokens: &'a mut slice::Iter<'_, CodeKind<'a>>) -> &'a Token {
+    fn next_interpreted_token<'a>(tokens: &'a mut slice::Iter<'_, CodeKind<'_>>) -> &'a Token {
         unwrap_interpreted_token(tokens.next().unwrap())
     }
 
@@ -1787,12 +1802,12 @@ mod tests {
     }
 
     fn next_skipped_token<'a>(
-        tokens: &'a mut slice::Iter<'_, CodeKind<'a>>,
+        tokens: &'a mut slice::Iter<'_, CodeKind<'_>>,
     ) -> (&'a Token, MissingTokenKind) {
         unwrap_skipped_token(tokens.next().unwrap())
     }
 
-    fn unwrap_node<'a>(kind: &'a CodeKind<'a>) -> &'a NodeKind<'a> {
+    fn unwrap_node<'a, 'b>(kind: &'a CodeKind<'b>) -> &'a NodeKind<'b> {
         if let CodeKind::Node(node) = kind {
             return node;
         }
@@ -1800,7 +1815,7 @@ mod tests {
         panic!("expected child node");
     }
 
-    fn unwrap_interpreted_token<'a>(kind: &'a CodeKind<'a>) -> &'a Token {
+    fn unwrap_interpreted_token<'a>(kind: &'a CodeKind<'_>) -> &'a Token {
         if let CodeKind::SyntaxToken(token) = kind {
             if let SyntaxToken::Interpreted(token) = token {
                 return token;
@@ -1820,7 +1835,7 @@ mod tests {
         panic!("expected missing token");
     }
 
-    fn unwrap_skipped_token<'a>(kind: &'a CodeKind<'a>) -> (&'a Token, MissingTokenKind) {
+    fn unwrap_skipped_token<'a>(kind: &'a CodeKind<'_>) -> (&'a Token, MissingTokenKind) {
         if let CodeKind::SyntaxToken(token) = kind {
             if let SyntaxToken::Skipped { token, expected } = token {
                 return (token, *expected);

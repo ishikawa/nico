@@ -103,7 +103,7 @@ pub enum NodeKind<'a> {
 }
 
 impl<'a> NodeKind<'a> {
-    pub fn program(&self) -> Option<&Program<'a>> {
+    pub fn program(&self) -> Option<&'a Program<'a>> {
         if let NodeKind::Program(program) = self {
             Some(program)
         } else {
@@ -1615,13 +1615,15 @@ impl<'a> ValueFieldPattern<'a> {
             }
         } else {
             let kind = PatternKind::VariablePattern(name);
-            let code = Code::with_node(tree, NodeKind::Identifier(name));
-            let omitted_value = tree.alloc(Pattern::new(kind, code));
+            let omitted_value = tree.alloc(Pattern::new(
+                kind,
+                Code::with_node(tree, NodeKind::Identifier(name)),
+            ));
 
             Self {
                 name,
                 value,
-                omitted_value: None,
+                omitted_value: Some(omitted_value),
                 code,
             }
         }
