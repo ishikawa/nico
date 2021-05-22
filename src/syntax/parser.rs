@@ -291,9 +291,9 @@ impl<'a> Parser<'a> {
                 );
             }
 
-            ValueFieldPattern::new(name, value, code)
+            ValueFieldPattern::new(tree, name, value, code)
         } else {
-            ValueFieldPattern::new(name, None, code)
+            ValueFieldPattern::new(tree, name, None, code)
         };
 
         Some(tree.alloc(field))

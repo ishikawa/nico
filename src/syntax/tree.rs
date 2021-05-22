@@ -534,8 +534,8 @@ impl CodeKind<'_> {
 #[derive(Debug)]
 pub struct Program<'a> {
     body: BumpaloVec<'a, TopLevelKind<'a>>,
-    declarations: Rc<RefCell<Scope>>,
-    main_scope: Rc<RefCell<Scope>>,
+    declarations: Rc<RefCell<Scope<'a>>>,
+    main_scope: Rc<RefCell<Scope<'a>>>,
     code: Code<'a>,
 }
 
@@ -560,11 +560,11 @@ impl<'a> Program<'a> {
         self.body.iter()
     }
 
-    pub fn declarations_scope(&self) -> &Rc<RefCell<Scope>> {
+    pub fn declarations_scope(&self) -> &Rc<RefCell<Scope<'a>>> {
         &self.declarations
     }
 
-    pub fn main_scope(&self) -> &Rc<RefCell<Scope>> {
+    pub fn main_scope(&self) -> &Rc<RefCell<Scope<'a>>> {
         &self.main_scope
     }
 }
@@ -934,7 +934,7 @@ impl fmt::Display for Statement<'_> {
 #[derive(Debug)]
 pub struct Block<'a> {
     statements: BumpaloVec<'a, &'a Statement<'a>>,
-    scope: Rc<RefCell<Scope>>,
+    scope: Rc<RefCell<Scope<'a>>>,
     code: Code<'a>,
 }
 
@@ -951,7 +951,7 @@ impl<'a> Block<'a> {
         }
     }
 
-    pub fn scope(&self) -> &Rc<RefCell<Scope>> {
+    pub fn scope(&self) -> &Rc<RefCell<Scope<'a>>> {
         &self.scope
     }
 
@@ -1148,7 +1148,7 @@ impl<'a> ValueField<'a> {
         Self { name, value, code }
     }
 
-    pub fn name(&self) -> &Identifier<'_> {
+    pub fn name(&self) -> &'a Identifier<'a> {
         self.name
     }
 
@@ -1406,7 +1406,7 @@ pub struct CaseArm<'a> {
     // `CaseArm` is the only syntactic element other than Program and Block that introduces
     // a new scope. This scope is necessary to use the variables introduced in each arm in
     // the guard clause.
-    scope: Rc<RefCell<Scope>>,
+    scope: Rc<RefCell<Scope<'a>>>,
     code: Code<'a>,
 }
 
@@ -1426,7 +1426,7 @@ impl<'a> CaseArm<'a> {
         }
     }
 
-    pub fn scope(&self) -> &Rc<RefCell<Scope>> {
+    pub fn scope(&self) -> &Rc<RefCell<Scope<'a>>> {
         &self.scope
     }
 
@@ -1518,13 +1518,6 @@ impl<'a> Pattern<'a> {
     pub fn kind(&self) -> &PatternKind<'a> {
         &self.kind
     }
-
-    pub fn variable_pattern(tree: &'a Ast, identifier: &'a Identifier<'a>) -> Self {
-        Self {
-            kind: PatternKind::VariablePattern(identifier),
-            code: Code::with_node(tree, NodeKind::Identifier(identifier)),
-        }
-    }
 }
 
 impl<'a> Node<'a> for Pattern<'a> {
@@ -1602,12 +1595,36 @@ impl<'a> StructPattern<'a> {
 pub struct ValueFieldPattern<'a> {
     name: &'a Identifier<'a>,
     value: Option<&'a Pattern<'a>>,
+    omitted_value: Option<&'a Pattern<'a>>,
     code: Code<'a>,
 }
 
 impl<'a> ValueFieldPattern<'a> {
-    pub fn new(name: &'a Identifier<'a>, value: Option<&'a Pattern<'a>>, code: Code<'a>) -> Self {
-        Self { name, value, code }
+    pub fn new(
+        tree: &'a Ast,
+        name: &'a Identifier<'a>,
+        value: Option<&'a Pattern<'a>>,
+        code: Code<'a>,
+    ) -> Self {
+        if value.is_some() {
+            Self {
+                name,
+                value,
+                omitted_value: None,
+                code,
+            }
+        } else {
+            let kind = PatternKind::VariablePattern(name);
+            let code = Code::with_node(tree, NodeKind::Identifier(name));
+            let omitted_value = tree.alloc(Pattern::new(kind, code));
+
+            Self {
+                name,
+                value,
+                omitted_value: None,
+                code,
+            }
+        }
     }
 
     pub fn name(&self) -> &'a Identifier<'a> {
@@ -1616,6 +1633,10 @@ impl<'a> ValueFieldPattern<'a> {
 
     pub fn value(&self) -> Option<&'a Pattern<'a>> {
         self.value.clone()
+    }
+
+    pub fn omitted_value(&self) -> Option<&'a Pattern<'a>> {
+        self.omitted_value.clone()
     }
 }
 

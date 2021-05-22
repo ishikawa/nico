@@ -12,9 +12,9 @@ pub struct NodePath<'a> {
     skipped: bool,
     stopped: bool,
     node: NodeKind<'a>,
-    scope: Weak<RefCell<Scope>>,
-    main_scope: Weak<RefCell<Scope>>,
-    declarations: Weak<RefCell<Scope>>,
+    scope: Weak<RefCell<Scope<'a>>>,
+    main_scope: Weak<RefCell<Scope<'a>>>,
+    declarations: Weak<RefCell<Scope<'a>>>,
     parent: Option<Rc<RefCell<NodePath<'a>>>>,
 }
 
@@ -73,7 +73,7 @@ impl<'a> NodePath<'a> {
             .unwrap_or_else(|| panic!("parent must exist."))
     }
 
-    pub fn scope(&self) -> Rc<RefCell<Scope>> {
+    pub fn scope(&self) -> Rc<RefCell<Scope<'a>>> {
         self.scope
             .upgrade()
             .unwrap_or_else(|| panic!("scope must live."))
