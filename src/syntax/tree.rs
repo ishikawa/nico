@@ -44,16 +44,16 @@
 //! ```
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::{sem, util::wrap};
-use bumpalo;
 use bumpalo::collections::String as BumpaloString;
 use bumpalo::collections::Vec as BumpaloVec;
+use bumpalo::Bump as BumpaloArena;
 use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
 
 #[derive(Debug, Default)]
 pub struct Ast {
-    arena: bumpalo::Bump,
+    arena: BumpaloArena,
 }
 
 impl Ast {

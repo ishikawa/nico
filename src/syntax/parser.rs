@@ -7,15 +7,15 @@ use bumpalo::collections::String as BumpaloString;
 const DEBUG: bool = false;
 
 #[derive(Debug)]
-pub struct Parser<'a> {
+pub struct Parser<'a, 't> {
     /// The filename, uri of a source code.
     source_name: BumpaloString<'a>,
-    tokenizer: Tokenizer<'a>,
+    tokenizer: Tokenizer<'t>,
     naming: PrefixNaming,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new<S: AsRef<str>>(tree: &'a Ast, tokenizer: Tokenizer<'a>, source_name: S) -> Self {
+impl<'a, 't> Parser<'a, 't> {
+    pub fn new<S: AsRef<str>>(tree: &'a Ast, tokenizer: Tokenizer<'t>, source_name: S) -> Self {
         Self {
             tokenizer,
             source_name: BumpaloString::from_str_in(source_name.as_ref(), tree.arena()),
@@ -26,10 +26,8 @@ impl<'a> Parser<'a> {
     pub fn source_name(&self) -> &str {
         self.source_name.as_str()
     }
-}
 
-impl<'a> Parser<'a> {
-    pub fn parse_string<S: AsRef<str> + ?Sized>(tree: &'a Ast, src: &'a S) -> &'a Program<'a> {
+    pub fn parse_string<S: AsRef<str> + ?Sized>(tree: &'a Ast, src: &S) -> &'a Program<'a> {
         let tokenizer = Tokenizer::from_string(src);
         let mut parser = Parser::new(tree, tokenizer, "-");
 
@@ -992,7 +990,7 @@ impl<'a> Parser<'a> {
         &mut self,
         tree: &'a Ast,
         code: &mut Code<'a>,
-        node_parser: fn(&mut Parser<'a>, &'a Ast) -> Option<&'a T>,
+        node_parser: fn(&mut Parser<'a, 't>, &'a Ast) -> Option<&'a T>,
         kind_builder: fn(&'a T) -> NodeKind<'a>,
         missing_token: MissingTokenKind,
     ) -> Option<&'a T> {
@@ -1015,7 +1013,7 @@ impl<'a> Parser<'a> {
         open_char: char,
         close_char: char,
         code: &mut Code<'a>,
-        element_parser: fn(&mut Parser<'a>, &'a Ast) -> Option<&'a T>,
+        element_parser: fn(&mut Parser<'a, 't>, &'a Ast) -> Option<&'a T>,
         kind_builder: fn(&'a T) -> NodeKind<'a>,
     ) -> Vec<&'a T> {
         let mut arguments = vec![];
@@ -1124,7 +1122,7 @@ impl<'a> Parser<'a> {
     fn _parse_binary_op(
         &mut self,
         tree: &'a Ast,
-        next_parser: fn(&mut Parser<'a>, &'a Ast) -> Option<&'a Expression<'a>>,
+        next_parser: fn(&mut Parser<'a, 't>, &'a Ast) -> Option<&'a Expression<'a>>,
         operators: &[(TokenKind, BinaryOperator)],
     ) -> Option<&'a Expression<'a>> {
         let mut lhs = next_parser(self, tree)?;
@@ -1427,7 +1425,7 @@ mod tests {
                 assert_eq!(operand.operator(), UnaryOperator::Plus);
 
                 assert_matches!(
-                    expr.operand().unwrap().kind(),
+                    operand.operand().unwrap().kind(),
                     ExpressionKind::IntegerLiteral(n) => {
                         assert_eq!(*n, IntegerLiteral::new(1));
                     }
@@ -1717,7 +1715,6 @@ mod tests {
         assert_matches!(token.kind, TokenKind::End);
     }
 
-    // If expression
     #[test]
     fn case_expression() {
         let tree = Ast::new();
@@ -1783,7 +1780,7 @@ mod tests {
     fn parse_statement<'a>(tree: &'a Ast, src: &'a str) -> &'a Statement<'a> {
         let module = Parser::parse_string(tree, src);
 
-        assert_eq!(!module.body().len(), 0);
+        assert_ne!(module.body().len(), 0);
         module.body().next().unwrap().statement().unwrap()
     }
 

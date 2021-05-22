@@ -11,7 +11,6 @@ use nico::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::rc::Rc;
 use std::{
@@ -210,8 +209,13 @@ impl DiagnosticsCollector {
     }
 }
 
-impl syntax::Visitor for DiagnosticsCollector {
-    fn enter_variable(&mut self, path: &mut NodePath, expr: &Rc<Expression>, id: &Rc<Identifier>) {
+impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
+    fn enter_variable(
+        &mut self,
+        path: &mut NodePath,
+        expr: &'a Expression<'a>,
+        id: &'a Identifier<'a>,
+    ) {
         // Undefined variable
         if path.scope().borrow().get_binding(id.as_str()).is_none() {
             self.add_diagnostic(expr.range(), format!("Cannot find name '{}'.", id));
@@ -221,7 +225,7 @@ impl syntax::Visitor for DiagnosticsCollector {
     fn enter_struct_literal(
         &mut self,
         path: &mut NodePath,
-        _expr: &Rc<Expression>,
+        _expr: &'a Expression<'a>,
         value: &StructLiteral,
     ) {
         // Expected struct for name
@@ -456,7 +460,7 @@ impl SemanticTokenizer {
     }
 }
 
-impl syntax::Visitor for SemanticTokenizer {
+impl<'a> syntax::Visitor<'a> for SemanticTokenizer {
     fn enter_line_comment(
         &mut self,
         _path: &mut NodePath,
@@ -485,14 +489,6 @@ impl syntax::Visitor for SemanticTokenizer {
     ) {
         self.add_token_generic(path, token);
     }
-}
-
-#[derive(Debug, Default)]
-struct Connection {
-    documents: HashMap<Url, Rc<RefCell<Document>>>,
-    compiled_results: HashMap<Url, Rc<syntax::Program>>,
-    diagnostics: HashMap<Url, Vec<Diagnostic>>,
-    server_options: Option<ServerRegistrationOptions>,
 }
 
 /// These options are initialized in `on_initialize()` callback.
@@ -526,15 +522,21 @@ impl ServerRegistrationOptions {
 }
 
 #[derive(Debug)]
-struct Document {
-    uri: Url,
-    text: String,
+struct Connection<'a> {
+    tree: &'a syntax::Ast,
+    documents: HashMap<Url, Document<'a>>,
+    diagnostics: HashMap<Url, Vec<Diagnostic>>,
+    server_options: Option<ServerRegistrationOptions>,
 }
 
-#[allow(clippy::unnecessary_wraps)]
-impl Connection {
-    pub fn new() -> Self {
-        Self::default()
+impl<'a> Connection<'a> {
+    pub fn new(tree: &'a syntax::Ast) -> Self {
+        Self {
+            tree,
+            documents: HashMap::new(),
+            diagnostics: HashMap::new(),
+            server_options: None,
+        }
     }
 
     pub fn send_response<V: Serialize>(&self, id: &Id, value: V) -> Result<(), HandlerError> {
@@ -596,14 +598,28 @@ impl Connection {
         })
     }
 
-    fn get_document(&self, uri: &Url) -> Result<&Rc<RefCell<Document>>, HandlerError> {
+    fn _get_documents(
+        &self,
+        uri: &Url,
+        d: &'a mut HashMap<Url, Document<'a>>,
+    ) -> Option<&'a Document<'a>> {
+        d.get(uri)
+    }
+
+    fn get_document(&self, uri: &Url) -> Result<&Document<'a>, HandlerError> {
         self.documents.get(uri).ok_or_else(|| HandlerError {
             kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
         })
     }
 
-    fn get_compiled_result(&self, uri: &Url) -> Result<&Rc<syntax::Program>, HandlerError> {
-        self.compiled_results.get(uri).ok_or_else(|| HandlerError {
+    fn get_document_mut(&mut self, uri: &Url) -> Result<&mut Document<'a>, HandlerError> {
+        self.documents.get_mut(uri).ok_or_else(|| HandlerError {
+            kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
+        })
+    }
+
+    fn get_compiled_result(&self, uri: &Url) -> Result<&'a syntax::Program<'a>, HandlerError> {
+        self.get_document(uri)?.node.ok_or_else(|| HandlerError {
             kind: HandlerErrorKind::DocumentNotFound(uri.clone()),
         })
     }
@@ -614,15 +630,17 @@ impl Connection {
         })
     }
 
-    fn compile(&mut self, uri: &Url) -> Result<Rc<syntax::Program>, HandlerError> {
+    fn compile(&mut self, uri: &Url) -> Result<&'a syntax::Program<'a>, HandlerError> {
         let doc = self.get_document(uri)?;
-        let node = Parser::parse_string(&doc.borrow().text);
+        let node = Parser::parse_string(self.tree, &doc.text);
+
+        let doc = self.get_document_mut(uri)?;
+        doc.node = Some(node);
 
         // Diagnostics
         let mut diagnostics = DiagnosticsCollector::new();
         syntax::traverse(&mut diagnostics, &node);
 
-        self.compiled_results.insert(uri.clone(), Rc::clone(&node));
         self.diagnostics
             .insert(uri.clone(), diagnostics.diagnostics);
 
@@ -789,15 +807,13 @@ impl Connection {
     ) -> Result<(), HandlerError> {
         info!("[on_text_document_did_open] {:?}", params);
 
+        let uri = params.text_document.uri.clone();
         let doc = Document::from(&params.text_document);
-        let doc = Rc::new(RefCell::new(doc));
 
-        self.documents
-            .insert(doc.borrow().uri.clone(), Rc::clone(&doc));
+        self.documents.insert(doc.uri.clone(), doc);
 
-        self.compile(&doc.borrow().uri)?;
-        self.publish_diagnostics(&doc.borrow().uri)?;
-
+        self.compile(&uri)?;
+        self.publish_diagnostics(&uri)?;
         Ok(())
     }
 
@@ -807,11 +823,9 @@ impl Connection {
     ) -> Result<(), HandlerError> {
         info!("[on_text_document_did_change] {:?}", params);
         {
-            let doc = self.get_document(&params.text_document.uri)?;
+            let doc = self.get_document_mut(&params.text_document.uri)?;
 
             for change in &params.content_changes {
-                let mut doc = doc.borrow_mut();
-
                 if let Some(range) = &change.range {
                     doc.replace_range(range, &change.text);
                 }
@@ -825,16 +839,24 @@ impl Connection {
     }
 }
 
-impl From<&TextDocumentItem> for Document {
+#[derive(Debug)]
+struct Document<'a> {
+    uri: Url,
+    text: String,
+    node: Option<&'a syntax::Program<'a>>,
+}
+
+impl From<&TextDocumentItem> for Document<'_> {
     fn from(item: &TextDocumentItem) -> Self {
         Self {
             uri: item.uri.clone(),
             text: item.text.clone(),
+            node: None,
         }
     }
 }
 
-impl Document {
+impl Document<'_> {
     fn replace_range(&mut self, range: &lsp_types::Range, replace_with: &str) {
         // Since the Range passed in LSP is the editor's row and column,
         // we need to calculate the string range from there.
@@ -881,7 +903,7 @@ impl Document {
 
 // --- Event Loop
 
-fn event_loop_main(conn: &mut Connection) -> Result<(), HandlerError> {
+fn event_loop_main(conn: &mut Connection<'_>) -> Result<(), HandlerError> {
     let mut content_length: Option<usize> = None;
 
     // Header Part
@@ -998,7 +1020,8 @@ fn main() {
     env_logger::init();
     info!("Launching language server...");
 
-    let mut connection = Connection::new();
+    let tree = syntax::Ast::new();
+    let mut connection = Connection::new(&tree);
 
     loop {
         if let Err(err) = event_loop_main(&mut connection) {
