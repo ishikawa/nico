@@ -13,7 +13,7 @@ pub struct Hover {
     result: Option<(String, EffectiveRange)>,
 }
 
-impl Hover {
+impl<'a> Hover {
     pub fn new(position: Position) -> Self {
         Self {
             position,
@@ -21,7 +21,7 @@ impl Hover {
         }
     }
 
-    pub fn describe(&mut self, program: &Rc<Program>) -> Option<(&str, EffectiveRange)> {
+    pub fn describe(&mut self, program: &'a Program<'a>) -> Option<(&str, EffectiveRange)> {
         syntax::traverse(self, program);
         self.result.as_ref().map(|(s, r)| (s.as_str(), *r))
     }
@@ -42,8 +42,8 @@ impl Hover {
 
     fn describe_value_field(
         &self,
-        definition: &Rc<StructDefinition>,
-        field: &Rc<ValueField>,
+        definition: &'a StructDefinition<'a>,
+        field: &'a ValueField<'a>,
     ) -> String {
         let ty = definition.get_field_type(field.name().as_str());
 
@@ -56,18 +56,22 @@ impl Hover {
     }
 }
 
-impl syntax::Visitor for Hover {
-    fn enter_type_annotation(&mut self, path: &mut NodePath, annotation: &Rc<TypeAnnotation>) {
+impl<'a> syntax::Visitor<'a> for Hover {
+    fn enter_type_annotation(
+        &mut self,
+        path: &mut NodePath<'a>,
+        annotation: &'a TypeAnnotation<'a>,
+    ) {
         if !annotation.range().contains(self.position) {
             return;
         }
 
         self.result
-            .replace((self.describe_type(&annotation.r#type), annotation.range()));
+            .replace((self.describe_type(&annotation.r#type()), annotation.range()));
         path.stop();
     }
 
-    fn enter_value_field(&mut self, path: &mut NodePath, field: &Rc<ValueField>) {
+    fn enter_value_field(&mut self, path: &mut NodePath<'a>, field: &'a ValueField<'a>) {
         if !field.name().range().contains(self.position) {
             return;
         }
