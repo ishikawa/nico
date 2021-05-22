@@ -8,18 +8,18 @@ use crate::{syntax::tree::*, util::wrap};
 
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Trivia, TriviaKind};
 
-pub struct NodePath {
+pub struct NodePath<'a> {
     skipped: bool,
     stopped: bool,
-    node: NodeKind,
+    node: NodeKind<'a>,
     scope: Weak<RefCell<Scope>>,
     main_scope: Weak<RefCell<Scope>>,
     declarations: Weak<RefCell<Scope>>,
-    parent: Option<Rc<RefCell<NodePath>>>,
+    parent: Option<Rc<RefCell<NodePath<'a>>>>,
 }
 
-impl NodePath {
-    pub fn new(node: &NodeKind) -> Self {
+impl<'a> NodePath<'a> {
+    pub fn new(node: &NodeKind<'a>) -> Self {
         Self {
             skipped: false,
             stopped: false,
@@ -31,7 +31,7 @@ impl NodePath {
         }
     }
 
-    pub fn child_path(node: &NodeKind, parent: &Rc<RefCell<NodePath>>) -> Self {
+    pub fn child_path(node: &NodeKind<'a>, parent: &Rc<RefCell<NodePath<'a>>>) -> Self {
         let borrowed_parent = parent.borrow();
 
         Self {
@@ -45,7 +45,7 @@ impl NodePath {
         }
     }
 
-    pub fn node(&self) -> &NodeKind {
+    pub fn node(&self) -> &NodeKind<'a> {
         &self.node
     }
 
@@ -64,11 +64,11 @@ impl NodePath {
         self.stopped = true;
     }
 
-    pub fn parent(&self) -> Option<Rc<RefCell<NodePath>>> {
+    pub fn parent(&self) -> Option<Rc<RefCell<NodePath<'a>>>> {
         self.parent.as_ref().map(Rc::clone)
     }
 
-    pub fn expect_parent(&self) -> Rc<RefCell<NodePath>> {
+    pub fn expect_parent(&self) -> Rc<RefCell<NodePath<'a>>> {
         self.parent()
             .unwrap_or_else(|| panic!("parent must exist."))
     }
@@ -128,41 +128,41 @@ impl NodePath {
 }
 
 #[allow(unused_variables, unused_mut)]
-pub trait Visitor {
+pub trait Visitor<'a> {
     // Token
-    fn enter_whitespace(&mut self, path: &mut NodePath, token: &Token, trivia: &Trivia) {}
-    fn exit_whitespace(&mut self, path: &mut NodePath, token: &Token, trivia: &Trivia) {}
+    fn enter_whitespace(&mut self, path: &mut NodePath<'a>, token: &'a Token, trivia: &Trivia) {}
+    fn exit_whitespace(&mut self, path: &mut NodePath<'a>, token: &'a Token, trivia: &Trivia) {}
 
     fn enter_line_comment(
         &mut self,
-        path: &mut NodePath,
-        token: &Token,
-        trivia: &Trivia,
-        comment: &str,
+        path: &mut NodePath<'a>,
+        token: &'a Token,
+        trivia: &'a Trivia,
+        comment: &'a str,
     ) {
     }
     fn exit_line_comment(
         &mut self,
-        path: &mut NodePath,
-        token: &Token,
-        trivia: &Trivia,
-        comment: &str,
+        path: &mut NodePath<'a>,
+        token: &'a Token,
+        trivia: &'a Trivia,
+        comment: &'a str,
     ) {
     }
 
-    fn enter_interpreted_token(&mut self, path: &mut NodePath, token: &Token) {}
-    fn exit_interpreted_token(&mut self, path: &mut NodePath, token: &Token) {}
+    fn enter_interpreted_token(&mut self, path: &mut NodePath<'a>, token: &Token) {}
+    fn exit_interpreted_token(&mut self, path: &mut NodePath<'a>, token: &Token) {}
 
     fn enter_missing_token(
         &mut self,
-        path: &mut NodePath,
+        path: &mut NodePath<'a>,
         range: EffectiveRange,
         item: MissingTokenKind,
     ) {
     }
     fn exit_missing_token(
         &mut self,
-        path: &mut NodePath,
+        path: &mut NodePath<'a>,
         range: EffectiveRange,
         item: MissingTokenKind,
     ) {
@@ -170,248 +170,312 @@ pub trait Visitor {
 
     fn enter_skipped_token(
         &mut self,
-        path: &mut NodePath,
-        token: &Token,
+        path: &mut NodePath<'a>,
+        token: &'a Token,
         expected: MissingTokenKind,
     ) {
     }
     fn exit_skipped_token(
         &mut self,
-        path: &mut NodePath,
-        token: &Token,
+        path: &mut NodePath<'a>,
+        token: &'a Token,
         expected: MissingTokenKind,
     ) {
     }
 
     // Node
-    fn enter_program(&mut self, path: &mut NodePath, program: &Rc<Program>) {}
-    fn exit_program(&mut self, path: &mut NodePath, program: &Rc<Program>) {}
+    fn enter_program(&mut self, path: &mut NodePath<'a>, program: &'a Program<'a>) {}
+    fn exit_program(&mut self, path: &mut NodePath<'a>, program: &'a Program<'a>) {}
 
-    fn enter_block(&mut self, path: &mut NodePath, block: &Rc<Block>) {}
-    fn exit_block(&mut self, path: &mut NodePath, block: &Rc<Block>) {}
+    fn enter_block(&mut self, path: &mut NodePath<'a>, block: &'a Block<'a>) {}
+    fn exit_block(&mut self, path: &mut NodePath<'a>, block: &'a Block<'a>) {}
 
-    fn enter_identifier(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {}
-    fn exit_identifier(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {}
+    fn enter_identifier(&mut self, path: &mut NodePath<'a>, id: &'a Identifier<'a>) {}
+    fn exit_identifier(&mut self, path: &mut NodePath<'a>, id: &'a Identifier<'a>) {}
 
-    fn enter_struct_definition(&mut self, path: &mut NodePath, definition: &Rc<StructDefinition>) {}
-    fn exit_struct_definition(&mut self, path: &mut NodePath, definition: &Rc<StructDefinition>) {}
+    fn enter_struct_definition(
+        &mut self,
+        path: &mut NodePath<'a>,
+        definition: &'a StructDefinition<'a>,
+    ) {
+    }
+    fn exit_struct_definition(
+        &mut self,
+        path: &mut NodePath<'a>,
+        definition: &'a StructDefinition<'a>,
+    ) {
+    }
 
     fn enter_function_definition(
         &mut self,
-        path: &mut NodePath,
-        definition: &Rc<FunctionDefinition>,
+        path: &mut NodePath<'a>,
+        definition: &'a FunctionDefinition<'a>,
     ) {
     }
     fn exit_function_definition(
         &mut self,
-        path: &mut NodePath,
-        definition: &Rc<FunctionDefinition>,
+        path: &mut NodePath<'a>,
+        definition: &'a FunctionDefinition<'a>,
     ) {
     }
 
-    fn enter_function_parameter(&mut self, path: &mut NodePath, param: &Rc<FunctionParameter>) {}
-    fn exit_function_parameter(&mut self, path: &mut NodePath, param: &Rc<FunctionParameter>) {}
+    fn enter_function_parameter(
+        &mut self,
+        path: &mut NodePath<'a>,
+        param: &'a FunctionParameter<'a>,
+    ) {
+    }
+    fn exit_function_parameter(
+        &mut self,
+        path: &mut NodePath<'a>,
+        param: &'a FunctionParameter<'a>,
+    ) {
+    }
 
-    fn enter_type_field(&mut self, path: &mut NodePath, field: &Rc<TypeField>) {}
-    fn exit_type_field(&mut self, path: &mut NodePath, field: &Rc<TypeField>) {}
+    fn enter_type_field(&mut self, path: &mut NodePath<'a>, field: &'a TypeField<'a>) {}
+    fn exit_type_field(&mut self, path: &mut NodePath<'a>, field: &'a TypeField<'a>) {}
 
-    fn enter_type_annotation(&mut self, path: &mut NodePath, annotation: &Rc<TypeAnnotation>) {}
-    fn exit_type_annotation(&mut self, path: &mut NodePath, annotation: &Rc<TypeAnnotation>) {}
+    fn enter_type_annotation(
+        &mut self,
+        path: &mut NodePath<'a>,
+        annotation: &'a TypeAnnotation<'a>,
+    ) {
+    }
+    fn exit_type_annotation(
+        &mut self,
+        path: &mut NodePath<'a>,
+        annotation: &'a TypeAnnotation<'a>,
+    ) {
+    }
 
-    fn enter_statement(&mut self, path: &mut NodePath, statement: &Rc<Statement>) {}
-    fn exit_statement(&mut self, path: &mut NodePath, statement: &Rc<Statement>) {}
+    fn enter_statement(&mut self, path: &mut NodePath<'a>, statement: &'a Statement<'a>) {}
+    fn exit_statement(&mut self, path: &mut NodePath<'a>, statement: &'a Statement<'a>) {}
 
     fn enter_variable_declaration(
         &mut self,
-        path: &mut NodePath,
-        declaration: &Rc<VariableDeclaration>,
+        path: &mut NodePath<'a>,
+        declaration: &'a VariableDeclaration<'a>,
     ) {
     }
     fn exit_variable_declaration(
         &mut self,
-        path: &mut NodePath,
-        declaration: &Rc<VariableDeclaration>,
+        path: &mut NodePath<'a>,
+        declaration: &'a VariableDeclaration<'a>,
     ) {
     }
 
-    fn enter_case_arm(&mut self, path: &mut NodePath, arm: &Rc<CaseArm>) {}
-    fn exit_case_arm(&mut self, path: &mut NodePath, arm: &Rc<CaseArm>) {}
+    fn enter_case_arm(&mut self, path: &mut NodePath<'a>, arm: &'a CaseArm<'a>) {}
+    fn exit_case_arm(&mut self, path: &mut NodePath<'a>, arm: &'a CaseArm<'a>) {}
 
-    fn enter_pattern(&mut self, path: &mut NodePath, pattern: &Rc<Pattern>) {}
-    fn exit_pattern(&mut self, path: &mut NodePath, pattern: &Rc<Pattern>) {}
+    fn enter_pattern(&mut self, path: &mut NodePath<'a>, pattern: &'a Pattern<'a>) {}
+    fn exit_pattern(&mut self, path: &mut NodePath<'a>, pattern: &'a Pattern<'a>) {}
 
-    fn enter_value_field(&mut self, path: &mut NodePath, field: &Rc<ValueField>) {}
-    fn exit_value_field(&mut self, path: &mut NodePath, field: &Rc<ValueField>) {}
+    fn enter_value_field(&mut self, path: &mut NodePath<'a>, field: &'a ValueField<'a>) {}
+    fn exit_value_field(&mut self, path: &mut NodePath<'a>, field: &'a ValueField<'a>) {}
 
-    fn enter_value_field_pattern(&mut self, path: &mut NodePath, pattern: &Rc<ValueFieldPattern>) {}
-    fn exit_value_field_pattern(&mut self, path: &mut NodePath, pattern: &Rc<ValueFieldPattern>) {}
+    fn enter_value_field_pattern(
+        &mut self,
+        path: &mut NodePath<'a>,
+        pattern: &'a ValueFieldPattern<'a>,
+    ) {
+    }
+    fn exit_value_field_pattern(
+        &mut self,
+        path: &mut NodePath<'a>,
+        pattern: &'a ValueFieldPattern<'a>,
+    ) {
+    }
 
-    fn enter_expression(&mut self, path: &mut NodePath, expression: &Rc<Expression>) {}
-    fn exit_expression(&mut self, path: &mut NodePath, expression: &Rc<Expression>) {}
+    fn enter_expression(&mut self, path: &mut NodePath<'a>, expression: &'a Expression<'a>) {}
+    fn exit_expression(&mut self, path: &mut NodePath<'a>, expression: &'a Expression<'a>) {}
 
-    fn enter_integer_literal(&mut self, path: &mut NodePath, expr: &Rc<Expression>, literal: i32) {}
-    fn exit_integer_literal(&mut self, path: &mut NodePath, expr: &Rc<Expression>, literal: i32) {}
+    fn enter_integer_literal(
+        &mut self,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        literal: &'a IntegerLiteral,
+    ) {
+    }
+    fn exit_integer_literal(
+        &mut self,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        literal: &'a IntegerLiteral,
+    ) {
+    }
 
     fn enter_string_literal(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        literal: Option<&str>,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        literal: &'a StringLiteral<'a>,
     ) {
     }
     fn exit_string_literal(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        literal: Option<&str>,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        literal: &'a StringLiteral<'a>,
     ) {
     }
 
     fn enter_struct_literal(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        value: &StructLiteral,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        value: &'a StructLiteral<'a>,
     ) {
     }
     fn exit_struct_literal(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        value: &StructLiteral,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        value: &'a StructLiteral<'a>,
     ) {
     }
 
-    fn enter_variable(&mut self, path: &mut NodePath, expr: &Rc<Expression>, id: &Rc<Identifier>) {}
-    fn exit_variable(&mut self, path: &mut NodePath, expr: &Rc<Expression>, id: &Rc<Identifier>) {}
+    fn enter_variable(
+        &mut self,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        id: &'a Identifier<'a>,
+    ) {
+    }
+    fn exit_variable(
+        &mut self,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        id: &'a Identifier<'a>,
+    ) {
+    }
 
     fn enter_binary_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        bin_expr: &BinaryExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        bin_expr: &'a BinaryExpression<'a>,
     ) {
     }
     fn exit_binary_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        bin_expr: &BinaryExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        bin_expr: &'a BinaryExpression<'a>,
     ) {
     }
 
     fn enter_unary_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        unary_expr: &UnaryExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        unary_expr: &'a UnaryExpression<'a>,
     ) {
     }
     fn exit_unary_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        unary_expr: &UnaryExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        unary_expr: &'a UnaryExpression<'a>,
     ) {
     }
 
     fn enter_subscript_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        subscript_expr: &SubscriptExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        subscript_expr: &'a SubscriptExpression<'a>,
     ) {
     }
     fn exit_subscript_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        subscript_expr: &SubscriptExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        subscript_expr: &'a SubscriptExpression<'a>,
     ) {
     }
 
     fn enter_call_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        call_expr: &CallExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        call_expr: &'a CallExpression<'a>,
     ) {
     }
     fn exit_call_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        call_expr: &CallExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        call_expr: &'a CallExpression<'a>,
     ) {
     }
 
     fn enter_access_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        member_expr: &MemberExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        member_expr: &'a MemberExpression<'a>,
     ) {
     }
     fn exit_access_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        member_expr: &MemberExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        member_expr: &'a MemberExpression<'a>,
     ) {
     }
 
     fn enter_array_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        array_expr: &ArrayExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        array_expr: &'a ArrayExpression<'a>,
     ) {
     }
     fn exit_array_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        array_expr: &ArrayExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        array_expr: &'a ArrayExpression<'a>,
     ) {
     }
 
     fn enter_if_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        if_expr: &IfExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        if_expr: &'a IfExpression<'a>,
     ) {
     }
     fn exit_if_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        if_expr: &IfExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        if_expr: &'a IfExpression<'a>,
     ) {
     }
 
     fn enter_case_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        case_expr: &CaseExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        case_expr: &'a CaseExpression<'a>,
     ) {
     }
     fn exit_case_expression(
         &mut self,
-        path: &mut NodePath,
-        expr: &Rc<Expression>,
-        case_expr: &CaseExpression,
+        path: &mut NodePath<'a>,
+        expr: &'a Expression<'a>,
+        case_expr: &'a CaseExpression<'a>,
     ) {
     }
 }
 
-pub fn traverse(visitor: &mut dyn Visitor, program: &Rc<Program>) {
-    let path = wrap(NodePath::new(&NodeKind::Program(Rc::clone(program))));
+pub fn traverse<'a>(visitor: &mut dyn Visitor<'a>, program: &'a Program<'a>) {
+    let path = wrap(NodePath::new(&NodeKind::Program(program)));
     traverse_path(visitor, &path);
 }
 
-fn traverse_path(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
+fn traverse_path<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<'a>>>) {
     path.borrow_mut().on_enter();
 
     if !path.borrow().skipped() {
@@ -427,7 +491,7 @@ fn traverse_path(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     path.borrow_mut().on_exit();
 }
 
-fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
+fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<'a>>>) {
     let mut path = &mut path.borrow_mut();
     let node = path.node().clone();
 
@@ -481,40 +545,40 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
             if !path.skipped() {
                 match expr.kind() {
                     ExpressionKind::IntegerLiteral(value) => {
-                        visitor.enter_integer_literal(&mut path, &expr, *value);
+                        visitor.enter_integer_literal(&mut path, expr, value);
                     }
                     ExpressionKind::StringLiteral(value) => {
-                        visitor.enter_string_literal(&mut path, &expr, value.as_deref());
+                        visitor.enter_string_literal(&mut path, expr, value);
                     }
                     ExpressionKind::StructLiteral(kind) => {
-                        visitor.enter_struct_literal(&mut path, &expr, kind);
+                        visitor.enter_struct_literal(&mut path, expr, kind);
                     }
                     ExpressionKind::VariableExpression(id) => {
-                        visitor.enter_variable(&mut path, &expr, id);
+                        visitor.enter_variable(&mut path, expr, id);
                     }
                     ExpressionKind::BinaryExpression(kind) => {
-                        visitor.enter_binary_expression(&mut path, &expr, kind);
+                        visitor.enter_binary_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::UnaryExpression(kind) => {
-                        visitor.enter_unary_expression(&mut path, &expr, kind);
+                        visitor.enter_unary_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::SubscriptExpression(kind) => {
-                        visitor.enter_subscript_expression(&mut path, &expr, kind);
+                        visitor.enter_subscript_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::CallExpression(kind) => {
-                        visitor.enter_call_expression(&mut path, &expr, kind);
+                        visitor.enter_call_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::MemberExpression(kind) => {
-                        visitor.enter_access_expression(&mut path, &expr, kind);
+                        visitor.enter_access_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::ArrayExpression(kind) => {
-                        visitor.enter_array_expression(&mut path, &expr, kind);
+                        visitor.enter_array_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::IfExpression(kind) => {
-                        visitor.enter_if_expression(&mut path, &expr, kind);
+                        visitor.enter_if_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::CaseExpression(kind) => {
-                        visitor.enter_case_expression(&mut path, &expr, kind);
+                        visitor.enter_case_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::Expression(_) => {}
                 }
@@ -523,7 +587,7 @@ fn dispatch_enter(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     }
 }
 
-fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
+fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<'a>>>) {
     let mut path = &mut path.borrow_mut();
     let node = path.node().clone();
 
@@ -577,40 +641,40 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
             if !path.skipped() {
                 match expr.kind() {
                     ExpressionKind::IntegerLiteral(value) => {
-                        visitor.exit_integer_literal(&mut path, &expr, *value);
+                        visitor.exit_integer_literal(&mut path, expr, value);
                     }
                     ExpressionKind::StringLiteral(value) => {
-                        visitor.exit_string_literal(&mut path, &expr, value.as_deref());
+                        visitor.exit_string_literal(&mut path, expr, value);
                     }
                     ExpressionKind::VariableExpression(id) => {
-                        visitor.exit_variable(&mut path, &expr, id);
+                        visitor.exit_variable(&mut path, expr, id);
                     }
                     ExpressionKind::StructLiteral(kind) => {
-                        visitor.exit_struct_literal(&mut path, &expr, kind);
+                        visitor.exit_struct_literal(&mut path, expr, kind);
                     }
                     ExpressionKind::BinaryExpression(kind) => {
-                        visitor.exit_binary_expression(&mut path, &expr, kind);
+                        visitor.exit_binary_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::UnaryExpression(kind) => {
-                        visitor.exit_unary_expression(&mut path, &expr, kind);
+                        visitor.exit_unary_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::SubscriptExpression(kind) => {
-                        visitor.exit_subscript_expression(&mut path, &expr, kind);
+                        visitor.exit_subscript_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::MemberExpression(kind) => {
-                        visitor.exit_access_expression(&mut path, &expr, kind);
+                        visitor.exit_access_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::CallExpression(kind) => {
-                        visitor.exit_call_expression(&mut path, &expr, kind);
+                        visitor.exit_call_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::ArrayExpression(kind) => {
-                        visitor.exit_array_expression(&mut path, &expr, kind);
+                        visitor.exit_array_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::IfExpression(kind) => {
-                        visitor.exit_if_expression(&mut path, &expr, kind);
+                        visitor.exit_if_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::CaseExpression(kind) => {
-                        visitor.exit_case_expression(&mut path, &expr, kind);
+                        visitor.exit_case_expression(&mut path, expr, kind);
                     }
                     ExpressionKind::Expression(_) => {}
                 }
@@ -619,7 +683,7 @@ fn dispatch_exit(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     }
 }
 
-fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
+fn traverse_children<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<'a>>>) {
     let node = path.borrow().node().clone();
 
     for kind in node.code() {
@@ -654,7 +718,11 @@ fn traverse_children(visitor: &mut dyn Visitor, path: &Rc<RefCell<NodePath>>) {
     }
 }
 
-fn traverse_token_trivia(visitor: &mut dyn Visitor, path: &mut NodePath, token: &Token) {
+fn traverse_token_trivia<'a>(
+    visitor: &mut dyn Visitor<'a>,
+    path: &mut NodePath<'a>,
+    token: &'a Token,
+) {
     for trivia in &token.leading_trivia {
         if path.skipped() {
             break;
@@ -681,7 +749,11 @@ fn traverse_token_trivia(visitor: &mut dyn Visitor, path: &mut NodePath, token: 
     }
 }
 
-fn traverse_interpreted_token(visitor: &mut dyn Visitor, path: &mut NodePath, token: &Token) {
+fn traverse_interpreted_token<'a>(
+    visitor: &mut dyn Visitor<'a>,
+    path: &mut NodePath<'a>,
+    token: &'a Token,
+) {
     if !path.skipped() {
         traverse_token_trivia(visitor, path, token);
     }
@@ -693,9 +765,9 @@ fn traverse_interpreted_token(visitor: &mut dyn Visitor, path: &mut NodePath, to
     }
 }
 
-fn traverse_missing_token(
-    visitor: &mut dyn Visitor,
-    path: &mut NodePath,
+fn traverse_missing_token<'a>(
+    visitor: &mut dyn Visitor<'a>,
+    path: &mut NodePath<'a>,
     range: EffectiveRange,
     item: MissingTokenKind,
 ) {
@@ -707,10 +779,10 @@ fn traverse_missing_token(
     }
 }
 
-fn traverse_skipped_token(
-    visitor: &mut dyn Visitor,
-    path: &mut NodePath,
-    token: &Token,
+fn traverse_skipped_token<'a>(
+    visitor: &mut dyn Visitor<'a>,
+    path: &mut NodePath<'a>,
+    token: &'a Token,
     expected: MissingTokenKind,
 ) {
     if !path.skipped() {
@@ -734,8 +806,8 @@ mod tests {
         number_of_expressions: i32,
     }
 
-    impl Visitor for NodeCounter {
-        fn enter_expression(&mut self, _path: &mut NodePath, _expr: &Rc<Expression>) {
+    impl<'a> Visitor<'a> for NodeCounter {
+        fn enter_expression(&mut self, _path: &mut NodePath<'a>, _expr: &'a Expression<'a>) {
             self.number_of_expressions += 1;
         }
     }
@@ -743,7 +815,8 @@ mod tests {
     #[test]
     fn number_integer() {
         let mut visitor = NodeCounter::default();
-        let program = Parser::parse_string("42");
+        let tree = Ast::new();
+        let program = Parser::parse_string(&tree, "42");
 
         traverse(&mut visitor, &program);
         assert_eq!(visitor.number_of_expressions, 1);
