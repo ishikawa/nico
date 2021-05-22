@@ -1455,7 +1455,7 @@ impl fmt::Display for CaseArm<'_> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct IntegerLiteral {
     value: i32,
 }
@@ -1470,7 +1470,7 @@ impl IntegerLiteral {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct StringLiteral<'a> {
     value: Option<BumpaloString<'a>>,
 }
@@ -1632,41 +1632,9 @@ impl fmt::Display for ValueFieldPattern<'_> {
 }
 
 #[derive(Debug)]
-pub struct IntegerPattern {
-    value: i32,
-}
-
-impl IntegerPattern {
-    pub fn new(value: i32) -> Self {
-        Self { value }
-    }
-
-    pub fn value(&self) -> i32 {
-        self.value
-    }
-}
-
-#[derive(Debug)]
-pub struct StringPattern<'a> {
-    value: Option<BumpaloString<'a>>,
-}
-
-impl<'a> StringPattern<'a> {
-    pub fn new<S: AsRef<str>>(tree: &'a Ast, value: Option<S>) -> Self {
-        Self {
-            value: value.map(|x| BumpaloString::from_str_in(x.as_ref(), tree.arena())),
-        }
-    }
-
-    pub fn value(&self) -> Option<&str> {
-        self.value.as_deref()
-    }
-}
-
-#[derive(Debug)]
 pub enum PatternKind<'a> {
-    IntegerPattern(IntegerPattern),
-    StringPattern(StringPattern<'a>),
+    IntegerPattern(IntegerLiteral),
+    StringPattern(StringLiteral<'a>),
     VariablePattern(&'a Identifier<'a>),
     ArrayPattern(ArrayPattern<'a>),
     RestPattern(RestPattern<'a>),

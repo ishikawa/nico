@@ -2,54 +2,58 @@ use super::*;
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use crate::{sem, syntax::binding};
-use std::rc::Rc;
+use bumpalo::collections::String as BumpaloString;
 
 const DEBUG: bool = false;
 
 #[derive(Debug)]
 pub struct Parser<'a> {
     /// The filename, uri of a source code.
-    source: String,
+    source_name: BumpaloString<'a>,
     tokenizer: Tokenizer<'a>,
     naming: PrefixNaming,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new<S: Into<String>>(tokenizer: Tokenizer<'a>, source: S) -> Self {
+    pub fn new<S: AsRef<str>>(tree: &'a Ast, tokenizer: Tokenizer<'a>, source_name: S) -> Self {
         Self {
             tokenizer,
-            source: source.into(),
+            source_name: BumpaloString::from_str_in(source_name.as_ref(), tree.arena()),
             naming: PrefixNaming::new("?"),
         }
+    }
+
+    pub fn source_name(&self) -> &str {
+        self.source_name.as_str()
     }
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse_string<S: AsRef<str>>(src: S) -> Rc<Program> {
-        let tokenizer = Tokenizer::from_string(&src);
-        let mut parser = Parser::new(tokenizer, "-");
+    pub fn parse_string<S: AsRef<str> + 'a>(tree: &'a Ast, src: S) -> &'a Program<'a> {
+        let tokenizer = Tokenizer::from_string(src);
+        let mut parser = Parser::new(tree, tokenizer, "-");
 
-        parser.parse()
+        parser.parse(tree)
     }
 
-    pub fn parse(&mut self) -> Rc<Program> {
+    pub fn parse(&mut self, tree: &'a Ast) -> &'a Program<'a> {
         let mut body = vec![];
-        let mut code = Code::new();
+        let mut code = Code::new(tree);
 
         loop {
             // Type declaration
-            if let Some(node) = self.parse_struct_definition() {
-                code.node(NodeKind::StructDefinition(Rc::clone(&node)));
+            if let Some(node) = self.parse_struct_definition(tree) {
+                code.node(NodeKind::StructDefinition(node));
                 body.push(TopLevelKind::StructDefinition(node));
             }
             // Function
-            else if let Some(node) = self.parse_function() {
-                code.node(NodeKind::FunctionDefinition(Rc::clone(&node)));
+            else if let Some(node) = self.parse_function(tree) {
+                code.node(NodeKind::FunctionDefinition(node));
                 body.push(TopLevelKind::FunctionDefinition(node));
             }
             // Body for main function
-            else if let Some(node) = self.parse_stmt() {
-                code.node(NodeKind::Statement(Rc::clone(&node)));
+            else if let Some(node) = self.parse_stmt(tree) {
+                code.node(NodeKind::Statement(node));
                 body.push(TopLevelKind::Statement(node));
             }
             // No top level constructs can be consumed. It may be at the end of input or
@@ -71,17 +75,17 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let program = Rc::new(Program::new(body, code));
+        let program = tree.alloc(Program::new(tree, body, code));
 
-        binding::bind(&program);
+        binding::bind(program);
 
         program
     }
 
-    fn parse_struct_definition(&mut self) -> Option<Rc<StructDefinition>> {
+    fn parse_struct_definition(&mut self, tree: &'a Ast) -> Option<&'a StructDefinition<'a>> {
         self.debug_trace("parse_struct_definition");
 
-        let mut code = Code::new();
+        let mut code = Code::new(tree);
 
         // struct
         code.interpret(self.expect_token(TokenKind::Struct)?);
@@ -92,9 +96,9 @@ impl<'a> Parser<'a> {
         loop {
             match self.tokenizer.peek_kind() {
                 TokenKind::Identifier(_) => {
-                    let name = self.parse_name().unwrap();
+                    let name = self.parse_name(tree).unwrap();
 
-                    code.node(NodeKind::Identifier(Rc::clone(&name)));
+                    code.node(NodeKind::Identifier(name));
                     struct_name = Some(name);
 
                     break;
@@ -115,6 +119,7 @@ impl<'a> Parser<'a> {
 
         // fields
         let fields = self._parse_elements(
+            tree,
             '{',
             '}',
             &mut code,
@@ -122,15 +127,14 @@ impl<'a> Parser<'a> {
             NodeKind::TypeField,
         );
 
-        let definition = StructDefinition::new(struct_name, fields, code);
-
-        Some(Rc::new(definition))
+        let definition = tree.alloc(StructDefinition::new(tree, struct_name, fields, code));
+        Some(definition)
     }
 
-    fn parse_function(&mut self) -> Option<Rc<FunctionDefinition>> {
+    fn parse_function(&mut self, tree: &'a Ast) -> Option<&'a FunctionDefinition<'a>> {
         self.debug_trace("parse_function");
 
-        let mut code = Code::new();
+        let mut code = Code::new(tree);
 
         // TODO: In L(1) parser, if the `fun` keyword is not followed by an `export` keyword,
         // the `export` keyword cannot be push backed, so we shouldn't stop reading export here.
@@ -150,9 +154,9 @@ impl<'a> Parser<'a> {
             match self.tokenizer.peek_kind() {
                 TokenKind::Identifier(_) => {
                     // Okay, it's a function name.
-                    let name = self.parse_name().unwrap();
+                    let name = self.parse_name(tree).unwrap();
 
-                    code.node(NodeKind::Identifier(Rc::clone(&name)));
+                    code.node(NodeKind::Identifier(name));
                     function_name = Some(name);
 
                     break;
@@ -175,6 +179,7 @@ impl<'a> Parser<'a> {
 
         // parameters
         let parameters = self._parse_elements(
+            tree,
             '(',
             ')',
             &mut code,
@@ -183,12 +188,13 @@ impl<'a> Parser<'a> {
         );
 
         // body
-        let body = self._read_block(&[TokenKind::End]);
+        let body = self._read_block(tree, &[TokenKind::End]);
 
-        code.node(NodeKind::Block(Rc::clone(&body)));
+        code.node(NodeKind::Block(body));
         code.interpret(self.tokenizer.next_token()); // end
 
-        Some(Rc::new(FunctionDefinition::new(
+        Some(tree.alloc(FunctionDefinition::new(
+            tree,
             function_name,
             parameters,
             body,
@@ -196,24 +202,24 @@ impl<'a> Parser<'a> {
         )))
     }
 
-    fn parse_function_parameter(&mut self) -> Option<Rc<FunctionParameter>> {
-        if let Some(name) = self.parse_name() {
-            let code = Code::with_node(NodeKind::Identifier(Rc::clone(&name)));
-            Some(Rc::new(FunctionParameter::new(name, code)))
+    fn parse_function_parameter(&mut self, tree: &'a Ast) -> Option<&'a FunctionParameter<'a>> {
+        if let Some(name) = self.parse_name(tree) {
+            let code = Code::with_node(tree, NodeKind::Identifier(name));
+            Some(tree.alloc(FunctionParameter::new(name, code)))
         } else {
             None
         }
     }
 
-    fn parse_type_field(&mut self) -> Option<Rc<TypeField>> {
+    fn parse_type_field(&mut self, tree: &'a Ast) -> Option<&'a TypeField<'a>> {
         // To prevent reading too many unnecessary tokens,
         // we should not skip tokens here.
-        let mut code = Code::new();
+        let mut code = Code::new(tree);
 
-        let name = self.parse_name();
+        let name = self.parse_name(tree);
 
         if let Some(ref name) = name {
-            code.node(NodeKind::Identifier(Rc::clone(name)));
+            code.node(NodeKind::Identifier(name));
         } else {
             code.missing(
                 self.tokenizer.current_insertion_range(),
@@ -223,10 +229,10 @@ impl<'a> Parser<'a> {
 
         code.interpret(self.expect_token(TokenKind::Char(':'))?);
 
-        let annotation = self.parse_type_annotation();
+        let annotation = self.parse_type_annotation(tree);
 
         if let Some(ref annotation) = annotation {
-            code.node(NodeKind::TypeAnnotation(Rc::clone(annotation)));
+            code.node(NodeKind::TypeAnnotation(annotation));
         } else {
             code.missing(
                 self.tokenizer.current_insertion_range(),
@@ -236,21 +242,21 @@ impl<'a> Parser<'a> {
 
         let field = TypeField::new(name, annotation, code);
 
-        Some(Rc::new(field))
+        Some(tree.alloc(field))
     }
 
-    fn parse_struct_field(&mut self) -> Option<Rc<ValueField>> {
-        let name = self.parse_name()?;
-        let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&name)));
+    fn parse_struct_field(&mut self, tree: &'a Ast) -> Option<&'a ValueField<'a>> {
+        let name = self.parse_name(tree)?;
+        let mut code = Code::with_node(tree, NodeKind::Identifier(name));
 
         // value can be omitted for struct literal.
         let field = if let Some(separator) = self.expect_token(TokenKind::Char(':')) {
             code.interpret(separator);
 
-            let value = self.parse_expr();
+            let value = self.parse_expr(tree);
 
             if let Some(ref value) = value {
-                code.node(NodeKind::Expression(Rc::clone(value)));
+                code.node(NodeKind::Expression(value));
             } else {
                 code.missing(
                     self.tokenizer.current_insertion_range(),
@@ -263,21 +269,21 @@ impl<'a> Parser<'a> {
             ValueField::new(name, None, code)
         };
 
-        Some(Rc::new(field))
+        Some(tree.alloc(field))
     }
 
-    fn parse_struct_field_pattern(&mut self) -> Option<Rc<ValueFieldPattern>> {
-        let name = self.parse_name()?;
-        let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&name)));
+    fn parse_struct_field_pattern(&mut self, tree: &'a Ast) -> Option<&'a ValueFieldPattern<'a>> {
+        let name = self.parse_name(tree)?;
+        let mut code = Code::with_node(tree, NodeKind::Identifier(name));
 
         // value can be omitted for struct literal.
         let field = if let Some(separator) = self.expect_token(TokenKind::Char(':')) {
             code.interpret(separator);
 
-            let value = self.parse_pattern();
+            let value = self.parse_pattern(tree);
 
             if let Some(ref value) = value {
-                code.node(NodeKind::Pattern(Rc::clone(value)));
+                code.node(NodeKind::Pattern(value));
             } else {
                 code.missing(
                     self.tokenizer.current_insertion_range(),
@@ -290,46 +296,46 @@ impl<'a> Parser<'a> {
             ValueFieldPattern::new(name, None, code)
         };
 
-        Some(Rc::new(field))
+        Some(tree.alloc(field))
     }
 
-    fn parse_name(&mut self) -> Option<Rc<Identifier>> {
+    fn parse_name(&mut self, tree: &'a Ast) -> Option<&'a Identifier<'a>> {
         if let TokenKind::Identifier(name) = self.tokenizer.peek_kind() {
             let name = name.clone();
-            let code = Code::with_interpreted(self.tokenizer.next_token());
+            let code = Code::with_interpreted(tree, self.tokenizer.next_token());
 
-            Some(Rc::new(Identifier::new(name, code)))
+            Some(tree.alloc(Identifier::new(tree, name, code)))
         } else {
             None
         }
     }
 
-    fn parse_type_annotation(&mut self) -> Option<Rc<TypeAnnotation>> {
-        let code = Code::with_interpreted(self.expect_token(TokenKind::I32)?);
+    fn parse_type_annotation(&mut self, tree: &'a Ast) -> Option<&'a TypeAnnotation<'a>> {
+        let code = Code::with_interpreted(tree, self.expect_token(TokenKind::I32)?);
 
         let ty = TypeAnnotation::new(wrap(sem::Type::Int32), code);
-        Some(Rc::new(ty))
+        Some(tree.alloc(ty))
     }
 
-    fn parse_stmt(&mut self) -> Option<Rc<Statement>> {
+    fn parse_stmt(&mut self, tree: &'a Ast) -> Option<&'a Statement<'a>> {
         self.debug_trace("parse_stmt");
 
         match self.tokenizer.peek_kind() {
-            TokenKind::Let => self.parse_variable_declaration_stmt(),
-            _ => self.parse_stmt_expr(),
+            TokenKind::Let => self.parse_variable_declaration_stmt(tree),
+            _ => self.parse_stmt_expr(tree),
         }
     }
 
-    fn parse_variable_declaration(&mut self) -> Option<Rc<VariableDeclaration>> {
+    fn parse_variable_declaration(&mut self, tree: &'a Ast) -> Option<&'a VariableDeclaration<'a>> {
         self.debug_trace("parse_variable_declaration");
 
-        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // let
+        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token()); // let
         let mut pattern = None;
         let mut init = None;
 
-        if let Some(ref pat) = self.parse_pattern() {
-            code.node(NodeKind::Pattern(Rc::clone(pat)));
-            pattern = Some(Rc::clone(pat));
+        if let Some(pat) = self.parse_pattern(tree) {
+            code.node(NodeKind::Pattern(pat));
+            pattern = Some(pat);
         } else {
             code.missing(
                 self.tokenizer.current_insertion_range(),
@@ -339,9 +345,9 @@ impl<'a> Parser<'a> {
 
         code.interpret(self.expect_token(TokenKind::Char('='))?);
 
-        if let Some(ref expr) = self.parse_expr() {
-            code.node(NodeKind::Expression(Rc::clone(expr)));
-            init = Some(Rc::clone(expr));
+        if let Some(expr) = self.parse_expr(tree) {
+            code.node(NodeKind::Expression(expr));
+            init = Some(expr);
         } else {
             code.missing(
                 self.tokenizer.current_insertion_range(),
@@ -351,41 +357,39 @@ impl<'a> Parser<'a> {
 
         let decl = VariableDeclaration::new(pattern, init, code);
 
-        Some(Rc::new(decl))
+        Some(tree.alloc(decl))
     }
 
-    fn parse_variable_declaration_stmt(&mut self) -> Option<Rc<Statement>> {
+    fn parse_variable_declaration_stmt(&mut self, tree: &'a Ast) -> Option<&'a Statement<'a>> {
         self.debug_trace("parse_variable_declaration_stmt");
 
-        let decl = self.parse_variable_declaration()?;
-        let code = Code::with_node(NodeKind::VariableDeclaration(Rc::clone(&decl)));
+        let decl = self.parse_variable_declaration(tree)?;
+        let code = Code::with_node(tree, NodeKind::VariableDeclaration(decl));
 
-        Some(Rc::new(Statement::new(
+        Some(tree.alloc(Statement::new(
             StatementKind::VariableDeclaration(decl),
             code,
         )))
     }
 
-    fn parse_stmt_expr(&mut self) -> Option<Rc<Statement>> {
+    fn parse_stmt_expr(&mut self, tree: &'a Ast) -> Option<&'a Statement<'a>> {
         self.debug_trace("parse_stmt_expr");
 
-        let expr = self.parse_expr()?;
-        let code = Code::with_node(NodeKind::Expression(Rc::clone(&expr)));
+        let expr = self.parse_expr(tree)?;
+        let code = Code::with_node(tree, NodeKind::Expression(expr));
 
-        Some(Rc::new(Statement::new(
-            StatementKind::Expression(expr),
-            code,
-        )))
+        Some(tree.alloc(Statement::new(StatementKind::Expression(expr), code)))
     }
 
-    fn parse_expr(&mut self) -> Option<Rc<Expression>> {
+    fn parse_expr(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_expr");
-        self.parse_rel_op1()
+        self.parse_rel_op1(tree)
     }
 
-    fn parse_rel_op1(&mut self) -> Option<Rc<Expression>> {
+    fn parse_rel_op1(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_rel_op1");
         self._parse_binary_op(
+            tree,
             Parser::parse_rel_op2,
             &[
                 (TokenKind::Eq, BinaryOperator::Eq),
@@ -394,9 +398,10 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_rel_op2(&mut self) -> Option<Rc<Expression>> {
+    fn parse_rel_op2(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_rel_op2");
         self._parse_binary_op(
+            tree,
             Parser::parse_binary_op1,
             &[
                 (TokenKind::Le, BinaryOperator::Le),
@@ -407,9 +412,10 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_binary_op1(&mut self) -> Option<Rc<Expression>> {
+    fn parse_binary_op1(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_binary_op1");
         self._parse_binary_op(
+            tree,
             Parser::parse_binary_op2,
             &[
                 (TokenKind::Char('+'), BinaryOperator::Add),
@@ -419,9 +425,10 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_binary_op2(&mut self) -> Option<Rc<Expression>> {
+    fn parse_binary_op2(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_binary_op2");
         self._parse_binary_op(
+            tree,
             Parser::parse_unary_op,
             &[
                 (TokenKind::Char('*'), BinaryOperator::Mul),
@@ -430,22 +437,22 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_unary_op(&mut self) -> Option<Rc<Expression>> {
+    fn parse_unary_op(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_unary_op");
 
         let operator = match self.tokenizer.peek_kind() {
             TokenKind::Char('+') => UnaryOperator::Plus,
             TokenKind::Char('-') => UnaryOperator::Minus,
-            _ => return self.parse_access(),
+            _ => return self.parse_access(tree),
         };
 
         // unary operators are right associative.
-        let mut code = Code::with_interpreted(self.tokenizer.next_token());
+        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token());
         let mut operand = None;
 
         loop {
-            if let Some(node) = self.parse_unary_op() {
-                code.node(NodeKind::Expression(Rc::clone(&node)));
+            if let Some(node) = self.parse_unary_op(tree) {
+                code.node(NodeKind::Expression(node));
                 operand = Some(node);
                 break;
             } else {
@@ -463,16 +470,16 @@ impl<'a> Parser<'a> {
         let expr = UnaryExpression::new(operator, operand);
         let kind = ExpressionKind::UnaryExpression(expr);
 
-        Some(Rc::new(Expression::new(kind, code)))
+        Some(tree.alloc(Expression::new(kind, code)))
     }
 
-    fn parse_access(&mut self) -> Option<Rc<Expression>> {
+    fn parse_access(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_access");
 
-        let mut operand = self.parse_primary()?;
+        let mut operand = self.parse_primary(tree)?;
 
         loop {
-            let mut code = Code::with_node(NodeKind::Expression(Rc::clone(&operand)));
+            let mut code = Code::with_node(tree, NodeKind::Expression(operand));
 
             // To distinguish `x\n[...]` and `x[...]`, we have to capture
             // `tokenizer.is_newline_seen()`, so try to advance tokenizer.
@@ -487,6 +494,7 @@ impl<'a> Parser<'a> {
             let kind = match token.kind {
                 TokenKind::Char('[') => {
                     let arguments = self._parse_elements(
+                        tree,
                         '[',
                         ']',
                         &mut code,
@@ -495,11 +503,12 @@ impl<'a> Parser<'a> {
                     );
 
                     ExpressionKind::SubscriptExpression(SubscriptExpression::new(
-                        operand, arguments,
+                        tree, operand, arguments,
                     ))
                 }
                 TokenKind::Char('(') => {
                     let arguments = self._parse_elements(
+                        tree,
                         '(',
                         ')',
                         &mut code,
@@ -507,15 +516,15 @@ impl<'a> Parser<'a> {
                         NodeKind::Expression,
                     );
 
-                    ExpressionKind::CallExpression(CallExpression::new(operand, arguments))
+                    ExpressionKind::CallExpression(CallExpression::new(tree, operand, arguments))
                 }
                 TokenKind::Char('.') => {
                     code.interpret(self.tokenizer.next_token());
 
-                    let field = self.parse_name();
+                    let field = self.parse_name(tree);
 
                     if let Some(ref field) = field {
-                        code.node(NodeKind::Identifier(Rc::clone(field)));
+                        code.node(NodeKind::Identifier(field));
                     } else {
                         code.missing(
                             self.tokenizer.current_insertion_range(),
@@ -528,79 +537,80 @@ impl<'a> Parser<'a> {
                 _ => break,
             };
 
-            operand = Rc::new(Expression::new(kind, code));
+            operand = tree.alloc(Expression::new(kind, code));
         }
 
         Some(operand)
     }
 
-    fn parse_primary(&mut self) -> Option<Rc<Expression>> {
+    fn parse_primary(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_primary");
 
         let token = self.tokenizer.peek();
         let node = match token.kind {
-            TokenKind::Integer(_) => self.read_integer(),
-            TokenKind::Identifier(_) => self.read_identifier(),
-            TokenKind::StringStart => self.read_string(),
-            TokenKind::Char('(') => self.read_paren(),
-            TokenKind::Char('[') => self.read_array(),
-            TokenKind::If => self.read_if_expression(),
-            TokenKind::Case => self.read_case_expression(),
+            TokenKind::Integer(_) => self.read_integer(tree),
+            TokenKind::Identifier(_) => self.read_identifier(tree),
+            TokenKind::StringStart => self.read_string(tree),
+            TokenKind::Char('(') => self.read_paren(tree),
+            TokenKind::Char('[') => self.read_array(tree),
+            TokenKind::If => self.read_if_expression(tree),
+            TokenKind::Case => self.read_case_expression(tree),
             _ => return None,
         };
 
         Some(node)
     }
 
-    fn parse_pattern(&mut self) -> Option<Rc<Pattern>> {
+    fn parse_pattern(&mut self, tree: &'a Ast) -> Option<&'a Pattern<'a>> {
         self.debug_trace("parse_pattern");
 
         let token = self.tokenizer.peek();
         let pattern = match token.kind {
-            TokenKind::Integer(_) => self.read_integer_pattern(),
-            TokenKind::Identifier(_) => self.read_identifier_pattern(),
-            TokenKind::StringStart => self.read_string_pattern(),
-            TokenKind::Char('[') => self.read_array_pattern(),
-            TokenKind::Rest => self.read_rest_pattern(),
+            TokenKind::Integer(_) => self.read_integer_pattern(tree),
+            TokenKind::Identifier(_) => self.read_identifier_pattern(tree),
+            TokenKind::StringStart => self.read_string_pattern(tree),
+            TokenKind::Char('[') => self.read_array_pattern(tree),
+            TokenKind::Rest => self.read_rest_pattern(tree),
             _ => return None,
         };
 
         Some(pattern)
     }
 
-    fn _read_integer(&mut self) -> (i32, Code) {
+    fn _read_integer(&mut self, tree: &'a Ast) -> (IntegerLiteral, Code<'a>) {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
-            let code = Code::with_interpreted(token);
+            let code = Code::with_interpreted(tree, token);
 
-            (i, code)
+            (IntegerLiteral::new(i), code)
         } else {
             unreachable!()
         }
     }
 
-    fn read_integer(&mut self) -> Rc<Expression> {
-        let (literal, code) = self._read_integer();
+    fn read_integer(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
+        let (literal, code) = self._read_integer(tree);
 
-        Rc::new(Expression::new(
+        tree.alloc(Expression::new(
             ExpressionKind::IntegerLiteral(literal),
             code,
         ))
     }
 
-    fn read_integer_pattern(&mut self) -> Rc<Pattern> {
-        let (literal, code) = self._read_integer();
+    fn read_integer_pattern(&mut self, tree: &'a Ast) -> &'a Pattern<'a> {
+        let (literal, code) = self._read_integer(tree);
 
-        Rc::new(Pattern::new(PatternKind::IntegerPattern(literal), code))
+        tree.alloc(Pattern::new(PatternKind::IntegerPattern(literal), code))
     }
 
-    fn read_identifier(&mut self) -> Rc<Expression> {
-        let id = self.parse_name().unwrap();
-        let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&id)));
+    fn read_identifier(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
+        let id = self.parse_name(tree).unwrap();
+        let mut code = Code::with_node(tree, NodeKind::Identifier(id));
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
             let fields = self._parse_elements(
+                tree,
                 '{',
                 '}',
                 &mut code,
@@ -608,20 +618,21 @@ impl<'a> Parser<'a> {
                 NodeKind::ValueField,
             );
 
-            ExpressionKind::StructLiteral(StructLiteral::new(id, fields))
+            ExpressionKind::StructLiteral(StructLiteral::new(tree, id, fields))
         } else {
             ExpressionKind::VariableExpression(id)
         };
 
-        Rc::new(Expression::new(kind, code))
+        tree.alloc(Expression::new(kind, code))
     }
 
-    fn read_identifier_pattern(&mut self) -> Rc<Pattern> {
-        let id = self.parse_name().unwrap();
-        let mut code = Code::with_node(NodeKind::Identifier(Rc::clone(&id)));
+    fn read_identifier_pattern(&mut self, tree: &'a Ast) -> &'a Pattern<'a> {
+        let id = self.parse_name(tree).unwrap();
+        let mut code = Code::with_node(tree, NodeKind::Identifier(id));
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
             let fields = self._parse_elements(
+                tree,
                 '{',
                 '}',
                 &mut code,
@@ -629,17 +640,17 @@ impl<'a> Parser<'a> {
                 NodeKind::ValueFieldPattern,
             );
 
-            PatternKind::StructPattern(StructPattern::new(id, fields))
+            PatternKind::StructPattern(StructPattern::new(tree, id, fields))
         } else {
             PatternKind::VariablePattern(id)
         };
 
-        Rc::new(Pattern::new(kind, code))
+        tree.alloc(Pattern::new(kind, code))
     }
 
-    fn _read_string(&mut self) -> (Option<String>, Code) {
+    fn _read_string(&mut self, tree: &'a Ast) -> (StringLiteral<'a>, Code<'a>) {
         let start_token = self.tokenizer.next_token(); // StringStart
-        let mut code = Code::with_interpreted(start_token);
+        let mut code = Code::with_interpreted(tree, start_token);
         let mut string = String::new();
         let mut has_error = false;
 
@@ -679,28 +690,28 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let literal = if has_error { None } else { Some(string) };
+        let value = if has_error { None } else { Some(string) };
 
-        (literal, code)
+        (StringLiteral::new(tree, value), code)
     }
 
-    fn read_string(&mut self) -> Rc<Expression> {
-        let (string, code) = self._read_string();
+    fn read_string(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
+        let (string, code) = self._read_string(tree);
 
-        Rc::new(Expression::new(ExpressionKind::StringLiteral(string), code))
+        tree.alloc(Expression::new(ExpressionKind::StringLiteral(string), code))
     }
 
-    fn read_string_pattern(&mut self) -> Rc<Pattern> {
-        let (string, code) = self._read_string();
-        Rc::new(Pattern::new(PatternKind::StringPattern(string), code))
+    fn read_string_pattern(&mut self, tree: &'a Ast) -> &'a Pattern<'a> {
+        let (string, code) = self._read_string(tree);
+        tree.alloc(Pattern::new(PatternKind::StringPattern(string), code))
     }
 
-    fn read_paren(&mut self) -> Rc<Expression> {
-        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "("
-        let node = self.parse_expr();
+    fn read_paren(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
+        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token()); // "("
+        let node = self.parse_expr(tree);
 
         if let Some(ref node) = node {
-            code.node(NodeKind::Expression(Rc::clone(node)));
+            code.node(NodeKind::Expression(node));
         } else {
             code.missing(
                 self.tokenizer.current_insertion_range(),
@@ -730,18 +741,19 @@ impl<'a> Parser<'a> {
         // Because parentheses which groups an expression is not part of
         // AST, we have to incorporate it into another node.
         if let Some(ref expr) = node {
-            Rc::new(Expression::new(
-                ExpressionKind::Expression(Some(Rc::clone(&expr))),
+            tree.alloc(Expression::new(
+                ExpressionKind::Expression(Some(expr)),
                 code,
             ))
         } else {
-            Rc::new(Expression::new(ExpressionKind::Expression(None), code))
+            tree.alloc(Expression::new(ExpressionKind::Expression(None), code))
         }
     }
 
-    fn read_array(&mut self) -> Rc<Expression> {
-        let mut code = Code::new();
+    fn read_array(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
+        let mut code = Code::new(tree);
         let elements = self._parse_elements(
+            tree,
             '[',
             ']',
             &mut code,
@@ -749,14 +761,15 @@ impl<'a> Parser<'a> {
             NodeKind::Expression,
         );
 
-        let expr = ArrayExpression::new(elements);
+        let expr = ArrayExpression::new(tree, elements);
 
-        Rc::new(Expression::new(ExpressionKind::ArrayExpression(expr), code))
+        tree.alloc(Expression::new(ExpressionKind::ArrayExpression(expr), code))
     }
 
-    fn read_array_pattern(&mut self) -> Rc<Pattern> {
-        let mut code = Code::new();
+    fn read_array_pattern(&mut self, tree: &'a Ast) -> &'a Pattern<'a> {
+        let mut code = Code::new(tree);
         let elements = self._parse_elements(
+            tree,
             '[',
             ']',
             &mut code,
@@ -764,29 +777,30 @@ impl<'a> Parser<'a> {
             NodeKind::Pattern,
         );
 
-        Rc::new(Pattern::new(
-            PatternKind::ArrayPattern(ArrayPattern::new(elements)),
+        tree.alloc(Pattern::new(
+            PatternKind::ArrayPattern(ArrayPattern::new(tree, elements)),
             code,
         ))
     }
 
-    fn read_rest_pattern(&mut self) -> Rc<Pattern> {
-        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "..."
-        let name = self.parse_name();
+    fn read_rest_pattern(&mut self, tree: &'a Ast) -> &'a Pattern<'a> {
+        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token()); // "..."
+        let name = self.parse_name(tree);
 
         if let Some(ref node) = name {
-            code.node(NodeKind::Identifier(Rc::clone(node)));
+            code.node(NodeKind::Identifier(node));
         }
 
-        Rc::new(Pattern::new(
+        tree.alloc(Pattern::new(
             PatternKind::RestPattern(RestPattern::new(name)),
             code,
         ))
     }
 
-    fn read_if_expression(&mut self) -> Rc<Expression> {
-        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "if"
+    fn read_if_expression(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
+        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token()); // "if"
         let condition = self._parse_optional_item(
+            tree,
             &mut code,
             Parser::parse_expr,
             NodeKind::Expression,
@@ -794,16 +808,16 @@ impl<'a> Parser<'a> {
         );
 
         // body
-        let then_body = self._read_block(&[TokenKind::End, TokenKind::Else]);
+        let then_body = self._read_block(tree, &[TokenKind::End, TokenKind::Else]);
         let has_else = *self.tokenizer.peek_kind() == TokenKind::Else;
 
-        code.node(NodeKind::Block(Rc::clone(&then_body)));
+        code.node(NodeKind::Block(then_body));
         code.interpret(self.tokenizer.next_token()); // "else" or "end"
 
         let else_body = if has_else {
-            let else_body = self._read_block(&[TokenKind::End]);
+            let else_body = self._read_block(tree, &[TokenKind::End]);
 
-            code.node(NodeKind::Block(Rc::clone(&else_body)));
+            code.node(NodeKind::Block(else_body));
             code.interpret(self.tokenizer.next_token()); //  "end"
 
             Some(else_body)
@@ -813,13 +827,14 @@ impl<'a> Parser<'a> {
 
         let expr = IfExpression::new(condition, then_body, else_body);
 
-        Rc::new(Expression::new(ExpressionKind::IfExpression(expr), code))
+        tree.alloc(Expression::new(ExpressionKind::IfExpression(expr), code))
     }
 
-    fn read_case_expression(&mut self) -> Rc<Expression> {
+    fn read_case_expression(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
         // case ...
-        let mut code = Code::with_interpreted(self.tokenizer.next_token()); // "case"
+        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token()); // "case"
         let head = self._parse_optional_item(
+            tree,
             &mut code,
             Parser::parse_expr,
             NodeKind::Expression,
@@ -833,16 +848,16 @@ impl<'a> Parser<'a> {
         loop {
             match self.tokenizer.peek_kind() {
                 TokenKind::When => {
-                    let arm = self.read_case_arm();
+                    let arm = self.read_case_arm(tree);
 
-                    code.node(NodeKind::CaseArm(Rc::clone(&arm)));
+                    code.node(NodeKind::CaseArm(arm));
                     arms.push(arm);
                 }
                 TokenKind::Else => {
                     code.interpret(self.tokenizer.next_token());
 
-                    let block = self._read_block(&[TokenKind::End]);
-                    code.node(NodeKind::Block(Rc::clone(&block)));
+                    let block = self._read_block(tree, &[TokenKind::End]);
+                    code.node(NodeKind::Block(block));
 
                     else_body = Some(block);
                 }
@@ -864,13 +879,13 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let expr = CaseExpression::new(head, arms, else_body);
+        let expr = CaseExpression::new(tree, head, arms, else_body);
 
-        Rc::new(Expression::new(ExpressionKind::CaseExpression(expr), code))
+        tree.alloc(Expression::new(ExpressionKind::CaseExpression(expr), code))
     }
 
-    fn read_case_arm(&mut self) -> Rc<CaseArm> {
-        let mut code = Code::new();
+    fn read_case_arm(&mut self, tree: &'a Ast) -> &'a CaseArm<'a> {
+        let mut code = Code::new(tree);
 
         // when
         code.interpret(self.tokenizer.next_token());
@@ -885,6 +900,7 @@ impl<'a> Parser<'a> {
             None
         } else {
             self._parse_optional_item(
+                tree,
                 &mut code,
                 Parser::parse_pattern,
                 NodeKind::Pattern,
@@ -898,6 +914,7 @@ impl<'a> Parser<'a> {
         if *self.tokenizer.peek_kind() == TokenKind::If {
             code.interpret(self.tokenizer.next_token());
             guard = self._parse_optional_item(
+                tree,
                 &mut code,
                 Parser::parse_expr,
                 NodeKind::Expression,
@@ -905,17 +922,17 @@ impl<'a> Parser<'a> {
             );
         }
 
-        let then_body = self._read_block(&[TokenKind::When, TokenKind::Else, TokenKind::End]);
-        code.node(NodeKind::Block(Rc::clone(&then_body)));
+        let then_body = self._read_block(tree, &[TokenKind::When, TokenKind::Else, TokenKind::End]);
+        code.node(NodeKind::Block(then_body));
 
-        Rc::new(CaseArm::new(pattern, guard, then_body, code))
+        tree.alloc(CaseArm::new(pattern, guard, then_body, code))
     }
 
     /// Reads statements until it meets a token listed in `stop_tokens`.
     /// But this function doesn't consume a stop token itself, consuming
     /// a stop token is caller's responsibility.
-    fn _read_block(&mut self, stop_tokens: &[TokenKind]) -> Rc<Block> {
-        let mut code = Code::new();
+    fn _read_block(&mut self, tree: &'a Ast, stop_tokens: &[TokenKind]) -> &'a Block<'a> {
+        let mut code = Code::new(tree);
 
         // body
         let mut body = vec![];
@@ -928,14 +945,14 @@ impl<'a> Parser<'a> {
         loop {
             let mut stmt_seen = false;
 
-            if let Some(stmt) = self.parse_stmt() {
+            if let Some(stmt) = self.parse_stmt(tree) {
                 stmt_seen = true;
 
                 if !newline_seen {
                     code.missing(insertion_range, MissingTokenKind::Separator);
                 }
 
-                code.node(NodeKind::Statement(Rc::clone(&stmt)));
+                code.node(NodeKind::Statement(stmt));
                 body.push(stmt);
             }
 
@@ -958,8 +975,8 @@ impl<'a> Parser<'a> {
                     newline_seen = self.tokenizer.is_newline_seen();
                     insertion_range = self.tokenizer.current_insertion_range();
 
-                    // `parse_stmt()` should consume at least one token.
-                    // However, in case `parse_stmt()` have not been able to consume a single token,
+                    // `parse_stmt(tree)` should consume at least one token.
+                    // However, in case `parse_stmt(tree)` have not been able to consume a single token,
                     // we have to skip the current token.
                     if !stmt_seen {
                         code.skip(self.tokenizer.next_token(), MissingTokenKind::Statement);
@@ -968,20 +985,21 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Rc::new(Block::new(body, code))
+        tree.alloc(Block::new(tree, body, code))
     }
 
     fn _parse_optional_item<T>(
         &mut self,
-        code: &mut Code,
-        node_parser: fn(&mut Parser<'a>) -> Option<Rc<T>>,
-        kind_builder: fn(Rc<T>) -> NodeKind,
+        tree: &'a Ast,
+        code: &mut Code<'a>,
+        node_parser: fn(&mut Parser<'a>, &'a Ast) -> Option<&'a T>,
+        kind_builder: fn(&'a T) -> NodeKind<'a>,
         missing_token: MissingTokenKind,
-    ) -> Option<Rc<T>> {
-        let node = node_parser(self);
+    ) -> Option<&'a T> {
+        let node = node_parser(self, tree);
 
         if let Some(ref node) = node {
-            code.node(kind_builder(Rc::clone(node)));
+            code.node(kind_builder(node));
         } else {
             code.missing(self.tokenizer.current_insertion_range(), missing_token);
         }
@@ -993,12 +1011,13 @@ impl<'a> Parser<'a> {
     /// the end character token or EOF specified by `close_char`.
     fn _parse_elements<T>(
         &mut self,
+        tree: &'a Ast,
         open_char: char,
         close_char: char,
-        code: &mut Code,
-        element_parser: fn(&mut Parser<'a>) -> Option<Rc<T>>,
-        kind_builder: fn(Rc<T>) -> NodeKind,
-    ) -> Vec<Rc<T>> {
+        code: &mut Code<'a>,
+        element_parser: fn(&mut Parser<'a>, &'a Ast) -> Option<&'a T>,
+        kind_builder: fn(&'a T) -> NodeKind<'a>,
+    ) -> Vec<&'a T> {
         let mut arguments = vec![];
         let mut consumed = false; // An argument already read.
 
@@ -1030,12 +1049,12 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 _ => {
-                    if let Some(expr) = element_parser(self) {
+                    if let Some(expr) = element_parser(self, tree) {
                         // Maybe user forgot opening token before a param.
                         //     # (
                         //         a ...
                         //     )
-                        arguments.push(Rc::clone(&expr));
+                        arguments.push(expr);
                         consumed = true;
 
                         code.missing(
@@ -1043,7 +1062,7 @@ impl<'a> Parser<'a> {
                             MissingTokenKind::Char(open_char),
                         );
 
-                        code.node(kind_builder(Rc::clone(&expr)));
+                        code.node(kind_builder(expr));
                         break;
                     } else {
                         // Continue until read an opening token.
@@ -1058,12 +1077,12 @@ impl<'a> Parser<'a> {
 
         loop {
             if !consumed {
-                let argument = element_parser(self);
+                let argument = element_parser(self, tree);
 
                 if let Some(argument) = argument {
                     consumed = true;
-                    arguments.push(Rc::clone(&argument));
-                    code.node(kind_builder(Rc::clone(&argument)));
+                    arguments.push(argument);
+                    code.node(kind_builder(argument));
                 } else {
                     consumed = false;
                 }
@@ -1104,10 +1123,11 @@ impl<'a> Parser<'a> {
 
     fn _parse_binary_op(
         &mut self,
-        next_parser: fn(&mut Parser<'a>) -> Option<Rc<Expression>>,
+        tree: &'a Ast,
+        next_parser: fn(&mut Parser<'a>, &'a Ast) -> Option<&'a Expression<'a>>,
         operators: &[(TokenKind, BinaryOperator)],
-    ) -> Option<Rc<Expression>> {
-        let mut lhs = next_parser(self)?;
+    ) -> Option<&'a Expression<'a>> {
+        let mut lhs = next_parser(self, tree)?;
 
         loop {
             let kind = self.tokenizer.peek_kind();
@@ -1129,16 +1149,15 @@ impl<'a> Parser<'a> {
 
             let op_token = self.tokenizer.next_token();
             let mut rhs;
-            let mut code = Code::new();
+            let mut code = Code::new(tree);
 
-            code.node(NodeKind::Expression(Rc::clone(&lhs)))
-                .interpret(op_token);
+            code.node(NodeKind::Expression(lhs)).interpret(op_token);
 
             loop {
-                rhs = next_parser(self);
+                rhs = next_parser(self, tree);
 
                 if let Some(ref rhs) = rhs {
-                    code.node(NodeKind::Expression(Rc::clone(rhs)));
+                    code.node(NodeKind::Expression(rhs));
                     break;
                 } else {
                     // If we couldn't parse the right hand expression, retry
@@ -1155,7 +1174,7 @@ impl<'a> Parser<'a> {
             // node
             let expr = BinaryExpression::new(operator, lhs, rhs);
 
-            lhs = Rc::new(Expression::new(
+            lhs = tree.alloc(Expression::new(
                 ExpressionKind::BinaryExpression(expr),
                 code,
             ));
@@ -1194,11 +1213,14 @@ mod tests {
 
     #[test]
     fn number_integer() {
-        let stmt = parse_statement("42");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "42");
 
         assert_matches!(
             stmt.expression().unwrap().kind(),
-            ExpressionKind::IntegerLiteral(42)
+            ExpressionKind::IntegerLiteral(n) => {
+                assert_eq!(*n, IntegerLiteral::new(42));
+            }
         );
 
         let mut code = stmt.expression().unwrap().code();
@@ -1210,8 +1232,9 @@ mod tests {
 
     #[test]
     fn incomplete_string() {
+        let tree = Ast::new();
         for src in vec!["\"Fizz\\\"", "\"Fizz\\\"\n"] {
-            let stmt = parse_statement(src);
+            let stmt = parse_statement(&tree, src);
             let expr = stmt.expression().unwrap();
 
             assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
@@ -1239,8 +1262,9 @@ mod tests {
 
     #[test]
     fn incomplete_string_in_paren() {
+        let tree = Ast::new();
         for src in vec!["(\"Fizz\\\")", "(\"Fizz\\\")\n"] {
-            let stmt = parse_statement(src);
+            let stmt = parse_statement(&tree, src);
             let expr = stmt.expression().unwrap();
 
             assert_matches!(expr.kind(), ExpressionKind::Expression(Some(expr)) => {
@@ -1263,14 +1287,22 @@ mod tests {
 
     #[test]
     fn add_integer() {
-        let stmt = parse_statement("1+2");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "1+2");
         let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
-        assert_eq!(expr.operator, BinaryOperator::Add);
-        assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(1));
+        assert_eq!(expr.operator(), BinaryOperator::Add);
+        assert_matches!(
+            expr.lhs().kind(),
+            ExpressionKind::IntegerLiteral(n) => {
+                assert_eq!(*n, IntegerLiteral::new(1));
+            }
+        );
         assert_matches!(
             expr.rhs().unwrap().kind(),
-            ExpressionKind::IntegerLiteral(2)
+            ExpressionKind::IntegerLiteral(n) => {
+                assert_eq!(*n, IntegerLiteral::new(2));
+            }
         );
 
         let mut tokens = stmt.expression().unwrap().code();
@@ -1288,11 +1320,17 @@ mod tests {
 
     #[test]
     fn add_integer_missing_node() {
-        let stmt = parse_statement("1+");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "1+");
         let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
-        assert_eq!(expr.operator, BinaryOperator::Add);
-        assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(1));
+        assert_eq!(expr.operator(), BinaryOperator::Add);
+        assert_matches!(
+            expr.lhs().kind(),
+            ExpressionKind::IntegerLiteral(n) => {
+                assert_eq!(*n, IntegerLiteral::new(1));
+            }
+        );
         assert!(expr.rhs().is_none());
 
         let mut tokens = stmt.expression().unwrap().code();
@@ -1311,14 +1349,22 @@ mod tests {
 
     #[test]
     fn add_integer_skipped_tokens() {
-        let stmt = parse_statement("1 + % ? 2");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "1 + % ? 2");
         let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
-        assert_eq!(expr.operator, BinaryOperator::Add);
-        assert_matches!(expr.lhs().kind(), ExpressionKind::IntegerLiteral(1));
+        assert_eq!(expr.operator(), BinaryOperator::Add);
+        assert_matches!(
+            expr.lhs().kind(),
+            ExpressionKind::IntegerLiteral(n) => {
+                assert_eq!(*n, IntegerLiteral::new(1));
+            }
+        );
         assert_matches!(
             expr.rhs().unwrap().kind(),
-            ExpressionKind::IntegerLiteral(2)
+            ExpressionKind::IntegerLiteral(n) => {
+                assert_eq!(*n, IntegerLiteral::new(2));
+            }
         );
 
         let mut tokens = stmt.expression().unwrap().code();
@@ -1344,13 +1390,16 @@ mod tests {
 
     #[test]
     fn unary_op() {
-        let stmt = parse_statement("-1");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "-1");
         let expr = stmt.expression().unwrap().unary_expression().unwrap();
 
-        assert_eq!(expr.operator, UnaryOperator::Minus);
+        assert_eq!(expr.operator(), UnaryOperator::Minus);
         assert_matches!(
             expr.operand().unwrap().kind(),
-            ExpressionKind::IntegerLiteral(1)
+            ExpressionKind::IntegerLiteral(n) => {
+                assert_eq!(*n, IntegerLiteral::new(1));
+            }
         );
 
         let mut tokens = stmt.expression().unwrap().code();
@@ -1365,14 +1414,20 @@ mod tests {
 
     #[test]
     fn unary_op_nested() {
-        let stmt = parse_statement("-+1");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "-+1");
         let expr = stmt.expression().unwrap().unary_expression().unwrap();
 
         assert_matches!(expr, UnaryExpression { operator: UnaryOperator::Minus, operand: Some(operand) } => {
             let operand = operand.unary_expression().unwrap();
 
             assert_matches!(operand, UnaryExpression { operator: UnaryOperator::Plus, operand: Some(operand) } => {
-                assert_matches!(operand.kind(), ExpressionKind::IntegerLiteral(1));
+                assert_matches!(
+                    operand.kind(),
+                    ExpressionKind::IntegerLiteral(n) => {
+                        assert_eq!(*n, IntegerLiteral::new(1));
+                    }
+                );
             });
         });
 
@@ -1388,7 +1443,8 @@ mod tests {
 
     #[test]
     fn subscript_index() {
-        let stmt = parse_statement("a[0]");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "a[0]");
         let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1400,7 +1456,12 @@ mod tests {
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
-            assert_matches!(arguments[0].kind(), ExpressionKind::IntegerLiteral(0));
+            assert_matches!(
+                arguments[0].kind(),
+                ExpressionKind::IntegerLiteral(n) => {
+                    assert_eq!(*n, IntegerLiteral::new(0));
+                }
+            );
         });
 
         let mut tokens = stmt.expression().unwrap().code();
@@ -1421,7 +1482,8 @@ mod tests {
 
     #[test]
     fn subscript_empty() {
-        let stmt = parse_statement("a[]");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "a[]");
         let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1450,7 +1512,8 @@ mod tests {
 
     #[test]
     fn subscript_not_closed() {
-        let stmt = parse_statement("a[1\nb");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "a[1\nb");
         let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1462,7 +1525,12 @@ mod tests {
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
-            assert_matches!(arguments[0].kind(), ExpressionKind::IntegerLiteral(1));
+            assert_matches!(
+                arguments[0].kind(),
+                ExpressionKind::IntegerLiteral(n) => {
+                    assert_eq!(*n, IntegerLiteral::new(1));
+                }
+            );
         });
 
         let mut tokens = stmt.expression().unwrap().code();
@@ -1480,8 +1548,9 @@ mod tests {
 
     #[test]
     fn subscript_incomplete_string() {
+        let tree = Ast::new();
         for src in vec!["a[\"", "a[\"\n"] {
-            let stmt = parse_statement(src);
+            let stmt = parse_statement(&tree, src);
             let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
             assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1506,7 +1575,8 @@ mod tests {
 
     #[test]
     fn array_empty() {
-        let stmt = parse_statement("[]");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "[]");
         let expr = stmt.expression().unwrap().array_expression().unwrap();
 
         assert_matches!(expr, ArrayExpression{ .. } => {
@@ -1526,7 +1596,8 @@ mod tests {
 
     #[test]
     fn array_one_element_and_trailing_comma() {
-        let stmt = parse_statement("[1,]");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "[1,]");
         let expr = stmt.expression().unwrap().array_expression().unwrap();
 
         assert_matches!(expr, ArrayExpression{ .. } => {
@@ -1534,7 +1605,12 @@ mod tests {
             assert_eq!(elements.len(), 1);
 
             assert_eq!(elements.len(), 1);
-            assert_matches!(elements[0].kind(), ExpressionKind::IntegerLiteral(1));
+            assert_matches!(
+                elements[0].kind(),
+                ExpressionKind::IntegerLiteral(n) => {
+                    assert_eq!(*n, IntegerLiteral::new(1));
+                }
+            );
         });
 
         let mut tokens = stmt.expression().unwrap().code();
@@ -1556,7 +1632,9 @@ mod tests {
     // If expression
     #[test]
     fn if_expression() {
+        let tree = Ast::new();
         let stmt = parse_statement(
+            &tree,
             "if x > 0
                 10
             else
@@ -1575,7 +1653,8 @@ mod tests {
 
     #[test]
     fn if_expression_missing_condition() {
-        let stmt = parse_statement("if\nend");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "if\nend");
         let expr = stmt.expression().unwrap().if_expression().unwrap();
 
         assert_matches!(expr, IfExpression { condition, then_body, else_body } => {
@@ -1589,7 +1668,8 @@ mod tests {
 
     #[test]
     fn if_expression_missing_newline() {
-        let stmt = parse_statement("if b x end");
+        let tree = Ast::new();
+        let stmt = parse_statement(&tree, "if b x end");
 
         assert!(stmt.expression().unwrap().if_expression().is_some());
 
@@ -1629,7 +1709,9 @@ mod tests {
     // If expression
     #[test]
     fn case_expression() {
+        let tree = Ast::new();
         let stmt = parse_statement(
+            &tree,
             "
             case x
             when 123
@@ -1653,29 +1735,29 @@ mod tests {
             assert!(!arms.is_empty());
 
             // when 123
-            assert!(arms[0].pattern.is_some());
-            assert!(arms[0].guard.is_none());
-            assert_matches!(arms[0].pattern().unwrap().kind, PatternKind::IntegerPattern(..));
+            assert!(arms[0].pattern().is_some());
+            assert!(arms[0].guard().is_none());
+            assert_matches!(arms[0].pattern().unwrap().kind(), PatternKind::IntegerPattern(..));
 
             // when \"string\"
-            assert!(arms[1].pattern.is_some());
-            assert!(arms[1].guard.is_none());
-            assert_matches!(arms[1].pattern().unwrap().kind, PatternKind::StringPattern(..));
+            assert!(arms[1].pattern().is_some());
+            assert!(arms[1].guard().is_none());
+            assert_matches!(arms[1].pattern().unwrap().kind(), PatternKind::StringPattern(..));
 
             // when y
-            assert!(arms[2].pattern.is_some());
-            assert!(arms[2].guard.is_none());
-            assert_matches!(arms[2].pattern().unwrap().kind, PatternKind::VariablePattern(..));
+            assert!(arms[2].pattern().is_some());
+            assert!(arms[2].guard().is_none());
+            assert_matches!(arms[2].pattern().unwrap().kind(), PatternKind::VariablePattern(..));
 
             // when [1, x]
-            assert!(arms[3].pattern.is_some());
-            assert!(arms[3].guard.is_none());
-            assert_matches!(arms[3].pattern().unwrap().kind, PatternKind::ArrayPattern(..));
+            assert!(arms[3].pattern().is_some());
+            assert!(arms[3].guard().is_none());
+            assert_matches!(arms[3].pattern().unwrap().kind(), PatternKind::ArrayPattern(..));
 
             // when x if x > 10
-            assert!(arms[4].pattern.is_some());
-            assert!(arms[4].guard.is_some());
-            assert_matches!(arms[4].pattern().unwrap().kind, PatternKind::VariablePattern(..));
+            assert!(arms[4].pattern().is_some());
+            assert!(arms[4].guard().is_some());
+            assert_matches!(arms[4].pattern().unwrap().kind(), PatternKind::VariablePattern(..));
 
             assert!(else_body.is_some());
         });
@@ -1683,34 +1765,34 @@ mod tests {
 
     // --- helpers
 
-    fn parse_statement(src: &str) -> Rc<Statement> {
-        let module = Parser::parse_string(src);
+    fn parse_statement<'a>(tree: &'a Ast, src: &'a str) -> &'a Statement<'a> {
+        let module = Parser::parse_string(tree, src);
 
-        assert!(!module.body.is_empty());
-        module.body[0].statement().unwrap()
+        assert_eq!(!module.body().len(), 0);
+        module.body().next().unwrap().statement().unwrap()
     }
 
-    fn next_node<'a>(tokens: &'a mut slice::Iter<CodeKind>) -> &'a NodeKind {
+    fn next_node<'a>(tokens: &'a mut slice::Iter<'_, CodeKind<'a>>) -> &'a NodeKind<'a> {
         unwrap_node(tokens.next().unwrap())
     }
 
-    fn next_interpreted_token<'a>(tokens: &'a mut slice::Iter<CodeKind>) -> &'a Token {
+    fn next_interpreted_token<'a>(tokens: &'a mut slice::Iter<'_, CodeKind<'a>>) -> &'a Token {
         unwrap_interpreted_token(tokens.next().unwrap())
     }
 
     fn next_missing_token(
-        tokens: &mut slice::Iter<CodeKind>,
+        tokens: &mut slice::Iter<'_, CodeKind<'_>>,
     ) -> (EffectiveRange, MissingTokenKind) {
         unwrap_missing_token(tokens.next().unwrap())
     }
 
     fn next_skipped_token<'a>(
-        tokens: &'a mut slice::Iter<CodeKind>,
+        tokens: &'a mut slice::Iter<'_, CodeKind<'a>>,
     ) -> (&'a Token, MissingTokenKind) {
         unwrap_skipped_token(tokens.next().unwrap())
     }
 
-    fn unwrap_node(kind: &CodeKind) -> &NodeKind {
+    fn unwrap_node<'a>(kind: &'a CodeKind<'a>) -> &'a NodeKind<'a> {
         if let CodeKind::Node(node) = kind {
             return node;
         }
@@ -1718,7 +1800,7 @@ mod tests {
         panic!("expected child node");
     }
 
-    fn unwrap_interpreted_token(kind: &CodeKind) -> &Token {
+    fn unwrap_interpreted_token<'a>(kind: &'a CodeKind<'a>) -> &'a Token {
         if let CodeKind::SyntaxToken(token) = kind {
             if let SyntaxToken::Interpreted(token) = token {
                 return token;
@@ -1728,7 +1810,7 @@ mod tests {
         panic!("expected interpreted token");
     }
 
-    fn unwrap_missing_token(kind: &CodeKind) -> (EffectiveRange, MissingTokenKind) {
+    fn unwrap_missing_token(kind: &CodeKind<'_>) -> (EffectiveRange, MissingTokenKind) {
         if let CodeKind::SyntaxToken(token) = kind {
             if let SyntaxToken::Missing { range, item } = token {
                 return (range.clone(), item.clone());
@@ -1738,7 +1820,7 @@ mod tests {
         panic!("expected missing token");
     }
 
-    fn unwrap_skipped_token(kind: &CodeKind) -> (&Token, MissingTokenKind) {
+    fn unwrap_skipped_token<'a>(kind: &'a CodeKind<'a>) -> (&'a Token, MissingTokenKind) {
         if let CodeKind::SyntaxToken(token) = kind {
             if let SyntaxToken::Skipped { token, expected } = token {
                 return (token, *expected);

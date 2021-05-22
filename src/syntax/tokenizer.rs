@@ -197,7 +197,7 @@ pub struct Tokenizer<'a> {
 }
 
 impl<'a> Tokenizer<'a> {
-    pub fn from_string<S: AsRef<str> + ?Sized>(src: &'a S) -> Tokenizer<'a> {
+    pub fn from_string<S: AsRef<str> + 'a>(src: S) -> Tokenizer<'a> {
         let mut iter = src.as_ref().chars().peekable();
         let at_end = iter.peek().is_none();
 

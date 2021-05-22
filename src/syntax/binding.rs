@@ -340,7 +340,7 @@ impl Visitor for TypeBinder {
     }
 }
 
-pub fn bind(node: &Rc<Program>) {
+pub fn bind<'a>(node: &'a Program<'a>) {
     let mut binder = TopLevelDeclarationBinder::new();
     traverse(&mut binder, node);
 
@@ -356,11 +356,12 @@ pub fn bind(node: &Rc<Program>) {
 
 #[cfg(test)]
 mod tests {
-    use crate::syntax::Parser;
+    use crate::syntax::{Ast, Parser};
 
     #[test]
     fn top_level_declarations() {
-        let program = Parser::parse_string("fun foo()\nend");
+        let tree = Ast::new();
+        let program = Parser::parse_string(&tree, "fun foo()\nend");
 
         let scope = program.declarations_scope().borrow();
         let binding = scope.get_binding("foo");
