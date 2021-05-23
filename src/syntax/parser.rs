@@ -71,7 +71,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         let program = arena.alloc(Program::new(arena, body, code));
 
-        binding::bind(program);
+        binding::bind(arena, program);
 
         program
     }

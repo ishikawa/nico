@@ -437,7 +437,7 @@ impl<'a> Program<'a> {
         body: I,
         code: Code<'a>,
     ) -> Program<'a> {
-        let declarations = wrap(Scope::prelude());
+        let declarations = wrap(Scope::prelude(arena));
         let main_scope = wrap(Scope::new());
 
         Program {
