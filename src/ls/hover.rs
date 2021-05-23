@@ -1,8 +1,9 @@
 use crate::{
     sem,
+    semantic::DefinitionKind,
     syntax::{
-        self, DefinitionKind, EffectiveRange, Node, NodePath, Position, Program, StructDefinition,
-        TypeAnnotation, ValueField,
+        self, EffectiveRange, Node, NodePath, Position, Program, StructDefinition, TypeAnnotation,
+        ValueField,
     },
 };
 use std::{cell::RefCell, fmt, rc::Rc};

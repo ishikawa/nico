@@ -1,12 +1,15 @@
 //! This module contains implementations of `Visitor` that assigns meta information that can be
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
-    traverse, Block, Builtin, CaseArm, DefinitionKind, Expression, FunctionDefinition,
-    FunctionParameter, IntegerLiteral, NodeKind, NodePath, Pattern, Program, StringLiteral,
-    StructDefinition, VariableDeclaration, Visitor,
+    traverse, Block, CaseArm, Expression, FunctionDefinition, FunctionParameter, IntegerLiteral,
+    NodeKind, NodePath, Pattern, Program, StringLiteral, StructDefinition, VariableDeclaration,
+    Visitor,
 };
-use crate::sem::{self, Type};
-use crate::util::wrap;
+use crate::{
+    sem::{self, Type},
+    semantic::DefinitionKind,
+};
+use crate::{semantic::Builtin, util::wrap};
 use std::{
     cell::RefCell,
     collections::HashMap,
