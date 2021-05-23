@@ -187,6 +187,9 @@ pub trait Visitor<'a> {
     fn enter_program(&mut self, path: &mut NodePath<'a>, program: &'a Program<'a>) {}
     fn exit_program(&mut self, path: &mut NodePath<'a>, program: &'a Program<'a>) {}
 
+    fn enter_top_level(&mut self, path: &mut NodePath<'a>, program: &'a TopLevel<'a>) {}
+    fn exit_top_level(&mut self, path: &mut NodePath<'a>, program: &'a TopLevel<'a>) {}
+
     fn enter_block(&mut self, path: &mut NodePath<'a>, block: &'a Block<'a>) {}
     fn exit_block(&mut self, path: &mut NodePath<'a>, block: &'a Block<'a>) {}
 
@@ -499,6 +502,9 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<
         NodeKind::Program(_) => {
             visitor.enter_program(&mut path, node.program().unwrap());
         }
+        NodeKind::TopLevel(kind) => {
+            visitor.enter_top_level(&mut path, kind);
+        }
         NodeKind::Block(_) => {
             visitor.enter_block(&mut path, node.block().unwrap());
         }
@@ -594,6 +600,9 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<'
     match node {
         NodeKind::Program(_) => {
             visitor.exit_program(&mut path, node.program().unwrap());
+        }
+        NodeKind::TopLevel(kind) => {
+            visitor.exit_top_level(&mut path, kind);
         }
         NodeKind::Block(_) => {
             visitor.exit_block(&mut path, node.block().unwrap());

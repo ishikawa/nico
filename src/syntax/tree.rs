@@ -87,6 +87,7 @@ pub trait Node<'a>: fmt::Display {
 #[derive(Debug, Clone)]
 pub enum NodeKind<'a> {
     Program(&'a Program<'a>),
+    TopLevel(&'a TopLevel<'a>),
     Block(&'a Block<'a>),
     Identifier(&'a Identifier<'a>),
     StructDefinition(&'a StructDefinition<'a>),
@@ -294,6 +295,7 @@ impl<'a> Node<'a> for NodeKind<'a> {
     fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
         match self {
             NodeKind::Program(kind) => kind.code(),
+            NodeKind::TopLevel(kind) => kind.code(),
             NodeKind::Block(kind) => kind.code(),
             NodeKind::Identifier(kind) => kind.code(),
             NodeKind::StructDefinition(kind) => kind.code(),
@@ -308,24 +310,6 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::Expression(kind) => kind.code(),
             NodeKind::CaseArm(kind) => kind.code(),
             NodeKind::Pattern(kind) => kind.code(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum TopLevelKind<'a> {
-    StructDefinition(&'a StructDefinition<'a>),
-    FunctionDefinition(&'a FunctionDefinition<'a>),
-    Statement(&'a Statement<'a>),
-    VariableDeclaration(&'a VariableDeclaration<'a>),
-}
-
-impl<'a> TopLevelKind<'a> {
-    pub fn statement(&self) -> Option<&'a Statement<'a>> {
-        if let TopLevelKind::Statement(stmt) = self {
-            Some(stmt)
-        } else {
-            None
         }
     }
 }
@@ -533,15 +517,76 @@ impl CodeKind<'_> {
 }
 
 #[derive(Debug)]
+pub struct TopLevel<'a> {
+    kind: TopLevelKind<'a>,
+    code: Code<'a>,
+}
+
+impl<'a> TopLevel<'a> {
+    pub fn new(kind: TopLevelKind<'a>, code: Code<'a>) -> Self {
+        Self { kind, code }
+    }
+
+    pub fn kind(&self) -> &TopLevelKind<'a> {
+        &self.kind
+    }
+
+    pub fn statement(&self) -> Option<&'a Statement<'a>> {
+        self.kind().statement()
+    }
+}
+
+impl<'a> Node<'a> for TopLevel<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for TopLevel<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TopLevel ({})", self.kind())
+    }
+}
+
+#[derive(Debug)]
+pub enum TopLevelKind<'a> {
+    StructDefinition(&'a StructDefinition<'a>),
+    FunctionDefinition(&'a FunctionDefinition<'a>),
+    Statement(&'a Statement<'a>),
+    VariableDeclaration(&'a VariableDeclaration<'a>),
+}
+
+impl<'a> TopLevelKind<'a> {
+    pub fn statement(&self) -> Option<&'a Statement<'a>> {
+        if let TopLevelKind::Statement(stmt) = self {
+            Some(stmt)
+        } else {
+            None
+        }
+    }
+}
+
+impl fmt::Display for TopLevelKind<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TopLevelKind::StructDefinition(kind) => kind.fmt(f),
+            TopLevelKind::FunctionDefinition(kind) => kind.fmt(f),
+            TopLevelKind::Statement(kind) => kind.fmt(f),
+            TopLevelKind::VariableDeclaration(kind) => kind.fmt(f),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Program<'a> {
-    body: BumpaloVec<'a, TopLevelKind<'a>>,
+    body: BumpaloVec<'a, &'a TopLevel<'a>>,
     declarations: Rc<RefCell<Scope<'a>>>,
     main_scope: Rc<RefCell<Scope<'a>>>,
     code: Code<'a>,
 }
 
 impl<'a> Program<'a> {
-    pub fn new<I: IntoIterator<Item = TopLevelKind<'a>>>(
+    pub fn new<I: IntoIterator<Item = &'a TopLevel<'a>>>(
         tree: &'a Ast,
         body: I,
         code: Code<'a>,
@@ -557,8 +602,8 @@ impl<'a> Program<'a> {
         }
     }
 
-    pub fn body(&self) -> impl ExactSizeIterator<Item = &TopLevelKind<'a>> + '_ {
-        self.body.iter()
+    pub fn body(&self) -> impl ExactSizeIterator<Item = &'a TopLevel<'a>> + '_ {
+        self.body.iter().copied()
     }
 
     pub fn declarations_scope(&self) -> &Rc<RefCell<Scope<'a>>> {
@@ -613,17 +658,6 @@ impl fmt::Display for Identifier<'_> {
     }
 }
 
-/// Types
-/// -----
-/// ```ignore
-/// definition  := struct
-/// struct      := "struct" name "{" fields "}"
-/// fields      := field | fields ","
-/// field       := name ":" type
-/// type        := name
-/// name        := IDENT
-/// ```
-///
 #[derive(Debug)]
 pub struct StructDefinition<'a> {
     name: Option<&'a Identifier<'a>>,
@@ -1669,6 +1703,7 @@ impl fmt::Display for NodeKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NodeKind::Program(program) => program.fmt(f),
+            NodeKind::TopLevel(kind) => kind.fmt(f),
             NodeKind::Block(block) => block.fmt(f),
             NodeKind::Identifier(id) => write!(f, "Identifier({})", id),
             NodeKind::StructDefinition(definition) => definition.fmt(f),
