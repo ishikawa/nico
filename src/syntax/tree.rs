@@ -65,6 +65,7 @@ impl Ast {
         &self.arena
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub fn alloc<T>(&self, val: T) -> &mut T {
         self.arena.alloc(val)
     }
@@ -647,7 +648,7 @@ impl<'a> StructDefinition<'a> {
     }
 
     pub fn name(&self) -> Option<&'a Identifier<'a>> {
-        self.name.clone()
+        self.name
     }
 
     pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
@@ -665,7 +666,7 @@ impl<'a> StructDefinition<'a> {
                 f.name()
                     .map_or(false, |field_name| field_name.as_str() == name)
             })
-            .and_then(|f| f.type_annotation.clone())
+            .and_then(|f| f.type_annotation)
             .map(|annotation| Rc::clone(&annotation.r#type))
     }
 }
@@ -707,11 +708,11 @@ impl<'a> TypeField<'a> {
     }
 
     pub fn name(&self) -> Option<&'a Identifier<'a>> {
-        self.name.clone()
+        self.name
     }
 
     pub fn type_annotation(&self) -> Option<&'a TypeAnnotation<'a>> {
-        self.type_annotation.clone()
+        self.type_annotation
     }
 }
 
@@ -784,7 +785,7 @@ impl<'a> FunctionDefinition<'a> {
     }
 
     pub fn name(&self) -> Option<&'a Identifier<'a>> {
-        self.name.clone()
+        self.name
     }
 
     pub fn body(&self) -> &'a Block<'a> {
@@ -861,11 +862,11 @@ impl<'a> VariableDeclaration<'a> {
     }
 
     pub fn pattern(&self) -> Option<&'a Pattern<'a>> {
-        self.pattern.clone()
+        self.pattern
     }
 
     pub fn init(&self) -> Option<&'a Expression<'a>> {
-        self.init.clone()
+        self.init
     }
 }
 
@@ -1153,7 +1154,7 @@ impl<'a> ValueField<'a> {
     }
 
     pub fn value(&self) -> Option<&'a Expression<'a>> {
-        self.value.clone()
+        self.value
     }
 }
 
@@ -1194,7 +1195,7 @@ impl<'a> BinaryExpression<'a> {
     }
 
     pub fn rhs(&self) -> Option<&'a Expression<'a>> {
-        self.rhs.clone()
+        self.rhs
     }
 }
 
@@ -1214,7 +1215,7 @@ impl<'a> UnaryExpression<'a> {
     }
 
     pub fn operand(&self) -> Option<&'a Expression<'a>> {
-        self.operand.clone()
+        self.operand
     }
 }
 
@@ -1309,7 +1310,7 @@ impl<'a> MemberExpression<'a> {
     }
 
     pub fn field(&self) -> Option<&'a Identifier<'a>> {
-        self.field.clone()
+        self.field
     }
 }
 
@@ -1351,7 +1352,7 @@ impl<'a> IfExpression<'a> {
     }
 
     pub fn condition(&self) -> Option<&'a Expression<'a>> {
-        self.condition.clone()
+        self.condition
     }
 
     pub fn then_body(&self) -> &'a Block<'a> {
@@ -1359,7 +1360,7 @@ impl<'a> IfExpression<'a> {
     }
 
     pub fn else_body(&self) -> Option<&'a Block<'a>> {
-        self.else_body.clone()
+        self.else_body
     }
 }
 
@@ -1385,7 +1386,7 @@ impl<'a> CaseExpression<'a> {
     }
 
     pub fn head(&self) -> Option<&'a Expression<'a>> {
-        self.head.clone()
+        self.head
     }
 
     pub fn arms(&self) -> impl ExactSizeIterator<Item = &'a CaseArm<'a>> + '_ {
@@ -1393,7 +1394,7 @@ impl<'a> CaseExpression<'a> {
     }
 
     pub fn else_body(&self) -> Option<&'a Block<'a>> {
-        self.else_body.clone()
+        self.else_body
     }
 }
 
@@ -1431,11 +1432,11 @@ impl<'a> CaseArm<'a> {
     }
 
     pub fn pattern(&self) -> Option<&'a Pattern<'a>> {
-        self.pattern.clone()
+        self.pattern
     }
 
     pub fn guard(&self) -> Option<&'a Expression<'a>> {
-        self.guard.clone()
+        self.guard
     }
 
     pub fn then_body(&self) -> &'a Block<'a> {
@@ -1560,7 +1561,7 @@ impl<'a> RestPattern<'a> {
     }
 
     pub fn id(&self) -> Option<&'a Identifier<'a>> {
-        self.id.clone()
+        self.id
     }
 }
 
@@ -1634,11 +1635,11 @@ impl<'a> ValueFieldPattern<'a> {
     }
 
     pub fn value(&self) -> Option<&'a Pattern<'a>> {
-        self.value.clone()
+        self.value
     }
 
     pub fn omitted_value(&self) -> Option<&'a Pattern<'a>> {
-        self.omitted_value.clone()
+        self.omitted_value
     }
 }
 
