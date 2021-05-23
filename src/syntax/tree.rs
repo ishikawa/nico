@@ -4,9 +4,9 @@
 //! ```ignore
 //! Program             := TopLevel*
 //! TopLevel            := Statement | FunctionDeclaration | StructDeclaration
-//! FunctionDeclaration := "export"? "fun" Id "(" (Parameter ",")* Parameter? ")" Block "end"
-//! Parameter           := Id
-//! StructDeclaration   := "export"? "struct" Id "{" (TypeField ",")* TypeField? "}"
+//! FunctionDeclaration := "export"? "fun" Id "(" FunctionParameter (, FunctionParameter)* ,? ")" Block "end"
+//! FunctionParameter   := Id
+//! StructDeclaration   := "export"? "struct" Id "{" TypeField (, TypeField)* ,? "}"
 //! TypeField           := Id ":" TypeAnnotation
 //! Block               := Statement*
 //! Statement           := VariableDeclaration | Expression
@@ -21,13 +21,13 @@
 //! IntegerLiteral      := <Integer>
 //! StringLiteral       := <String>
 //! VariableExpression  := Id
-//! StructLiteral       := Id "{" (ValueField ",")* ValueField? "}"
+//! StructLiteral       := Id "{" ValueField (, ValueField)* ,? "}"
 //! ValueField          := Id (":" Expression)?
 //! BinaryExpression    := Expression ("+" | "-" | "*" | "/"| "%") Expression
 //! UnaryExpression     := ("!" | "-") Expression
 //! SubscriptExpression := Expression "[" Expression "]"
-//! CallExpression      := Expression "(" (Expression ",")* Expression?* "]"
-//! ArrayExpression     := "[" (Expression ",")* Expression? "]"
+//! CallExpression      := Expression "(" Expression (, Expression)* ,?* "]"
+//! ArrayExpression     := "[" Expression (, Expression)* ,? "]"
 //! MemberExpression    := Expression "." Id
 //! IfExpression        := "if" Expression Block ("else" Block)? "end"
 //! CaseExpression      := "case" Expression CaseArm* ("else" Block)? "end"
@@ -37,10 +37,10 @@
 //! IntegerPattern      := <Integer>
 //! StringPattern       := <String>
 //! VariablePattern     := Id
-//! StructPattern       := Id "{" (ValueFieldPattern ",")* ValueFieldPattern? "}"
+//! StructPattern       := Id "{" ValueFieldPattern (, ValueFieldPattern)* ,? "}"
 //! ValueFieldPattern   := Id (":" Pattern)?
-//! ArrayPattern        := "[" (Pattern ",")* Pattern? "]"
-//! RestPattern.        := "..." Id?
+//! ArrayPattern        := "[" Pattern (, Pattern)* ,? "]"
+//! RestPattern         := "..." Id?
 //! ```
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::{sem, util::wrap};
