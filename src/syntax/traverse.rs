@@ -187,6 +187,9 @@ pub trait Visitor<'a> {
     fn enter_program(&mut self, path: &mut NodePath<'a>, program: &'a Program<'a>) {}
     fn exit_program(&mut self, path: &mut NodePath<'a>, program: &'a Program<'a>) {}
 
+    fn enter_top_level(&mut self, path: &mut NodePath<'a>, program: &'a TopLevel<'a>) {}
+    fn exit_top_level(&mut self, path: &mut NodePath<'a>, program: &'a TopLevel<'a>) {}
+
     fn enter_block(&mut self, path: &mut NodePath<'a>, block: &'a Block<'a>) {}
     fn exit_block(&mut self, path: &mut NodePath<'a>, block: &'a Block<'a>) {}
 
@@ -496,51 +499,53 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<
     let node = path.node().clone();
 
     match node {
-        NodeKind::Program(_) => {
-            visitor.enter_program(&mut path, node.program().unwrap());
+        NodeKind::Program(kind) => {
+            visitor.enter_program(&mut path, kind);
         }
-        NodeKind::Block(_) => {
-            visitor.enter_block(&mut path, node.block().unwrap());
+        NodeKind::TopLevel(kind) => {
+            visitor.enter_top_level(&mut path, kind);
         }
-        NodeKind::Identifier(_) => {
-            visitor.enter_identifier(&mut path, node.identifier().unwrap());
+        NodeKind::Block(kind) => {
+            visitor.enter_block(&mut path, kind);
         }
-        NodeKind::StructDefinition(_) => {
-            visitor.enter_struct_definition(&mut path, node.struct_definition().unwrap());
+        NodeKind::Identifier(kind) => {
+            visitor.enter_identifier(&mut path, kind);
         }
-        NodeKind::FunctionDefinition(_) => {
-            visitor.enter_function_definition(&mut path, node.function_definition().unwrap());
+        NodeKind::StructDefinition(kind) => {
+            visitor.enter_struct_definition(&mut path, kind);
         }
-        NodeKind::TypeField(_) => {
-            visitor.enter_type_field(&mut path, node.type_field().unwrap());
+        NodeKind::FunctionDefinition(kind) => {
+            visitor.enter_function_definition(&mut path, kind);
         }
-        NodeKind::TypeAnnotation(_) => {
-            visitor.enter_type_annotation(&mut path, node.type_annotation().unwrap());
+        NodeKind::TypeField(kind) => {
+            visitor.enter_type_field(&mut path, kind);
         }
-        NodeKind::FunctionParameter(_) => {
-            visitor.enter_function_parameter(&mut path, node.function_parameter().unwrap());
+        NodeKind::TypeAnnotation(kind) => {
+            visitor.enter_type_annotation(&mut path, kind);
         }
-        NodeKind::Statement(_) => {
-            visitor.enter_statement(&mut path, node.statement().unwrap());
+        NodeKind::FunctionParameter(kind) => {
+            visitor.enter_function_parameter(&mut path, kind);
         }
-        NodeKind::VariableDeclaration(_) => {
-            visitor.enter_variable_declaration(&mut path, node.variable_declaration().unwrap());
+        NodeKind::Statement(kind) => {
+            visitor.enter_statement(&mut path, kind);
         }
-        NodeKind::CaseArm(_) => {
-            visitor.enter_case_arm(&mut path, node.case_arm().unwrap());
+        NodeKind::VariableDeclaration(kind) => {
+            visitor.enter_variable_declaration(&mut path, kind);
         }
-        NodeKind::Pattern(_) => {
-            visitor.enter_pattern(&mut path, node.pattern().unwrap());
+        NodeKind::CaseArm(kind) => {
+            visitor.enter_case_arm(&mut path, kind);
         }
-        NodeKind::ValueField(_) => {
-            visitor.enter_value_field(&mut path, node.struct_field().unwrap());
+        NodeKind::Pattern(kind) => {
+            visitor.enter_pattern(&mut path, kind);
         }
-        NodeKind::ValueFieldPattern(_) => {
-            visitor.enter_value_field_pattern(&mut path, node.struct_field_pattern().unwrap());
+        NodeKind::ValueField(kind) => {
+            visitor.enter_value_field(&mut path, kind);
         }
-        NodeKind::Expression(_) => {
-            let expr = node.expression().unwrap();
-            visitor.enter_expression(&mut path, &expr);
+        NodeKind::ValueFieldPattern(kind) => {
+            visitor.enter_value_field_pattern(&mut path, kind);
+        }
+        NodeKind::Expression(expr) => {
+            visitor.enter_expression(&mut path, expr);
 
             if !path.skipped() {
                 match expr.kind() {
@@ -592,51 +597,53 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<'
     let node = path.node().clone();
 
     match node {
-        NodeKind::Program(_) => {
-            visitor.exit_program(&mut path, node.program().unwrap());
+        NodeKind::Program(kind) => {
+            visitor.exit_program(&mut path, kind);
         }
-        NodeKind::Block(_) => {
-            visitor.exit_block(&mut path, node.block().unwrap());
+        NodeKind::TopLevel(kind) => {
+            visitor.exit_top_level(&mut path, kind);
         }
-        NodeKind::Identifier(_) => {
-            visitor.exit_identifier(&mut path, node.identifier().unwrap());
+        NodeKind::Block(kind) => {
+            visitor.exit_block(&mut path, kind);
         }
-        NodeKind::StructDefinition(_) => {
-            visitor.exit_struct_definition(&mut path, node.struct_definition().unwrap());
+        NodeKind::Identifier(kind) => {
+            visitor.exit_identifier(&mut path, kind);
         }
-        NodeKind::FunctionDefinition(_) => {
-            visitor.exit_function_definition(&mut path, node.function_definition().unwrap());
+        NodeKind::StructDefinition(kind) => {
+            visitor.exit_struct_definition(&mut path, kind);
         }
-        NodeKind::TypeField(_) => {
-            visitor.exit_type_field(&mut path, node.type_field().unwrap());
+        NodeKind::FunctionDefinition(kind) => {
+            visitor.exit_function_definition(&mut path, kind);
         }
-        NodeKind::TypeAnnotation(_) => {
-            visitor.exit_type_annotation(&mut path, node.type_annotation().unwrap());
+        NodeKind::TypeField(kind) => {
+            visitor.exit_type_field(&mut path, kind);
         }
-        NodeKind::FunctionParameter(_) => {
-            visitor.exit_function_parameter(&mut path, node.function_parameter().unwrap());
+        NodeKind::TypeAnnotation(kind) => {
+            visitor.exit_type_annotation(&mut path, kind);
         }
-        NodeKind::Statement(_) => {
-            visitor.exit_statement(&mut path, node.statement().unwrap());
+        NodeKind::FunctionParameter(kind) => {
+            visitor.exit_function_parameter(&mut path, kind);
         }
-        NodeKind::VariableDeclaration(_) => {
-            visitor.exit_variable_declaration(&mut path, node.variable_declaration().unwrap());
+        NodeKind::Statement(kind) => {
+            visitor.exit_statement(&mut path, kind);
         }
-        NodeKind::Pattern(_) => {
-            visitor.exit_pattern(&mut path, node.pattern().unwrap());
+        NodeKind::VariableDeclaration(kind) => {
+            visitor.exit_variable_declaration(&mut path, kind);
         }
-        NodeKind::CaseArm(_) => {
-            visitor.exit_case_arm(&mut path, node.case_arm().unwrap());
+        NodeKind::Pattern(kind) => {
+            visitor.exit_pattern(&mut path, kind);
         }
-        NodeKind::ValueField(_) => {
-            visitor.exit_value_field(&mut path, node.struct_field().unwrap());
+        NodeKind::CaseArm(kind) => {
+            visitor.exit_case_arm(&mut path, kind);
         }
-        NodeKind::ValueFieldPattern(_) => {
-            visitor.exit_value_field_pattern(&mut path, node.struct_field_pattern().unwrap());
+        NodeKind::ValueField(kind) => {
+            visitor.exit_value_field(&mut path, kind);
         }
-        NodeKind::Expression(_) => {
-            let expr = node.expression().unwrap();
-            visitor.exit_expression(&mut path, &expr);
+        NodeKind::ValueFieldPattern(kind) => {
+            visitor.exit_value_field_pattern(&mut path, kind);
+        }
+        NodeKind::Expression(expr) => {
+            visitor.exit_expression(&mut path, expr);
 
             if !path.skipped() {
                 match expr.kind() {

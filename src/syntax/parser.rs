@@ -39,20 +39,9 @@ impl<'a, 't> Parser<'a, 't> {
         let mut code = Code::new(tree);
 
         loop {
-            // Type declaration
-            if let Some(node) = self.parse_struct_definition(tree) {
-                code.node(NodeKind::StructDefinition(node));
-                body.push(TopLevelKind::StructDefinition(node));
-            }
-            // Function
-            else if let Some(node) = self.parse_function(tree) {
-                code.node(NodeKind::FunctionDefinition(node));
-                body.push(TopLevelKind::FunctionDefinition(node));
-            }
-            // Body for main function
-            else if let Some(node) = self.parse_stmt(tree) {
-                code.node(NodeKind::Statement(node));
-                body.push(TopLevelKind::Statement(node));
+            if let Some(node) = self.parse_top_level(tree) {
+                code.node(NodeKind::TopLevel(node));
+                body.push(node);
             }
             // No top level constructs can be consumed. It may be at the end of input or
             // parse error.
@@ -78,6 +67,34 @@ impl<'a, 't> Parser<'a, 't> {
         binding::bind(program);
 
         program
+    }
+
+    fn parse_top_level(&mut self, tree: &'a Ast) -> Option<&'a TopLevel<'a>> {
+        self.debug_trace("parse_top_level");
+
+        let mut code = Code::new(tree);
+
+        // Type declaration
+        let kind = if let Some(node) = self.parse_struct_definition(tree) {
+            code.node(NodeKind::StructDefinition(node));
+            TopLevelKind::StructDefinition(node)
+        }
+        // Function
+        else if let Some(node) = self.parse_function(tree) {
+            code.node(NodeKind::FunctionDefinition(node));
+            TopLevelKind::FunctionDefinition(node)
+        }
+        // Body for main function
+        else if let Some(node) = self.parse_stmt(tree) {
+            code.node(NodeKind::Statement(node));
+            TopLevelKind::Statement(node)
+        }
+        // none
+        else {
+            return None;
+        };
+
+        Some(tree.alloc(TopLevel::new(kind, code)))
     }
 
     fn parse_struct_definition(&mut self, tree: &'a Ast) -> Option<&'a StructDefinition<'a>> {
