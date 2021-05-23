@@ -1,3 +1,5 @@
+#![deny(unused, nonstandard_style, rust_2018_idioms)]
+
 pub mod asm;
 pub mod ls;
 pub mod parser;

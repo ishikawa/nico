@@ -3,15 +3,14 @@ use crate::syntax::{
     self, DefinitionKind, EffectiveRange, Expression, FunctionDefinition, FunctionParameter,
     Identifier, Node, NodePath, Pattern, Position, Program, StructDefinition, StructLiteral,
 };
-use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct Rename {
+pub struct Rename<'a> {
     position: Position,
-    operation: Option<RenameOperation>,
+    operation: Option<RenameOperation<'a>>,
 }
 
-impl Rename {
+impl<'a> Rename<'a> {
     pub fn new(position: Position) -> Self {
         Self {
             position,
@@ -19,17 +18,17 @@ impl Rename {
         }
     }
 
-    pub fn prepare(&mut self, program: &Rc<Program>) -> Option<&Identifier> {
+    pub fn prepare(&mut self, program: &'a Program<'a>) -> Option<&'a Identifier<'a>> {
         self.operation = None;
         syntax::traverse(self, program);
-        self.operation.as_ref().map(|op| op.id.as_ref())
+        self.operation.as_ref().map(|op| op.id)
     }
 
-    pub fn rename(&mut self, program: &Rc<Program>) -> Option<Vec<EffectiveRange>> {
+    pub fn rename(&mut self, program: &'a Program<'a>) -> Option<Vec<EffectiveRange>> {
         if let Some(RenameOperation { kind, .. }) = self.operation.as_ref() {
             match kind {
                 RenameOperationKind::Definition(definition) => {
-                    let mut visitor = RenameDefinition::new(definition);
+                    let mut visitor = RenameDefinition::new(definition.clone());
                     syntax::traverse(&mut visitor, program);
 
                     return Some(visitor.ranges);
@@ -42,8 +41,8 @@ impl Rename {
     }
 }
 
-impl syntax::Visitor for Rename {
-    fn enter_identifier(&mut self, path: &mut NodePath, id: &Rc<Identifier>) {
+impl<'a> syntax::Visitor<'a> for Rename<'a> {
+    fn enter_identifier(&mut self, path: &mut NodePath<'a>, id: &'a Identifier<'a>) {
         // Prepare
         if self.operation.is_none() && id.range().contains(self.position) {
             let parent = path.expect_parent();
@@ -78,34 +77,28 @@ impl syntax::Visitor for Rename {
             } else if let Some(struct_def) = parent.struct_definition() {
                 self.operation = Some(RenameOperation::new(
                     id,
-                    RenameOperationKind::Definition(DefinitionKind::StructDefinition(Rc::clone(
-                        struct_def,
-                    ))),
+                    RenameOperationKind::Definition(DefinitionKind::StructDefinition(struct_def)),
                 ));
             }
             // Renaming function name
             else if let Some(function) = parent.function_definition() {
                 self.operation = Some(RenameOperation::new(
                     id,
-                    RenameOperationKind::Definition(DefinitionKind::FunctionDefinition(Rc::clone(
-                        function,
-                    ))),
+                    RenameOperationKind::Definition(DefinitionKind::FunctionDefinition(function)),
                 ));
             }
             // Renaming function parameter
             else if let Some(param) = parent.function_parameter() {
                 self.operation = Some(RenameOperation::new(
                     id,
-                    RenameOperationKind::Definition(DefinitionKind::FunctionParameter(Rc::clone(
-                        param,
-                    ))),
+                    RenameOperationKind::Definition(DefinitionKind::FunctionParameter(param)),
                 ));
             }
             // Renaming pattern
             else if let Some(pattern) = parent.pattern() {
                 self.operation = Some(RenameOperation::new(
                     id,
-                    RenameOperationKind::Definition(DefinitionKind::Pattern(Rc::clone(pattern))),
+                    RenameOperationKind::Definition(DefinitionKind::Pattern(pattern)),
                 ));
             } else {
                 // dummy
@@ -120,46 +113,51 @@ impl syntax::Visitor for Rename {
 // --- Operations
 
 #[derive(Debug)]
-struct RenameOperation {
-    id: Rc<Identifier>,
-    kind: RenameOperationKind,
+struct RenameOperation<'a> {
+    id: &'a Identifier<'a>,
+    kind: RenameOperationKind<'a>,
 }
 
-impl RenameOperation {
-    fn new(id: &Rc<Identifier>, kind: RenameOperationKind) -> Self {
-        Self {
-            id: Rc::clone(id),
-            kind,
-        }
+impl<'a> RenameOperation<'a> {
+    fn new(id: &'a Identifier<'a>, kind: RenameOperationKind<'a>) -> Self {
+        Self { id, kind }
     }
 }
 
 #[derive(Debug, Clone)]
-enum RenameOperationKind {
-    Definition(DefinitionKind),
+enum RenameOperationKind<'a> {
+    Definition(DefinitionKind<'a>),
     Unknown,
 }
 
 #[derive(Debug)]
 struct RenameDefinition<'a> {
-    definition: &'a DefinitionKind,
+    definition: DefinitionKind<'a>,
     ranges: Vec<EffectiveRange>,
 }
 
 impl<'a> RenameDefinition<'a> {
-    fn new(definition: &'a DefinitionKind) -> Self {
+    fn new(definition: DefinitionKind<'a>) -> Self {
         Self {
             definition,
             ranges: vec![],
         }
     }
+
+    fn definition(&self) -> &DefinitionKind<'a> {
+        &self.definition
+    }
 }
 
-impl<'a> syntax::Visitor for RenameDefinition<'a> {
-    fn enter_struct_definition(&mut self, _path: &mut NodePath, struct_def: &Rc<StructDefinition>) {
+impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
+    fn enter_struct_definition(
+        &mut self,
+        _path: &mut NodePath<'a>,
+        struct_def: &'a StructDefinition<'a>,
+    ) {
         if let DefinitionKind::StructDefinition(definition) = self.definition {
-            if std::ptr::eq(definition.as_ref(), struct_def.as_ref()) {
-                if let Some(ref name) = struct_def.name {
+            if std::ptr::eq(definition, struct_def) {
+                if let Some(name) = struct_def.name() {
                     self.ranges.push(name.range());
                 }
             }
@@ -168,9 +166,9 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
 
     fn enter_struct_literal(
         &mut self,
-        path: &mut NodePath,
-        _expr: &Rc<Expression>,
-        value: &StructLiteral,
+        path: &mut NodePath<'a>,
+        _expr: &'a Expression<'a>,
+        value: &'a StructLiteral<'a>,
     ) {
         let scope = path.scope();
         let scope = scope.borrow();
@@ -181,34 +179,43 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
         };
         let binding = binding.borrow();
 
-        if binding.kind().ptr_eq(self.definition) {
+        if binding.kind().ptr_eq(self.definition()) {
             self.ranges.push(value.name().range());
         }
     }
 
     fn enter_function_definition(
         &mut self,
-        _path: &mut NodePath,
-        function: &Rc<FunctionDefinition>,
+        _path: &mut NodePath<'a>,
+        function: &'a FunctionDefinition<'a>,
     ) {
         if let DefinitionKind::FunctionDefinition(definition) = self.definition {
-            if std::ptr::eq(definition.as_ref(), function.as_ref()) {
-                if let Some(ref name) = function.name {
+            if std::ptr::eq(definition, function) {
+                if let Some(name) = function.name() {
                     self.ranges.push(name.range());
                 }
             }
         }
     }
 
-    fn enter_function_parameter(&mut self, _path: &mut NodePath, param: &Rc<FunctionParameter>) {
+    fn enter_function_parameter(
+        &mut self,
+        _path: &mut NodePath<'a>,
+        param: &'a FunctionParameter<'a>,
+    ) {
         if let DefinitionKind::FunctionParameter(definition) = self.definition {
-            if std::ptr::eq(definition.as_ref(), param.as_ref()) {
+            if std::ptr::eq(definition, param) {
                 self.ranges.push(param.name().range());
             }
         }
     }
 
-    fn enter_variable(&mut self, path: &mut NodePath, _expr: &Rc<Expression>, id: &Rc<Identifier>) {
+    fn enter_variable(
+        &mut self,
+        path: &mut NodePath<'a>,
+        _expr: &'a Expression<'a>,
+        id: &'a Identifier<'a>,
+    ) {
         let scope = path.scope();
         let scope = scope.borrow();
 
@@ -218,14 +225,14 @@ impl<'a> syntax::Visitor for RenameDefinition<'a> {
         };
         let binding = binding.borrow();
 
-        if binding.kind().ptr_eq(self.definition) {
+        if binding.kind().ptr_eq(self.definition()) {
             self.ranges.push(id.range());
         }
     }
 
-    fn enter_pattern(&mut self, _path: &mut NodePath, pattern: &Rc<Pattern>) {
+    fn enter_pattern(&mut self, _path: &mut NodePath<'a>, pattern: &'a Pattern<'a>) {
         if let DefinitionKind::Pattern(definition) = self.definition {
-            if std::ptr::eq(definition.as_ref(), pattern.as_ref()) {
+            if std::ptr::eq(definition, pattern) {
                 self.ranges.push(pattern.range());
             }
         }

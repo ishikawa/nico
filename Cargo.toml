@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 # nico
+bumpalo = { version = "3.6.1", features = ["boxed", "collections"] }
 assert_matches = "1.5.0"
 thiserror = "1.0.24"
 # nico-ls
