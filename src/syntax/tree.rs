@@ -436,25 +436,25 @@ impl<'a> DefinitionKind<'a> {
 
         if let DefinitionKind::StructDefinition(definition1) = self {
             if let DefinitionKind::StructDefinition(definition2) = other {
-                return std::ptr::eq(definition1, definition2);
+                return std::ptr::eq(*definition1, *definition2);
             }
         }
 
         if let DefinitionKind::FunctionDefinition(definition1) = self {
             if let DefinitionKind::FunctionDefinition(definition2) = other {
-                return std::ptr::eq(definition1, definition2);
+                return std::ptr::eq(*definition1, *definition2);
             }
         }
 
         if let DefinitionKind::FunctionParameter(definition1) = self {
             if let DefinitionKind::FunctionParameter(definition2) = other {
-                return std::ptr::eq(definition1, definition2);
+                return std::ptr::eq(*definition1, *definition2);
             }
         }
 
         if let DefinitionKind::Pattern(definition1) = self {
             if let DefinitionKind::Pattern(definition2) = other {
-                return std::ptr::eq(definition1, definition2);
+                return std::ptr::eq(*definition1, *definition2);
             }
         }
 
