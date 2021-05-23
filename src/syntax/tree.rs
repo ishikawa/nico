@@ -14,8 +14,8 @@
 //! Expression          := IntegerLiteral | StringLiteral | StructLiteral | VariableExpression
 //!                      | BinaryExpression | UnaryExpression | SubscriptExpression | CallExpression
 //!                      | ArrayExpression | MemberExpression | IfExpression | CaseExpression
-//!                      | ExpressionGroup
-//! ExpressionGroup.    := "(" Expression ")"
+//!                      | GroupedExpression
+//! GroupedExpression   := "(" Expression ")"
 //! Id                  := <Identifier>
 //! TypeAnnotation      := <Int32>
 //! IntegerLiteral      := <Integer>
@@ -102,6 +102,7 @@ pub enum NodeKind<'a> {
     Expression(&'a Expression<'a>),
     CaseArm(&'a CaseArm<'a>),
     Pattern(&'a Pattern<'a>),
+    GroupedExpression(&'a GroupedExpression<'a>),
 }
 
 impl<'a> NodeKind<'a> {
@@ -310,6 +311,7 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::Expression(kind) => kind.code(),
             NodeKind::CaseArm(kind) => kind.code(),
             NodeKind::Pattern(kind) => kind.code(),
+            NodeKind::GroupedExpression(kind) => kind.code(),
         }
     }
 }
@@ -553,7 +555,6 @@ pub enum TopLevelKind<'a> {
     StructDefinition(&'a StructDefinition<'a>),
     FunctionDefinition(&'a FunctionDefinition<'a>),
     Statement(&'a Statement<'a>),
-    VariableDeclaration(&'a VariableDeclaration<'a>),
 }
 
 impl<'a> TopLevelKind<'a> {
@@ -572,7 +573,6 @@ impl fmt::Display for TopLevelKind<'_> {
             TopLevelKind::StructDefinition(kind) => kind.fmt(f),
             TopLevelKind::FunctionDefinition(kind) => kind.fmt(f),
             TopLevelKind::Statement(kind) => kind.fmt(f),
-            TopLevelKind::VariableDeclaration(kind) => kind.fmt(f),
         }
     }
 }
@@ -1523,6 +1523,38 @@ impl<'a> StringLiteral<'a> {
 }
 
 #[derive(Debug)]
+pub struct GroupedExpression<'a> {
+    expression: Option<&'a Expression<'a>>,
+    code: Code<'a>,
+}
+
+impl<'a> GroupedExpression<'a> {
+    pub fn new(expression: Option<&'a Expression<'a>>, code: Code<'a>) -> Self {
+        Self { expression, code }
+    }
+
+    pub fn expression(&self) -> Option<&'a Expression<'a>> {
+        self.expression
+    }
+}
+
+impl<'a> Node<'a> for GroupedExpression<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for GroupedExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(expression) = self.expression() {
+            write!(f, "GroupedExpression({})", expression)
+        } else {
+            write!(f, "GroupedExpression")
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum ExpressionKind<'a> {
     IntegerLiteral(IntegerLiteral),
     StringLiteral(StringLiteral<'a>),
@@ -1536,7 +1568,7 @@ pub enum ExpressionKind<'a> {
     MemberExpression(MemberExpression<'a>),
     IfExpression(IfExpression<'a>),
     CaseExpression(CaseExpression<'a>),
-    Expression(Option<&'a Expression<'a>>),
+    GroupedExpression(&'a GroupedExpression<'a>),
 }
 
 #[derive(Debug)]
@@ -1718,6 +1750,7 @@ impl fmt::Display for NodeKind<'_> {
             NodeKind::Pattern(pattern) => pattern.fmt(f),
             NodeKind::CaseArm(arm) => arm.fmt(f),
             NodeKind::Expression(expr) => expr.fmt(f),
+            NodeKind::GroupedExpression(expr) => expr.fmt(f),
         }
     }
 }
@@ -1743,8 +1776,7 @@ impl fmt::Display for ExpressionKind<'_> {
             ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
             ExpressionKind::MemberExpression(_) => write!(f, "MemberExpression"),
             ExpressionKind::StructLiteral(_) => write!(f, "StructLiteral"),
-            ExpressionKind::Expression(Some(expr)) => write!(f, "({})", expr.kind()),
-            ExpressionKind::Expression(None) => write!(f, "()"),
+            ExpressionKind::GroupedExpression(expr) => expr.fmt(f),
         }
     }
 }

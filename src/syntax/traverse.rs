@@ -289,6 +289,19 @@ pub trait Visitor<'a> {
     ) {
     }
 
+    fn enter_grouped_expression(
+        &mut self,
+        path: &mut NodePath<'a>,
+        expression: &'a GroupedExpression<'a>,
+    ) {
+    }
+    fn exit_grouped_expression(
+        &mut self,
+        path: &mut NodePath<'a>,
+        expression: &'a GroupedExpression<'a>,
+    ) {
+    }
+
     fn enter_expression(&mut self, path: &mut NodePath<'a>, expression: &'a Expression<'a>) {}
     fn exit_expression(&mut self, path: &mut NodePath<'a>, expression: &'a Expression<'a>) {}
 
@@ -544,6 +557,9 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<
         NodeKind::ValueFieldPattern(kind) => {
             visitor.enter_value_field_pattern(&mut path, kind);
         }
+        NodeKind::GroupedExpression(kind) => {
+            visitor.enter_grouped_expression(&mut path, kind);
+        }
         NodeKind::Expression(expr) => {
             visitor.enter_expression(&mut path, expr);
 
@@ -585,7 +601,9 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<
                     ExpressionKind::CaseExpression(kind) => {
                         visitor.enter_case_expression(&mut path, expr, kind);
                     }
-                    ExpressionKind::Expression(_) => {}
+                    _ => {
+                        // TODO: We shouldn't handle expression kind here. It is handled by traverse_children().
+                    }
                 }
             }
         }
@@ -642,6 +660,9 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<'
         NodeKind::ValueFieldPattern(kind) => {
             visitor.exit_value_field_pattern(&mut path, kind);
         }
+        NodeKind::GroupedExpression(kind) => {
+            visitor.exit_grouped_expression(&mut path, kind);
+        }
         NodeKind::Expression(expr) => {
             visitor.exit_expression(&mut path, expr);
 
@@ -683,7 +704,9 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<'
                     ExpressionKind::CaseExpression(kind) => {
                         visitor.exit_case_expression(&mut path, expr, kind);
                     }
-                    ExpressionKind::Expression(_) => {}
+                    _ => {
+                        // TODO: We shouldn't handle expression kind here. It is handled by traverse_children().
+                    }
                 }
             }
         }
