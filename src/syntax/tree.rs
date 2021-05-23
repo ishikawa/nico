@@ -426,8 +426,8 @@ impl fmt::Display for TopLevelKind<'_> {
 #[derive(Debug)]
 pub struct Program<'a> {
     body: BumpaloVec<'a, &'a TopLevel<'a>>,
-    declarations: Rc<RefCell<Scope<'a>>>,
-    main_scope: Rc<RefCell<Scope<'a>>>,
+    declarations: &'a Scope<'a>,
+    main_scope: &'a Scope<'a>,
     code: Code<'a>,
 }
 
@@ -437,8 +437,8 @@ impl<'a> Program<'a> {
         body: I,
         code: Code<'a>,
     ) -> Program<'a> {
-        let declarations = wrap(Scope::prelude(arena));
-        let main_scope = wrap(Scope::new());
+        let declarations = arena.alloc(Scope::prelude(arena));
+        let main_scope = arena.alloc(Scope::new(arena));
 
         Program {
             body: BumpaloVec::from_iter_in(body, arena),
@@ -452,12 +452,12 @@ impl<'a> Program<'a> {
         self.body.iter().copied()
     }
 
-    pub fn declarations_scope(&self) -> &Rc<RefCell<Scope<'a>>> {
-        &self.declarations
+    pub fn declarations_scope(&self) -> &'a Scope<'a> {
+        self.declarations
     }
 
-    pub fn main_scope(&self) -> &Rc<RefCell<Scope<'a>>> {
-        &self.main_scope
+    pub fn main_scope(&self) -> &'a Scope<'a> {
+        self.main_scope
     }
 }
 
@@ -815,7 +815,7 @@ impl fmt::Display for Statement<'_> {
 #[derive(Debug)]
 pub struct Block<'a> {
     statements: BumpaloVec<'a, &'a Statement<'a>>,
-    scope: Rc<RefCell<Scope<'a>>>,
+    scope: &'a Scope<'a>,
     code: Code<'a>,
 }
 
@@ -827,13 +827,13 @@ impl<'a> Block<'a> {
     ) -> Self {
         Self {
             statements: BumpaloVec::from_iter_in(statements, arena),
-            scope: wrap(Scope::new()),
+            scope: arena.alloc(Scope::new(arena)),
             code,
         }
     }
 
-    pub fn scope(&self) -> &Rc<RefCell<Scope<'a>>> {
-        &self.scope
+    pub fn scope(&self) -> &'a Scope<'a> {
+        self.scope
     }
 
     pub fn statements(&self) -> impl ExactSizeIterator<Item = &'a Statement<'a>> + '_ {
@@ -1290,12 +1290,13 @@ pub struct CaseArm<'a> {
     // `CaseArm` is the only syntactic element other than Program and Block that introduces
     // a new scope. This scope is necessary to use the variables introduced in each arm in
     // the guard clause.
-    scope: Rc<RefCell<Scope<'a>>>,
+    scope: &'a Scope<'a>,
     code: Code<'a>,
 }
 
 impl<'a> CaseArm<'a> {
     pub fn new(
+        arena: &'a BumpaloArena,
         pattern: Option<&'a Pattern<'a>>,
         guard: Option<&'a Expression<'a>>,
         then_body: &'a Block<'a>,
@@ -1305,13 +1306,13 @@ impl<'a> CaseArm<'a> {
             pattern,
             guard,
             then_body,
-            scope: wrap(Scope::new()),
+            scope: arena.alloc(Scope::new(arena)),
             code,
         }
     }
 
-    pub fn scope(&self) -> &Rc<RefCell<Scope<'a>>> {
-        &self.scope
+    pub fn scope(&self) -> &'a Scope<'a> {
+        self.scope
     }
 
     pub fn pattern(&self) -> Option<&'a Pattern<'a>> {

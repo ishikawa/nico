@@ -218,7 +218,7 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
         id: &'a Identifier<'a>,
     ) {
         // Undefined variable
-        if path.scope().borrow().get_binding(id.as_str()).is_none() {
+        if path.scope().get_binding(id.as_str()).is_none() {
             self.add_diagnostic(expr.range(), format!("Cannot find name '{}'.", id));
         }
     }
@@ -230,11 +230,11 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
         value: &StructLiteral,
     ) {
         // Expected struct for name
-        if let Some(binding) = path.scope().borrow().get_binding(value.name().as_str()) {
-            if !binding.borrow().kind().is_struct_definition() {
+        if let Some(binding) = path.scope().get_binding(value.name().as_str()) {
+            if !binding.kind().is_struct_definition() {
                 self.add_diagnostic(
                     value.name().range(),
-                    format!("Expected struct, found '{}'.", binding.borrow()),
+                    format!("Expected struct, found '{}'.", binding),
                 );
             }
         } else {
@@ -379,8 +379,7 @@ impl SemanticTokenizer {
         } else if parent.is_struct_field() || parent.is_member_expression() {
             SemanticTokenType::PROPERTY
         } else if parent.is_variable_expression() {
-            if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
-                let binding = binding.borrow();
+            if let Some(binding) = scope.get_binding(id.as_str()) {
                 let definition = binding.kind();
 
                 if definition.is_function_definition() {

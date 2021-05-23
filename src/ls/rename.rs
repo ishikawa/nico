@@ -55,9 +55,7 @@ impl<'a> syntax::Visitor<'a> for Rename<'a> {
 
             // Renaming variable
             if parent.is_variable_expression() {
-                if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
-                    let binding = binding.borrow();
-
+                if let Some(binding) = scope.get_binding(id.as_str()) {
                     self.operation = Some(RenameOperation::new(
                         id,
                         RenameOperationKind::Definition(binding.kind().clone()),
@@ -67,9 +65,7 @@ impl<'a> syntax::Visitor<'a> for Rename<'a> {
             // Renaming struct name
             else if parent.is_struct_literal() {
                 // TODO: Use type info
-                if let Some(binding) = scope.borrow().get_binding(id.as_str()) {
-                    let binding = binding.borrow();
-
+                if let Some(binding) = scope.get_binding(id.as_str()) {
                     if let DefinitionKind::StructDefinition(_) = binding.kind() {
                         self.operation = Some(RenameOperation::new(
                             id,
@@ -174,13 +170,11 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         value: &'a StructLiteral<'a>,
     ) {
         let scope = path.scope();
-        let scope = scope.borrow();
 
         let binding = match scope.get_binding(value.name().as_str()) {
             None => return,
             Some(binding) => binding,
         };
-        let binding = binding.borrow();
 
         if binding.kind().ptr_eq(self.definition()) {
             self.ranges.push(value.name().range());
@@ -220,13 +214,10 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         id: &'a Identifier<'a>,
     ) {
         let scope = path.scope();
-        let scope = scope.borrow();
-
         let binding = match scope.get_binding(id.as_str()) {
             None => return,
             Some(binding) => binding,
         };
-        let binding = binding.borrow();
 
         if binding.kind().ptr_eq(self.definition()) {
             self.ranges.push(id.range());

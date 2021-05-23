@@ -965,7 +965,7 @@ impl<'a, 't> Parser<'a, 't> {
             self._read_block(arena, &[TokenKind::When, TokenKind::Else, TokenKind::End]);
         code.node(NodeKind::Block(then_body));
 
-        arena.alloc(CaseArm::new(pattern, guard, then_body, code))
+        arena.alloc(CaseArm::new(arena, pattern, guard, then_body, code))
     }
 
     /// Reads statements until it meets a token listed in `stop_tokens`.

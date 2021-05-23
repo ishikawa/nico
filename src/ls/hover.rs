@@ -85,9 +85,7 @@ impl<'a> syntax::Visitor<'a> for Hover {
         let literal = parent.expression().unwrap().struct_literal().unwrap();
 
         // TODO: Use type info
-        if let Some(binding) = scope.borrow().get_binding(literal.name().as_str()) {
-            let binding = binding.borrow();
-
+        if let Some(binding) = scope.get_binding(literal.name().as_str()) {
             if let DefinitionKind::StructDefinition(ref definition) = binding.kind() {
                 self.result.replace((
                     self.describe_value_field(definition, field),
