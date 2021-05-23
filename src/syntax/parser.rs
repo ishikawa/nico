@@ -757,11 +757,14 @@ impl<'a, 't> Parser<'a, 't> {
         // AST, we have to incorporate it into another node.
         if let Some(ref expr) = node {
             tree.alloc(Expression::new(
-                ExpressionKind::Expression(Some(expr)),
+                ExpressionKind::GroupedExpression(Some(expr)),
                 code,
             ))
         } else {
-            tree.alloc(Expression::new(ExpressionKind::Expression(None), code))
+            tree.alloc(Expression::new(
+                ExpressionKind::GroupedExpression(None),
+                code,
+            ))
         }
     }
 
@@ -1282,7 +1285,7 @@ mod tests {
             let stmt = parse_statement(&tree, src);
             let expr = stmt.expression().unwrap();
 
-            assert_matches!(expr.kind(), ExpressionKind::Expression(Some(expr)) => {
+            assert_matches!(expr.kind(), ExpressionKind::GroupedExpression(Some(expr)) => {
                 assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
             });
 

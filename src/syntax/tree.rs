@@ -14,8 +14,8 @@
 //! Expression          := IntegerLiteral | StringLiteral | StructLiteral | VariableExpression
 //!                      | BinaryExpression | UnaryExpression | SubscriptExpression | CallExpression
 //!                      | ArrayExpression | MemberExpression | IfExpression | CaseExpression
-//!                      | ExpressionGroup
-//! ExpressionGroup.    := "(" Expression ")"
+//!                      | GroupedExpression
+//! GroupedExpression   := "(" Expression ")"
 //! Id                  := <Identifier>
 //! TypeAnnotation      := <Int32>
 //! IntegerLiteral      := <Integer>
@@ -1534,7 +1534,7 @@ pub enum ExpressionKind<'a> {
     MemberExpression(MemberExpression<'a>),
     IfExpression(IfExpression<'a>),
     CaseExpression(CaseExpression<'a>),
-    Expression(Option<&'a Expression<'a>>),
+    GroupedExpression(Option<&'a Expression<'a>>),
 }
 
 #[derive(Debug)]
@@ -1741,8 +1741,8 @@ impl fmt::Display for ExpressionKind<'_> {
             ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
             ExpressionKind::MemberExpression(_) => write!(f, "MemberExpression"),
             ExpressionKind::StructLiteral(_) => write!(f, "StructLiteral"),
-            ExpressionKind::Expression(Some(expr)) => write!(f, "({})", expr.kind()),
-            ExpressionKind::Expression(None) => write!(f, "()"),
+            ExpressionKind::GroupedExpression(Some(expr)) => write!(f, "({})", expr.kind()),
+            ExpressionKind::GroupedExpression(None) => write!(f, "()"),
         }
     }
 }

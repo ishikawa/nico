@@ -585,7 +585,7 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<
                     ExpressionKind::CaseExpression(kind) => {
                         visitor.enter_case_expression(&mut path, expr, kind);
                     }
-                    ExpressionKind::Expression(_) => {}
+                    ExpressionKind::GroupedExpression(_) => {}
                 }
             }
         }
@@ -683,7 +683,7 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &Rc<RefCell<NodePath<'
                     ExpressionKind::CaseExpression(kind) => {
                         visitor.exit_case_expression(&mut path, expr, kind);
                     }
-                    ExpressionKind::Expression(_) => {}
+                    ExpressionKind::GroupedExpression(_) => {}
                 }
             }
         }
