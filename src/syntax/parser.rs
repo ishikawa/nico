@@ -722,6 +722,15 @@ impl<'a, 't> Parser<'a, 't> {
     }
 
     fn read_paren(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
+        let expr = self.read_grouped_expression(tree);
+
+        tree.alloc(Expression::new(
+            ExpressionKind::GroupedExpression(expr),
+            Code::with_node(tree, NodeKind::GroupedExpression(expr)),
+        ))
+    }
+
+    fn read_grouped_expression(&mut self, tree: &'a Ast) -> &'a GroupedExpression<'a> {
         let mut code = Code::with_interpreted(tree, self.tokenizer.next_token()); // "("
         let node = self.parse_expr(tree);
 
@@ -755,17 +764,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         // Because parentheses which groups an expression is not part of
         // AST, we have to incorporate it into another node.
-        if let Some(ref expr) = node {
-            tree.alloc(Expression::new(
-                ExpressionKind::GroupedExpression(Some(expr)),
-                code,
-            ))
-        } else {
-            tree.alloc(Expression::new(
-                ExpressionKind::GroupedExpression(None),
-                code,
-            ))
-        }
+        tree.alloc(GroupedExpression::new(node, code))
     }
 
     fn read_array(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
@@ -1285,21 +1284,24 @@ mod tests {
             let stmt = parse_statement(&tree, src);
             let expr = stmt.expression().unwrap();
 
-            assert_matches!(expr.kind(), ExpressionKind::GroupedExpression(Some(expr)) => {
-                assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
+            assert_matches!(expr.kind(), ExpressionKind::GroupedExpression(expr) => {
+                assert_matches!(expr.expression(), Some(expr) => {
+                    assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
+                });
+
+                let mut tokens = expr.code();
+
+                assert_eq!(tokens.len(), 3);
+
+                let token = next_interpreted_token(&mut tokens);
+                assert_matches!(token.kind, TokenKind::Char('('));
+
+                let node = next_node(&mut tokens);
+                assert_matches!(node, NodeKind::Expression(..));
+
+                let (_, item) = next_missing_token(&mut tokens);
+                assert_eq!(item, MissingTokenKind::Char(')'));
             });
-
-            let mut tokens = stmt.expression().unwrap().code();
-            assert_eq!(tokens.len(), 3);
-
-            let token = next_interpreted_token(&mut tokens);
-            assert_matches!(token.kind, TokenKind::Char('('));
-
-            let node = next_node(&mut tokens);
-            assert_matches!(node, NodeKind::Expression(..));
-
-            let (_, item) = next_missing_token(&mut tokens);
-            assert_eq!(item, MissingTokenKind::Char(')'));
         }
     }
 
