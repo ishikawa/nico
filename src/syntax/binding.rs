@@ -21,14 +21,14 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct Binding<'a> {
     id: BumpaloString<'a>,
-    kind: DefinitionKind<'a>,
+    kind: &'a DefinitionKind<'a>,
 }
 
 impl<'a> Binding<'a> {
     pub fn new<S: AsRef<str>>(arena: &'a BumpaloArena, name: S, kind: DefinitionKind<'a>) -> Self {
         Self {
             id: BumpaloString::from_str_in(name.as_ref(), arena),
-            kind,
+            kind: arena.alloc(kind),
         }
     }
 
@@ -56,11 +56,11 @@ impl<'a> Binding<'a> {
     }
 
     pub fn id(&self) -> &str {
-        &self.id
+        self.id.as_str()
     }
 
-    pub fn kind(&self) -> &DefinitionKind<'a> {
-        &self.kind
+    pub fn kind(&self) -> &'a DefinitionKind<'a> {
+        self.kind
     }
 }
 
