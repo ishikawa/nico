@@ -5,30 +5,30 @@ use super::{
     NodeKind, NodePath, Pattern, Program, StringLiteral, StructDefinition, VariableDeclaration,
     Visitor,
 };
-use crate::arena::{BumpaloArena, BumpaloString};
+use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
 use crate::{
     sem::{self, Type},
     semantic::DefinitionKind,
 };
 use crate::{semantic::Builtin, util::wrap};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::HashMap,
     fmt,
-    rc::{Rc, Weak},
+    rc::Rc,
 };
 
 #[derive(Debug, Clone)]
 pub struct Binding<'a> {
     id: BumpaloString<'a>,
-    kind: DefinitionKind<'a>,
+    kind: &'a DefinitionKind<'a>,
 }
 
 impl<'a> Binding<'a> {
     pub fn new<S: AsRef<str>>(arena: &'a BumpaloArena, name: S, kind: DefinitionKind<'a>) -> Self {
         Self {
             id: BumpaloString::from_str_in(name.as_ref(), arena),
-            kind,
+            kind: arena.alloc(kind),
         }
     }
 
@@ -56,11 +56,11 @@ impl<'a> Binding<'a> {
     }
 
     pub fn id(&self) -> &str {
-        &self.id
+        self.id.as_str()
     }
 
-    pub fn kind(&self) -> &DefinitionKind<'a> {
-        &self.kind
+    pub fn kind(&self) -> &'a DefinitionKind<'a> {
+        self.kind
     }
 }
 
@@ -76,95 +76,112 @@ impl fmt::Display for Binding<'_> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Scope<'a> {
-    bindings: HashMap<String, Rc<RefCell<Binding<'a>>>>,
-    parent: Weak<RefCell<Scope<'a>>>,
+    bindings: BumpaloBox<'a, RefCell<HashMap<&'a str, &'a Binding<'a>>>>,
+    parent: Cell<Option<&'a Scope<'a>>>,
 }
 
 impl<'a> Scope<'a> {
     pub fn prelude(arena: &'a BumpaloArena) -> Self {
-        let mut scope = Self::new();
+        let scope = Self::new(arena);
 
         // print
-        scope.insert(Binding::builtin_function(
+        scope.insert(
             arena,
-            "println_str",
-            Type::Function {
-                params: vec![wrap(Type::String)],
-                return_type: wrap(Type::Int32),
-            },
-        ));
-        scope.insert(Binding::builtin_function(
+            Binding::builtin_function(
+                arena,
+                "println_str",
+                Type::Function {
+                    params: vec![wrap(Type::String)],
+                    return_type: wrap(Type::Int32),
+                },
+            ),
+        );
+        scope.insert(
             arena,
-            "println_i32",
-            Type::Function {
-                params: vec![wrap(Type::Int32)],
-                return_type: wrap(Type::Int32),
-            },
-        ));
-        scope.insert(Binding::builtin_function(
+            Binding::builtin_function(
+                arena,
+                "println_i32",
+                Type::Function {
+                    params: vec![wrap(Type::Int32)],
+                    return_type: wrap(Type::Int32),
+                },
+            ),
+        );
+        scope.insert(
             arena,
-            "debug_i32",
-            Type::Function {
-                params: vec![wrap(Type::String), wrap(Type::Int32)],
-                return_type: wrap(Type::Int32),
-            },
-        ));
+            Binding::builtin_function(
+                arena,
+                "debug_i32",
+                Type::Function {
+                    params: vec![wrap(Type::String), wrap(Type::Int32)],
+                    return_type: wrap(Type::Int32),
+                },
+            ),
+        );
 
         scope
     }
 
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(arena: &'a BumpaloArena) -> Self {
+        Self {
+            bindings: BumpaloBox::new_in(RefCell::new(HashMap::new()), arena),
+            parent: Cell::new(None),
+        }
     }
 
-    pub fn parent(&self) -> &Weak<RefCell<Scope<'a>>> {
-        &self.parent
+    pub fn parent(&self) -> Option<&'a Scope<'a>> {
+        self.parent.get()
     }
 
-    fn insert(&mut self, binding: Binding<'a>) {
-        self.bindings.insert(binding.id.to_string(), wrap(binding));
+    fn insert(&self, arena: &'a BumpaloArena, binding: Binding<'a>) {
+        let b = arena.alloc(binding);
+        self.bindings.borrow_mut().insert(b.id(), b);
     }
 
-    pub fn register_declaration(&mut self, arena: &'a BumpaloArena, declaration: &NodeKind<'a>) {
+    pub fn register_declaration(&self, arena: &'a BumpaloArena, declaration: &NodeKind<'a>) {
         if let Some(fun) = declaration.function_definition() {
             if let Some(name) = fun.name() {
-                self.insert(Binding::new(
+                self.insert(
                     arena,
-                    name.as_str(),
-                    DefinitionKind::FunctionDefinition(&fun),
-                ));
+                    Binding::new(
+                        arena,
+                        name.as_str(),
+                        DefinitionKind::FunctionDefinition(&fun),
+                    ),
+                );
             }
         } else if let Some(param) = declaration.function_parameter() {
-            self.insert(Binding::new(
+            self.insert(
                 arena,
-                param.name().as_str(),
-                DefinitionKind::FunctionParameter(&param),
-            ));
+                Binding::new(
+                    arena,
+                    param.name().as_str(),
+                    DefinitionKind::FunctionParameter(&param),
+                ),
+            );
         } else if let Some(def) = declaration.struct_definition() {
             if let Some(name) = def.name() {
-                self.insert(Binding::new(
+                self.insert(
                     arena,
-                    name.as_str(),
-                    DefinitionKind::StructDefinition(&def),
-                ));
+                    Binding::new(arena, name.as_str(), DefinitionKind::StructDefinition(&def)),
+                );
             }
         } else if let Some(pattern) = declaration.pattern() {
             self.register_pattern(arena, pattern);
         }
     }
 
-    pub fn register_pattern(&mut self, arena: &'a BumpaloArena, pattern: &'a Pattern<'a>) {
+    pub fn register_pattern(&self, arena: &'a BumpaloArena, pattern: &'a Pattern<'a>) {
         match pattern.kind() {
             super::PatternKind::IntegerPattern(_) => {}
             super::PatternKind::StringPattern(_) => {}
             super::PatternKind::VariablePattern(id) => {
-                self.insert(Binding::new(
+                self.insert(
                     arena,
-                    id.as_str(),
-                    DefinitionKind::Pattern(pattern),
-                ));
+                    Binding::new(arena, id.as_str(), DefinitionKind::Pattern(pattern)),
+                );
             }
             super::PatternKind::ArrayPattern(pat) => {
                 for pat in pat.elements() {
@@ -173,11 +190,10 @@ impl<'a> Scope<'a> {
             }
             super::PatternKind::RestPattern(pat) => {
                 if let Some(id) = pat.id() {
-                    self.insert(Binding::new(
+                    self.insert(
                         arena,
-                        id.as_str(),
-                        DefinitionKind::Pattern(pattern),
-                    ));
+                        Binding::new(arena, id.as_str(), DefinitionKind::Pattern(pattern)),
+                    );
                 }
             }
             super::PatternKind::StructPattern(pat) => {
@@ -188,24 +204,27 @@ impl<'a> Scope<'a> {
                         // omitted
                         let pattern = field.omitted_value().unwrap();
 
-                        self.insert(Binding::new(
+                        self.insert(
                             arena,
-                            field.name().as_str(),
-                            DefinitionKind::Pattern(pattern),
-                        ));
+                            Binding::new(
+                                arena,
+                                field.name().as_str(),
+                                DefinitionKind::Pattern(pattern),
+                            ),
+                        );
                     }
                 }
             }
         }
     }
 
-    pub fn get_binding(&self, name: &str) -> Option<Rc<RefCell<Binding<'a>>>> {
-        if let Some(binding) = self.bindings.get(name) {
-            return Some(Rc::clone(binding));
+    pub fn get_binding(&self, name: &str) -> Option<&'a Binding<'a>> {
+        if let Some(binding) = self.bindings.borrow().get(name) {
+            return Some(binding);
         }
 
-        if let Some(parent) = self.parent.upgrade() {
-            return parent.borrow().get_binding(name);
+        if let Some(parent) = self.parent.get() {
+            return parent.get_binding(name);
         }
 
         None
@@ -216,7 +235,7 @@ impl<'a> Scope<'a> {
 #[derive(Debug)]
 struct TopLevelDeclarationBinder<'a> {
     arena: &'a BumpaloArena,
-    declarations: Option<Rc<RefCell<Scope<'a>>>>,
+    declarations: Option<&'a Scope<'a>>,
 }
 
 impl<'a> TopLevelDeclarationBinder<'a> {
@@ -229,16 +248,14 @@ impl<'a> TopLevelDeclarationBinder<'a> {
 
     fn register_declaration(&mut self, node: &NodeKind<'a>) {
         if let Some(ref declarations) = self.declarations {
-            declarations
-                .borrow_mut()
-                .register_declaration(self.arena, node);
+            declarations.register_declaration(self.arena, node);
         }
     }
 }
 
 impl<'a> Visitor<'a> for TopLevelDeclarationBinder<'a> {
     fn enter_program(&mut self, _path: &mut NodePath<'a>, program: &'a Program<'a>) {
-        self.declarations = Some(Rc::clone(program.declarations_scope()));
+        self.declarations = Some(program.declarations_scope());
     }
 
     fn enter_struct_definition(
@@ -262,33 +279,33 @@ impl<'a> Visitor<'a> for TopLevelDeclarationBinder<'a> {
 #[derive(Debug)]
 struct ScopeChainBinder<'a> {
     arena: &'a BumpaloArena,
-    scope: Weak<RefCell<Scope<'a>>>,
+    scope: Option<&'a Scope<'a>>,
 }
 
 impl<'a> ScopeChainBinder<'a> {
     pub fn new(arena: &'a BumpaloArena) -> Self {
-        Self {
-            arena,
-            scope: Weak::default(),
-        }
+        Self { arena, scope: None }
     }
 
-    fn _enter_scope(&mut self, _path: &mut NodePath<'a>, scope: &Rc<RefCell<Scope<'a>>>) {
-        scope.borrow_mut().parent = Weak::clone(&self.scope);
-        self.scope = Rc::downgrade(scope);
+    fn _enter_scope(&mut self, _path: &mut NodePath<'a>, scope: &'a Scope<'a>) {
+        scope.parent.replace(self.scope);
+        self.scope = Some(scope);
     }
 
-    fn _exit_scope(&mut self, _path: &mut NodePath<'a>, _scope: &Rc<RefCell<Scope<'a>>>) {
-        if let Some(scope) = self.scope.upgrade() {
-            self.scope = Weak::clone(&scope.borrow().parent);
+    fn _exit_scope(&mut self, _path: &mut NodePath<'a>, _scope: &'a Scope<'a>) {
+        if let Some(scope) = self.scope {
+            self.scope = scope.parent()
         }
     }
 }
 
 impl<'a> Visitor<'a> for ScopeChainBinder<'a> {
     fn enter_program(&mut self, _path: &mut NodePath<'a>, program: &'a Program<'a>) {
-        program.main_scope().borrow_mut().parent = Rc::downgrade(program.declarations_scope());
-        self.scope = Rc::downgrade(program.main_scope());
+        program
+            .main_scope()
+            .parent
+            .replace(Some(program.declarations_scope()));
+        self.scope = Some(program.main_scope());
     }
 
     fn enter_block(&mut self, path: &mut NodePath<'a>, block: &'a Block<'a>) {
@@ -332,8 +349,7 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
         let parent_path = parent_path.borrow();
         let fun = parent_path.node().function_definition().unwrap();
 
-        let mut scope = fun.body().scope().borrow_mut();
-        scope.register_declaration(self.arena, node);
+        fun.body().scope().register_declaration(self.arena, node);
     }
 
     fn enter_variable_declaration(
@@ -344,16 +360,14 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
         if let Some(pattern) = declaration.pattern() {
             let scope = path.scope();
 
-            scope
-                .borrow_mut()
-                .register_declaration(self.arena, &NodeKind::Pattern(pattern));
+            scope.register_declaration(self.arena, &NodeKind::Pattern(pattern));
         }
     }
 
     fn enter_case_arm(&mut self, _path: &mut NodePath<'a>, arm: &'a CaseArm<'a>) {
         if let Some(pattern) = arm.pattern() {
-            let mut scope = arm.scope().borrow_mut();
-            scope.register_declaration(self.arena, &NodeKind::Pattern(pattern));
+            arm.scope()
+                .register_declaration(self.arena, &NodeKind::Pattern(pattern));
         }
     }
 }
@@ -414,12 +428,12 @@ mod tests {
         let arena = BumpaloArena::new();
         let program = Parser::parse_string(&arena, "fun foo()\nend");
 
-        let scope = program.declarations_scope().borrow();
+        let scope = program.declarations_scope();
         let binding = scope.get_binding("foo");
 
         assert!(binding.is_some());
 
         let binding = binding.unwrap();
-        assert_eq!(binding.borrow().id(), "foo");
+        assert_eq!(binding.id(), "foo");
     }
 }

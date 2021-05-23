@@ -1,7 +1,4 @@
-use std::{
-    cell::RefCell,
-    rc::{Rc, Weak},
-};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::syntax::Token;
 use crate::{syntax::tree::*, util::wrap};
@@ -12,9 +9,9 @@ pub struct NodePath<'a> {
     skipped: bool,
     stopped: bool,
     node: NodeKind<'a>,
-    scope: Weak<RefCell<Scope<'a>>>,
-    main_scope: Weak<RefCell<Scope<'a>>>,
-    declarations: Weak<RefCell<Scope<'a>>>,
+    scope: Option<&'a Scope<'a>>,
+    main_scope: Option<&'a Scope<'a>>,
+    declarations: Option<&'a Scope<'a>>,
     parent: Option<Rc<RefCell<NodePath<'a>>>>,
 }
 
@@ -25,9 +22,9 @@ impl<'a> NodePath<'a> {
             stopped: false,
             node: node.clone(),
             parent: None,
-            declarations: Weak::new(),
-            scope: Weak::new(),
-            main_scope: Weak::new(),
+            declarations: None,
+            scope: None,
+            main_scope: None,
         }
     }
 
@@ -39,9 +36,9 @@ impl<'a> NodePath<'a> {
             stopped: false,
             node,
             parent: Some(Rc::clone(parent)),
-            scope: Weak::clone(&borrowed_parent.scope),
-            main_scope: Weak::clone(&borrowed_parent.main_scope),
-            declarations: Weak::clone(&borrowed_parent.declarations),
+            scope: borrowed_parent.scope,
+            main_scope: borrowed_parent.main_scope,
+            declarations: borrowed_parent.declarations,
         }
     }
 
@@ -73,31 +70,29 @@ impl<'a> NodePath<'a> {
             .unwrap_or_else(|| panic!("parent must exist."))
     }
 
-    pub fn scope(&self) -> Rc<RefCell<Scope<'a>>> {
-        self.scope
-            .upgrade()
-            .unwrap_or_else(|| panic!("scope must live."))
+    pub fn scope(&self) -> &'a Scope<'a> {
+        self.scope.unwrap_or_else(|| panic!("scope must live."))
     }
 
     fn on_enter(&mut self) {
         match self.node {
             NodeKind::Program(ref program) => {
-                self.main_scope = Rc::downgrade(program.main_scope());
-                self.declarations = Rc::downgrade(program.declarations_scope());
-                self.scope = Rc::downgrade(program.main_scope());
+                self.main_scope = Some(program.main_scope());
+                self.declarations = Some(program.declarations_scope());
+                self.scope = Some(program.main_scope());
             }
             NodeKind::Block(ref block) => {
-                self.scope = Rc::downgrade(block.scope());
+                self.scope = Some(block.scope());
             }
             NodeKind::CaseArm(ref arm) => {
-                self.scope = Rc::downgrade(arm.scope());
+                self.scope = Some(arm.scope());
             }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
-                self.scope = Weak::clone(&self.declarations);
+                self.scope = self.declarations;
             }
             NodeKind::FunctionDefinition(_) => {
-                self.scope = Weak::clone(&self.declarations);
+                self.scope = self.declarations;
             }
             _ => {}
         }
@@ -106,21 +101,21 @@ impl<'a> NodePath<'a> {
     fn on_exit(&mut self) {
         match self.node {
             NodeKind::Program(_) => {
-                self.main_scope = Weak::new();
-                self.scope = Weak::new();
+                self.main_scope = None;
+                self.scope = None;
             }
             NodeKind::Block(ref block) => {
-                self.scope = Weak::clone(block.scope().borrow().parent());
+                self.scope = block.scope().parent();
             }
             NodeKind::CaseArm(ref arm) => {
-                self.scope = Weak::clone(arm.scope().borrow().parent());
+                self.scope = arm.scope().parent();
             }
             NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
-                self.scope = Weak::clone(&self.main_scope);
+                self.scope = self.main_scope;
             }
             NodeKind::FunctionDefinition(_) => {
-                self.scope = Weak::clone(&self.main_scope);
+                self.scope = self.main_scope;
             }
             _ => {}
         }
