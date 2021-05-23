@@ -367,12 +367,13 @@ pub fn bind<'a>(node: &'a Program<'a>) {
 
 #[cfg(test)]
 mod tests {
-    use crate::syntax::{Ast, Parser};
+    use crate::arena::BumpaloArena;
+    use crate::syntax::Parser;
 
     #[test]
     fn top_level_declarations() {
-        let tree = Ast::new();
-        let program = Parser::parse_string(&tree, "fun foo()\nend");
+        let arena = BumpaloArena::new();
+        let program = Parser::parse_string(&arena, "fun foo()\nend");
 
         let scope = program.declarations_scope().borrow();
         let binding = scope.get_binding("foo");

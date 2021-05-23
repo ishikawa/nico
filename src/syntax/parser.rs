@@ -1,8 +1,8 @@
 use super::*;
+use crate::arena::{BumpaloArena, BumpaloString};
 use crate::util::naming::PrefixNaming;
 use crate::util::wrap;
 use crate::{sem, syntax::binding};
-use bumpalo::collections::String as BumpaloString;
 
 const DEBUG: bool = false;
 
@@ -15,10 +15,14 @@ pub struct Parser<'a, 't> {
 }
 
 impl<'a, 't> Parser<'a, 't> {
-    pub fn new<S: AsRef<str>>(tree: &'a Ast, tokenizer: Tokenizer<'t>, source_name: S) -> Self {
+    pub fn new<S: AsRef<str>>(
+        arena: &'a BumpaloArena,
+        tokenizer: Tokenizer<'t>,
+        source_name: S,
+    ) -> Self {
         Self {
             tokenizer,
-            source_name: BumpaloString::from_str_in(source_name.as_ref(), tree.arena()),
+            source_name: BumpaloString::from_str_in(source_name.as_ref(), arena),
             naming: PrefixNaming::new("?"),
         }
     }
@@ -27,19 +31,22 @@ impl<'a, 't> Parser<'a, 't> {
         self.source_name.as_str()
     }
 
-    pub fn parse_string<S: AsRef<str> + ?Sized>(tree: &'a Ast, src: &S) -> &'a Program<'a> {
+    pub fn parse_string<S: AsRef<str> + ?Sized>(
+        arena: &'a BumpaloArena,
+        src: &S,
+    ) -> &'a Program<'a> {
         let tokenizer = Tokenizer::from_string(src);
-        let mut parser = Parser::new(tree, tokenizer, "-");
+        let mut parser = Parser::new(arena, tokenizer, "-");
 
-        parser.parse(tree)
+        parser.parse(arena)
     }
 
-    pub fn parse(&mut self, tree: &'a Ast) -> &'a Program<'a> {
+    pub fn parse(&mut self, arena: &'a BumpaloArena) -> &'a Program<'a> {
         let mut body = vec![];
-        let mut code = Code::new(tree);
+        let mut code = Code::new(arena);
 
         loop {
-            if let Some(node) = self.parse_top_level(tree) {
+            if let Some(node) = self.parse_top_level(arena) {
                 code.node(NodeKind::TopLevel(node));
                 body.push(node);
             }
@@ -62,30 +69,30 @@ impl<'a, 't> Parser<'a, 't> {
             }
         }
 
-        let program = tree.alloc(Program::new(tree, body, code));
+        let program = arena.alloc(Program::new(arena, body, code));
 
         binding::bind(program);
 
         program
     }
 
-    fn parse_top_level(&mut self, tree: &'a Ast) -> Option<&'a TopLevel<'a>> {
+    fn parse_top_level(&mut self, arena: &'a BumpaloArena) -> Option<&'a TopLevel<'a>> {
         self.debug_trace("parse_top_level");
 
-        let mut code = Code::new(tree);
+        let mut code = Code::new(arena);
 
         // Type declaration
-        let kind = if let Some(node) = self.parse_struct_definition(tree) {
+        let kind = if let Some(node) = self.parse_struct_definition(arena) {
             code.node(NodeKind::StructDefinition(node));
             TopLevelKind::StructDefinition(node)
         }
         // Function
-        else if let Some(node) = self.parse_function(tree) {
+        else if let Some(node) = self.parse_function(arena) {
             code.node(NodeKind::FunctionDefinition(node));
             TopLevelKind::FunctionDefinition(node)
         }
         // Body for main function
-        else if let Some(node) = self.parse_stmt(tree) {
+        else if let Some(node) = self.parse_stmt(arena) {
             code.node(NodeKind::Statement(node));
             TopLevelKind::Statement(node)
         }
@@ -94,13 +101,16 @@ impl<'a, 't> Parser<'a, 't> {
             return None;
         };
 
-        Some(tree.alloc(TopLevel::new(kind, code)))
+        Some(arena.alloc(TopLevel::new(kind, code)))
     }
 
-    fn parse_struct_definition(&mut self, tree: &'a Ast) -> Option<&'a StructDefinition<'a>> {
+    fn parse_struct_definition(
+        &mut self,
+        arena: &'a BumpaloArena,
+    ) -> Option<&'a StructDefinition<'a>> {
         self.debug_trace("parse_struct_definition");
 
-        let mut code = Code::new(tree);
+        let mut code = Code::new(arena);
 
         // struct
         code.interpret(self.expect_token(TokenKind::Struct)?);
@@ -111,7 +121,7 @@ impl<'a, 't> Parser<'a, 't> {
         loop {
             match self.tokenizer.peek_kind() {
                 TokenKind::Identifier(_) => {
-                    let name = self.parse_name(tree).unwrap();
+                    let name = self.parse_name(arena).unwrap();
 
                     code.node(NodeKind::Identifier(name));
                     struct_name = Some(name);
@@ -134,7 +144,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         // fields
         let fields = self._parse_elements(
-            tree,
+            arena,
             '{',
             '}',
             &mut code,
@@ -142,14 +152,14 @@ impl<'a, 't> Parser<'a, 't> {
             NodeKind::TypeField,
         );
 
-        let definition = tree.alloc(StructDefinition::new(tree, struct_name, fields, code));
+        let definition = arena.alloc(StructDefinition::new(arena, struct_name, fields, code));
         Some(definition)
     }
 
-    fn parse_function(&mut self, tree: &'a Ast) -> Option<&'a FunctionDefinition<'a>> {
+    fn parse_function(&mut self, arena: &'a BumpaloArena) -> Option<&'a FunctionDefinition<'a>> {
         self.debug_trace("parse_function");
 
-        let mut code = Code::new(tree);
+        let mut code = Code::new(arena);
 
         // TODO: In L(1) parser, if the `fun` keyword is not followed by an `export` keyword,
         // the `export` keyword cannot be push backed, so we shouldn't stop reading export here.
@@ -169,7 +179,7 @@ impl<'a, 't> Parser<'a, 't> {
             match self.tokenizer.peek_kind() {
                 TokenKind::Identifier(_) => {
                     // Okay, it's a function name.
-                    let name = self.parse_name(tree).unwrap();
+                    let name = self.parse_name(arena).unwrap();
 
                     code.node(NodeKind::Identifier(name));
                     function_name = Some(name);
@@ -194,7 +204,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         // parameters
         let parameters = self._parse_elements(
-            tree,
+            arena,
             '(',
             ')',
             &mut code,
@@ -203,13 +213,13 @@ impl<'a, 't> Parser<'a, 't> {
         );
 
         // body
-        let body = self._read_block(tree, &[TokenKind::End]);
+        let body = self._read_block(arena, &[TokenKind::End]);
 
         code.node(NodeKind::Block(body));
         code.interpret(self.tokenizer.next_token()); // end
 
-        Some(tree.alloc(FunctionDefinition::new(
-            tree,
+        Some(arena.alloc(FunctionDefinition::new(
+            arena,
             function_name,
             parameters,
             body,
@@ -217,21 +227,24 @@ impl<'a, 't> Parser<'a, 't> {
         )))
     }
 
-    fn parse_function_parameter(&mut self, tree: &'a Ast) -> Option<&'a FunctionParameter<'a>> {
-        if let Some(name) = self.parse_name(tree) {
-            let code = Code::with_node(tree, NodeKind::Identifier(name));
-            Some(tree.alloc(FunctionParameter::new(name, code)))
+    fn parse_function_parameter(
+        &mut self,
+        arena: &'a BumpaloArena,
+    ) -> Option<&'a FunctionParameter<'a>> {
+        if let Some(name) = self.parse_name(arena) {
+            let code = Code::with_node(arena, NodeKind::Identifier(name));
+            Some(arena.alloc(FunctionParameter::new(name, code)))
         } else {
             None
         }
     }
 
-    fn parse_type_field(&mut self, tree: &'a Ast) -> Option<&'a TypeField<'a>> {
+    fn parse_type_field(&mut self, arena: &'a BumpaloArena) -> Option<&'a TypeField<'a>> {
         // To prevent reading too many unnecessary tokens,
         // we should not skip tokens here.
-        let mut code = Code::new(tree);
+        let mut code = Code::new(arena);
 
-        let name = self.parse_name(tree);
+        let name = self.parse_name(arena);
 
         if let Some(ref name) = name {
             code.node(NodeKind::Identifier(name));
@@ -244,7 +257,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         code.interpret(self.expect_token(TokenKind::Char(':'))?);
 
-        let annotation = self.parse_type_annotation(tree);
+        let annotation = self.parse_type_annotation(arena);
 
         if let Some(ref annotation) = annotation {
             code.node(NodeKind::TypeAnnotation(annotation));
@@ -257,18 +270,18 @@ impl<'a, 't> Parser<'a, 't> {
 
         let field = TypeField::new(name, annotation, code);
 
-        Some(tree.alloc(field))
+        Some(arena.alloc(field))
     }
 
-    fn parse_struct_field(&mut self, tree: &'a Ast) -> Option<&'a ValueField<'a>> {
-        let name = self.parse_name(tree)?;
-        let mut code = Code::with_node(tree, NodeKind::Identifier(name));
+    fn parse_struct_field(&mut self, arena: &'a BumpaloArena) -> Option<&'a ValueField<'a>> {
+        let name = self.parse_name(arena)?;
+        let mut code = Code::with_node(arena, NodeKind::Identifier(name));
 
         // value can be omitted for struct literal.
         let field = if let Some(separator) = self.expect_token(TokenKind::Char(':')) {
             code.interpret(separator);
 
-            let value = self.parse_expr(tree);
+            let value = self.parse_expr(arena);
 
             if let Some(ref value) = value {
                 code.node(NodeKind::Expression(value));
@@ -284,18 +297,21 @@ impl<'a, 't> Parser<'a, 't> {
             ValueField::new(name, None, code)
         };
 
-        Some(tree.alloc(field))
+        Some(arena.alloc(field))
     }
 
-    fn parse_struct_field_pattern(&mut self, tree: &'a Ast) -> Option<&'a ValueFieldPattern<'a>> {
-        let name = self.parse_name(tree)?;
-        let mut code = Code::with_node(tree, NodeKind::Identifier(name));
+    fn parse_struct_field_pattern(
+        &mut self,
+        arena: &'a BumpaloArena,
+    ) -> Option<&'a ValueFieldPattern<'a>> {
+        let name = self.parse_name(arena)?;
+        let mut code = Code::with_node(arena, NodeKind::Identifier(name));
 
         // value can be omitted for struct literal.
         let field = if let Some(separator) = self.expect_token(TokenKind::Char(':')) {
             code.interpret(separator);
 
-            let value = self.parse_pattern(tree);
+            let value = self.parse_pattern(arena);
 
             if let Some(ref value) = value {
                 code.node(NodeKind::Pattern(value));
@@ -306,49 +322,52 @@ impl<'a, 't> Parser<'a, 't> {
                 );
             }
 
-            ValueFieldPattern::new(tree, name, value, code)
+            ValueFieldPattern::new(arena, name, value, code)
         } else {
-            ValueFieldPattern::new(tree, name, None, code)
+            ValueFieldPattern::new(arena, name, None, code)
         };
 
-        Some(tree.alloc(field))
+        Some(arena.alloc(field))
     }
 
-    fn parse_name(&mut self, tree: &'a Ast) -> Option<&'a Identifier<'a>> {
+    fn parse_name(&mut self, arena: &'a BumpaloArena) -> Option<&'a Identifier<'a>> {
         if let TokenKind::Identifier(name) = self.tokenizer.peek_kind() {
             let name = name.clone();
-            let code = Code::with_interpreted(tree, self.tokenizer.next_token());
+            let code = Code::with_interpreted(arena, self.tokenizer.next_token());
 
-            Some(tree.alloc(Identifier::new(tree, name, code)))
+            Some(arena.alloc(Identifier::new(arena, name, code)))
         } else {
             None
         }
     }
 
-    fn parse_type_annotation(&mut self, tree: &'a Ast) -> Option<&'a TypeAnnotation<'a>> {
-        let code = Code::with_interpreted(tree, self.expect_token(TokenKind::I32)?);
+    fn parse_type_annotation(&mut self, arena: &'a BumpaloArena) -> Option<&'a TypeAnnotation<'a>> {
+        let code = Code::with_interpreted(arena, self.expect_token(TokenKind::I32)?);
 
         let ty = TypeAnnotation::new(wrap(sem::Type::Int32), code);
-        Some(tree.alloc(ty))
+        Some(arena.alloc(ty))
     }
 
-    fn parse_stmt(&mut self, tree: &'a Ast) -> Option<&'a Statement<'a>> {
+    fn parse_stmt(&mut self, arena: &'a BumpaloArena) -> Option<&'a Statement<'a>> {
         self.debug_trace("parse_stmt");
 
         match self.tokenizer.peek_kind() {
-            TokenKind::Let => self.parse_variable_declaration_stmt(tree),
-            _ => self.parse_stmt_expr(tree),
+            TokenKind::Let => self.parse_variable_declaration_stmt(arena),
+            _ => self.parse_stmt_expr(arena),
         }
     }
 
-    fn parse_variable_declaration(&mut self, tree: &'a Ast) -> Option<&'a VariableDeclaration<'a>> {
+    fn parse_variable_declaration(
+        &mut self,
+        arena: &'a BumpaloArena,
+    ) -> Option<&'a VariableDeclaration<'a>> {
         self.debug_trace("parse_variable_declaration");
 
-        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token()); // let
+        let mut code = Code::with_interpreted(arena, self.tokenizer.next_token()); // let
         let mut pattern = None;
         let mut init = None;
 
-        if let Some(pat) = self.parse_pattern(tree) {
+        if let Some(pat) = self.parse_pattern(arena) {
             code.node(NodeKind::Pattern(pat));
             pattern = Some(pat);
         } else {
@@ -360,7 +379,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         code.interpret(self.expect_token(TokenKind::Char('='))?);
 
-        if let Some(expr) = self.parse_expr(tree) {
+        if let Some(expr) = self.parse_expr(arena) {
             code.node(NodeKind::Expression(expr));
             init = Some(expr);
         } else {
@@ -372,39 +391,42 @@ impl<'a, 't> Parser<'a, 't> {
 
         let decl = VariableDeclaration::new(pattern, init, code);
 
-        Some(tree.alloc(decl))
+        Some(arena.alloc(decl))
     }
 
-    fn parse_variable_declaration_stmt(&mut self, tree: &'a Ast) -> Option<&'a Statement<'a>> {
+    fn parse_variable_declaration_stmt(
+        &mut self,
+        arena: &'a BumpaloArena,
+    ) -> Option<&'a Statement<'a>> {
         self.debug_trace("parse_variable_declaration_stmt");
 
-        let decl = self.parse_variable_declaration(tree)?;
-        let code = Code::with_node(tree, NodeKind::VariableDeclaration(decl));
+        let decl = self.parse_variable_declaration(arena)?;
+        let code = Code::with_node(arena, NodeKind::VariableDeclaration(decl));
 
-        Some(tree.alloc(Statement::new(
+        Some(arena.alloc(Statement::new(
             StatementKind::VariableDeclaration(decl),
             code,
         )))
     }
 
-    fn parse_stmt_expr(&mut self, tree: &'a Ast) -> Option<&'a Statement<'a>> {
+    fn parse_stmt_expr(&mut self, arena: &'a BumpaloArena) -> Option<&'a Statement<'a>> {
         self.debug_trace("parse_stmt_expr");
 
-        let expr = self.parse_expr(tree)?;
-        let code = Code::with_node(tree, NodeKind::Expression(expr));
+        let expr = self.parse_expr(arena)?;
+        let code = Code::with_node(arena, NodeKind::Expression(expr));
 
-        Some(tree.alloc(Statement::new(StatementKind::Expression(expr), code)))
+        Some(arena.alloc(Statement::new(StatementKind::Expression(expr), code)))
     }
 
-    fn parse_expr(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
+    fn parse_expr(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_expr");
-        self.parse_rel_op1(tree)
+        self.parse_rel_op1(arena)
     }
 
-    fn parse_rel_op1(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
+    fn parse_rel_op1(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_rel_op1");
         self._parse_binary_op(
-            tree,
+            arena,
             Parser::parse_rel_op2,
             &[
                 (TokenKind::Eq, BinaryOperator::Eq),
@@ -413,10 +435,10 @@ impl<'a, 't> Parser<'a, 't> {
         )
     }
 
-    fn parse_rel_op2(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
+    fn parse_rel_op2(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_rel_op2");
         self._parse_binary_op(
-            tree,
+            arena,
             Parser::parse_binary_op1,
             &[
                 (TokenKind::Le, BinaryOperator::Le),
@@ -427,10 +449,10 @@ impl<'a, 't> Parser<'a, 't> {
         )
     }
 
-    fn parse_binary_op1(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
+    fn parse_binary_op1(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_binary_op1");
         self._parse_binary_op(
-            tree,
+            arena,
             Parser::parse_binary_op2,
             &[
                 (TokenKind::Char('+'), BinaryOperator::Add),
@@ -440,10 +462,10 @@ impl<'a, 't> Parser<'a, 't> {
         )
     }
 
-    fn parse_binary_op2(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
+    fn parse_binary_op2(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_binary_op2");
         self._parse_binary_op(
-            tree,
+            arena,
             Parser::parse_unary_op,
             &[
                 (TokenKind::Char('*'), BinaryOperator::Mul),
@@ -452,21 +474,21 @@ impl<'a, 't> Parser<'a, 't> {
         )
     }
 
-    fn parse_unary_op(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
+    fn parse_unary_op(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_unary_op");
 
         let operator = match self.tokenizer.peek_kind() {
             TokenKind::Char('+') => UnaryOperator::Plus,
             TokenKind::Char('-') => UnaryOperator::Minus,
-            _ => return self.parse_access(tree),
+            _ => return self.parse_access(arena),
         };
 
         // unary operators are right associative.
-        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token());
+        let mut code = Code::with_interpreted(arena, self.tokenizer.next_token());
         let mut operand = None;
 
         loop {
-            if let Some(node) = self.parse_unary_op(tree) {
+            if let Some(node) = self.parse_unary_op(arena) {
                 code.node(NodeKind::Expression(node));
                 operand = Some(node);
                 break;
@@ -485,16 +507,16 @@ impl<'a, 't> Parser<'a, 't> {
         let expr = UnaryExpression::new(operator, operand);
         let kind = ExpressionKind::UnaryExpression(expr);
 
-        Some(tree.alloc(Expression::new(kind, code)))
+        Some(arena.alloc(Expression::new(kind, code)))
     }
 
-    fn parse_access(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
+    fn parse_access(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_access");
 
-        let mut operand = self.parse_primary(tree)?;
+        let mut operand = self.parse_primary(arena)?;
 
         loop {
-            let mut code = Code::with_node(tree, NodeKind::Expression(operand));
+            let mut code = Code::with_node(arena, NodeKind::Expression(operand));
 
             // To distinguish `x\n[...]` and `x[...]`, we have to capture
             // `tokenizer.is_newline_seen()`, so try to advance tokenizer.
@@ -509,7 +531,7 @@ impl<'a, 't> Parser<'a, 't> {
             let kind = match token.kind {
                 TokenKind::Char('[') => {
                     let arguments = self._parse_elements(
-                        tree,
+                        arena,
                         '[',
                         ']',
                         &mut code,
@@ -518,12 +540,12 @@ impl<'a, 't> Parser<'a, 't> {
                     );
 
                     ExpressionKind::SubscriptExpression(SubscriptExpression::new(
-                        tree, operand, arguments,
+                        arena, operand, arguments,
                     ))
                 }
                 TokenKind::Char('(') => {
                     let arguments = self._parse_elements(
-                        tree,
+                        arena,
                         '(',
                         ')',
                         &mut code,
@@ -531,12 +553,12 @@ impl<'a, 't> Parser<'a, 't> {
                         NodeKind::Expression,
                     );
 
-                    ExpressionKind::CallExpression(CallExpression::new(tree, operand, arguments))
+                    ExpressionKind::CallExpression(CallExpression::new(arena, operand, arguments))
                 }
                 TokenKind::Char('.') => {
                     code.interpret(self.tokenizer.next_token());
 
-                    let field = self.parse_name(tree);
+                    let field = self.parse_name(arena);
 
                     if let Some(ref field) = field {
                         code.node(NodeKind::Identifier(field));
@@ -552,51 +574,51 @@ impl<'a, 't> Parser<'a, 't> {
                 _ => break,
             };
 
-            operand = tree.alloc(Expression::new(kind, code));
+            operand = arena.alloc(Expression::new(kind, code));
         }
 
         Some(operand)
     }
 
-    fn parse_primary(&mut self, tree: &'a Ast) -> Option<&'a Expression<'a>> {
+    fn parse_primary(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_primary");
 
         let token = self.tokenizer.peek();
         let node = match token.kind {
-            TokenKind::Integer(_) => self.read_integer(tree),
-            TokenKind::Identifier(_) => self.read_identifier(tree),
-            TokenKind::StringStart => self.read_string(tree),
-            TokenKind::Char('(') => self.read_paren(tree),
-            TokenKind::Char('[') => self.read_array(tree),
-            TokenKind::If => self.read_if_expression(tree),
-            TokenKind::Case => self.read_case_expression(tree),
+            TokenKind::Integer(_) => self.read_integer(arena),
+            TokenKind::Identifier(_) => self.read_identifier(arena),
+            TokenKind::StringStart => self.read_string(arena),
+            TokenKind::Char('(') => self.read_paren(arena),
+            TokenKind::Char('[') => self.read_array(arena),
+            TokenKind::If => self.read_if_expression(arena),
+            TokenKind::Case => self.read_case_expression(arena),
             _ => return None,
         };
 
         Some(node)
     }
 
-    fn parse_pattern(&mut self, tree: &'a Ast) -> Option<&'a Pattern<'a>> {
+    fn parse_pattern(&mut self, arena: &'a BumpaloArena) -> Option<&'a Pattern<'a>> {
         self.debug_trace("parse_pattern");
 
         let token = self.tokenizer.peek();
         let pattern = match token.kind {
-            TokenKind::Integer(_) => self.read_integer_pattern(tree),
-            TokenKind::Identifier(_) => self.read_identifier_pattern(tree),
-            TokenKind::StringStart => self.read_string_pattern(tree),
-            TokenKind::Char('[') => self.read_array_pattern(tree),
-            TokenKind::Rest => self.read_rest_pattern(tree),
+            TokenKind::Integer(_) => self.read_integer_pattern(arena),
+            TokenKind::Identifier(_) => self.read_identifier_pattern(arena),
+            TokenKind::StringStart => self.read_string_pattern(arena),
+            TokenKind::Char('[') => self.read_array_pattern(arena),
+            TokenKind::Rest => self.read_rest_pattern(arena),
             _ => return None,
         };
 
         Some(pattern)
     }
 
-    fn _read_integer(&mut self, tree: &'a Ast) -> (IntegerLiteral, Code<'a>) {
+    fn _read_integer(&mut self, arena: &'a BumpaloArena) -> (IntegerLiteral, Code<'a>) {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
-            let code = Code::with_interpreted(tree, token);
+            let code = Code::with_interpreted(arena, token);
 
             (IntegerLiteral::new(i), code)
         } else {
@@ -604,28 +626,28 @@ impl<'a, 't> Parser<'a, 't> {
         }
     }
 
-    fn read_integer(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
-        let (literal, code) = self._read_integer(tree);
+    fn read_integer(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
+        let (literal, code) = self._read_integer(arena);
 
-        tree.alloc(Expression::new(
+        arena.alloc(Expression::new(
             ExpressionKind::IntegerLiteral(literal),
             code,
         ))
     }
 
-    fn read_integer_pattern(&mut self, tree: &'a Ast) -> &'a Pattern<'a> {
-        let (literal, code) = self._read_integer(tree);
+    fn read_integer_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
+        let (literal, code) = self._read_integer(arena);
 
-        tree.alloc(Pattern::new(PatternKind::IntegerPattern(literal), code))
+        arena.alloc(Pattern::new(PatternKind::IntegerPattern(literal), code))
     }
 
-    fn read_identifier(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
-        let id = self.parse_name(tree).unwrap();
-        let mut code = Code::with_node(tree, NodeKind::Identifier(id));
+    fn read_identifier(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
+        let id = self.parse_name(arena).unwrap();
+        let mut code = Code::with_node(arena, NodeKind::Identifier(id));
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
             let fields = self._parse_elements(
-                tree,
+                arena,
                 '{',
                 '}',
                 &mut code,
@@ -633,21 +655,21 @@ impl<'a, 't> Parser<'a, 't> {
                 NodeKind::ValueField,
             );
 
-            ExpressionKind::StructLiteral(StructLiteral::new(tree, id, fields))
+            ExpressionKind::StructLiteral(StructLiteral::new(arena, id, fields))
         } else {
             ExpressionKind::VariableExpression(id)
         };
 
-        tree.alloc(Expression::new(kind, code))
+        arena.alloc(Expression::new(kind, code))
     }
 
-    fn read_identifier_pattern(&mut self, tree: &'a Ast) -> &'a Pattern<'a> {
-        let id = self.parse_name(tree).unwrap();
-        let mut code = Code::with_node(tree, NodeKind::Identifier(id));
+    fn read_identifier_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
+        let id = self.parse_name(arena).unwrap();
+        let mut code = Code::with_node(arena, NodeKind::Identifier(id));
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
             let fields = self._parse_elements(
-                tree,
+                arena,
                 '{',
                 '}',
                 &mut code,
@@ -655,17 +677,17 @@ impl<'a, 't> Parser<'a, 't> {
                 NodeKind::ValueFieldPattern,
             );
 
-            PatternKind::StructPattern(StructPattern::new(tree, id, fields))
+            PatternKind::StructPattern(StructPattern::new(arena, id, fields))
         } else {
             PatternKind::VariablePattern(id)
         };
 
-        tree.alloc(Pattern::new(kind, code))
+        arena.alloc(Pattern::new(kind, code))
     }
 
-    fn _read_string(&mut self, tree: &'a Ast) -> (StringLiteral<'a>, Code<'a>) {
+    fn _read_string(&mut self, arena: &'a BumpaloArena) -> (StringLiteral<'a>, Code<'a>) {
         let start_token = self.tokenizer.next_token(); // StringStart
-        let mut code = Code::with_interpreted(tree, start_token);
+        let mut code = Code::with_interpreted(arena, start_token);
         let mut string = String::new();
         let mut has_error = false;
 
@@ -707,32 +729,32 @@ impl<'a, 't> Parser<'a, 't> {
 
         let value = if has_error { None } else { Some(string) };
 
-        (StringLiteral::new(tree, value), code)
+        (StringLiteral::new(arena, value), code)
     }
 
-    fn read_string(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
-        let (string, code) = self._read_string(tree);
+    fn read_string(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
+        let (string, code) = self._read_string(arena);
 
-        tree.alloc(Expression::new(ExpressionKind::StringLiteral(string), code))
+        arena.alloc(Expression::new(ExpressionKind::StringLiteral(string), code))
     }
 
-    fn read_string_pattern(&mut self, tree: &'a Ast) -> &'a Pattern<'a> {
-        let (string, code) = self._read_string(tree);
-        tree.alloc(Pattern::new(PatternKind::StringPattern(string), code))
+    fn read_string_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
+        let (string, code) = self._read_string(arena);
+        arena.alloc(Pattern::new(PatternKind::StringPattern(string), code))
     }
 
-    fn read_paren(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
-        let expr = self.read_grouped_expression(tree);
+    fn read_paren(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
+        let expr = self.read_grouped_expression(arena);
 
-        tree.alloc(Expression::new(
+        arena.alloc(Expression::new(
             ExpressionKind::GroupedExpression(expr),
-            Code::with_node(tree, NodeKind::GroupedExpression(expr)),
+            Code::with_node(arena, NodeKind::GroupedExpression(expr)),
         ))
     }
 
-    fn read_grouped_expression(&mut self, tree: &'a Ast) -> &'a GroupedExpression<'a> {
-        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token()); // "("
-        let node = self.parse_expr(tree);
+    fn read_grouped_expression(&mut self, arena: &'a BumpaloArena) -> &'a GroupedExpression<'a> {
+        let mut code = Code::with_interpreted(arena, self.tokenizer.next_token()); // "("
+        let node = self.parse_expr(arena);
 
         if let Some(ref node) = node {
             code.node(NodeKind::Expression(node));
@@ -764,13 +786,13 @@ impl<'a, 't> Parser<'a, 't> {
 
         // Because parentheses which groups an expression is not part of
         // AST, we have to incorporate it into another node.
-        tree.alloc(GroupedExpression::new(node, code))
+        arena.alloc(GroupedExpression::new(node, code))
     }
 
-    fn read_array(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
-        let mut code = Code::new(tree);
+    fn read_array(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
+        let mut code = Code::new(arena);
         let elements = self._parse_elements(
-            tree,
+            arena,
             '[',
             ']',
             &mut code,
@@ -778,15 +800,15 @@ impl<'a, 't> Parser<'a, 't> {
             NodeKind::Expression,
         );
 
-        let expr = ArrayExpression::new(tree, elements);
+        let expr = ArrayExpression::new(arena, elements);
 
-        tree.alloc(Expression::new(ExpressionKind::ArrayExpression(expr), code))
+        arena.alloc(Expression::new(ExpressionKind::ArrayExpression(expr), code))
     }
 
-    fn read_array_pattern(&mut self, tree: &'a Ast) -> &'a Pattern<'a> {
-        let mut code = Code::new(tree);
+    fn read_array_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
+        let mut code = Code::new(arena);
         let elements = self._parse_elements(
-            tree,
+            arena,
             '[',
             ']',
             &mut code,
@@ -794,30 +816,30 @@ impl<'a, 't> Parser<'a, 't> {
             NodeKind::Pattern,
         );
 
-        tree.alloc(Pattern::new(
-            PatternKind::ArrayPattern(ArrayPattern::new(tree, elements)),
+        arena.alloc(Pattern::new(
+            PatternKind::ArrayPattern(ArrayPattern::new(arena, elements)),
             code,
         ))
     }
 
-    fn read_rest_pattern(&mut self, tree: &'a Ast) -> &'a Pattern<'a> {
-        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token()); // "..."
-        let name = self.parse_name(tree);
+    fn read_rest_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
+        let mut code = Code::with_interpreted(arena, self.tokenizer.next_token()); // "..."
+        let name = self.parse_name(arena);
 
         if let Some(ref node) = name {
             code.node(NodeKind::Identifier(node));
         }
 
-        tree.alloc(Pattern::new(
+        arena.alloc(Pattern::new(
             PatternKind::RestPattern(RestPattern::new(name)),
             code,
         ))
     }
 
-    fn read_if_expression(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
-        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token()); // "if"
+    fn read_if_expression(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
+        let mut code = Code::with_interpreted(arena, self.tokenizer.next_token()); // "if"
         let condition = self._parse_optional_item(
-            tree,
+            arena,
             &mut code,
             Parser::parse_expr,
             NodeKind::Expression,
@@ -825,14 +847,14 @@ impl<'a, 't> Parser<'a, 't> {
         );
 
         // body
-        let then_body = self._read_block(tree, &[TokenKind::End, TokenKind::Else]);
+        let then_body = self._read_block(arena, &[TokenKind::End, TokenKind::Else]);
         let has_else = *self.tokenizer.peek_kind() == TokenKind::Else;
 
         code.node(NodeKind::Block(then_body));
         code.interpret(self.tokenizer.next_token()); // "else" or "end"
 
         let else_body = if has_else {
-            let else_body = self._read_block(tree, &[TokenKind::End]);
+            let else_body = self._read_block(arena, &[TokenKind::End]);
 
             code.node(NodeKind::Block(else_body));
             code.interpret(self.tokenizer.next_token()); //  "end"
@@ -844,14 +866,14 @@ impl<'a, 't> Parser<'a, 't> {
 
         let expr = IfExpression::new(condition, then_body, else_body);
 
-        tree.alloc(Expression::new(ExpressionKind::IfExpression(expr), code))
+        arena.alloc(Expression::new(ExpressionKind::IfExpression(expr), code))
     }
 
-    fn read_case_expression(&mut self, tree: &'a Ast) -> &'a Expression<'a> {
+    fn read_case_expression(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
         // case ...
-        let mut code = Code::with_interpreted(tree, self.tokenizer.next_token()); // "case"
+        let mut code = Code::with_interpreted(arena, self.tokenizer.next_token()); // "case"
         let head = self._parse_optional_item(
-            tree,
+            arena,
             &mut code,
             Parser::parse_expr,
             NodeKind::Expression,
@@ -865,7 +887,7 @@ impl<'a, 't> Parser<'a, 't> {
         loop {
             match self.tokenizer.peek_kind() {
                 TokenKind::When => {
-                    let arm = self.read_case_arm(tree);
+                    let arm = self.read_case_arm(arena);
 
                     code.node(NodeKind::CaseArm(arm));
                     arms.push(arm);
@@ -873,7 +895,7 @@ impl<'a, 't> Parser<'a, 't> {
                 TokenKind::Else => {
                     code.interpret(self.tokenizer.next_token());
 
-                    let block = self._read_block(tree, &[TokenKind::End]);
+                    let block = self._read_block(arena, &[TokenKind::End]);
                     code.node(NodeKind::Block(block));
 
                     else_body = Some(block);
@@ -896,13 +918,13 @@ impl<'a, 't> Parser<'a, 't> {
             }
         }
 
-        let expr = CaseExpression::new(tree, head, arms, else_body);
+        let expr = CaseExpression::new(arena, head, arms, else_body);
 
-        tree.alloc(Expression::new(ExpressionKind::CaseExpression(expr), code))
+        arena.alloc(Expression::new(ExpressionKind::CaseExpression(expr), code))
     }
 
-    fn read_case_arm(&mut self, tree: &'a Ast) -> &'a CaseArm<'a> {
-        let mut code = Code::new(tree);
+    fn read_case_arm(&mut self, arena: &'a BumpaloArena) -> &'a CaseArm<'a> {
+        let mut code = Code::new(arena);
 
         // when
         code.interpret(self.tokenizer.next_token());
@@ -917,7 +939,7 @@ impl<'a, 't> Parser<'a, 't> {
             None
         } else {
             self._parse_optional_item(
-                tree,
+                arena,
                 &mut code,
                 Parser::parse_pattern,
                 NodeKind::Pattern,
@@ -931,7 +953,7 @@ impl<'a, 't> Parser<'a, 't> {
         if *self.tokenizer.peek_kind() == TokenKind::If {
             code.interpret(self.tokenizer.next_token());
             guard = self._parse_optional_item(
-                tree,
+                arena,
                 &mut code,
                 Parser::parse_expr,
                 NodeKind::Expression,
@@ -939,17 +961,18 @@ impl<'a, 't> Parser<'a, 't> {
             );
         }
 
-        let then_body = self._read_block(tree, &[TokenKind::When, TokenKind::Else, TokenKind::End]);
+        let then_body =
+            self._read_block(arena, &[TokenKind::When, TokenKind::Else, TokenKind::End]);
         code.node(NodeKind::Block(then_body));
 
-        tree.alloc(CaseArm::new(pattern, guard, then_body, code))
+        arena.alloc(CaseArm::new(pattern, guard, then_body, code))
     }
 
     /// Reads statements until it meets a token listed in `stop_tokens`.
     /// But this function doesn't consume a stop token itself, consuming
     /// a stop token is caller's responsibility.
-    fn _read_block(&mut self, tree: &'a Ast, stop_tokens: &[TokenKind]) -> &'a Block<'a> {
-        let mut code = Code::new(tree);
+    fn _read_block(&mut self, arena: &'a BumpaloArena, stop_tokens: &[TokenKind]) -> &'a Block<'a> {
+        let mut code = Code::new(arena);
 
         // body
         let mut body = vec![];
@@ -962,7 +985,7 @@ impl<'a, 't> Parser<'a, 't> {
         loop {
             let mut stmt_seen = false;
 
-            if let Some(stmt) = self.parse_stmt(tree) {
+            if let Some(stmt) = self.parse_stmt(arena) {
                 stmt_seen = true;
 
                 if !newline_seen {
@@ -992,8 +1015,8 @@ impl<'a, 't> Parser<'a, 't> {
                     newline_seen = self.tokenizer.is_newline_seen();
                     insertion_range = self.tokenizer.current_insertion_range();
 
-                    // `parse_stmt(tree)` should consume at least one token.
-                    // However, in case `parse_stmt(tree)` have not been able to consume a single token,
+                    // `parse_stmt(arena)` should consume at least one token.
+                    // However, in case `parse_stmt(arena)` have not been able to consume a single token,
                     // we have to skip the current token.
                     if !stmt_seen {
                         code.skip(self.tokenizer.next_token(), MissingTokenKind::Statement);
@@ -1002,18 +1025,18 @@ impl<'a, 't> Parser<'a, 't> {
             }
         }
 
-        tree.alloc(Block::new(tree, body, code))
+        arena.alloc(Block::new(arena, body, code))
     }
 
     fn _parse_optional_item<T>(
         &mut self,
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         code: &mut Code<'a>,
-        node_parser: fn(&mut Parser<'a, 't>, &'a Ast) -> Option<&'a T>,
+        node_parser: fn(&mut Parser<'a, 't>, &'a BumpaloArena) -> Option<&'a T>,
         kind_builder: fn(&'a T) -> NodeKind<'a>,
         missing_token: MissingTokenKind,
     ) -> Option<&'a T> {
-        let node = node_parser(self, tree);
+        let node = node_parser(self, arena);
 
         if let Some(ref node) = node {
             code.node(kind_builder(node));
@@ -1028,11 +1051,11 @@ impl<'a, 't> Parser<'a, 't> {
     /// the end character token or EOF specified by `close_char`.
     fn _parse_elements<T>(
         &mut self,
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         open_char: char,
         close_char: char,
         code: &mut Code<'a>,
-        element_parser: fn(&mut Parser<'a, 't>, &'a Ast) -> Option<&'a T>,
+        element_parser: fn(&mut Parser<'a, 't>, &'a BumpaloArena) -> Option<&'a T>,
         kind_builder: fn(&'a T) -> NodeKind<'a>,
     ) -> Vec<&'a T> {
         let mut arguments = vec![];
@@ -1066,7 +1089,7 @@ impl<'a, 't> Parser<'a, 't> {
                     break;
                 }
                 _ => {
-                    if let Some(expr) = element_parser(self, tree) {
+                    if let Some(expr) = element_parser(self, arena) {
                         // Maybe user forgot opening token before a param.
                         //     # (
                         //         a ...
@@ -1094,7 +1117,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         loop {
             if !consumed {
-                let argument = element_parser(self, tree);
+                let argument = element_parser(self, arena);
 
                 if let Some(argument) = argument {
                     consumed = true;
@@ -1140,11 +1163,11 @@ impl<'a, 't> Parser<'a, 't> {
 
     fn _parse_binary_op(
         &mut self,
-        tree: &'a Ast,
-        next_parser: fn(&mut Parser<'a, 't>, &'a Ast) -> Option<&'a Expression<'a>>,
+        arena: &'a BumpaloArena,
+        next_parser: fn(&mut Parser<'a, 't>, &'a BumpaloArena) -> Option<&'a Expression<'a>>,
         operators: &[(TokenKind, BinaryOperator)],
     ) -> Option<&'a Expression<'a>> {
-        let mut lhs = next_parser(self, tree)?;
+        let mut lhs = next_parser(self, arena)?;
 
         loop {
             let kind = self.tokenizer.peek_kind();
@@ -1166,12 +1189,12 @@ impl<'a, 't> Parser<'a, 't> {
 
             let op_token = self.tokenizer.next_token();
             let mut rhs;
-            let mut code = Code::new(tree);
+            let mut code = Code::new(arena);
 
             code.node(NodeKind::Expression(lhs)).interpret(op_token);
 
             loop {
-                rhs = next_parser(self, tree);
+                rhs = next_parser(self, arena);
 
                 if let Some(ref rhs) = rhs {
                     code.node(NodeKind::Expression(rhs));
@@ -1191,7 +1214,7 @@ impl<'a, 't> Parser<'a, 't> {
             // node
             let expr = BinaryExpression::new(operator, lhs, rhs);
 
-            lhs = tree.alloc(Expression::new(
+            lhs = arena.alloc(Expression::new(
                 ExpressionKind::BinaryExpression(expr),
                 code,
             ));
@@ -1225,13 +1248,14 @@ mod tests {
     use std::slice;
 
     use super::*;
+    use crate::arena::BumpaloArena;
     use crate::syntax::{EffectiveRange, ExpressionKind, SyntaxToken, Token};
     use assert_matches::assert_matches;
 
     #[test]
     fn number_integer() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "42");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "42");
 
         assert_matches!(
             stmt.expression().unwrap().kind(),
@@ -1249,9 +1273,9 @@ mod tests {
 
     #[test]
     fn incomplete_string() {
-        let tree = Ast::new();
+        let arena = BumpaloArena::new();
         for src in vec!["\"Fizz\\\"", "\"Fizz\\\"\n"] {
-            let stmt = parse_statement(&tree, src);
+            let stmt = parse_statement(&arena, src);
             let expr = stmt.expression().unwrap();
 
             assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
@@ -1279,9 +1303,9 @@ mod tests {
 
     #[test]
     fn incomplete_string_in_paren() {
-        let tree = Ast::new();
+        let arena = BumpaloArena::new();
         for src in vec!["(\"Fizz\\\")", "(\"Fizz\\\")\n"] {
-            let stmt = parse_statement(&tree, src);
+            let stmt = parse_statement(&arena, src);
             let expr = stmt.expression().unwrap();
 
             assert_matches!(expr.kind(), ExpressionKind::GroupedExpression(expr) => {
@@ -1307,8 +1331,8 @@ mod tests {
 
     #[test]
     fn add_integer() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "1+2");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "1+2");
         let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator(), BinaryOperator::Add);
@@ -1340,8 +1364,8 @@ mod tests {
 
     #[test]
     fn add_integer_missing_node() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "1+");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "1+");
         let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator(), BinaryOperator::Add);
@@ -1369,8 +1393,8 @@ mod tests {
 
     #[test]
     fn add_integer_skipped_tokens() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "1 + % ? 2");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "1 + % ? 2");
         let expr = stmt.expression().unwrap().binary_expression().unwrap();
 
         assert_eq!(expr.operator(), BinaryOperator::Add);
@@ -1410,8 +1434,8 @@ mod tests {
 
     #[test]
     fn unary_op() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "-1");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "-1");
         let expr = stmt.expression().unwrap().unary_expression().unwrap();
 
         assert_eq!(expr.operator(), UnaryOperator::Minus);
@@ -1434,8 +1458,8 @@ mod tests {
 
     #[test]
     fn unary_op_nested() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "-+1");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "-+1");
         let expr = stmt.expression().unwrap().unary_expression().unwrap();
 
         assert_matches!(expr, UnaryExpression { .. } => {
@@ -1467,8 +1491,8 @@ mod tests {
 
     #[test]
     fn subscript_index() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "a[0]");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "a[0]");
         let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1506,8 +1530,8 @@ mod tests {
 
     #[test]
     fn subscript_empty() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "a[]");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "a[]");
         let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1536,8 +1560,8 @@ mod tests {
 
     #[test]
     fn subscript_not_closed() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "a[1\nb");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "a[1\nb");
         let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
         assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1572,9 +1596,9 @@ mod tests {
 
     #[test]
     fn subscript_incomplete_string() {
-        let tree = Ast::new();
+        let arena = BumpaloArena::new();
         for src in vec!["a[\"", "a[\"\n"] {
-            let stmt = parse_statement(&tree, src);
+            let stmt = parse_statement(&arena, src);
             let expr = stmt.expression().unwrap().subscript_expression().unwrap();
 
             assert_matches!(expr, SubscriptExpression{ .. } => {
@@ -1599,8 +1623,8 @@ mod tests {
 
     #[test]
     fn array_empty() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "[]");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "[]");
         let expr = stmt.expression().unwrap().array_expression().unwrap();
 
         assert_matches!(expr, ArrayExpression{ .. } => {
@@ -1620,8 +1644,8 @@ mod tests {
 
     #[test]
     fn array_one_element_and_trailing_comma() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "[1,]");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "[1,]");
         let expr = stmt.expression().unwrap().array_expression().unwrap();
 
         assert_matches!(expr, ArrayExpression{ .. } => {
@@ -1656,9 +1680,9 @@ mod tests {
     // If expression
     #[test]
     fn if_expression() {
-        let tree = Ast::new();
+        let arena = BumpaloArena::new();
         let stmt = parse_statement(
-            &tree,
+            &arena,
             "if x > 0
                 10
             else
@@ -1680,8 +1704,8 @@ mod tests {
 
     #[test]
     fn if_expression_missing_condition() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "if\nend");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "if\nend");
         let expr = stmt.expression().unwrap().if_expression().unwrap();
 
         assert_matches!(expr, IfExpression { .. } => {
@@ -1699,8 +1723,8 @@ mod tests {
 
     #[test]
     fn if_expression_missing_newline() {
-        let tree = Ast::new();
-        let stmt = parse_statement(&tree, "if b x end");
+        let arena = BumpaloArena::new();
+        let stmt = parse_statement(&arena, "if b x end");
 
         assert!(stmt.expression().unwrap().if_expression().is_some());
 
@@ -1739,9 +1763,9 @@ mod tests {
 
     #[test]
     fn case_expression() {
-        let tree = Ast::new();
+        let arena = BumpaloArena::new();
         let stmt = parse_statement(
-            &tree,
+            &arena,
             "
             case x
             when 123
@@ -1799,8 +1823,8 @@ mod tests {
 
     // --- helpers
 
-    fn parse_statement<'a>(tree: &'a Ast, src: &'a str) -> &'a Statement<'a> {
-        let module = Parser::parse_string(tree, src);
+    fn parse_statement<'a>(arena: &'a BumpaloArena, src: &'a str) -> &'a Statement<'a> {
+        let module = Parser::parse_string(arena, src);
 
         assert_ne!(module.body().len(), 0);
         module.body().next().unwrap().statement().unwrap()

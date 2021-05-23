@@ -1,5 +1,6 @@
 use log::{info, warn};
 use lsp_types::*;
+use nico::arena::BumpaloArena;
 use nico::sem;
 use nico::syntax::{
     self, EffectiveRange, Identifier, MissingTokenKind, Node, NodePath, ParseError, Parser,
@@ -523,16 +524,16 @@ impl ServerRegistrationOptions {
 
 #[derive(Debug)]
 struct Connection<'a> {
-    tree: &'a syntax::Ast,
+    arena: &'a BumpaloArena,
     documents: HashMap<Url, Document<'a>>,
     diagnostics: HashMap<Url, Vec<Diagnostic>>,
     server_options: Option<ServerRegistrationOptions>,
 }
 
 impl<'a> Connection<'a> {
-    pub fn new(tree: &'a syntax::Ast) -> Self {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
         Self {
-            tree,
+            arena,
             documents: HashMap::new(),
             diagnostics: HashMap::new(),
             server_options: None,
@@ -632,7 +633,7 @@ impl<'a> Connection<'a> {
 
     fn compile(&mut self, uri: &Url) -> Result<&'a syntax::Program<'a>, HandlerError> {
         let doc = self.get_document(uri)?;
-        let node = Parser::parse_string(self.tree, &doc.text);
+        let node = Parser::parse_string(self.arena, &doc.text);
 
         let doc = self.get_document_mut(uri)?;
         doc.node = Some(node);
@@ -1020,8 +1021,8 @@ fn main() {
     env_logger::init();
     info!("Launching language server...");
 
-    let tree = syntax::Ast::new();
-    let mut connection = Connection::new(&tree);
+    let arena = BumpaloArena::new();
+    let mut connection = Connection::new(&arena);
 
     loop {
         if let Err(err) = event_loop_main(&mut connection) {

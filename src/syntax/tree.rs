@@ -43,33 +43,11 @@
 //! RestPattern         := "..." Id?
 //! ```
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
+use crate::arena::{BumpaloArena, BumpaloString, BumpaloVec};
 use crate::{sem, util::wrap};
-use bumpalo::collections::String as BumpaloString;
-use bumpalo::collections::Vec as BumpaloVec;
-use bumpalo::Bump as BumpaloArena;
 use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
-
-#[derive(Debug, Default)]
-pub struct Ast {
-    arena: BumpaloArena,
-}
-
-impl Ast {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn arena(&self) -> &bumpalo::Bump {
-        &self.arena
-    }
-
-    #[allow(clippy::mut_from_ref)]
-    pub fn alloc<T>(&self, val: T) -> &mut T {
-        self.arena.alloc(val)
-    }
-}
 
 pub trait Node<'a>: fmt::Display {
     fn code(&self) -> slice::Iter<'_, CodeKind<'a>>;
@@ -322,21 +300,21 @@ pub struct Code<'a> {
 }
 
 impl<'a> Code<'a> {
-    pub fn new(tree: &'a Ast) -> Self {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
         Self {
-            code: BumpaloVec::new_in(&tree.arena),
+            code: BumpaloVec::new_in(arena),
         }
     }
 
-    pub fn with_interpreted(tree: &'a Ast, token: Token) -> Self {
+    pub fn with_interpreted(arena: &'a BumpaloArena, token: Token) -> Self {
         Self {
-            code: bumpalo::vec![in tree.arena(); CodeKind::SyntaxToken(SyntaxToken::Interpreted(token))],
+            code: bumpalo::vec![in arena; CodeKind::SyntaxToken(SyntaxToken::Interpreted(token))],
         }
     }
 
-    pub fn with_node(tree: &'a Ast, node: NodeKind<'a>) -> Code<'a> {
+    pub fn with_node(arena: &'a BumpaloArena, node: NodeKind<'a>) -> Code<'a> {
         Code {
-            code: bumpalo::vec![in tree.arena(); CodeKind::Node(node)],
+            code: bumpalo::vec![in arena; CodeKind::Node(node)],
         }
     }
 
@@ -455,7 +433,7 @@ pub struct Program<'a> {
 
 impl<'a> Program<'a> {
     pub fn new<I: IntoIterator<Item = &'a TopLevel<'a>>>(
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         body: I,
         code: Code<'a>,
     ) -> Program<'a> {
@@ -463,7 +441,7 @@ impl<'a> Program<'a> {
         let main_scope = wrap(Scope::new());
 
         Program {
-            body: BumpaloVec::from_iter_in(body, tree.arena()),
+            body: BumpaloVec::from_iter_in(body, arena),
             declarations,
             main_scope,
             code,
@@ -502,9 +480,9 @@ pub struct Identifier<'a> {
 }
 
 impl<'a> Identifier<'a> {
-    pub fn new<S: AsRef<str>>(tree: &'a Ast, id: S, code: Code<'a>) -> Self {
+    pub fn new<S: AsRef<str>>(arena: &'a BumpaloArena, id: S, code: Code<'a>) -> Self {
         Self {
-            id: BumpaloString::from_str_in(id.as_ref(), tree.arena()),
+            id: BumpaloString::from_str_in(id.as_ref(), arena),
             code,
         }
     }
@@ -536,14 +514,14 @@ pub struct StructDefinition<'a> {
 
 impl<'a> StructDefinition<'a> {
     pub fn new<I: IntoIterator<Item = &'a TypeField<'a>>>(
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         name: Option<&'a Identifier<'a>>,
         fields: I,
         code: Code<'a>,
     ) -> Self {
         Self {
             name,
-            fields: BumpaloVec::from_iter_in(fields, tree.arena()),
+            fields: BumpaloVec::from_iter_in(fields, arena),
             code,
             r#type: wrap(sem::Type::Unknown),
         }
@@ -672,7 +650,7 @@ pub struct FunctionDefinition<'a> {
 
 impl<'a> FunctionDefinition<'a> {
     pub fn new<I: IntoIterator<Item = &'a FunctionParameter<'a>>>(
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         name: Option<&'a Identifier<'a>>,
         parameters: I,
         body: &'a Block<'a>,
@@ -680,7 +658,7 @@ impl<'a> FunctionDefinition<'a> {
     ) -> Self {
         Self {
             name,
-            parameters: BumpaloVec::from_iter_in(parameters, tree.arena()),
+            parameters: BumpaloVec::from_iter_in(parameters, arena),
             body,
             code,
         }
@@ -843,12 +821,12 @@ pub struct Block<'a> {
 
 impl<'a> Block<'a> {
     pub fn new<I: IntoIterator<Item = &'a Statement<'a>>>(
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         statements: I,
         code: Code<'a>,
     ) -> Self {
         Self {
-            statements: BumpaloVec::from_iter_in(statements, tree.arena()),
+            statements: BumpaloVec::from_iter_in(statements, arena),
             scope: wrap(Scope::new()),
             code,
         }
@@ -1016,13 +994,13 @@ pub struct StructLiteral<'a> {
 
 impl<'a> StructLiteral<'a> {
     pub fn new<I: IntoIterator<Item = &'a ValueField<'a>>>(
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         name: &'a Identifier<'a>,
         fields: I,
     ) -> Self {
         Self {
             name,
-            fields: BumpaloVec::from_iter_in(fields, tree.arena()),
+            fields: BumpaloVec::from_iter_in(fields, arena),
         }
     }
 
@@ -1150,13 +1128,13 @@ pub struct SubscriptExpression<'a> {
 
 impl<'a> SubscriptExpression<'a> {
     pub fn new<I: IntoIterator<Item = &'a Expression<'a>>>(
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         callee: &'a Expression<'a>,
         arguments: I,
     ) -> Self {
         Self {
             callee,
-            arguments: BumpaloVec::from_iter_in(arguments, tree.arena()),
+            arguments: BumpaloVec::from_iter_in(arguments, arena),
         }
     }
 
@@ -1177,13 +1155,13 @@ pub struct CallExpression<'a> {
 
 impl<'a> CallExpression<'a> {
     pub fn new<I: IntoIterator<Item = &'a Expression<'a>>>(
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         callee: &'a Expression<'a>,
         arguments: I,
     ) -> Self {
         Self {
             callee,
-            arguments: BumpaloVec::from_iter_in(arguments, tree.arena()),
+            arguments: BumpaloVec::from_iter_in(arguments, arena),
         }
     }
 
@@ -1222,9 +1200,12 @@ pub struct ArrayExpression<'a> {
 }
 
 impl<'a> ArrayExpression<'a> {
-    pub fn new<I: IntoIterator<Item = &'a Expression<'a>>>(tree: &'a Ast, elements: I) -> Self {
+    pub fn new<I: IntoIterator<Item = &'a Expression<'a>>>(
+        arena: &'a BumpaloArena,
+        elements: I,
+    ) -> Self {
         Self {
-            elements: BumpaloVec::from_iter_in(elements, tree.arena()),
+            elements: BumpaloVec::from_iter_in(elements, arena),
         }
     }
 
@@ -1275,14 +1256,14 @@ pub struct CaseExpression<'a> {
 
 impl<'a> CaseExpression<'a> {
     pub fn new<I: IntoIterator<Item = &'a CaseArm<'a>>>(
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         head: Option<&'a Expression<'a>>,
         arms: I,
         else_body: Option<&'a Block<'a>>,
     ) -> Self {
         Self {
             head,
-            arms: BumpaloVec::from_iter_in(arms, tree.arena()),
+            arms: BumpaloVec::from_iter_in(arms, arena),
             else_body,
         }
     }
@@ -1379,9 +1360,9 @@ pub struct StringLiteral<'a> {
 }
 
 impl<'a> StringLiteral<'a> {
-    pub fn new<S: AsRef<str>>(tree: &'a Ast, value: Option<S>) -> Self {
+    pub fn new<S: AsRef<str>>(arena: &'a BumpaloArena, value: Option<S>) -> Self {
         Self {
-            value: value.map(|x| BumpaloString::from_str_in(x.as_ref(), tree.arena())),
+            value: value.map(|x| BumpaloString::from_str_in(x.as_ref(), arena)),
         }
     }
 
@@ -1473,9 +1454,12 @@ pub struct ArrayPattern<'a> {
 }
 
 impl<'a> ArrayPattern<'a> {
-    pub fn new<I: IntoIterator<Item = &'a Pattern<'a>>>(tree: &'a Ast, elements: I) -> Self {
+    pub fn new<I: IntoIterator<Item = &'a Pattern<'a>>>(
+        arena: &'a BumpaloArena,
+        elements: I,
+    ) -> Self {
         Self {
-            elements: BumpaloVec::from_iter_in(elements, tree.arena()),
+            elements: BumpaloVec::from_iter_in(elements, arena),
         }
     }
 
@@ -1507,13 +1491,13 @@ pub struct StructPattern<'a> {
 
 impl<'a> StructPattern<'a> {
     pub fn new<I: IntoIterator<Item = &'a ValueFieldPattern<'a>>>(
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         name: &'a Identifier<'a>,
         fields: I,
     ) -> Self {
         Self {
             name,
-            fields: BumpaloVec::from_iter_in(fields, tree.arena()),
+            fields: BumpaloVec::from_iter_in(fields, arena),
         }
     }
 
@@ -1536,7 +1520,7 @@ pub struct ValueFieldPattern<'a> {
 
 impl<'a> ValueFieldPattern<'a> {
     pub fn new(
-        tree: &'a Ast,
+        arena: &'a BumpaloArena,
         name: &'a Identifier<'a>,
         value: Option<&'a Pattern<'a>>,
         code: Code<'a>,
@@ -1550,9 +1534,9 @@ impl<'a> ValueFieldPattern<'a> {
             }
         } else {
             let kind = PatternKind::VariablePattern(name);
-            let omitted_value = tree.alloc(Pattern::new(
+            let omitted_value = arena.alloc(Pattern::new(
                 kind,
-                Code::with_node(tree, NodeKind::Identifier(name)),
+                Code::with_node(arena, NodeKind::Identifier(name)),
             ));
 
             Self {
