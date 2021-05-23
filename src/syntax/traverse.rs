@@ -829,6 +829,7 @@ fn traverse_skipped_token<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::arena::BumpaloArena;
     use crate::syntax::Parser;
 
     #[derive(Debug, Default)]
@@ -845,8 +846,8 @@ mod tests {
     #[test]
     fn number_integer() {
         let mut visitor = NodeCounter::default();
-        let tree = Ast::new();
-        let program = Parser::parse_string(&tree, "42");
+        let arena = BumpaloArena::new();
+        let program = Parser::parse_string(&arena, "42");
 
         traverse(&mut visitor, &program);
         assert_eq!(visitor.number_of_expressions, 1);

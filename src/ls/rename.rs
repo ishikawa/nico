@@ -1,7 +1,10 @@
 //! Rename operation
-use crate::syntax::{
-    self, DefinitionKind, EffectiveRange, Expression, FunctionDefinition, FunctionParameter,
-    Identifier, Node, NodePath, Pattern, Position, Program, StructDefinition, StructLiteral,
+use crate::{
+    semantic::DefinitionKind,
+    syntax::{
+        self, EffectiveRange, Expression, FunctionDefinition, FunctionParameter, Identifier, Node,
+        NodePath, Pattern, Position, Program, StructDefinition, StructLiteral,
+    },
 };
 
 #[derive(Debug)]
