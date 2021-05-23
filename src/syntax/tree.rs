@@ -553,7 +553,6 @@ pub enum TopLevelKind<'a> {
     StructDefinition(&'a StructDefinition<'a>),
     FunctionDefinition(&'a FunctionDefinition<'a>),
     Statement(&'a Statement<'a>),
-    VariableDeclaration(&'a VariableDeclaration<'a>),
 }
 
 impl<'a> TopLevelKind<'a> {
@@ -572,7 +571,6 @@ impl fmt::Display for TopLevelKind<'_> {
             TopLevelKind::StructDefinition(kind) => kind.fmt(f),
             TopLevelKind::FunctionDefinition(kind) => kind.fmt(f),
             TopLevelKind::Statement(kind) => kind.fmt(f),
-            TopLevelKind::VariableDeclaration(kind) => kind.fmt(f),
         }
     }
 }
