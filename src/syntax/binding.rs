@@ -79,7 +79,7 @@ impl fmt::Display for Binding<'_> {
 #[derive(Debug)]
 pub struct Scope<'a> {
     bindings: BumpaloBox<'a, RefCell<HashMap<&'a str, &'a Binding<'a>>>>,
-    parent: Cell<Option<&'a Scope<'a>>>,
+    parent: BumpaloBox<'a, Cell<Option<&'a Scope<'a>>>>,
 }
 
 impl<'a> Scope<'a> {
@@ -127,7 +127,7 @@ impl<'a> Scope<'a> {
     pub fn new(arena: &'a BumpaloArena) -> Self {
         Self {
             bindings: BumpaloBox::new_in(RefCell::new(HashMap::new()), arena),
-            parent: Cell::new(None),
+            parent: BumpaloBox::new_in(Cell::new(None), arena),
         }
     }
 
@@ -254,13 +254,13 @@ impl<'a> TopLevelDeclarationBinder<'a> {
 }
 
 impl<'a> Visitor<'a> for TopLevelDeclarationBinder<'a> {
-    fn enter_program(&mut self, _path: &mut NodePath<'a>, program: &'a Program<'a>) {
+    fn enter_program(&mut self, _path: &'a NodePath<'a>, program: &'a Program<'a>) {
         self.declarations = Some(program.declarations_scope());
     }
 
     fn enter_struct_definition(
         &mut self,
-        path: &mut NodePath<'a>,
+        path: &'a NodePath<'a>,
         _definition: &'a StructDefinition<'a>,
     ) {
         self.register_declaration(path.node());
@@ -268,7 +268,7 @@ impl<'a> Visitor<'a> for TopLevelDeclarationBinder<'a> {
 
     fn enter_function_definition(
         &mut self,
-        path: &mut NodePath<'a>,
+        path: &'a NodePath<'a>,
         _definition: &'a FunctionDefinition<'a>,
     ) {
         self.register_declaration(path.node());
@@ -287,12 +287,12 @@ impl<'a> ScopeChainBinder<'a> {
         Self { arena, scope: None }
     }
 
-    fn _enter_scope(&mut self, _path: &mut NodePath<'a>, scope: &'a Scope<'a>) {
+    fn _enter_scope(&mut self, _path: &'a NodePath<'a>, scope: &'a Scope<'a>) {
         scope.parent.replace(self.scope);
         self.scope = Some(scope);
     }
 
-    fn _exit_scope(&mut self, _path: &mut NodePath<'a>, _scope: &'a Scope<'a>) {
+    fn _exit_scope(&mut self, _path: &'a NodePath<'a>, _scope: &'a Scope<'a>) {
         if let Some(scope) = self.scope {
             self.scope = scope.parent()
         }
@@ -300,7 +300,7 @@ impl<'a> ScopeChainBinder<'a> {
 }
 
 impl<'a> Visitor<'a> for ScopeChainBinder<'a> {
-    fn enter_program(&mut self, _path: &mut NodePath<'a>, program: &'a Program<'a>) {
+    fn enter_program(&mut self, _path: &'a NodePath<'a>, program: &'a Program<'a>) {
         program
             .main_scope()
             .parent
@@ -308,19 +308,19 @@ impl<'a> Visitor<'a> for ScopeChainBinder<'a> {
         self.scope = Some(program.main_scope());
     }
 
-    fn enter_block(&mut self, path: &mut NodePath<'a>, block: &'a Block<'a>) {
+    fn enter_block(&mut self, path: &'a NodePath<'a>, block: &'a Block<'a>) {
         self._enter_scope(path, block.scope());
     }
 
-    fn exit_block(&mut self, path: &mut NodePath<'a>, block: &'a Block<'a>) {
+    fn exit_block(&mut self, path: &'a NodePath<'a>, block: &'a Block<'a>) {
         self._exit_scope(path, block.scope());
     }
 
-    fn enter_case_arm(&mut self, path: &mut NodePath<'a>, arm: &'a CaseArm<'a>) {
+    fn enter_case_arm(&mut self, path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {
         self._enter_scope(path, arm.scope());
     }
 
-    fn exit_case_arm(&mut self, path: &mut NodePath<'a>, arm: &'a CaseArm<'a>) {
+    fn exit_case_arm(&mut self, path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {
         self._exit_scope(path, &arm.scope());
     }
 }
@@ -340,13 +340,12 @@ impl<'a> VariableBinder<'a> {
 impl<'a> Visitor<'a> for VariableBinder<'a> {
     fn enter_function_parameter(
         &mut self,
-        path: &mut NodePath<'a>,
+        path: &'a NodePath<'a>,
         _param: &'a FunctionParameter<'a>,
     ) {
         let node = path.node();
 
         let parent_path = path.expect_parent();
-        let parent_path = parent_path.borrow();
         let fun = parent_path.node().function_definition().unwrap();
 
         fun.body().scope().register_declaration(self.arena, node);
@@ -354,7 +353,7 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
 
     fn enter_variable_declaration(
         &mut self,
-        path: &mut NodePath<'a>,
+        path: &'a NodePath<'a>,
         declaration: &'a VariableDeclaration<'a>,
     ) {
         if let Some(pattern) = declaration.pattern() {
@@ -364,7 +363,7 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
         }
     }
 
-    fn enter_case_arm(&mut self, _path: &mut NodePath<'a>, arm: &'a CaseArm<'a>) {
+    fn enter_case_arm(&mut self, _path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {
         if let Some(pattern) = arm.pattern() {
             arm.scope()
                 .register_declaration(self.arena, &NodeKind::Pattern(pattern));
@@ -385,7 +384,7 @@ impl TypeBinder {
 impl<'a> Visitor<'a> for TypeBinder {
     fn enter_integer_literal(
         &mut self,
-        _path: &mut NodePath<'a>,
+        _path: &'a NodePath<'a>,
         expr: &'a Expression<'a>,
         _literal: &'a IntegerLiteral,
     ) {
@@ -395,7 +394,7 @@ impl<'a> Visitor<'a> for TypeBinder {
 
     fn enter_string_literal(
         &mut self,
-        _path: &mut NodePath<'a>,
+        _path: &'a NodePath<'a>,
         expr: &'a Expression<'a>,
         _literal: &'a StringLiteral<'a>,
     ) {
@@ -406,16 +405,16 @@ impl<'a> Visitor<'a> for TypeBinder {
 
 pub fn bind<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
     let mut binder = TopLevelDeclarationBinder::new(arena);
-    traverse(&mut binder, node);
+    traverse(arena, &mut binder, node);
 
     let mut binder = ScopeChainBinder::new(arena);
-    traverse(&mut binder, node);
+    traverse(arena, &mut binder, node);
 
     let mut binder = VariableBinder::new(arena);
-    traverse(&mut binder, node);
+    traverse(arena, &mut binder, node);
 
     let mut binder = TypeBinder::new();
-    traverse(&mut binder, node);
+    traverse(arena, &mut binder, node);
 }
 
 #[cfg(test)]

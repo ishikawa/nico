@@ -213,7 +213,7 @@ impl DiagnosticsCollector {
 impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
     fn enter_variable(
         &mut self,
-        path: &mut NodePath,
+        path: &'a NodePath<'a>,
         expr: &'a Expression<'a>,
         id: &'a Identifier<'a>,
     ) {
@@ -225,7 +225,7 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
 
     fn enter_struct_literal(
         &mut self,
-        path: &mut NodePath,
+        path: &'a NodePath<'a>,
         _expr: &'a Expression<'a>,
         value: &StructLiteral,
     ) {
@@ -247,7 +247,7 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
 
     fn enter_missing_token(
         &mut self,
-        _path: &mut NodePath,
+        _path: &'a NodePath<'a>,
         range: EffectiveRange,
         item: MissingTokenKind,
     ) {
@@ -256,7 +256,7 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
 
     fn enter_skipped_token(
         &mut self,
-        _path: &mut NodePath,
+        _path: &'a NodePath<'a>,
         token: &Token,
         expected: MissingTokenKind,
     ) {
@@ -366,7 +366,6 @@ impl SemanticTokenizer {
         };
 
         let parent = path.expect_parent();
-        let parent = parent.borrow();
         let scope = parent.scope();
         let parent = parent.node();
 
@@ -463,7 +462,7 @@ impl SemanticTokenizer {
 impl<'a> syntax::Visitor<'a> for SemanticTokenizer {
     fn enter_line_comment(
         &mut self,
-        _path: &mut NodePath,
+        _path: &'a NodePath<'a>,
         _token: &Token,
         trivia: &Trivia,
         _comment: &str,
@@ -477,13 +476,13 @@ impl<'a> syntax::Visitor<'a> for SemanticTokenizer {
         })
     }
 
-    fn enter_interpreted_token(&mut self, path: &mut NodePath, token: &Token) {
+    fn enter_interpreted_token(&mut self, path: &'a NodePath<'a>, token: &Token) {
         self.add_token_generic(path, token);
     }
 
     fn enter_skipped_token(
         &mut self,
-        path: &mut NodePath,
+        path: &'a NodePath<'a>,
         token: &Token,
         _expected: MissingTokenKind,
     ) {
@@ -639,7 +638,7 @@ impl<'a> Connection<'a> {
 
         // Diagnostics
         let mut diagnostics = DiagnosticsCollector::new();
-        syntax::traverse(&mut diagnostics, &node);
+        syntax::traverse(self.arena, &mut diagnostics, &node);
 
         self.diagnostics
             .insert(uri.clone(), diagnostics.diagnostics);
@@ -721,7 +720,7 @@ impl<'a> Connection<'a> {
             &server_options.token_modifier_legend,
         );
 
-        syntax::traverse(&mut tokenizer, &node);
+        syntax::traverse(self.arena, &mut tokenizer, &node);
 
         Ok(SemanticTokens {
             data: tokenizer.tokens,
@@ -733,9 +732,10 @@ impl<'a> Connection<'a> {
         info!("[on_text_document_hover] {:?}", params);
         let uri = &params.text_document_position_params.text_document.uri;
         let node = self.get_compiled_result(uri)?;
-        let mut hover = ls::Hover::new(syntax_position(
-            params.text_document_position_params.position,
-        ));
+        let mut hover = ls::Hover::new(
+            self.arena,
+            syntax_position(params.text_document_position_params.position),
+        );
 
         if let Some((value, range)) = hover.describe(&node) {
             return Ok(Some(Hover {
@@ -756,7 +756,7 @@ impl<'a> Connection<'a> {
     ) -> Result<Option<PrepareRenameResponse>, HandlerError> {
         info!("[on_text_document_prepare_rename] {:?}", params);
         let node = self.get_compiled_result(&params.text_document.uri)?;
-        let mut rename = ls::Rename::new(syntax_position(params.position));
+        let mut rename = ls::Rename::new(self.arena, syntax_position(params.position));
 
         if let Some(id) = rename.prepare(&node) {
             return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
@@ -775,7 +775,10 @@ impl<'a> Connection<'a> {
         info!("[on_text_document_prepare_rename] {:?}", params);
         let uri = &params.text_document_position.text_document.uri;
         let node = self.get_compiled_result(uri)?;
-        let mut rename = ls::Rename::new(syntax_position(params.text_document_position.position));
+        let mut rename = ls::Rename::new(
+            self.arena,
+            syntax_position(params.text_document_position.position),
+        );
 
         if rename.prepare(&node).is_some() {
             if let Some(ranges) = rename.rename(&node) {

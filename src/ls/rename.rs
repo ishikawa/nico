@@ -1,4 +1,5 @@
 //! Rename operation
+use crate::arena::BumpaloArena;
 use crate::{
     semantic::DefinitionKind,
     syntax::{
@@ -9,13 +10,15 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Rename<'a> {
+    arena: &'a BumpaloArena,
     position: Position,
     operation: Option<RenameOperation<'a>>,
 }
 
 impl<'a> Rename<'a> {
-    pub fn new(position: Position) -> Self {
+    pub fn new(arena: &'a BumpaloArena, position: Position) -> Self {
         Self {
+            arena,
             position,
             operation: None,
         }
@@ -23,7 +26,7 @@ impl<'a> Rename<'a> {
 
     pub fn prepare(&mut self, program: &'a Program<'a>) -> Option<&'a Identifier<'a>> {
         self.operation = None;
-        syntax::traverse(self, program);
+        syntax::traverse(self.arena, self, program);
         self.operation.as_ref().map(|op| op.id)
     }
 
@@ -32,7 +35,7 @@ impl<'a> Rename<'a> {
             match kind {
                 RenameOperationKind::Definition(definition) => {
                     let mut visitor = RenameDefinition::new(definition.clone());
-                    syntax::traverse(&mut visitor, program);
+                    syntax::traverse(self.arena, &mut visitor, program);
 
                     return Some(visitor.ranges);
                 }
@@ -45,11 +48,10 @@ impl<'a> Rename<'a> {
 }
 
 impl<'a> syntax::Visitor<'a> for Rename<'a> {
-    fn enter_identifier(&mut self, path: &mut NodePath<'a>, id: &'a Identifier<'a>) {
+    fn enter_identifier(&mut self, path: &'a NodePath<'a>, id: &'a Identifier<'a>) {
         // Prepare
         if self.operation.is_none() && id.range().contains(self.position) {
             let parent = path.expect_parent();
-            let parent = parent.borrow();
             let scope = parent.scope();
             let parent = parent.node();
 
@@ -151,7 +153,7 @@ impl<'a> RenameDefinition<'a> {
 impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
     fn enter_struct_definition(
         &mut self,
-        _path: &mut NodePath<'a>,
+        _path: &'a NodePath<'a>,
         struct_def: &'a StructDefinition<'a>,
     ) {
         if let DefinitionKind::StructDefinition(definition) = self.definition {
@@ -165,7 +167,7 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
 
     fn enter_struct_literal(
         &mut self,
-        path: &mut NodePath<'a>,
+        path: &'a NodePath<'a>,
         _expr: &'a Expression<'a>,
         value: &'a StructLiteral<'a>,
     ) {
@@ -183,7 +185,7 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
 
     fn enter_function_definition(
         &mut self,
-        _path: &mut NodePath<'a>,
+        _path: &'a NodePath<'a>,
         function: &'a FunctionDefinition<'a>,
     ) {
         if let DefinitionKind::FunctionDefinition(definition) = self.definition {
@@ -197,7 +199,7 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
 
     fn enter_function_parameter(
         &mut self,
-        _path: &mut NodePath<'a>,
+        _path: &'a NodePath<'a>,
         param: &'a FunctionParameter<'a>,
     ) {
         if let DefinitionKind::FunctionParameter(definition) = self.definition {
@@ -209,7 +211,7 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
 
     fn enter_variable(
         &mut self,
-        path: &mut NodePath<'a>,
+        path: &'a NodePath<'a>,
         _expr: &'a Expression<'a>,
         id: &'a Identifier<'a>,
     ) {
@@ -224,7 +226,7 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         }
     }
 
-    fn enter_pattern(&mut self, _path: &mut NodePath<'a>, pattern: &'a Pattern<'a>) {
+    fn enter_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a Pattern<'a>) {
         if let DefinitionKind::Pattern(definition) = self.definition {
             if std::ptr::eq(definition, pattern) {
                 self.ranges.push(pattern.range());
