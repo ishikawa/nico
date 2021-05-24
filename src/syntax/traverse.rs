@@ -838,12 +838,13 @@ mod tests {
     use crate::arena::BumpaloArena;
     use crate::syntax::Parser;
 
+    // count expressions
     #[derive(Debug, Default)]
-    struct NodeCounter {
+    struct ExpressionCounter {
         number_of_expressions: i32,
     }
 
-    impl<'a> Visitor<'a> for NodeCounter {
+    impl<'a> Visitor<'a> for ExpressionCounter {
         fn enter_expression(&mut self, _path: &mut NodePath<'a>, _expr: &'a Expression<'a>) {
             self.number_of_expressions += 1;
         }
@@ -851,11 +852,113 @@ mod tests {
 
     #[test]
     fn number_integer() {
-        let mut visitor = NodeCounter::default();
+        let mut visitor = ExpressionCounter::default();
         let arena = BumpaloArena::new();
-        let program = Parser::parse_string(&arena, "42");
+        let program = Parser::parse_string(&arena, "42 + 55");
 
         traverse(&mut visitor, &program);
-        assert_eq!(visitor.number_of_expressions, 1);
+        assert_eq!(visitor.number_of_expressions, 3);
+    }
+
+    // stop()
+    #[derive(Debug, Default)]
+    struct StopInExpression {
+        stop_at: i32,
+        enter_program: i32,
+        exit_program: i32,
+        enter_statement: i32,
+        exit_statement: i32,
+        enter_expression: i32,
+        exit_expression: i32,
+    }
+
+    impl<'a> Visitor<'a> for StopInExpression {
+        fn enter_program(&mut self, _path: &mut NodePath<'a>, _program: &'a Program<'a>) {
+            println!("enter_program {}", self.enter_program);
+            self.enter_program += 1;
+        }
+
+        fn exit_program(&mut self, _path: &mut NodePath<'a>, _program: &'a Program<'a>) {
+            println!("exit_program {}", self.exit_program);
+            self.exit_program += 1;
+        }
+
+        fn enter_statement(&mut self, _path: &mut NodePath<'a>, _statement: &'a Statement<'a>) {
+            println!("enter_statement {}", self.enter_statement);
+            self.enter_statement += 1;
+        }
+
+        fn exit_statement(&mut self, _path: &mut NodePath<'a>, _statement: &'a Statement<'a>) {
+            println!("exit_statement {}", self.exit_statement);
+            self.exit_statement += 1;
+        }
+
+        fn enter_expression(&mut self, path: &mut NodePath<'a>, _expression: &'a Expression<'a>) {
+            println!("enter_expression {}", self.enter_expression);
+            if self.enter_expression == self.stop_at {
+                println!("-- stop");
+                path.stop();
+            }
+            self.enter_expression += 1;
+        }
+
+        fn exit_expression(&mut self, _path: &mut NodePath<'a>, _expression: &'a Expression<'a>) {
+            println!("exit_expression {}", self.exit_expression);
+            self.exit_expression += 1;
+        }
+    }
+
+    #[test]
+    fn never_stop_traversal() {
+        let mut visitor = StopInExpression::default();
+        visitor.stop_at = -1; // never stop
+
+        let arena = BumpaloArena::new();
+        let program = Parser::parse_string(&arena, "42 + 55");
+
+        traverse(&mut visitor, &program);
+        assert_eq!(visitor.enter_program, 1);
+        assert_eq!(visitor.enter_statement, 1);
+        assert_eq!(visitor.enter_expression, 3);
+
+        assert_eq!(visitor.exit_program, 1);
+        assert_eq!(visitor.exit_statement, 1);
+        assert_eq!(visitor.exit_expression, 3);
+    }
+
+    #[test]
+    fn stop_at_2nd_expression() {
+        let mut visitor = StopInExpression::default();
+        visitor.stop_at = 1; // Stop at 2nd expression
+
+        let arena = BumpaloArena::new();
+        let program = Parser::parse_string(&arena, "42 + 55");
+
+        traverse(&mut visitor, &program);
+        assert_eq!(visitor.enter_program, 1);
+        assert_eq!(visitor.enter_statement, 1);
+        assert_eq!(visitor.enter_expression, 2);
+
+        assert_eq!(visitor.exit_program, 0);
+        assert_eq!(visitor.exit_statement, 0);
+        assert_eq!(visitor.exit_expression, 0);
+    }
+
+    #[test]
+    fn stop_at_last_expression() {
+        let mut visitor = StopInExpression::default();
+        visitor.stop_at = 2; // Stop at 2nd expression
+
+        let arena = BumpaloArena::new();
+        let program = Parser::parse_string(&arena, "42 + 55");
+
+        traverse(&mut visitor, &program);
+        assert_eq!(visitor.enter_program, 1);
+        assert_eq!(visitor.enter_statement, 1);
+        assert_eq!(visitor.enter_expression, 3);
+
+        assert_eq!(visitor.exit_program, 0);
+        assert_eq!(visitor.exit_statement, 0);
+        assert_eq!(visitor.exit_expression, 1);
     }
 }
