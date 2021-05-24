@@ -9,23 +9,40 @@ pub struct NodePath<'a> {
     skipped: bool,
     stopped: bool,
     node: NodeKind<'a>,
-    scope: Option<&'a Scope<'a>>,
-    main_scope: Option<&'a Scope<'a>>,
-    declarations: Option<&'a Scope<'a>>,
     parent: Option<Rc<RefCell<NodePath<'a>>>>,
+    // Scopes. If the node is the root, these scopes point it even if exited.
+    scope: &'a Scope<'a>,
+    main_scope: &'a Scope<'a>,
+    declarations: &'a Scope<'a>,
 }
 
 impl<'a> NodePath<'a> {
-    pub fn new(node: &NodeKind<'a>) -> Self {
+    pub fn new(
+        node: NodeKind<'a>,
+        parent: Option<Rc<RefCell<NodePath<'a>>>>,
+        scope: &'a Scope<'a>,
+        main_scope: &'a Scope<'a>,
+        declarations: &'a Scope<'a>,
+    ) -> Self {
         Self {
             skipped: false,
             stopped: false,
-            node: node.clone(),
-            parent: None,
-            declarations: None,
-            scope: None,
-            main_scope: None,
+            node,
+            parent,
+            declarations,
+            scope,
+            main_scope,
         }
+    }
+
+    pub fn root_path(node: &'a Program<'a>) -> Self {
+        Self::new(
+            NodeKind::Program(node),
+            None,
+            node.main_scope(),
+            node.main_scope(),
+            node.declarations_scope(),
+        )
     }
 
     pub fn child_path(node: NodeKind<'a>, parent: &Rc<RefCell<NodePath<'a>>>) -> Self {
@@ -71,23 +88,17 @@ impl<'a> NodePath<'a> {
     }
 
     pub fn scope(&self) -> &'a Scope<'a> {
-        self.scope.unwrap_or_else(|| panic!("scope must live."))
+        self.scope
     }
 
     fn on_enter(&mut self) {
         match self.node {
-            NodeKind::Program(ref program) => {
-                self.main_scope = Some(program.main_scope());
-                self.declarations = Some(program.declarations_scope());
-                self.scope = Some(program.main_scope());
+            NodeKind::Block(block) => {
+                self.scope = block.scope();
             }
-            NodeKind::Block(ref block) => {
-                self.scope = Some(block.scope());
+            NodeKind::CaseArm(arm) => {
+                self.scope = arm.scope();
             }
-            NodeKind::CaseArm(ref arm) => {
-                self.scope = Some(arm.scope());
-            }
-            NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
                 self.scope = self.declarations;
             }
@@ -100,17 +111,17 @@ impl<'a> NodePath<'a> {
 
     fn on_exit(&mut self) {
         match self.node {
-            NodeKind::Program(_) => {
-                self.main_scope = None;
-                self.scope = None;
+            // Before binding completed, parent scope is `None`.
+            NodeKind::Block(block) => {
+                if let Some(scope) = block.scope().parent() {
+                    self.scope = scope;
+                }
             }
-            NodeKind::Block(ref block) => {
-                self.scope = block.scope().parent();
+            NodeKind::CaseArm(arm) => {
+                if let Some(scope) = arm.scope().parent() {
+                    self.scope = scope;
+                }
             }
-            NodeKind::CaseArm(ref arm) => {
-                self.scope = arm.scope().parent();
-            }
-            NodeKind::Identifier(_) => {}
             NodeKind::StructDefinition(_) => {
                 self.scope = self.main_scope;
             }
@@ -482,7 +493,7 @@ pub trait Visitor<'a> {
 }
 
 pub fn traverse<'a>(visitor: &mut dyn Visitor<'a>, program: &'a Program<'a>) {
-    let path = wrap(NodePath::new(&NodeKind::Program(program)));
+    let path = wrap(NodePath::root_path(program));
     traverse_path(visitor, &path);
 }
 
