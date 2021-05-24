@@ -1,3 +1,4 @@
+use crate::arena::BumpaloArena;
 use crate::{
     sem,
     semantic::DefinitionKind,
@@ -9,21 +10,23 @@ use crate::{
 use std::{cell::RefCell, fmt, rc::Rc};
 
 #[derive(Debug)]
-pub struct Hover {
+pub struct Hover<'a> {
+    arena: &'a BumpaloArena,
     position: Position,
     result: Option<(String, EffectiveRange)>,
 }
 
-impl<'a> Hover {
-    pub fn new(position: Position) -> Self {
+impl<'a> Hover<'a> {
+    pub fn new(arena: &'a BumpaloArena, position: Position) -> Self {
         Self {
+            arena,
             position,
             result: None,
         }
     }
 
     pub fn describe(&mut self, program: &'a Program<'a>) -> Option<(&str, EffectiveRange)> {
-        syntax::traverse(self, program);
+        syntax::traverse(self.arena, self, program);
         self.result.as_ref().map(|(s, r)| (s.as_str(), *r))
     }
 
@@ -57,10 +60,10 @@ impl<'a> Hover {
     }
 }
 
-impl<'a> syntax::Visitor<'a> for Hover {
+impl<'a> syntax::Visitor<'a> for Hover<'a> {
     fn enter_type_annotation(
         &mut self,
-        path: &mut NodePath<'a>,
+        path: &'a NodePath<'a>,
         annotation: &'a TypeAnnotation<'a>,
     ) {
         if !annotation.range().contains(self.position) {
@@ -72,13 +75,12 @@ impl<'a> syntax::Visitor<'a> for Hover {
         path.stop();
     }
 
-    fn enter_value_field(&mut self, path: &mut NodePath<'a>, field: &'a ValueField<'a>) {
+    fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
         if !field.name().range().contains(self.position) {
             return;
         }
 
         let parent = path.expect_parent();
-        let parent = parent.borrow();
         let scope = parent.scope();
         let parent = parent.node();
 
