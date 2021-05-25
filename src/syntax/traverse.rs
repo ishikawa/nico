@@ -429,14 +429,14 @@ pub trait Visitor<'a> {
     ) {
     }
 
-    fn enter_access_expression(
+    fn enter_member_expression(
         &mut self,
         path: &'a NodePath<'a>,
         expr: &'a Expression<'a>,
         member_expr: &'a MemberExpression<'a>,
     ) {
     }
-    fn exit_access_expression(
+    fn exit_member_expression(
         &mut self,
         path: &'a NodePath<'a>,
         expr: &'a Expression<'a>,
@@ -601,7 +601,7 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
                         visitor.enter_call_expression(path, expr, kind);
                     }
                     ExpressionKind::MemberExpression(kind) => {
-                        visitor.enter_access_expression(path, expr, kind);
+                        visitor.enter_member_expression(path, expr, kind);
                     }
                     ExpressionKind::ArrayExpression(kind) => {
                         visitor.enter_array_expression(path, expr, kind);
@@ -700,7 +700,7 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
                         visitor.exit_subscript_expression(path, expr, kind);
                     }
                     ExpressionKind::MemberExpression(kind) => {
-                        visitor.exit_access_expression(path, expr, kind);
+                        visitor.exit_member_expression(path, expr, kind);
                     }
                     ExpressionKind::CallExpression(kind) => {
                         visitor.exit_call_expression(path, expr, kind);
