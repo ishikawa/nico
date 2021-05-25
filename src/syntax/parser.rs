@@ -614,31 +614,33 @@ impl<'a, 't> Parser<'a, 't> {
         Some(pattern)
     }
 
-    fn _read_integer(&mut self, arena: &'a BumpaloArena) -> (IntegerLiteral, Code<'a>) {
+    fn _read_integer(&mut self, arena: &'a BumpaloArena) -> &'a IntegerLiteral<'a> {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
             let code = Code::with_interpreted(arena, token);
-
-            (IntegerLiteral::new(i), code)
+            arena.alloc(IntegerLiteral::new(i, code))
         } else {
             unreachable!()
         }
     }
 
     fn read_integer(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
-        let (literal, code) = self._read_integer(arena);
+        let literal = self._read_integer(arena);
 
         arena.alloc(Expression::new(
             ExpressionKind::IntegerLiteral(literal),
-            code,
+            Code::with_node(arena, NodeKind::IntegerLiteral(literal)),
         ))
     }
 
     fn read_integer_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
-        let (literal, code) = self._read_integer(arena);
+        let literal = self._read_integer(arena);
 
-        arena.alloc(Pattern::new(PatternKind::IntegerPattern(literal), code))
+        arena.alloc(Pattern::new(
+            PatternKind::IntegerPattern(literal),
+            Code::with_node(arena, NodeKind::IntegerLiteral(literal)),
+        ))
     }
 
     fn read_identifier(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
@@ -1264,11 +1266,11 @@ mod tests {
         assert_matches!(
             stmt.expression().unwrap().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(42));
+                assert_eq!(n.value(), 42);
             }
         );
 
-        let mut code = stmt.expression().unwrap().code();
+        let mut code = stmt.expression().unwrap().integer_literal().unwrap().code();
         assert_eq!(code.len(), 1);
 
         let token = next_interpreted_token(&mut code);
@@ -1343,13 +1345,13 @@ mod tests {
         assert_matches!(
             expr.lhs().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(1));
+                assert_eq!(n.value(), 1);
             }
         );
         assert_matches!(
             expr.rhs().unwrap().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(2));
+                assert_eq!(n.value(), 2);
             }
         );
 
@@ -1381,7 +1383,7 @@ mod tests {
         assert_matches!(
             expr.lhs().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(1));
+                assert_eq!(n.value(), 1);
             }
         );
         assert!(expr.rhs().is_none());
@@ -1415,13 +1417,13 @@ mod tests {
         assert_matches!(
             expr.lhs().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(1));
+                assert_eq!(n.value(), 1);
             }
         );
         assert_matches!(
             expr.rhs().unwrap().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(2));
+                assert_eq!(n.value(), 2);
             }
         );
 
@@ -1462,7 +1464,7 @@ mod tests {
         assert_matches!(
             expr.operand().unwrap().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(1));
+                assert_eq!(n.value(), 1);
             }
         );
 
@@ -1493,7 +1495,7 @@ mod tests {
                 assert_matches!(
                     operand.operand().unwrap().kind(),
                     ExpressionKind::IntegerLiteral(n) => {
-                        assert_eq!(*n, IntegerLiteral::new(1));
+                        assert_eq!(n.value(), 1);
                     }
                 );
             });
@@ -1527,7 +1529,7 @@ mod tests {
             assert_matches!(
                 arguments[0].kind(),
                 ExpressionKind::IntegerLiteral(n) => {
-                    assert_eq!(*n, IntegerLiteral::new(0));
+                    assert_eq!(n.value(), 0);
                 }
             );
         });
@@ -1596,7 +1598,7 @@ mod tests {
             assert_matches!(
                 arguments[0].kind(),
                 ExpressionKind::IntegerLiteral(n) => {
-                    assert_eq!(*n, IntegerLiteral::new(1));
+                    assert_eq!(n.value(), 1);
                 }
             );
         });
@@ -1676,7 +1678,7 @@ mod tests {
             assert_matches!(
                 elements[0].kind(),
                 ExpressionKind::IntegerLiteral(n) => {
-                    assert_eq!(*n, IntegerLiteral::new(1));
+                    assert_eq!(n.value(), 1);
                 }
             );
         });

@@ -78,6 +78,7 @@ pub enum NodeKind<'a> {
     Statement(&'a Statement<'a>),
     VariableDeclaration(&'a VariableDeclaration<'a>),
     Expression(&'a Expression<'a>),
+    IntegerLiteral(&'a IntegerLiteral<'a>),
     BinaryExpression(&'a BinaryExpression<'a>),
     StructLiteral(&'a StructLiteral<'a>),
     CaseArm(&'a CaseArm<'a>),
@@ -289,6 +290,7 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::Statement(kind) => kind.code(),
             NodeKind::VariableDeclaration(kind) => kind.code(),
             NodeKind::Expression(kind) => kind.code(),
+            NodeKind::IntegerLiteral(kind) => kind.code(),
             NodeKind::BinaryExpression(kind) => kind.code(),
             NodeKind::StructLiteral(kind) => kind.code(),
             NodeKind::CaseArm(kind) => kind.code(),
@@ -874,6 +876,14 @@ impl<'a> Expression<'a> {
         }
     }
 
+    pub fn integer_literal(&self) -> Option<&IntegerLiteral<'a>> {
+        if let ExpressionKind::IntegerLiteral(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
     pub fn struct_literal(&self) -> Option<&StructLiteral<'a>> {
         if let ExpressionKind::StructLiteral(ref expr) = self.kind {
             Some(expr)
@@ -1386,18 +1396,31 @@ impl fmt::Display for CaseArm<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash)]
-pub struct IntegerLiteral {
+#[derive(Debug)]
+pub struct IntegerLiteral<'a> {
     value: i32,
+    code: Code<'a>,
 }
 
-impl IntegerLiteral {
-    pub fn new(value: i32) -> Self {
-        Self { value }
+impl<'a> IntegerLiteral<'a> {
+    pub fn new(value: i32, code: Code<'a>) -> Self {
+        Self { value, code }
     }
 
     pub fn value(&self) -> i32 {
         self.value
+    }
+}
+
+impl<'a> Node<'a> for IntegerLiteral<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for IntegerLiteral<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "IntegerLiteral({:?})", self.value())
     }
 }
 
@@ -1452,7 +1475,7 @@ impl fmt::Display for GroupedExpression<'_> {
 
 #[derive(Debug)]
 pub enum ExpressionKind<'a> {
-    IntegerLiteral(IntegerLiteral),
+    IntegerLiteral(&'a IntegerLiteral<'a>),
     StringLiteral(StringLiteral<'a>),
     StructLiteral(&'a StructLiteral<'a>),
     VariableExpression(&'a Identifier<'a>),
@@ -1622,7 +1645,7 @@ impl fmt::Display for ValueFieldPattern<'_> {
 
 #[derive(Debug)]
 pub enum PatternKind<'a> {
-    IntegerPattern(IntegerLiteral),
+    IntegerPattern(&'a IntegerLiteral<'a>),
     StringPattern(StringLiteral<'a>),
     VariablePattern(&'a Identifier<'a>),
     ArrayPattern(ArrayPattern<'a>),
@@ -1648,6 +1671,7 @@ impl fmt::Display for NodeKind<'_> {
             NodeKind::VariableDeclaration(declaration) => declaration.fmt(f),
             NodeKind::Pattern(pattern) => pattern.fmt(f),
             NodeKind::Expression(expr) => expr.fmt(f),
+            NodeKind::IntegerLiteral(expr) => expr.fmt(f),
             NodeKind::BinaryExpression(expr) => expr.fmt(f),
             NodeKind::StructLiteral(expr) => expr.fmt(f),
             NodeKind::CaseArm(arm) => arm.fmt(f),
@@ -1659,7 +1683,7 @@ impl fmt::Display for NodeKind<'_> {
 impl fmt::Display for ExpressionKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ExpressionKind::IntegerLiteral(i) => write!(f, "IntegerLiteral({})", i.value()),
+            ExpressionKind::IntegerLiteral(expr) => expr.fmt(f),
             ExpressionKind::StringLiteral(s) => {
                 write!(
                     f,

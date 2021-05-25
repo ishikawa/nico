@@ -309,20 +309,8 @@ pub trait Visitor<'a> {
     fn enter_expression(&mut self, path: &'a NodePath<'a>, expression: &'a Expression<'a>) {}
     fn exit_expression(&mut self, path: &'a NodePath<'a>, expression: &'a Expression<'a>) {}
 
-    fn enter_integer_literal(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        literal: &'a IntegerLiteral,
-    ) {
-    }
-    fn exit_integer_literal(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        literal: &'a IntegerLiteral,
-    ) {
-    }
+    fn enter_integer_literal(&mut self, path: &'a NodePath<'a>, literal: &'a IntegerLiteral<'a>) {}
+    fn exit_integer_literal(&mut self, path: &'a NodePath<'a>, literal: &'a IntegerLiteral<'a>) {}
 
     fn enter_string_literal(
         &mut self,
@@ -542,6 +530,9 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.enter_value_field_pattern(path, kind);
         }
         // Expression
+        NodeKind::IntegerLiteral(value) => {
+            visitor.enter_integer_literal(path, value);
+        }
         NodeKind::BinaryExpression(kind) => {
             visitor.enter_binary_expression(path, kind);
         }
@@ -559,9 +550,6 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
 
             if !path.skipped() {
                 match expr.kind() {
-                    ExpressionKind::IntegerLiteral(value) => {
-                        visitor.enter_integer_literal(path, expr, value);
-                    }
                     ExpressionKind::StringLiteral(value) => {
                         visitor.enter_string_literal(path, expr, value);
                     }
@@ -645,6 +633,9 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.exit_value_field_pattern(path, kind);
         }
         // Expression
+        NodeKind::IntegerLiteral(value) => {
+            visitor.exit_integer_literal(path, value);
+        }
         NodeKind::BinaryExpression(kind) => {
             visitor.exit_binary_expression(path, kind);
         }
@@ -662,9 +653,6 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
 
             if !path.skipped() {
                 match expr.kind() {
-                    ExpressionKind::IntegerLiteral(value) => {
-                        visitor.exit_integer_literal(path, expr, value);
-                    }
                     ExpressionKind::StringLiteral(value) => {
                         visitor.exit_string_literal(path, expr, value);
                     }
