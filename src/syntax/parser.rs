@@ -1216,11 +1216,11 @@ impl<'a, 't> Parser<'a, 't> {
             }
 
             // node
-            let expr = BinaryExpression::new(operator, lhs, rhs);
+            let expr = arena.alloc(BinaryExpression::new(operator, lhs, rhs, code));
 
             lhs = arena.alloc(Expression::new(
                 ExpressionKind::BinaryExpression(expr),
-                code,
+                Code::with_node(arena, NodeKind::BinaryExpression(expr)),
             ));
         }
 
@@ -1353,7 +1353,12 @@ mod tests {
             }
         );
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .binary_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 3);
 
         let node = next_node(&mut tokens);
@@ -1381,7 +1386,12 @@ mod tests {
         );
         assert!(expr.rhs().is_none());
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .binary_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 3);
 
         let node = next_node(&mut tokens);
@@ -1415,7 +1425,13 @@ mod tests {
             }
         );
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .binary_expression()
+            .unwrap()
+            .code();
+
         assert_eq!(tokens.len(), 5);
 
         let node = next_node(&mut tokens);

@@ -357,20 +357,8 @@ pub trait Visitor<'a> {
     ) {
     }
 
-    fn enter_binary_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        bin_expr: &'a BinaryExpression<'a>,
-    ) {
-    }
-    fn exit_binary_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        bin_expr: &'a BinaryExpression<'a>,
-    ) {
-    }
+    fn enter_binary_expression(&mut self, path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {}
+    fn exit_binary_expression(&mut self, path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {}
 
     fn enter_unary_expression(
         &mut self,
@@ -554,6 +542,9 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.enter_value_field_pattern(path, kind);
         }
         // Expression
+        NodeKind::BinaryExpression(kind) => {
+            visitor.enter_binary_expression(path, kind);
+        }
         NodeKind::StructLiteral(kind) => {
             visitor.enter_struct_literal(path, kind);
         }
@@ -576,9 +567,6 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
                     }
                     ExpressionKind::VariableExpression(id) => {
                         visitor.enter_variable(path, expr, id);
-                    }
-                    ExpressionKind::BinaryExpression(kind) => {
-                        visitor.enter_binary_expression(path, expr, kind);
                     }
                     ExpressionKind::UnaryExpression(kind) => {
                         visitor.enter_unary_expression(path, expr, kind);
@@ -656,6 +644,10 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::ValueFieldPattern(kind) => {
             visitor.exit_value_field_pattern(path, kind);
         }
+        // Expression
+        NodeKind::BinaryExpression(kind) => {
+            visitor.exit_binary_expression(path, kind);
+        }
         NodeKind::StructLiteral(kind) => {
             visitor.exit_struct_literal(path, kind);
         }
@@ -678,9 +670,6 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
                     }
                     ExpressionKind::VariableExpression(id) => {
                         visitor.exit_variable(path, expr, id);
-                    }
-                    ExpressionKind::BinaryExpression(kind) => {
-                        visitor.exit_binary_expression(path, expr, kind);
                     }
                     ExpressionKind::UnaryExpression(kind) => {
                         visitor.exit_unary_expression(path, expr, kind);

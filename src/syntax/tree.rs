@@ -78,6 +78,7 @@ pub enum NodeKind<'a> {
     Statement(&'a Statement<'a>),
     VariableDeclaration(&'a VariableDeclaration<'a>),
     Expression(&'a Expression<'a>),
+    BinaryExpression(&'a BinaryExpression<'a>),
     StructLiteral(&'a StructLiteral<'a>),
     CaseArm(&'a CaseArm<'a>),
     Pattern(&'a Pattern<'a>),
@@ -288,6 +289,7 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::Statement(kind) => kind.code(),
             NodeKind::VariableDeclaration(kind) => kind.code(),
             NodeKind::Expression(kind) => kind.code(),
+            NodeKind::BinaryExpression(kind) => kind.code(),
             NodeKind::StructLiteral(kind) => kind.code(),
             NodeKind::CaseArm(kind) => kind.code(),
             NodeKind::Pattern(kind) => kind.code(),
@@ -1053,6 +1055,7 @@ pub struct BinaryExpression<'a> {
     operator: BinaryOperator,
     lhs: &'a Expression<'a>,
     rhs: Option<&'a Expression<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> BinaryExpression<'a> {
@@ -1060,8 +1063,14 @@ impl<'a> BinaryExpression<'a> {
         operator: BinaryOperator,
         lhs: &'a Expression<'a>,
         rhs: Option<&'a Expression<'a>>,
+        code: Code<'a>,
     ) -> Self {
-        Self { operator, lhs, rhs }
+        Self {
+            operator,
+            lhs,
+            rhs,
+            code,
+        }
     }
 
     pub fn operator(&self) -> BinaryOperator {
@@ -1074,6 +1083,18 @@ impl<'a> BinaryExpression<'a> {
 
     pub fn rhs(&self) -> Option<&'a Expression<'a>> {
         self.rhs
+    }
+}
+
+impl<'a> Node<'a> for BinaryExpression<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for BinaryExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "BinaryExpression({})", self.operator())
     }
 }
 
@@ -1112,10 +1133,37 @@ pub enum BinaryOperator {
     Ne,
 }
 
+impl fmt::Display for BinaryOperator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BinaryOperator::Add => write!(f, "+"),
+            BinaryOperator::Sub => write!(f, "-"),
+            BinaryOperator::Mul => write!(f, "*"),
+            BinaryOperator::Div => write!(f, "/"),
+            BinaryOperator::Rem => write!(f, "%"),
+            BinaryOperator::Lt => write!(f, "<"),
+            BinaryOperator::Gt => write!(f, ">"),
+            BinaryOperator::Le => write!(f, "<="),
+            BinaryOperator::Ge => write!(f, ">="),
+            BinaryOperator::Eq => write!(f, "=="),
+            BinaryOperator::Ne => write!(f, "!="),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum UnaryOperator {
-    Minus,
     Plus,
+    Minus,
+}
+
+impl fmt::Display for UnaryOperator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UnaryOperator::Plus => write!(f, "+"),
+            UnaryOperator::Minus => write!(f, "-"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -1408,7 +1456,7 @@ pub enum ExpressionKind<'a> {
     StringLiteral(StringLiteral<'a>),
     StructLiteral(&'a StructLiteral<'a>),
     VariableExpression(&'a Identifier<'a>),
-    BinaryExpression(BinaryExpression<'a>),
+    BinaryExpression(&'a BinaryExpression<'a>),
     UnaryExpression(UnaryExpression<'a>),
     SubscriptExpression(SubscriptExpression<'a>),
     CallExpression(CallExpression<'a>),
@@ -1600,6 +1648,7 @@ impl fmt::Display for NodeKind<'_> {
             NodeKind::VariableDeclaration(declaration) => declaration.fmt(f),
             NodeKind::Pattern(pattern) => pattern.fmt(f),
             NodeKind::Expression(expr) => expr.fmt(f),
+            NodeKind::BinaryExpression(expr) => expr.fmt(f),
             NodeKind::StructLiteral(expr) => expr.fmt(f),
             NodeKind::CaseArm(arm) => arm.fmt(f),
             NodeKind::GroupedExpression(expr) => expr.fmt(f),
@@ -1619,7 +1668,7 @@ impl fmt::Display for ExpressionKind<'_> {
                 )
             }
             ExpressionKind::VariableExpression(expr) => write!(f, "VariableExpression({})", expr),
-            ExpressionKind::BinaryExpression(_) => write!(f, "BinaryExpression"),
+            ExpressionKind::BinaryExpression(expr) => expr.fmt(f),
             ExpressionKind::UnaryExpression(_) => write!(f, "UnaryExpression"),
             ExpressionKind::SubscriptExpression(_) => write!(f, "SubscriptExpression"),
             ExpressionKind::CallExpression(_) => write!(f, "CallExpression"),
@@ -1627,7 +1676,7 @@ impl fmt::Display for ExpressionKind<'_> {
             ExpressionKind::IfExpression(_) => write!(f, "IfExpression"),
             ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
             ExpressionKind::MemberExpression(_) => write!(f, "MemberExpression"),
-            ExpressionKind::StructLiteral(_) => write!(f, "StructLiteral"),
+            ExpressionKind::StructLiteral(expr) => expr.fmt(f),
             ExpressionKind::GroupedExpression(expr) => expr.fmt(f),
         }
     }
