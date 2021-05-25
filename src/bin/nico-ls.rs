@@ -223,12 +223,7 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
         }
     }
 
-    fn enter_struct_literal(
-        &mut self,
-        path: &'a NodePath<'a>,
-        _expr: &'a Expression<'a>,
-        value: &StructLiteral,
-    ) {
+    fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, value: &StructLiteral) {
         // Expected struct for name
         if let Some(binding) = path.scope().get_binding(value.name().as_str()) {
             if !binding.kind().is_struct_definition() {

@@ -339,20 +339,8 @@ pub trait Visitor<'a> {
     ) {
     }
 
-    fn enter_struct_literal(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        value: &'a StructLiteral<'a>,
-    ) {
-    }
-    fn exit_struct_literal(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        value: &'a StructLiteral<'a>,
-    ) {
-    }
+    fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {}
+    fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {}
 
     fn enter_variable(
         &mut self,
@@ -556,9 +544,6 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::VariableDeclaration(kind) => {
             visitor.enter_variable_declaration(path, kind);
         }
-        NodeKind::CaseArm(kind) => {
-            visitor.enter_case_arm(path, kind);
-        }
         NodeKind::Pattern(kind) => {
             visitor.enter_pattern(path, kind);
         }
@@ -567,6 +552,13 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         }
         NodeKind::ValueFieldPattern(kind) => {
             visitor.enter_value_field_pattern(path, kind);
+        }
+        // Expression
+        NodeKind::StructLiteral(kind) => {
+            visitor.enter_struct_literal(path, kind);
+        }
+        NodeKind::CaseArm(kind) => {
+            visitor.enter_case_arm(path, kind);
         }
         NodeKind::GroupedExpression(kind) => {
             visitor.enter_grouped_expression(path, kind);
@@ -581,9 +573,6 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
                     }
                     ExpressionKind::StringLiteral(value) => {
                         visitor.enter_string_literal(path, expr, value);
-                    }
-                    ExpressionKind::StructLiteral(kind) => {
-                        visitor.enter_struct_literal(path, expr, kind);
                     }
                     ExpressionKind::VariableExpression(id) => {
                         visitor.enter_variable(path, expr, id);
@@ -661,14 +650,17 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::Pattern(kind) => {
             visitor.exit_pattern(path, kind);
         }
-        NodeKind::CaseArm(kind) => {
-            visitor.exit_case_arm(path, kind);
-        }
         NodeKind::ValueField(kind) => {
             visitor.exit_value_field(path, kind);
         }
         NodeKind::ValueFieldPattern(kind) => {
             visitor.exit_value_field_pattern(path, kind);
+        }
+        NodeKind::StructLiteral(kind) => {
+            visitor.exit_struct_literal(path, kind);
+        }
+        NodeKind::CaseArm(kind) => {
+            visitor.exit_case_arm(path, kind);
         }
         NodeKind::GroupedExpression(kind) => {
             visitor.exit_grouped_expression(path, kind);
@@ -686,9 +678,6 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
                     }
                     ExpressionKind::VariableExpression(id) => {
                         visitor.exit_variable(path, expr, id);
-                    }
-                    ExpressionKind::StructLiteral(kind) => {
-                        visitor.exit_struct_literal(path, expr, kind);
                     }
                     ExpressionKind::BinaryExpression(kind) => {
                         visitor.exit_binary_expression(path, expr, kind);

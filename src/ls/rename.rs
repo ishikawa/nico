@@ -165,12 +165,7 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         }
     }
 
-    fn enter_struct_literal(
-        &mut self,
-        path: &'a NodePath<'a>,
-        _expr: &'a Expression<'a>,
-        value: &'a StructLiteral<'a>,
-    ) {
+    fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, value: &'a StructLiteral<'a>) {
         let scope = path.scope();
 
         let binding = match scope.get_binding(value.name().as_str()) {

@@ -78,6 +78,7 @@ pub enum NodeKind<'a> {
     Statement(&'a Statement<'a>),
     VariableDeclaration(&'a VariableDeclaration<'a>),
     Expression(&'a Expression<'a>),
+    StructLiteral(&'a StructLiteral<'a>),
     CaseArm(&'a CaseArm<'a>),
     Pattern(&'a Pattern<'a>),
     GroupedExpression(&'a GroupedExpression<'a>),
@@ -287,6 +288,7 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::Statement(kind) => kind.code(),
             NodeKind::VariableDeclaration(kind) => kind.code(),
             NodeKind::Expression(kind) => kind.code(),
+            NodeKind::StructLiteral(kind) => kind.code(),
             NodeKind::CaseArm(kind) => kind.code(),
             NodeKind::Pattern(kind) => kind.code(),
             NodeKind::GroupedExpression(kind) => kind.code(),
@@ -971,6 +973,7 @@ impl fmt::Display for Expression<'_> {
 pub struct StructLiteral<'a> {
     name: &'a Identifier<'a>,
     fields: BumpaloVec<'a, &'a ValueField<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> StructLiteral<'a> {
@@ -978,10 +981,12 @@ impl<'a> StructLiteral<'a> {
         arena: &'a BumpaloArena,
         name: &'a Identifier<'a>,
         fields: I,
+        code: Code<'a>,
     ) -> Self {
         Self {
             name,
             fields: BumpaloVec::from_iter_in(fields, arena),
+            code,
         }
     }
 
@@ -991,6 +996,18 @@ impl<'a> StructLiteral<'a> {
 
     pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a ValueField<'a>> + '_ {
         self.fields.iter().copied()
+    }
+}
+
+impl<'a> Node<'a> for StructLiteral<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for StructLiteral<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "StructLiteral({})", self.name())
     }
 }
 
@@ -1389,7 +1406,7 @@ impl fmt::Display for GroupedExpression<'_> {
 pub enum ExpressionKind<'a> {
     IntegerLiteral(IntegerLiteral),
     StringLiteral(StringLiteral<'a>),
-    StructLiteral(StructLiteral<'a>),
+    StructLiteral(&'a StructLiteral<'a>),
     VariableExpression(&'a Identifier<'a>),
     BinaryExpression(BinaryExpression<'a>),
     UnaryExpression(UnaryExpression<'a>),
@@ -1582,8 +1599,9 @@ impl fmt::Display for NodeKind<'_> {
             NodeKind::Statement(stmt) => stmt.fmt(f),
             NodeKind::VariableDeclaration(declaration) => declaration.fmt(f),
             NodeKind::Pattern(pattern) => pattern.fmt(f),
-            NodeKind::CaseArm(arm) => arm.fmt(f),
             NodeKind::Expression(expr) => expr.fmt(f),
+            NodeKind::StructLiteral(expr) => expr.fmt(f),
+            NodeKind::CaseArm(arm) => arm.fmt(f),
             NodeKind::GroupedExpression(expr) => expr.fmt(f),
         }
     }
