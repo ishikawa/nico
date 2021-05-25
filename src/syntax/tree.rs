@@ -44,7 +44,7 @@
 //! ```
 use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Token};
 use crate::arena::{BumpaloArena, BumpaloString, BumpaloVec};
-use crate::{sem, util::wrap};
+use crate::sem;
 use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
@@ -508,7 +508,6 @@ impl fmt::Display for Identifier<'_> {
 pub struct StructDefinition<'a> {
     name: Option<&'a Identifier<'a>>,
     fields: BumpaloVec<'a, &'a TypeField<'a>>,
-    r#type: Rc<RefCell<sem::Type>>,
     code: Code<'a>,
 }
 
@@ -523,7 +522,6 @@ impl<'a> StructDefinition<'a> {
             name,
             fields: BumpaloVec::from_iter_in(fields, arena),
             code,
-            r#type: wrap(sem::Type::Unknown),
         }
     }
 
@@ -533,10 +531,6 @@ impl<'a> StructDefinition<'a> {
 
     pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
         self.fields.iter().copied()
-    }
-
-    pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
-        &self.r#type
     }
 
     pub fn get_field_type(&self, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
@@ -857,28 +851,15 @@ impl fmt::Display for Block<'_> {
 pub struct Expression<'a> {
     kind: ExpressionKind<'a>,
     code: Code<'a>,
-    r#type: Rc<RefCell<sem::Type>>,
 }
 
 impl<'a> Expression<'a> {
     pub fn new(kind: ExpressionKind<'a>, code: Code<'a>) -> Self {
-        Self {
-            kind,
-            code,
-            r#type: wrap(sem::Type::Unknown),
-        }
+        Self { kind, code }
     }
 
     pub fn kind(&self) -> &ExpressionKind<'a> {
         &self.kind
-    }
-
-    pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
-        &self.r#type
-    }
-
-    pub fn replace_type(&mut self, ty: &Rc<RefCell<sem::Type>>) {
-        self.r#type = Rc::clone(ty);
     }
 
     pub fn variable_expression(&self) -> Option<&'a Identifier<'a>> {

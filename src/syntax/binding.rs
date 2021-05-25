@@ -1,15 +1,11 @@
 //! This module contains implementations of `Visitor` that assigns meta information that can be
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
-    traverse, Block, CaseArm, Expression, FunctionDefinition, FunctionParameter, IntegerLiteral,
-    NodeKind, NodePath, Pattern, Program, StringLiteral, StructDefinition, VariableDeclaration,
-    Visitor,
+    traverse, Block, CaseArm, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Pattern,
+    Program, StructDefinition, VariableDeclaration, Visitor,
 };
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
-use crate::{
-    sem::{self, Type},
-    semantic::DefinitionKind,
-};
+use crate::{sem::Type, semantic::DefinitionKind};
 use crate::{semantic::Builtin, util::wrap};
 use std::{
     cell::{Cell, RefCell},
@@ -371,38 +367,6 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
     }
 }
 
-/// Assign types for primitives and declarations
-#[derive(Debug, Default)]
-struct TypeBinder {}
-
-impl TypeBinder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl<'a> Visitor<'a> for TypeBinder {
-    fn enter_integer_literal(
-        &mut self,
-        _path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        _literal: &'a IntegerLiteral,
-    ) {
-        let ty = expr.r#type();
-        ty.replace(sem::Type::Int32);
-    }
-
-    fn enter_string_literal(
-        &mut self,
-        _path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        _literal: &'a StringLiteral<'a>,
-    ) {
-        let ty = expr.r#type();
-        ty.replace(sem::Type::String);
-    }
-}
-
 pub fn bind<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
     let mut binder = TopLevelDeclarationBinder::new(arena);
     traverse(arena, &mut binder, node);
@@ -411,9 +375,6 @@ pub fn bind<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
     traverse(arena, &mut binder, node);
 
     let mut binder = VariableBinder::new(arena);
-    traverse(arena, &mut binder, node);
-
-    let mut binder = TypeBinder::new();
     traverse(arena, &mut binder, node);
 }
 
