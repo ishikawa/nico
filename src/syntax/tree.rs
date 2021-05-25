@@ -49,7 +49,7 @@ use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
 
-pub trait Node<'a>: fmt::Display {
+pub trait Node<'a> {
     fn code(&self) -> slice::Iter<'_, CodeKind<'a>>;
 
     /// Returns the effective range of this node.
