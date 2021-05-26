@@ -82,6 +82,10 @@ pub enum NodeKind<'a> {
     StringLiteral(&'a StringLiteral<'a>),
     BinaryExpression(&'a BinaryExpression<'a>),
     UnaryExpression(&'a UnaryExpression<'a>),
+    SubscriptExpression(&'a SubscriptExpression<'a>),
+    CallExpression(&'a CallExpression<'a>),
+    ArrayExpression(&'a ArrayExpression<'a>),
+    MemberExpression(&'a MemberExpression<'a>),
     StructLiteral(&'a StructLiteral<'a>),
     CaseArm(&'a CaseArm<'a>),
     Pattern(&'a Pattern<'a>),
@@ -225,8 +229,8 @@ impl<'a> NodeKind<'a> {
     }
 
     pub fn member_expression(&self) -> Option<&'a MemberExpression<'a>> {
-        if let NodeKind::Expression(node) = self {
-            return node.member_expression();
+        if let NodeKind::MemberExpression(node) = self {
+            return Some(node);
         }
         None
     }
@@ -297,6 +301,10 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::StringLiteral(kind) => kind.code(),
             NodeKind::BinaryExpression(kind) => kind.code(),
             NodeKind::UnaryExpression(kind) => kind.code(),
+            NodeKind::SubscriptExpression(kind) => kind.code(),
+            NodeKind::CallExpression(kind) => kind.code(),
+            NodeKind::ArrayExpression(kind) => kind.code(),
+            NodeKind::MemberExpression(kind) => kind.code(),
             NodeKind::StructLiteral(kind) => kind.code(),
             NodeKind::CaseArm(kind) => kind.code(),
             NodeKind::Pattern(kind) => kind.code(),
@@ -1214,6 +1222,7 @@ impl fmt::Display for UnaryOperator {
 pub struct SubscriptExpression<'a> {
     callee: &'a Expression<'a>,
     arguments: BumpaloVec<'a, &'a Expression<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> SubscriptExpression<'a> {
@@ -1221,10 +1230,12 @@ impl<'a> SubscriptExpression<'a> {
         arena: &'a BumpaloArena,
         callee: &'a Expression<'a>,
         arguments: I,
+        code: Code<'a>,
     ) -> Self {
         Self {
             callee,
             arguments: BumpaloVec::from_iter_in(arguments, arena),
+            code,
         }
     }
 
@@ -1234,6 +1245,18 @@ impl<'a> SubscriptExpression<'a> {
 
     pub fn arguments(&self) -> impl ExactSizeIterator<Item = &'a Expression<'a>> + '_ {
         self.arguments.iter().copied()
+    }
+}
+
+impl<'a> Node<'a> for SubscriptExpression<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for SubscriptExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SubscriptExpression({})", self.callee())
     }
 }
 
@@ -1241,6 +1264,7 @@ impl<'a> SubscriptExpression<'a> {
 pub struct CallExpression<'a> {
     callee: &'a Expression<'a>,
     arguments: BumpaloVec<'a, &'a Expression<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> CallExpression<'a> {
@@ -1248,10 +1272,12 @@ impl<'a> CallExpression<'a> {
         arena: &'a BumpaloArena,
         callee: &'a Expression<'a>,
         arguments: I,
+        code: Code<'a>,
     ) -> Self {
         Self {
             callee,
             arguments: BumpaloVec::from_iter_in(arguments, arena),
+            code,
         }
     }
 
@@ -1264,15 +1290,36 @@ impl<'a> CallExpression<'a> {
     }
 }
 
+impl<'a> Node<'a> for CallExpression<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for CallExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "CallExpression({})", self.callee())
+    }
+}
+
 #[derive(Debug)]
 pub struct MemberExpression<'a> {
     object: &'a Expression<'a>,
     field: Option<&'a Identifier<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> MemberExpression<'a> {
-    pub fn new(object: &'a Expression<'a>, field: Option<&'a Identifier<'a>>) -> Self {
-        Self { object, field }
+    pub fn new(
+        object: &'a Expression<'a>,
+        field: Option<&'a Identifier<'a>>,
+        code: Code<'a>,
+    ) -> Self {
+        Self {
+            object,
+            field,
+            code,
+        }
     }
 
     pub fn object(&self) -> &'a Expression<'a> {
@@ -1284,23 +1331,54 @@ impl<'a> MemberExpression<'a> {
     }
 }
 
+impl<'a> Node<'a> for MemberExpression<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for MemberExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "MemberExpression(.{})",
+            self.field().map(&Identifier::as_str).unwrap_or("{unknown}")
+        )
+    }
+}
+
 #[derive(Debug)]
 pub struct ArrayExpression<'a> {
     elements: BumpaloVec<'a, &'a Expression<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> ArrayExpression<'a> {
     pub fn new<I: IntoIterator<Item = &'a Expression<'a>>>(
         arena: &'a BumpaloArena,
         elements: I,
+        code: Code<'a>,
     ) -> Self {
         Self {
             elements: BumpaloVec::from_iter_in(elements, arena),
+            code,
         }
     }
 
     pub fn elements(&self) -> impl ExactSizeIterator<Item = &'a Expression<'a>> + '_ {
         self.elements.iter().copied()
+    }
+}
+
+impl<'a> Node<'a> for ArrayExpression<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for ArrayExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ArrayExpression({})", self.elements.len())
     }
 }
 
@@ -1533,10 +1611,10 @@ pub enum ExpressionKind<'a> {
     VariableExpression(&'a Identifier<'a>),
     BinaryExpression(&'a BinaryExpression<'a>),
     UnaryExpression(&'a UnaryExpression<'a>),
-    SubscriptExpression(SubscriptExpression<'a>),
-    CallExpression(CallExpression<'a>),
-    ArrayExpression(ArrayExpression<'a>),
-    MemberExpression(MemberExpression<'a>),
+    SubscriptExpression(&'a SubscriptExpression<'a>),
+    CallExpression(&'a CallExpression<'a>),
+    ArrayExpression(&'a ArrayExpression<'a>),
+    MemberExpression(&'a MemberExpression<'a>),
     IfExpression(IfExpression<'a>),
     CaseExpression(CaseExpression<'a>),
     GroupedExpression(&'a GroupedExpression<'a>),
@@ -1727,6 +1805,10 @@ impl fmt::Display for NodeKind<'_> {
             NodeKind::StringLiteral(expr) => expr.fmt(f),
             NodeKind::BinaryExpression(expr) => expr.fmt(f),
             NodeKind::UnaryExpression(expr) => expr.fmt(f),
+            NodeKind::SubscriptExpression(expr) => expr.fmt(f),
+            NodeKind::CallExpression(expr) => expr.fmt(f),
+            NodeKind::ArrayExpression(expr) => expr.fmt(f),
+            NodeKind::MemberExpression(expr) => expr.fmt(f),
             NodeKind::StructLiteral(expr) => expr.fmt(f),
             NodeKind::CaseArm(arm) => arm.fmt(f),
             NodeKind::GroupedExpression(expr) => expr.fmt(f),
@@ -1742,9 +1824,9 @@ impl fmt::Display for ExpressionKind<'_> {
             ExpressionKind::VariableExpression(expr) => write!(f, "VariableExpression({})", expr),
             ExpressionKind::BinaryExpression(expr) => expr.fmt(f),
             ExpressionKind::UnaryExpression(expr) => expr.fmt(f),
-            ExpressionKind::SubscriptExpression(_) => write!(f, "SubscriptExpression"),
-            ExpressionKind::CallExpression(_) => write!(f, "CallExpression"),
-            ExpressionKind::ArrayExpression(_) => write!(f, "ArrayExpression"),
+            ExpressionKind::SubscriptExpression(expr) => expr.fmt(f),
+            ExpressionKind::CallExpression(expr) => expr.fmt(f),
+            ExpressionKind::ArrayExpression(expr) => expr.fmt(f),
             ExpressionKind::IfExpression(_) => write!(f, "IfExpression"),
             ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
             ExpressionKind::MemberExpression(_) => write!(f, "MemberExpression"),

@@ -541,9 +541,10 @@ impl<'a, 't> Parser<'a, 't> {
                         NodeKind::Expression,
                     );
 
-                    ExpressionKind::SubscriptExpression(SubscriptExpression::new(
-                        arena, operand, arguments,
-                    ))
+                    let node =
+                        arena.alloc(SubscriptExpression::new(arena, operand, arguments, code));
+                    code = Code::with_node(arena, NodeKind::SubscriptExpression(node));
+                    ExpressionKind::SubscriptExpression(node)
                 }
                 TokenKind::Char('(') => {
                     let arguments = self._parse_elements(
@@ -555,7 +556,9 @@ impl<'a, 't> Parser<'a, 't> {
                         NodeKind::Expression,
                     );
 
-                    ExpressionKind::CallExpression(CallExpression::new(arena, operand, arguments))
+                    let node = arena.alloc(CallExpression::new(arena, operand, arguments, code));
+                    code = Code::with_node(arena, NodeKind::CallExpression(node));
+                    ExpressionKind::CallExpression(node)
                 }
                 TokenKind::Char('.') => {
                     code.interpret(self.tokenizer.next_token());
@@ -571,7 +574,9 @@ impl<'a, 't> Parser<'a, 't> {
                         );
                     }
 
-                    ExpressionKind::MemberExpression(MemberExpression::new(operand, field))
+                    let node = arena.alloc(MemberExpression::new(operand, field, code));
+                    code = Code::with_node(arena, NodeKind::MemberExpression(node));
+                    ExpressionKind::MemberExpression(node)
                 }
                 _ => break,
             };
@@ -814,9 +819,12 @@ impl<'a, 't> Parser<'a, 't> {
             NodeKind::Expression,
         );
 
-        let expr = ArrayExpression::new(arena, elements);
+        let expr = arena.alloc(ArrayExpression::new(arena, elements, code));
 
-        arena.alloc(Expression::new(ExpressionKind::ArrayExpression(expr), code))
+        arena.alloc(Expression::new(
+            ExpressionKind::ArrayExpression(expr),
+            Code::with_node(arena, NodeKind::ArrayExpression(expr)),
+        ))
     }
 
     fn read_array_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
@@ -1552,7 +1560,12 @@ mod tests {
             );
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .subscript_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 4);
 
         let node = next_node(&mut tokens);
@@ -1585,7 +1598,12 @@ mod tests {
             assert_eq!(arguments.len(), 0);
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .subscript_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 3);
 
         let node = next_node(&mut tokens);
@@ -1621,7 +1639,13 @@ mod tests {
             );
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .subscript_expression()
+            .unwrap()
+            .code();
+
         assert_eq!(tokens.len(), 4);
 
         tokens.next();
@@ -1647,7 +1671,12 @@ mod tests {
                 assert_matches!(arguments[0].kind(), ExpressionKind::StringLiteral(..));
             });
 
-            let mut tokens = stmt.expression().unwrap().code();
+            let mut tokens = stmt
+                .expression()
+                .unwrap()
+                .subscript_expression()
+                .unwrap()
+                .code();
             assert_eq!(tokens.len(), 4);
 
             tokens.next();
@@ -1672,7 +1701,12 @@ mod tests {
             assert_eq!(elements.len(), 0);
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .array_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1701,7 +1735,12 @@ mod tests {
             );
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .array_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 4);
 
         let token = next_interpreted_token(&mut tokens);

@@ -352,44 +352,29 @@ pub trait Visitor<'a> {
     fn enter_subscript_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         subscript_expr: &'a SubscriptExpression<'a>,
     ) {
     }
     fn exit_subscript_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         subscript_expr: &'a SubscriptExpression<'a>,
     ) {
     }
 
-    fn enter_call_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        call_expr: &'a CallExpression<'a>,
-    ) {
+    fn enter_call_expression(&mut self, path: &'a NodePath<'a>, call_expr: &'a CallExpression<'a>) {
     }
-    fn exit_call_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        call_expr: &'a CallExpression<'a>,
-    ) {
-    }
+    fn exit_call_expression(&mut self, path: &'a NodePath<'a>, call_expr: &'a CallExpression<'a>) {}
 
     fn enter_member_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         member_expr: &'a MemberExpression<'a>,
     ) {
     }
     fn exit_member_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         member_expr: &'a MemberExpression<'a>,
     ) {
     }
@@ -397,14 +382,12 @@ pub trait Visitor<'a> {
     fn enter_array_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         array_expr: &'a ArrayExpression<'a>,
     ) {
     }
     fn exit_array_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         array_expr: &'a ArrayExpression<'a>,
     ) {
     }
@@ -528,6 +511,18 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::UnaryExpression(kind) => {
             visitor.enter_unary_expression(path, kind);
         }
+        NodeKind::SubscriptExpression(kind) => {
+            visitor.enter_subscript_expression(path, kind);
+        }
+        NodeKind::CallExpression(kind) => {
+            visitor.enter_call_expression(path, kind);
+        }
+        NodeKind::MemberExpression(kind) => {
+            visitor.enter_member_expression(path, kind);
+        }
+        NodeKind::ArrayExpression(kind) => {
+            visitor.enter_array_expression(path, kind);
+        }
         NodeKind::StructLiteral(kind) => {
             visitor.enter_struct_literal(path, kind);
         }
@@ -544,18 +539,6 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
                 match expr.kind() {
                     ExpressionKind::VariableExpression(id) => {
                         visitor.enter_variable(path, expr, id);
-                    }
-                    ExpressionKind::SubscriptExpression(kind) => {
-                        visitor.enter_subscript_expression(path, expr, kind);
-                    }
-                    ExpressionKind::CallExpression(kind) => {
-                        visitor.enter_call_expression(path, expr, kind);
-                    }
-                    ExpressionKind::MemberExpression(kind) => {
-                        visitor.enter_member_expression(path, expr, kind);
-                    }
-                    ExpressionKind::ArrayExpression(kind) => {
-                        visitor.enter_array_expression(path, expr, kind);
                     }
                     ExpressionKind::IfExpression(kind) => {
                         visitor.enter_if_expression(path, expr, kind);
@@ -631,6 +614,18 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::UnaryExpression(kind) => {
             visitor.exit_unary_expression(path, kind);
         }
+        NodeKind::SubscriptExpression(kind) => {
+            visitor.exit_subscript_expression(path, kind);
+        }
+        NodeKind::MemberExpression(kind) => {
+            visitor.exit_member_expression(path, kind);
+        }
+        NodeKind::CallExpression(kind) => {
+            visitor.exit_call_expression(path, kind);
+        }
+        NodeKind::ArrayExpression(kind) => {
+            visitor.exit_array_expression(path, kind);
+        }
         NodeKind::StructLiteral(kind) => {
             visitor.exit_struct_literal(path, kind);
         }
@@ -647,18 +642,6 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
                 match expr.kind() {
                     ExpressionKind::VariableExpression(id) => {
                         visitor.exit_variable(path, expr, id);
-                    }
-                    ExpressionKind::SubscriptExpression(kind) => {
-                        visitor.exit_subscript_expression(path, expr, kind);
-                    }
-                    ExpressionKind::MemberExpression(kind) => {
-                        visitor.exit_member_expression(path, expr, kind);
-                    }
-                    ExpressionKind::CallExpression(kind) => {
-                        visitor.exit_call_expression(path, expr, kind);
-                    }
-                    ExpressionKind::ArrayExpression(kind) => {
-                        visitor.exit_array_expression(path, expr, kind);
                     }
                     ExpressionKind::IfExpression(kind) => {
                         visitor.exit_if_expression(path, expr, kind);
