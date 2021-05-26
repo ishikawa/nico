@@ -886,9 +886,12 @@ impl<'a, 't> Parser<'a, 't> {
             None
         };
 
-        let expr = IfExpression::new(condition, then_body, else_body);
+        let expr = arena.alloc(IfExpression::new(condition, then_body, else_body, code));
 
-        arena.alloc(Expression::new(ExpressionKind::IfExpression(expr), code))
+        arena.alloc(Expression::new(
+            ExpressionKind::IfExpression(expr),
+            Code::with_node(arena, NodeKind::IfExpression(expr)),
+        ))
     }
 
     fn read_case_expression(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
@@ -940,9 +943,12 @@ impl<'a, 't> Parser<'a, 't> {
             }
         }
 
-        let expr = CaseExpression::new(arena, head, arms, else_body);
+        let expr = arena.alloc(CaseExpression::new(arena, head, arms, else_body, code));
 
-        arena.alloc(Expression::new(ExpressionKind::CaseExpression(expr), code))
+        arena.alloc(Expression::new(
+            ExpressionKind::CaseExpression(expr),
+            Code::with_node(arena, NodeKind::CaseExpression(expr)),
+        ))
     }
 
     fn read_case_arm(&mut self, arena: &'a BumpaloArena) -> &'a CaseArm<'a> {
@@ -1808,7 +1814,7 @@ mod tests {
         assert!(stmt.expression().unwrap().if_expression().is_some());
 
         // tokens
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression().unwrap().if_expression().unwrap().code();
         assert_eq!(tokens.len(), 4);
 
         let token = next_interpreted_token(&mut tokens);

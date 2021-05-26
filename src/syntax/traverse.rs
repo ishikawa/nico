@@ -392,35 +392,12 @@ pub trait Visitor<'a> {
     ) {
     }
 
-    fn enter_if_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        if_expr: &'a IfExpression<'a>,
-    ) {
-    }
-    fn exit_if_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        if_expr: &'a IfExpression<'a>,
-    ) {
-    }
+    fn enter_if_expression(&mut self, path: &'a NodePath<'a>, if_expr: &'a IfExpression<'a>) {}
+    fn exit_if_expression(&mut self, path: &'a NodePath<'a>, if_expr: &'a IfExpression<'a>) {}
 
-    fn enter_case_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        case_expr: &'a CaseExpression<'a>,
-    ) {
+    fn enter_case_expression(&mut self, path: &'a NodePath<'a>, case_expr: &'a CaseExpression<'a>) {
     }
-    fn exit_case_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        case_expr: &'a CaseExpression<'a>,
-    ) {
-    }
+    fn exit_case_expression(&mut self, path: &'a NodePath<'a>, case_expr: &'a CaseExpression<'a>) {}
 }
 
 pub fn traverse<'a>(
@@ -526,6 +503,12 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::StructLiteral(kind) => {
             visitor.enter_struct_literal(path, kind);
         }
+        NodeKind::IfExpression(kind) => {
+            visitor.enter_if_expression(path, kind);
+        }
+        NodeKind::CaseExpression(kind) => {
+            visitor.enter_case_expression(path, kind);
+        }
         NodeKind::CaseArm(kind) => {
             visitor.enter_case_arm(path, kind);
         }
@@ -536,19 +519,8 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.enter_expression(path, expr);
 
             if !path.skipped() {
-                match expr.kind() {
-                    ExpressionKind::VariableExpression(id) => {
-                        visitor.enter_variable(path, expr, id);
-                    }
-                    ExpressionKind::IfExpression(kind) => {
-                        visitor.enter_if_expression(path, expr, kind);
-                    }
-                    ExpressionKind::CaseExpression(kind) => {
-                        visitor.enter_case_expression(path, expr, kind);
-                    }
-                    _ => {
-                        // TODO: We shouldn't handle expression kind here. It is handled by traverse_children().
-                    }
+                if let ExpressionKind::VariableExpression(id) = expr.kind() {
+                    visitor.enter_variable(path, expr, id);
                 }
             }
         }
@@ -629,6 +601,12 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::StructLiteral(kind) => {
             visitor.exit_struct_literal(path, kind);
         }
+        NodeKind::IfExpression(kind) => {
+            visitor.exit_if_expression(path, kind);
+        }
+        NodeKind::CaseExpression(kind) => {
+            visitor.exit_case_expression(path, kind);
+        }
         NodeKind::CaseArm(kind) => {
             visitor.exit_case_arm(path, kind);
         }
@@ -639,19 +617,8 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.exit_expression(path, expr);
 
             if !path.skipped() {
-                match expr.kind() {
-                    ExpressionKind::VariableExpression(id) => {
-                        visitor.exit_variable(path, expr, id);
-                    }
-                    ExpressionKind::IfExpression(kind) => {
-                        visitor.exit_if_expression(path, expr, kind);
-                    }
-                    ExpressionKind::CaseExpression(kind) => {
-                        visitor.exit_case_expression(path, expr, kind);
-                    }
-                    _ => {
-                        // TODO: We shouldn't handle expression kind here. It is handled by traverse_children().
-                    }
+                if let ExpressionKind::VariableExpression(id) = expr.kind() {
+                    visitor.exit_variable(path, expr, id);
                 }
             }
         }

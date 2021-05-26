@@ -80,13 +80,15 @@ pub enum NodeKind<'a> {
     Expression(&'a Expression<'a>),
     IntegerLiteral(&'a IntegerLiteral<'a>),
     StringLiteral(&'a StringLiteral<'a>),
+    StructLiteral(&'a StructLiteral<'a>),
     BinaryExpression(&'a BinaryExpression<'a>),
     UnaryExpression(&'a UnaryExpression<'a>),
     SubscriptExpression(&'a SubscriptExpression<'a>),
     CallExpression(&'a CallExpression<'a>),
     ArrayExpression(&'a ArrayExpression<'a>),
     MemberExpression(&'a MemberExpression<'a>),
-    StructLiteral(&'a StructLiteral<'a>),
+    IfExpression(&'a IfExpression<'a>),
+    CaseExpression(&'a CaseExpression<'a>),
     CaseArm(&'a CaseArm<'a>),
     Pattern(&'a Pattern<'a>),
     GroupedExpression(&'a GroupedExpression<'a>),
@@ -298,6 +300,7 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::VariableDeclaration(kind) => kind.code(),
             NodeKind::Expression(kind) => kind.code(),
             NodeKind::IntegerLiteral(kind) => kind.code(),
+            NodeKind::StructLiteral(kind) => kind.code(),
             NodeKind::StringLiteral(kind) => kind.code(),
             NodeKind::BinaryExpression(kind) => kind.code(),
             NodeKind::UnaryExpression(kind) => kind.code(),
@@ -305,7 +308,8 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::CallExpression(kind) => kind.code(),
             NodeKind::ArrayExpression(kind) => kind.code(),
             NodeKind::MemberExpression(kind) => kind.code(),
-            NodeKind::StructLiteral(kind) => kind.code(),
+            NodeKind::IfExpression(kind) => kind.code(),
+            NodeKind::CaseExpression(kind) => kind.code(),
             NodeKind::CaseArm(kind) => kind.code(),
             NodeKind::Pattern(kind) => kind.code(),
             NodeKind::GroupedExpression(kind) => kind.code(),
@@ -1387,6 +1391,7 @@ pub struct IfExpression<'a> {
     condition: Option<&'a Expression<'a>>,
     then_body: &'a Block<'a>,
     else_body: Option<&'a Block<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> IfExpression<'a> {
@@ -1394,11 +1399,13 @@ impl<'a> IfExpression<'a> {
         condition: Option<&'a Expression<'a>>,
         then_body: &'a Block<'a>,
         else_body: Option<&'a Block<'a>>,
+        code: Code<'a>,
     ) -> Self {
         Self {
             condition,
             then_body,
             else_body,
+            code,
         }
     }
 
@@ -1415,11 +1422,24 @@ impl<'a> IfExpression<'a> {
     }
 }
 
+impl<'a> Node<'a> for IfExpression<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for IfExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "IfExpression")
+    }
+}
+
 #[derive(Debug)]
 pub struct CaseExpression<'a> {
     head: Option<&'a Expression<'a>>,
     arms: BumpaloVec<'a, &'a CaseArm<'a>>,
     else_body: Option<&'a Block<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> CaseExpression<'a> {
@@ -1428,11 +1448,13 @@ impl<'a> CaseExpression<'a> {
         head: Option<&'a Expression<'a>>,
         arms: I,
         else_body: Option<&'a Block<'a>>,
+        code: Code<'a>,
     ) -> Self {
         Self {
             head,
             arms: BumpaloVec::from_iter_in(arms, arena),
             else_body,
+            code,
         }
     }
 
@@ -1446,6 +1468,18 @@ impl<'a> CaseExpression<'a> {
 
     pub fn else_body(&self) -> Option<&'a Block<'a>> {
         self.else_body
+    }
+}
+
+impl<'a> Node<'a> for CaseExpression<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for CaseExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "CaseExpression")
     }
 }
 
@@ -1615,8 +1649,8 @@ pub enum ExpressionKind<'a> {
     CallExpression(&'a CallExpression<'a>),
     ArrayExpression(&'a ArrayExpression<'a>),
     MemberExpression(&'a MemberExpression<'a>),
-    IfExpression(IfExpression<'a>),
-    CaseExpression(CaseExpression<'a>),
+    IfExpression(&'a IfExpression<'a>),
+    CaseExpression(&'a CaseExpression<'a>),
     GroupedExpression(&'a GroupedExpression<'a>),
 }
 
@@ -1803,13 +1837,15 @@ impl fmt::Display for NodeKind<'_> {
             NodeKind::Expression(expr) => expr.fmt(f),
             NodeKind::IntegerLiteral(expr) => expr.fmt(f),
             NodeKind::StringLiteral(expr) => expr.fmt(f),
+            NodeKind::StructLiteral(expr) => expr.fmt(f),
             NodeKind::BinaryExpression(expr) => expr.fmt(f),
             NodeKind::UnaryExpression(expr) => expr.fmt(f),
             NodeKind::SubscriptExpression(expr) => expr.fmt(f),
             NodeKind::CallExpression(expr) => expr.fmt(f),
             NodeKind::ArrayExpression(expr) => expr.fmt(f),
             NodeKind::MemberExpression(expr) => expr.fmt(f),
-            NodeKind::StructLiteral(expr) => expr.fmt(f),
+            NodeKind::IfExpression(expr) => expr.fmt(f),
+            NodeKind::CaseExpression(expr) => expr.fmt(f),
             NodeKind::CaseArm(arm) => arm.fmt(f),
             NodeKind::GroupedExpression(expr) => expr.fmt(f),
         }
@@ -1827,9 +1863,9 @@ impl fmt::Display for ExpressionKind<'_> {
             ExpressionKind::SubscriptExpression(expr) => expr.fmt(f),
             ExpressionKind::CallExpression(expr) => expr.fmt(f),
             ExpressionKind::ArrayExpression(expr) => expr.fmt(f),
-            ExpressionKind::IfExpression(_) => write!(f, "IfExpression"),
-            ExpressionKind::CaseExpression(_) => write!(f, "CaseExpression"),
-            ExpressionKind::MemberExpression(_) => write!(f, "MemberExpression"),
+            ExpressionKind::IfExpression(expr) => expr.fmt(f),
+            ExpressionKind::CaseExpression(expr) => expr.fmt(f),
+            ExpressionKind::MemberExpression(expr) => expr.fmt(f),
             ExpressionKind::StructLiteral(expr) => expr.fmt(f),
             ExpressionKind::GroupedExpression(expr) => expr.fmt(f),
         }
