@@ -504,10 +504,12 @@ impl<'a, 't> Parser<'a, 't> {
         }
 
         // node
-        let expr = UnaryExpression::new(operator, operand);
-        let kind = ExpressionKind::UnaryExpression(expr);
+        let expr = arena.alloc(UnaryExpression::new(operator, operand, code));
 
-        Some(arena.alloc(Expression::new(kind, code)))
+        Some(arena.alloc(Expression::new(
+            ExpressionKind::UnaryExpression(expr),
+            Code::with_node(arena, NodeKind::UnaryExpression(expr)),
+        )))
     }
 
     fn parse_access(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
@@ -1474,7 +1476,12 @@ mod tests {
             }
         );
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .unary_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1507,7 +1514,12 @@ mod tests {
             });
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .unary_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);

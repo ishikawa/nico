@@ -339,14 +339,12 @@ pub trait Visitor<'a> {
     fn enter_unary_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         unary_expr: &'a UnaryExpression<'a>,
     ) {
     }
     fn exit_unary_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         unary_expr: &'a UnaryExpression<'a>,
     ) {
     }
@@ -527,6 +525,9 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::BinaryExpression(kind) => {
             visitor.enter_binary_expression(path, kind);
         }
+        NodeKind::UnaryExpression(kind) => {
+            visitor.enter_unary_expression(path, kind);
+        }
         NodeKind::StructLiteral(kind) => {
             visitor.enter_struct_literal(path, kind);
         }
@@ -543,9 +544,6 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
                 match expr.kind() {
                     ExpressionKind::VariableExpression(id) => {
                         visitor.enter_variable(path, expr, id);
-                    }
-                    ExpressionKind::UnaryExpression(kind) => {
-                        visitor.enter_unary_expression(path, expr, kind);
                     }
                     ExpressionKind::SubscriptExpression(kind) => {
                         visitor.enter_subscript_expression(path, expr, kind);
@@ -630,6 +628,9 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::BinaryExpression(kind) => {
             visitor.exit_binary_expression(path, kind);
         }
+        NodeKind::UnaryExpression(kind) => {
+            visitor.exit_unary_expression(path, kind);
+        }
         NodeKind::StructLiteral(kind) => {
             visitor.exit_struct_literal(path, kind);
         }
@@ -646,9 +647,6 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
                 match expr.kind() {
                     ExpressionKind::VariableExpression(id) => {
                         visitor.exit_variable(path, expr, id);
-                    }
-                    ExpressionKind::UnaryExpression(kind) => {
-                        visitor.exit_unary_expression(path, expr, kind);
                     }
                     ExpressionKind::SubscriptExpression(kind) => {
                         visitor.exit_subscript_expression(path, expr, kind);

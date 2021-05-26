@@ -81,6 +81,7 @@ pub enum NodeKind<'a> {
     IntegerLiteral(&'a IntegerLiteral<'a>),
     StringLiteral(&'a StringLiteral<'a>),
     BinaryExpression(&'a BinaryExpression<'a>),
+    UnaryExpression(&'a UnaryExpression<'a>),
     StructLiteral(&'a StructLiteral<'a>),
     CaseArm(&'a CaseArm<'a>),
     Pattern(&'a Pattern<'a>),
@@ -295,6 +296,7 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::IntegerLiteral(kind) => kind.code(),
             NodeKind::StringLiteral(kind) => kind.code(),
             NodeKind::BinaryExpression(kind) => kind.code(),
+            NodeKind::UnaryExpression(kind) => kind.code(),
             NodeKind::StructLiteral(kind) => kind.code(),
             NodeKind::CaseArm(kind) => kind.code(),
             NodeKind::Pattern(kind) => kind.code(),
@@ -1123,11 +1125,20 @@ impl fmt::Display for BinaryExpression<'_> {
 pub struct UnaryExpression<'a> {
     operator: UnaryOperator,
     operand: Option<&'a Expression<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> UnaryExpression<'a> {
-    pub fn new(operator: UnaryOperator, operand: Option<&'a Expression<'a>>) -> Self {
-        Self { operator, operand }
+    pub fn new(
+        operator: UnaryOperator,
+        operand: Option<&'a Expression<'a>>,
+        code: Code<'a>,
+    ) -> Self {
+        Self {
+            operator,
+            operand,
+            code,
+        }
     }
 
     pub fn operator(&self) -> UnaryOperator {
@@ -1136,6 +1147,18 @@ impl<'a> UnaryExpression<'a> {
 
     pub fn operand(&self) -> Option<&'a Expression<'a>> {
         self.operand
+    }
+}
+
+impl<'a> Node<'a> for UnaryExpression<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for UnaryExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "UnaryExpression({})", self.operator())
     }
 }
 
@@ -1509,7 +1532,7 @@ pub enum ExpressionKind<'a> {
     StructLiteral(&'a StructLiteral<'a>),
     VariableExpression(&'a Identifier<'a>),
     BinaryExpression(&'a BinaryExpression<'a>),
-    UnaryExpression(UnaryExpression<'a>),
+    UnaryExpression(&'a UnaryExpression<'a>),
     SubscriptExpression(SubscriptExpression<'a>),
     CallExpression(CallExpression<'a>),
     ArrayExpression(ArrayExpression<'a>),
@@ -1703,6 +1726,7 @@ impl fmt::Display for NodeKind<'_> {
             NodeKind::IntegerLiteral(expr) => expr.fmt(f),
             NodeKind::StringLiteral(expr) => expr.fmt(f),
             NodeKind::BinaryExpression(expr) => expr.fmt(f),
+            NodeKind::UnaryExpression(expr) => expr.fmt(f),
             NodeKind::StructLiteral(expr) => expr.fmt(f),
             NodeKind::CaseArm(arm) => arm.fmt(f),
             NodeKind::GroupedExpression(expr) => expr.fmt(f),
@@ -1717,7 +1741,7 @@ impl fmt::Display for ExpressionKind<'_> {
             ExpressionKind::StringLiteral(expr) => expr.fmt(f),
             ExpressionKind::VariableExpression(expr) => write!(f, "VariableExpression({})", expr),
             ExpressionKind::BinaryExpression(expr) => expr.fmt(f),
-            ExpressionKind::UnaryExpression(_) => write!(f, "UnaryExpression"),
+            ExpressionKind::UnaryExpression(expr) => expr.fmt(f),
             ExpressionKind::SubscriptExpression(_) => write!(f, "SubscriptExpression"),
             ExpressionKind::CallExpression(_) => write!(f, "CallExpression"),
             ExpressionKind::ArrayExpression(_) => write!(f, "ArrayExpression"),
