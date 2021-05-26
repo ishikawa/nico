@@ -79,6 +79,7 @@ pub enum NodeKind<'a> {
     VariableDeclaration(&'a VariableDeclaration<'a>),
     Expression(&'a Expression<'a>),
     IntegerLiteral(&'a IntegerLiteral<'a>),
+    StringLiteral(&'a StringLiteral<'a>),
     BinaryExpression(&'a BinaryExpression<'a>),
     StructLiteral(&'a StructLiteral<'a>),
     CaseArm(&'a CaseArm<'a>),
@@ -292,6 +293,7 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::VariableDeclaration(kind) => kind.code(),
             NodeKind::Expression(kind) => kind.code(),
             NodeKind::IntegerLiteral(kind) => kind.code(),
+            NodeKind::StringLiteral(kind) => kind.code(),
             NodeKind::BinaryExpression(kind) => kind.code(),
             NodeKind::StructLiteral(kind) => kind.code(),
             NodeKind::CaseArm(kind) => kind.code(),
@@ -885,6 +887,14 @@ impl<'a> Expression<'a> {
         }
     }
 
+    pub fn string_literal(&self) -> Option<&StringLiteral<'a>> {
+        if let ExpressionKind::StringLiteral(ref expr) = self.kind {
+            Some(expr)
+        } else {
+            None
+        }
+    }
+
     pub fn struct_literal(&self) -> Option<&StructLiteral<'a>> {
         if let ExpressionKind::StructLiteral(ref expr) = self.kind {
             Some(expr)
@@ -1421,24 +1431,42 @@ impl<'a> Node<'a> for IntegerLiteral<'a> {
 
 impl fmt::Display for IntegerLiteral<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "IntegerLiteral({:?})", self.value())
+        write!(f, "IntegerLiteral({})", self.value())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug)]
 pub struct StringLiteral<'a> {
     value: Option<BumpaloString<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> StringLiteral<'a> {
-    pub fn new<S: AsRef<str>>(arena: &'a BumpaloArena, value: Option<S>) -> Self {
+    pub fn new<S: AsRef<str>>(arena: &'a BumpaloArena, value: Option<S>, code: Code<'a>) -> Self {
         Self {
             value: value.map(|x| BumpaloString::from_str_in(x.as_ref(), arena)),
+            code,
         }
     }
 
     pub fn value(&self) -> Option<&str> {
         self.value.as_deref()
+    }
+}
+
+impl<'a> Node<'a> for StringLiteral<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for StringLiteral<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "StringLiteral({})",
+            self.value().unwrap_or(&"-".to_string())
+        )
     }
 }
 
@@ -1477,7 +1505,7 @@ impl fmt::Display for GroupedExpression<'_> {
 #[derive(Debug)]
 pub enum ExpressionKind<'a> {
     IntegerLiteral(&'a IntegerLiteral<'a>),
-    StringLiteral(StringLiteral<'a>),
+    StringLiteral(&'a StringLiteral<'a>),
     StructLiteral(&'a StructLiteral<'a>),
     VariableExpression(&'a Identifier<'a>),
     BinaryExpression(&'a BinaryExpression<'a>),
@@ -1647,7 +1675,7 @@ impl fmt::Display for ValueFieldPattern<'_> {
 #[derive(Debug)]
 pub enum PatternKind<'a> {
     IntegerPattern(&'a IntegerLiteral<'a>),
-    StringPattern(StringLiteral<'a>),
+    StringPattern(&'a StringLiteral<'a>),
     VariablePattern(&'a Identifier<'a>),
     ArrayPattern(ArrayPattern<'a>),
     RestPattern(RestPattern<'a>),
@@ -1673,6 +1701,7 @@ impl fmt::Display for NodeKind<'_> {
             NodeKind::Pattern(pattern) => pattern.fmt(f),
             NodeKind::Expression(expr) => expr.fmt(f),
             NodeKind::IntegerLiteral(expr) => expr.fmt(f),
+            NodeKind::StringLiteral(expr) => expr.fmt(f),
             NodeKind::BinaryExpression(expr) => expr.fmt(f),
             NodeKind::StructLiteral(expr) => expr.fmt(f),
             NodeKind::CaseArm(arm) => arm.fmt(f),
@@ -1685,13 +1714,7 @@ impl fmt::Display for ExpressionKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ExpressionKind::IntegerLiteral(expr) => expr.fmt(f),
-            ExpressionKind::StringLiteral(s) => {
-                write!(
-                    f,
-                    "StringLiteral({})",
-                    s.value().unwrap_or(&"-".to_string())
-                )
-            }
+            ExpressionKind::StringLiteral(expr) => expr.fmt(f),
             ExpressionKind::VariableExpression(expr) => write!(f, "VariableExpression({})", expr),
             ExpressionKind::BinaryExpression(expr) => expr.fmt(f),
             ExpressionKind::UnaryExpression(_) => write!(f, "UnaryExpression"),

@@ -691,7 +691,7 @@ impl<'a, 't> Parser<'a, 't> {
         arena.alloc(Pattern::new(kind, code))
     }
 
-    fn _read_string(&mut self, arena: &'a BumpaloArena) -> (StringLiteral<'a>, Code<'a>) {
+    fn _read_string(&mut self, arena: &'a BumpaloArena) -> &'a StringLiteral<'a> {
         let start_token = self.tokenizer.next_token(); // StringStart
         let mut code = Code::with_interpreted(arena, start_token);
         let mut string = String::new();
@@ -735,18 +735,24 @@ impl<'a, 't> Parser<'a, 't> {
 
         let value = if has_error { None } else { Some(string) };
 
-        (StringLiteral::new(arena, value), code)
+        arena.alloc(StringLiteral::new(arena, value, code))
     }
 
     fn read_string(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
-        let (string, code) = self._read_string(arena);
+        let string = self._read_string(arena);
 
-        arena.alloc(Expression::new(ExpressionKind::StringLiteral(string), code))
+        arena.alloc(Expression::new(
+            ExpressionKind::StringLiteral(string),
+            Code::with_node(arena, NodeKind::StringLiteral(string)),
+        ))
     }
 
     fn read_string_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
-        let (string, code) = self._read_string(arena);
-        arena.alloc(Pattern::new(PatternKind::StringPattern(string), code))
+        let string = self._read_string(arena);
+        arena.alloc(Pattern::new(
+            PatternKind::StringPattern(string),
+            Code::with_node(arena, NodeKind::StringLiteral(string)),
+        ))
     }
 
     fn read_paren(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
@@ -1286,7 +1292,7 @@ mod tests {
 
             assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
 
-            let mut tokens = stmt.expression().unwrap().code();
+            let mut tokens = stmt.expression().unwrap().string_literal().unwrap().code();
             assert_eq!(tokens.len(), 4);
 
             let token = next_interpreted_token(&mut tokens);
