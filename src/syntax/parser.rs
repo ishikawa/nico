@@ -670,7 +670,11 @@ impl<'a, 't> Parser<'a, 't> {
                 Code::with_node(arena, NodeKind::StructLiteral(literal)),
             )
         } else {
-            Expression::new(ExpressionKind::VariableExpression(id), code)
+            let expr = arena.alloc(VariableExpression::new(id, code));
+            Expression::new(
+                ExpressionKind::VariableExpression(expr),
+                Code::with_node(arena, NodeKind::VariableExpression(expr)),
+            )
         };
 
         arena.alloc(expr)
@@ -690,9 +694,15 @@ impl<'a, 't> Parser<'a, 't> {
                 NodeKind::ValueFieldPattern,
             );
 
-            PatternKind::StructPattern(StructPattern::new(arena, id, fields))
+            let pattern = arena.alloc(StructPattern::new(arena, id, fields, code));
+
+            code = Code::with_node(arena, NodeKind::StructPattern(pattern));
+            PatternKind::StructPattern(pattern)
         } else {
-            PatternKind::VariablePattern(id)
+            let pattern = arena.alloc(VariablePattern::new(id, code));
+
+            code = Code::with_node(arena, NodeKind::VariablePattern(pattern));
+            PatternKind::VariablePattern(pattern)
         };
 
         arena.alloc(Pattern::new(kind, code))
@@ -838,9 +848,11 @@ impl<'a, 't> Parser<'a, 't> {
             NodeKind::Pattern,
         );
 
+        let pattern = arena.alloc(ArrayPattern::new(arena, elements, code));
+
         arena.alloc(Pattern::new(
-            PatternKind::ArrayPattern(ArrayPattern::new(arena, elements)),
-            code,
+            PatternKind::ArrayPattern(pattern),
+            Code::with_node(arena, NodeKind::ArrayPattern(pattern)),
         ))
     }
 
@@ -848,13 +860,23 @@ impl<'a, 't> Parser<'a, 't> {
         let mut code = Code::with_interpreted(arena, self.tokenizer.next_token()); // "..."
         let name = self.parse_name(arena);
 
-        if let Some(ref node) = name {
-            code.node(NodeKind::Identifier(node));
-        }
+        let variable_pattern = if let Some(node) = name {
+            let variable_pattern: &VariablePattern<'_> = arena.alloc(VariablePattern::new(
+                node,
+                Code::with_node(arena, NodeKind::Identifier(node)),
+            ));
+
+            code.node(NodeKind::VariablePattern(variable_pattern));
+            Some(variable_pattern)
+        } else {
+            None
+        };
+
+        let pattern = arena.alloc(RestPattern::new(variable_pattern, code));
 
         arena.alloc(Pattern::new(
-            PatternKind::RestPattern(RestPattern::new(name)),
-            code,
+            PatternKind::RestPattern(pattern),
+            Code::with_node(arena, NodeKind::RestPattern(pattern)),
         ))
     }
 
@@ -1554,7 +1576,7 @@ mod tests {
             assert!(id.is_some());
 
             let id = id.unwrap();
-            assert_eq!(id.to_string(), "a");
+            assert_eq!(id.name(), "a");
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
@@ -1598,7 +1620,7 @@ mod tests {
             assert!(id.is_some());
 
             let id = id.unwrap();
-            assert_eq!(id.to_string(), "a");
+            assert_eq!(id.name(), "a");
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 0);
@@ -1633,7 +1655,7 @@ mod tests {
             assert!(id.is_some());
 
             let id = id.unwrap();
-            assert_eq!(id.to_string(), "a");
+            assert_eq!(id.name(), "a");
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);

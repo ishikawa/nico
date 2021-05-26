@@ -1,8 +1,8 @@
 //! This module contains implementations of `Visitor` that assigns meta information that can be
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
-    traverse, Block, CaseArm, FunctionDefinition, FunctionParameter, NodeKind, NodePath, Pattern,
-    Program, StructDefinition, VariableDeclaration, Visitor,
+    traverse, Block, CaseArm, FunctionDefinition, FunctionParameter, NodeKind, NodePath,
+    PatternKind, Program, StructDefinition, VariableDeclaration, Visitor,
 };
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
 use crate::{sem::Type, semantic::DefinitionKind};
@@ -67,7 +67,7 @@ impl fmt::Display for Binding<'_> {
             DefinitionKind::StructDefinition(_) => write!(f, "struct `{}`", self.id),
             DefinitionKind::FunctionDefinition(_) => write!(f, "function `{}`", self.id),
             DefinitionKind::FunctionParameter(_) => write!(f, "function parameter `{}`", self.id),
-            DefinitionKind::Pattern(_) => write!(f, "local variable `{}`", self.id),
+            DefinitionKind::VariablePattern(_) => write!(f, "local variable `{}`", self.id),
         }
     }
 }
@@ -165,50 +165,46 @@ impl<'a> Scope<'a> {
                 );
             }
         } else if let Some(pattern) = declaration.pattern() {
-            self.register_pattern(arena, pattern);
+            self.register_pattern(arena, pattern.kind());
         }
     }
 
-    pub fn register_pattern(&self, arena: &'a BumpaloArena, pattern: &'a Pattern<'a>) {
-        match pattern.kind() {
-            super::PatternKind::IntegerPattern(_) => {}
-            super::PatternKind::StringPattern(_) => {}
-            super::PatternKind::VariablePattern(id) => {
+    pub fn register_pattern(&self, arena: &'a BumpaloArena, pattern: &PatternKind<'a>) {
+        match pattern {
+            PatternKind::IntegerPattern(_) => {}
+            PatternKind::StringPattern(_) => {}
+            PatternKind::VariablePattern(variable_pattern) => {
                 self.insert(
                     arena,
-                    Binding::new(arena, id.as_str(), DefinitionKind::Pattern(pattern)),
+                    Binding::new(
+                        arena,
+                        variable_pattern.name(),
+                        DefinitionKind::VariablePattern(variable_pattern),
+                    ),
                 );
             }
-            super::PatternKind::ArrayPattern(pat) => {
+            PatternKind::ArrayPattern(pat) => {
                 for pat in pat.elements() {
-                    self.register_pattern(arena, pat);
+                    self.register_pattern(arena, pat.kind());
                 }
             }
-            super::PatternKind::RestPattern(pat) => {
-                if let Some(id) = pat.id() {
-                    self.insert(
-                        arena,
-                        Binding::new(arena, id.as_str(), DefinitionKind::Pattern(pattern)),
-                    );
+            PatternKind::RestPattern(pat) => {
+                if let Some(variable_pattern) = pat.variable_pattern() {
+                    self.register_pattern(arena, &PatternKind::VariablePattern(variable_pattern));
                 }
             }
-            super::PatternKind::StructPattern(pat) => {
+            PatternKind::StructPattern(pat) => {
                 for field in pat.fields() {
-                    if let Some(value) = field.value() {
-                        self.register_pattern(arena, value);
-                    } else {
-                        // omitted
-                        let pattern = field.omitted_value().unwrap();
-
-                        self.insert(
-                            arena,
-                            Binding::new(
-                                arena,
-                                field.name().as_str(),
-                                DefinitionKind::Pattern(pattern),
-                            ),
-                        );
-                    }
+                    self.register_pattern(arena, &PatternKind::ValueFieldPattern(field));
+                }
+            }
+            PatternKind::ValueFieldPattern(field) => {
+                if let Some(value) = field.value() {
+                    self.register_pattern(arena, value.kind());
+                } else {
+                    // omitted
+                    let pattern = field.omitted_value().unwrap();
+                    self.register_pattern(arena, pattern.kind());
                 }
             }
         }

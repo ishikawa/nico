@@ -74,13 +74,13 @@ pub enum NodeKind<'a> {
     TypeField(&'a TypeField<'a>),
     TypeAnnotation(&'a TypeAnnotation<'a>),
     ValueField(&'a ValueField<'a>),
-    ValueFieldPattern(&'a ValueFieldPattern<'a>),
     Statement(&'a Statement<'a>),
     VariableDeclaration(&'a VariableDeclaration<'a>),
     Expression(&'a Expression<'a>),
     IntegerLiteral(&'a IntegerLiteral<'a>),
     StringLiteral(&'a StringLiteral<'a>),
     StructLiteral(&'a StructLiteral<'a>),
+    VariableExpression(&'a VariableExpression<'a>),
     BinaryExpression(&'a BinaryExpression<'a>),
     UnaryExpression(&'a UnaryExpression<'a>),
     SubscriptExpression(&'a SubscriptExpression<'a>),
@@ -91,6 +91,11 @@ pub enum NodeKind<'a> {
     CaseExpression(&'a CaseExpression<'a>),
     CaseArm(&'a CaseArm<'a>),
     Pattern(&'a Pattern<'a>),
+    VariablePattern(&'a VariablePattern<'a>),
+    ArrayPattern(&'a ArrayPattern<'a>),
+    RestPattern(&'a RestPattern<'a>),
+    StructPattern(&'a StructPattern<'a>),
+    ValueFieldPattern(&'a ValueFieldPattern<'a>),
     GroupedExpression(&'a GroupedExpression<'a>),
 }
 
@@ -223,9 +228,16 @@ impl<'a> NodeKind<'a> {
         None
     }
 
-    pub fn variable_expression(&self) -> Option<&'a Identifier<'a>> {
-        if let NodeKind::Expression(node) = self {
-            return node.variable_expression();
+    pub fn variable_expression(&self) -> Option<&'a VariableExpression<'a>> {
+        if let NodeKind::VariableExpression(node) = self {
+            return Some(node);
+        }
+        None
+    }
+
+    pub fn variable_pattern(&self) -> Option<&'a VariablePattern<'a>> {
+        if let NodeKind::VariablePattern(node) = self {
+            return Some(node);
         }
         None
     }
@@ -293,7 +305,6 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::FunctionDefinition(kind) => kind.code(),
             NodeKind::TypeField(kind) => kind.code(),
             NodeKind::ValueField(kind) => kind.code(),
-            NodeKind::ValueFieldPattern(kind) => kind.code(),
             NodeKind::TypeAnnotation(kind) => kind.code(),
             NodeKind::FunctionParameter(kind) => kind.code(),
             NodeKind::Statement(kind) => kind.code(),
@@ -302,6 +313,7 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::IntegerLiteral(kind) => kind.code(),
             NodeKind::StructLiteral(kind) => kind.code(),
             NodeKind::StringLiteral(kind) => kind.code(),
+            NodeKind::VariableExpression(kind) => kind.code(),
             NodeKind::BinaryExpression(kind) => kind.code(),
             NodeKind::UnaryExpression(kind) => kind.code(),
             NodeKind::SubscriptExpression(kind) => kind.code(),
@@ -312,6 +324,11 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::CaseExpression(kind) => kind.code(),
             NodeKind::CaseArm(kind) => kind.code(),
             NodeKind::Pattern(kind) => kind.code(),
+            NodeKind::VariablePattern(kind) => kind.code(),
+            NodeKind::ArrayPattern(kind) => kind.code(),
+            NodeKind::RestPattern(kind) => kind.code(),
+            NodeKind::StructPattern(kind) => kind.code(),
+            NodeKind::ValueFieldPattern(kind) => kind.code(),
             NodeKind::GroupedExpression(kind) => kind.code(),
         }
     }
@@ -512,6 +529,12 @@ impl<'a> Identifier<'a> {
 
     pub fn as_str(&self) -> &str {
         self.id.as_str()
+    }
+}
+
+impl<'a> AsRef<str> for Identifier<'a> {
+    fn as_ref(&self) -> &str {
+        self.id.as_ref()
     }
 }
 
@@ -885,9 +908,9 @@ impl<'a> Expression<'a> {
         &self.kind
     }
 
-    pub fn variable_expression(&self) -> Option<&'a Identifier<'a>> {
-        if let ExpressionKind::VariableExpression(id) = self.kind {
-            Some(id)
+    pub fn variable_expression(&self) -> Option<&'a VariableExpression<'a>> {
+        if let ExpressionKind::VariableExpression(expr) = self.kind {
+            Some(expr)
         } else {
             None
         }
@@ -1606,6 +1629,38 @@ impl fmt::Display for StringLiteral<'_> {
 }
 
 #[derive(Debug)]
+pub struct VariableExpression<'a> {
+    id: &'a Identifier<'a>,
+    code: Code<'a>,
+}
+
+impl<'a> VariableExpression<'a> {
+    pub fn new(id: &'a Identifier<'a>, code: Code<'a>) -> Self {
+        Self { id, code }
+    }
+
+    pub fn id(&self) -> &'a Identifier<'a> {
+        self.id
+    }
+
+    pub fn name(&self) -> &str {
+        self.id.as_str()
+    }
+}
+
+impl<'a> Node<'a> for VariableExpression<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for VariableExpression<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "VariableExpression({})", self.id())
+    }
+}
+
+#[derive(Debug)]
 pub struct GroupedExpression<'a> {
     expression: Option<&'a Expression<'a>>,
     code: Code<'a>,
@@ -1642,7 +1697,7 @@ pub enum ExpressionKind<'a> {
     IntegerLiteral(&'a IntegerLiteral<'a>),
     StringLiteral(&'a StringLiteral<'a>),
     StructLiteral(&'a StructLiteral<'a>),
-    VariableExpression(&'a Identifier<'a>),
+    VariableExpression(&'a VariableExpression<'a>),
     BinaryExpression(&'a BinaryExpression<'a>),
     UnaryExpression(&'a UnaryExpression<'a>),
     SubscriptExpression(&'a SubscriptExpression<'a>),
@@ -1683,17 +1738,52 @@ impl fmt::Display for Pattern<'_> {
 }
 
 #[derive(Debug)]
+pub struct VariablePattern<'a> {
+    id: &'a Identifier<'a>,
+    code: Code<'a>,
+}
+
+impl<'a> VariablePattern<'a> {
+    pub fn new(id: &'a Identifier<'a>, code: Code<'a>) -> Self {
+        Self { id, code }
+    }
+
+    pub fn id(&self) -> &'a Identifier<'a> {
+        self.id
+    }
+
+    pub fn name(&self) -> &str {
+        self.id.as_str()
+    }
+}
+
+impl<'a> Node<'a> for VariablePattern<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for VariablePattern<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "VariablePattern({})", self.id())
+    }
+}
+
+#[derive(Debug)]
 pub struct ArrayPattern<'a> {
     elements: BumpaloVec<'a, &'a Pattern<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> ArrayPattern<'a> {
     pub fn new<I: IntoIterator<Item = &'a Pattern<'a>>>(
         arena: &'a BumpaloArena,
         elements: I,
+        code: Code<'a>,
     ) -> Self {
         Self {
             elements: BumpaloVec::from_iter_in(elements, arena),
+            code,
         }
     }
 
@@ -1702,18 +1792,46 @@ impl<'a> ArrayPattern<'a> {
     }
 }
 
+impl<'a> Node<'a> for ArrayPattern<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for ArrayPattern<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ArrayPattern({})", self.elements.len())
+    }
+}
+
 #[derive(Debug)]
 pub struct RestPattern<'a> {
-    id: Option<&'a Identifier<'a>>,
+    variable_pattern: Option<&'a VariablePattern<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> RestPattern<'a> {
-    pub fn new(id: Option<&'a Identifier<'a>>) -> Self {
-        Self { id }
+    pub fn new(variable_pattern: Option<&'a VariablePattern<'a>>, code: Code<'a>) -> Self {
+        Self {
+            variable_pattern,
+            code,
+        }
     }
 
-    pub fn id(&self) -> Option<&'a Identifier<'a>> {
-        self.id
+    pub fn variable_pattern(&self) -> Option<&'a VariablePattern<'a>> {
+        self.variable_pattern
+    }
+}
+
+impl<'a> Node<'a> for RestPattern<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for RestPattern<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RestPattern")
     }
 }
 
@@ -1721,6 +1839,7 @@ impl<'a> RestPattern<'a> {
 pub struct StructPattern<'a> {
     name: &'a Identifier<'a>,
     fields: BumpaloVec<'a, &'a ValueFieldPattern<'a>>,
+    code: Code<'a>,
 }
 
 impl<'a> StructPattern<'a> {
@@ -1728,10 +1847,12 @@ impl<'a> StructPattern<'a> {
         arena: &'a BumpaloArena,
         name: &'a Identifier<'a>,
         fields: I,
+        code: Code<'a>,
     ) -> Self {
         Self {
             name,
             fields: BumpaloVec::from_iter_in(fields, arena),
+            code,
         }
     }
 
@@ -1741,6 +1862,18 @@ impl<'a> StructPattern<'a> {
 
     pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a ValueFieldPattern<'a>> + '_ {
         self.fields.iter().copied()
+    }
+}
+
+impl<'a> Node<'a> for StructPattern<'a> {
+    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+        self.code.iter()
+    }
+}
+
+impl fmt::Display for StructPattern<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "StructPattern({})", self.name())
     }
 }
 
@@ -1767,10 +1900,11 @@ impl<'a> ValueFieldPattern<'a> {
                 code,
             }
         } else {
-            let kind = PatternKind::VariablePattern(name);
+            let expr = arena.alloc(VariablePattern::new(name, Code::new(arena)));
+            let kind = PatternKind::VariablePattern(expr);
             let omitted_value = arena.alloc(Pattern::new(
                 kind,
-                Code::with_node(arena, NodeKind::Identifier(name)),
+                Code::with_node(arena, NodeKind::VariablePattern(expr)),
             ));
 
             Self {
@@ -1811,10 +1945,11 @@ impl fmt::Display for ValueFieldPattern<'_> {
 pub enum PatternKind<'a> {
     IntegerPattern(&'a IntegerLiteral<'a>),
     StringPattern(&'a StringLiteral<'a>),
-    VariablePattern(&'a Identifier<'a>),
-    ArrayPattern(ArrayPattern<'a>),
-    RestPattern(RestPattern<'a>),
-    StructPattern(StructPattern<'a>),
+    VariablePattern(&'a VariablePattern<'a>),
+    ArrayPattern(&'a ArrayPattern<'a>),
+    RestPattern(&'a RestPattern<'a>),
+    StructPattern(&'a StructPattern<'a>),
+    ValueFieldPattern(&'a ValueFieldPattern<'a>),
 }
 
 impl fmt::Display for NodeKind<'_> {
@@ -1823,21 +1958,20 @@ impl fmt::Display for NodeKind<'_> {
             NodeKind::Program(program) => program.fmt(f),
             NodeKind::TopLevel(kind) => kind.fmt(f),
             NodeKind::Block(block) => block.fmt(f),
-            NodeKind::Identifier(id) => write!(f, "Identifier({})", id),
+            NodeKind::Identifier(id) => id.fmt(f),
             NodeKind::StructDefinition(definition) => definition.fmt(f),
             NodeKind::FunctionDefinition(definition) => definition.fmt(f),
             NodeKind::TypeField(field) => field.fmt(f),
             NodeKind::TypeAnnotation(ty) => ty.fmt(f),
             NodeKind::ValueField(field) => field.fmt(f),
-            NodeKind::ValueFieldPattern(pattern) => pattern.fmt(f),
             NodeKind::FunctionParameter(param) => param.fmt(f),
             NodeKind::Statement(stmt) => stmt.fmt(f),
             NodeKind::VariableDeclaration(declaration) => declaration.fmt(f),
-            NodeKind::Pattern(pattern) => pattern.fmt(f),
             NodeKind::Expression(expr) => expr.fmt(f),
             NodeKind::IntegerLiteral(expr) => expr.fmt(f),
             NodeKind::StringLiteral(expr) => expr.fmt(f),
             NodeKind::StructLiteral(expr) => expr.fmt(f),
+            NodeKind::VariableExpression(expr) => expr.fmt(f),
             NodeKind::BinaryExpression(expr) => expr.fmt(f),
             NodeKind::UnaryExpression(expr) => expr.fmt(f),
             NodeKind::SubscriptExpression(expr) => expr.fmt(f),
@@ -1847,6 +1981,12 @@ impl fmt::Display for NodeKind<'_> {
             NodeKind::IfExpression(expr) => expr.fmt(f),
             NodeKind::CaseExpression(expr) => expr.fmt(f),
             NodeKind::CaseArm(arm) => arm.fmt(f),
+            NodeKind::Pattern(pattern) => pattern.fmt(f),
+            NodeKind::VariablePattern(pattern) => pattern.fmt(f),
+            NodeKind::ArrayPattern(pattern) => pattern.fmt(f),
+            NodeKind::RestPattern(pattern) => pattern.fmt(f),
+            NodeKind::StructPattern(pattern) => pattern.fmt(f),
+            NodeKind::ValueFieldPattern(pattern) => pattern.fmt(f),
             NodeKind::GroupedExpression(expr) => expr.fmt(f),
         }
     }
@@ -1857,7 +1997,7 @@ impl fmt::Display for ExpressionKind<'_> {
         match self {
             ExpressionKind::IntegerLiteral(expr) => expr.fmt(f),
             ExpressionKind::StringLiteral(expr) => expr.fmt(f),
-            ExpressionKind::VariableExpression(expr) => write!(f, "VariableExpression({})", expr),
+            ExpressionKind::VariableExpression(expr) => expr.fmt(f),
             ExpressionKind::BinaryExpression(expr) => expr.fmt(f),
             ExpressionKind::UnaryExpression(expr) => expr.fmt(f),
             ExpressionKind::SubscriptExpression(expr) => expr.fmt(f),

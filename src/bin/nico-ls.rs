@@ -1,14 +1,12 @@
 use log::{info, warn};
 use lsp_types::*;
 use nico::arena::BumpaloArena;
+use nico::ls::{self, server::ServerCapabilitiesBuilder};
 use nico::sem;
+use nico::syntax::VariableExpression;
 use nico::syntax::{
-    self, EffectiveRange, Identifier, MissingTokenKind, Node, NodePath, ParseError, Parser,
-    StructLiteral, TextToken, Token, TokenKind, Trivia,
-};
-use nico::{
-    ls::{self, server::ServerCapabilitiesBuilder},
-    syntax::Expression,
+    self, EffectiveRange, MissingTokenKind, Node, NodePath, ParseError, Parser, StructLiteral,
+    TextToken, Token, TokenKind, Trivia,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -211,15 +209,14 @@ impl DiagnosticsCollector {
 }
 
 impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
-    fn enter_variable(
+    fn enter_variable_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        id: &'a Identifier<'a>,
+        expr: &'a VariableExpression<'a>,
     ) {
         // Undefined variable
-        if path.scope().get_binding(id.as_str()).is_none() {
-            self.add_diagnostic(expr.range(), format!("Cannot find name '{}'.", id));
+        if path.scope().get_binding(expr.name()).is_none() {
+            self.add_diagnostic(expr.range(), format!("Cannot find name '{}'.", expr.name()));
         }
     }
 
@@ -756,7 +753,7 @@ impl<'a> Connection<'a> {
         if let Some(id) = rename.prepare(&node) {
             return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
                 range: lsp_range(id.range()),
-                placeholder: id.to_string(),
+                placeholder: id.as_str().to_string(),
             }));
         }
 

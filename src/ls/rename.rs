@@ -1,10 +1,12 @@
 //! Rename operation
 use crate::arena::BumpaloArena;
+use crate::syntax::VariableExpression;
+use crate::syntax::VariablePattern;
 use crate::{
     semantic::DefinitionKind,
     syntax::{
-        self, EffectiveRange, Expression, FunctionDefinition, FunctionParameter, Identifier, Node,
-        NodePath, Pattern, Position, Program, StructDefinition, StructLiteral,
+        self, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node, NodePath,
+        Position, Program, StructDefinition, StructLiteral,
     },
 };
 
@@ -96,10 +98,10 @@ impl<'a> syntax::Visitor<'a> for Rename<'a> {
                 ));
             }
             // Renaming pattern
-            else if let Some(pattern) = parent.pattern() {
+            else if let Some(pattern) = parent.variable_pattern() {
                 self.operation = Some(RenameOperation::new(
                     id,
-                    RenameOperationKind::Definition(DefinitionKind::Pattern(pattern)),
+                    RenameOperationKind::Definition(DefinitionKind::VariablePattern(pattern)),
                 ));
             } else {
                 // dummy
@@ -204,25 +206,28 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         }
     }
 
-    fn enter_variable(
+    fn enter_variable_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        _expr: &'a Expression<'a>,
-        id: &'a Identifier<'a>,
+        expr: &'a VariableExpression<'a>,
     ) {
         let scope = path.scope();
-        let binding = match scope.get_binding(id.as_str()) {
+        let binding = match scope.get_binding(expr.name()) {
             None => return,
             Some(binding) => binding,
         };
 
         if binding.kind().ptr_eq(self.definition()) {
-            self.ranges.push(id.range());
+            self.ranges.push(expr.range());
         }
     }
 
-    fn enter_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a Pattern<'a>) {
-        if let DefinitionKind::Pattern(definition) = self.definition {
+    fn enter_variable_pattern(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        pattern: &'a VariablePattern<'a>,
+    ) {
+        if let DefinitionKind::VariablePattern(definition) = self.definition {
             if std::ptr::eq(definition, pattern) {
                 self.ranges.push(pattern.range());
             }

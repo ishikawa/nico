@@ -274,24 +274,8 @@ pub trait Visitor<'a> {
     fn enter_case_arm(&mut self, path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {}
     fn exit_case_arm(&mut self, path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {}
 
-    fn enter_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a Pattern<'a>) {}
-    fn exit_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a Pattern<'a>) {}
-
     fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {}
     fn exit_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {}
-
-    fn enter_value_field_pattern(
-        &mut self,
-        path: &'a NodePath<'a>,
-        pattern: &'a ValueFieldPattern<'a>,
-    ) {
-    }
-    fn exit_value_field_pattern(
-        &mut self,
-        path: &'a NodePath<'a>,
-        pattern: &'a ValueFieldPattern<'a>,
-    ) {
-    }
 
     fn enter_grouped_expression(
         &mut self,
@@ -318,18 +302,16 @@ pub trait Visitor<'a> {
     fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {}
     fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {}
 
-    fn enter_variable(
+    fn enter_variable_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        id: &'a Identifier<'a>,
+        expr: &'a VariableExpression<'a>,
     ) {
     }
-    fn exit_variable(
+    fn exit_variable_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        id: &'a Identifier<'a>,
+        expr: &'a VariableExpression<'a>,
     ) {
     }
 
@@ -398,6 +380,26 @@ pub trait Visitor<'a> {
     fn enter_case_expression(&mut self, path: &'a NodePath<'a>, case_expr: &'a CaseExpression<'a>) {
     }
     fn exit_case_expression(&mut self, path: &'a NodePath<'a>, case_expr: &'a CaseExpression<'a>) {}
+
+    fn enter_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a Pattern<'a>) {}
+    fn exit_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a Pattern<'a>) {}
+
+    fn enter_variable_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a VariablePattern<'a>) {
+    }
+    fn exit_variable_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a VariablePattern<'a>) {}
+
+    fn enter_value_field_pattern(
+        &mut self,
+        path: &'a NodePath<'a>,
+        pattern: &'a ValueFieldPattern<'a>,
+    ) {
+    }
+    fn exit_value_field_pattern(
+        &mut self,
+        path: &'a NodePath<'a>,
+        pattern: &'a ValueFieldPattern<'a>,
+    ) {
+    }
 }
 
 pub fn traverse<'a>(
@@ -466,14 +468,8 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::VariableDeclaration(kind) => {
             visitor.enter_variable_declaration(path, kind);
         }
-        NodeKind::Pattern(kind) => {
-            visitor.enter_pattern(path, kind);
-        }
         NodeKind::ValueField(kind) => {
             visitor.enter_value_field(path, kind);
-        }
-        NodeKind::ValueFieldPattern(kind) => {
-            visitor.enter_value_field_pattern(path, kind);
         }
         // Expression
         NodeKind::IntegerLiteral(value) => {
@@ -481,6 +477,9 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         }
         NodeKind::StringLiteral(value) => {
             visitor.enter_string_literal(path, value);
+        }
+        NodeKind::VariableExpression(kind) => {
+            visitor.enter_variable_expression(path, kind);
         }
         NodeKind::BinaryExpression(kind) => {
             visitor.enter_binary_expression(path, kind);
@@ -517,12 +516,19 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         }
         NodeKind::Expression(expr) => {
             visitor.enter_expression(path, expr);
-
-            if !path.skipped() {
-                if let ExpressionKind::VariableExpression(id) = expr.kind() {
-                    visitor.enter_variable(path, expr, id);
-                }
-            }
+        }
+        // Pattern
+        NodeKind::Pattern(kind) => {
+            visitor.enter_pattern(path, kind);
+        }
+        NodeKind::VariablePattern(kind) => {
+            visitor.enter_variable_pattern(path, kind);
+        }
+        NodeKind::ArrayPattern(_) => { /* todo */ }
+        NodeKind::RestPattern(_) => { /* todo */ }
+        NodeKind::StructPattern(_) => { /* todo */ }
+        NodeKind::ValueFieldPattern(kind) => {
+            visitor.enter_value_field_pattern(path, kind);
         }
     }
 }
@@ -564,14 +570,8 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::VariableDeclaration(kind) => {
             visitor.exit_variable_declaration(path, kind);
         }
-        NodeKind::Pattern(kind) => {
-            visitor.exit_pattern(path, kind);
-        }
         NodeKind::ValueField(kind) => {
             visitor.exit_value_field(path, kind);
-        }
-        NodeKind::ValueFieldPattern(kind) => {
-            visitor.exit_value_field_pattern(path, kind);
         }
         // Expression
         NodeKind::IntegerLiteral(value) => {
@@ -579,6 +579,9 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         }
         NodeKind::StringLiteral(value) => {
             visitor.exit_string_literal(path, value);
+        }
+        NodeKind::VariableExpression(kind) => {
+            visitor.exit_variable_expression(path, kind);
         }
         NodeKind::BinaryExpression(kind) => {
             visitor.exit_binary_expression(path, kind);
@@ -615,12 +618,19 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         }
         NodeKind::Expression(expr) => {
             visitor.exit_expression(path, expr);
-
-            if !path.skipped() {
-                if let ExpressionKind::VariableExpression(id) = expr.kind() {
-                    visitor.exit_variable(path, expr, id);
-                }
-            }
+        }
+        // Pattern
+        NodeKind::Pattern(kind) => {
+            visitor.exit_pattern(path, kind);
+        }
+        NodeKind::VariablePattern(kind) => {
+            visitor.exit_variable_pattern(path, kind);
+        }
+        NodeKind::ArrayPattern(_) => { /* todo */ }
+        NodeKind::RestPattern(_) => { /* todo */ }
+        NodeKind::StructPattern(_) => { /* todo */ }
+        NodeKind::ValueFieldPattern(kind) => {
+            visitor.exit_value_field_pattern(path, kind);
         }
     }
 }
