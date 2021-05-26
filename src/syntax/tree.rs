@@ -208,9 +208,10 @@ impl<'a> NodeKind<'a> {
     }
 
     pub fn struct_literal(&self) -> Option<&'a StructLiteral<'a>> {
-        if let NodeKind::Expression(node) = self {
-            return node.struct_literal();
+        if let NodeKind::StructLiteral(node) = self {
+            return Some(node);
         }
+
         None
     }
 

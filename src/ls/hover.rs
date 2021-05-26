@@ -84,7 +84,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         let scope = parent.scope();
         let parent = parent.node();
 
-        let literal = parent.expression().unwrap().struct_literal().unwrap();
+        let literal = parent.struct_literal().unwrap();
 
         // TODO: Use type info
         if let Some(binding) = scope.get_binding(literal.name().as_str()) {
