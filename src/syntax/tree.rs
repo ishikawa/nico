@@ -979,11 +979,12 @@ impl fmt::Display for Block<'_> {
 #[derive(Debug)]
 pub struct Expression<'a> {
     kind: ExpressionKind<'a>,
-    code: Code<'a>,
+    code: CodeKind<'a>,
 }
 
 impl<'a> Expression<'a> {
-    pub fn new(kind: ExpressionKind<'a>, code: Code<'a>) -> Self {
+    pub fn new(kind: ExpressionKind<'a>) -> Self {
+        let code = CodeKind::Node(kind.node());
         Self { kind, code }
     }
 
@@ -1102,7 +1103,7 @@ impl<'a> Expression<'a> {
 
 impl<'a> Node<'a> for Expression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
-        self.code.iter()
+        CodeKindIter::from(&self.code)
     }
 }
 
@@ -1790,6 +1791,26 @@ pub enum ExpressionKind<'a> {
     IfExpression(&'a IfExpression<'a>),
     CaseExpression(&'a CaseExpression<'a>),
     GroupedExpression(&'a GroupedExpression<'a>),
+}
+
+impl<'a> ExpressionKind<'a> {
+    pub fn node(&self) -> NodeKind<'a> {
+        match self {
+            ExpressionKind::IntegerLiteral(kind) => NodeKind::IntegerLiteral(kind),
+            ExpressionKind::StringLiteral(kind) => NodeKind::StringLiteral(kind),
+            ExpressionKind::StructLiteral(kind) => NodeKind::StructLiteral(kind),
+            ExpressionKind::VariableExpression(kind) => NodeKind::VariableExpression(kind),
+            ExpressionKind::BinaryExpression(kind) => NodeKind::BinaryExpression(kind),
+            ExpressionKind::UnaryExpression(kind) => NodeKind::UnaryExpression(kind),
+            ExpressionKind::SubscriptExpression(kind) => NodeKind::SubscriptExpression(kind),
+            ExpressionKind::CallExpression(kind) => NodeKind::CallExpression(kind),
+            ExpressionKind::ArrayExpression(kind) => NodeKind::ArrayExpression(kind),
+            ExpressionKind::MemberExpression(kind) => NodeKind::MemberExpression(kind),
+            ExpressionKind::IfExpression(kind) => NodeKind::IfExpression(kind),
+            ExpressionKind::CaseExpression(kind) => NodeKind::CaseExpression(kind),
+            ExpressionKind::GroupedExpression(kind) => NodeKind::GroupedExpression(kind),
+        }
+    }
 }
 
 #[derive(Debug)]

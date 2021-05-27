@@ -499,10 +499,7 @@ impl<'a, 't> Parser<'a, 't> {
         // node
         let expr = arena.alloc(UnaryExpression::new(operator, operand, code));
 
-        Some(arena.alloc(Expression::new(
-            ExpressionKind::UnaryExpression(expr),
-            Code::with_node(arena, NodeKind::UnaryExpression(expr)),
-        )))
+        Some(arena.alloc(Expression::new(ExpressionKind::UnaryExpression(expr))))
     }
 
     fn parse_access(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
@@ -536,7 +533,6 @@ impl<'a, 't> Parser<'a, 't> {
 
                     let node =
                         arena.alloc(SubscriptExpression::new(arena, operand, arguments, code));
-                    code = Code::with_node(arena, NodeKind::SubscriptExpression(node));
                     ExpressionKind::SubscriptExpression(node)
                 }
                 TokenKind::Char('(') => {
@@ -550,7 +546,6 @@ impl<'a, 't> Parser<'a, 't> {
                     );
 
                     let node = arena.alloc(CallExpression::new(arena, operand, arguments, code));
-                    code = Code::with_node(arena, NodeKind::CallExpression(node));
                     ExpressionKind::CallExpression(node)
                 }
                 TokenKind::Char('.') => {
@@ -568,13 +563,12 @@ impl<'a, 't> Parser<'a, 't> {
                     }
 
                     let node = arena.alloc(MemberExpression::new(operand, field, code));
-                    code = Code::with_node(arena, NodeKind::MemberExpression(node));
                     ExpressionKind::MemberExpression(node)
                 }
                 _ => break,
             };
 
-            operand = arena.alloc(Expression::new(kind, code));
+            operand = arena.alloc(Expression::new(kind));
         }
 
         Some(operand)
@@ -628,10 +622,7 @@ impl<'a, 't> Parser<'a, 't> {
     fn read_integer(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
         let literal = self._read_integer(arena);
 
-        arena.alloc(Expression::new(
-            ExpressionKind::IntegerLiteral(literal),
-            Code::with_node(arena, NodeKind::IntegerLiteral(literal)),
-        ))
+        arena.alloc(Expression::new(ExpressionKind::IntegerLiteral(literal)))
     }
 
     fn read_integer_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
@@ -658,16 +649,10 @@ impl<'a, 't> Parser<'a, 't> {
             );
 
             let literal = arena.alloc(StructLiteral::new(arena, id, fields, code));
-            Expression::new(
-                ExpressionKind::StructLiteral(literal),
-                Code::with_node(arena, NodeKind::StructLiteral(literal)),
-            )
+            Expression::new(ExpressionKind::StructLiteral(literal))
         } else {
             let expr = arena.alloc(VariableExpression::new(id, code));
-            Expression::new(
-                ExpressionKind::VariableExpression(expr),
-                Code::with_node(arena, NodeKind::VariableExpression(expr)),
-            )
+            Expression::new(ExpressionKind::VariableExpression(expr))
         };
 
         arena.alloc(expr)
@@ -751,10 +736,7 @@ impl<'a, 't> Parser<'a, 't> {
     fn read_string(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
         let string = self._read_string(arena);
 
-        arena.alloc(Expression::new(
-            ExpressionKind::StringLiteral(string),
-            Code::with_node(arena, NodeKind::StringLiteral(string)),
-        ))
+        arena.alloc(Expression::new(ExpressionKind::StringLiteral(string)))
     }
 
     fn read_string_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
@@ -768,10 +750,7 @@ impl<'a, 't> Parser<'a, 't> {
     fn read_paren(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
         let expr = self.read_grouped_expression(arena);
 
-        arena.alloc(Expression::new(
-            ExpressionKind::GroupedExpression(expr),
-            Code::with_node(arena, NodeKind::GroupedExpression(expr)),
-        ))
+        arena.alloc(Expression::new(ExpressionKind::GroupedExpression(expr)))
     }
 
     fn read_grouped_expression(&mut self, arena: &'a BumpaloArena) -> &'a GroupedExpression<'a> {
@@ -824,10 +803,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         let expr = arena.alloc(ArrayExpression::new(arena, elements, code));
 
-        arena.alloc(Expression::new(
-            ExpressionKind::ArrayExpression(expr),
-            Code::with_node(arena, NodeKind::ArrayExpression(expr)),
-        ))
+        arena.alloc(Expression::new(ExpressionKind::ArrayExpression(expr)))
     }
 
     fn read_array_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
@@ -903,10 +879,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         let expr = arena.alloc(IfExpression::new(condition, then_body, else_body, code));
 
-        arena.alloc(Expression::new(
-            ExpressionKind::IfExpression(expr),
-            Code::with_node(arena, NodeKind::IfExpression(expr)),
-        ))
+        arena.alloc(Expression::new(ExpressionKind::IfExpression(expr)))
     }
 
     fn read_case_expression(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
@@ -960,10 +933,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         let expr = arena.alloc(CaseExpression::new(arena, head, arms, else_body, code));
 
-        arena.alloc(Expression::new(
-            ExpressionKind::CaseExpression(expr),
-            Code::with_node(arena, NodeKind::CaseExpression(expr)),
-        ))
+        arena.alloc(Expression::new(ExpressionKind::CaseExpression(expr)))
     }
 
     fn read_case_arm(&mut self, arena: &'a BumpaloArena) -> &'a CaseArm<'a> {
@@ -1257,10 +1227,7 @@ impl<'a, 't> Parser<'a, 't> {
             // node
             let expr = arena.alloc(BinaryExpression::new(operator, lhs, rhs, code));
 
-            lhs = arena.alloc(Expression::new(
-                ExpressionKind::BinaryExpression(expr),
-                Code::with_node(arena, NodeKind::BinaryExpression(expr)),
-            ));
+            lhs = arena.alloc(Expression::new(ExpressionKind::BinaryExpression(expr)));
         }
 
         Some(lhs)
