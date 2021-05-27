@@ -333,9 +333,9 @@ impl<'a, 't> Parser<'a, 't> {
     fn parse_name(&mut self, arena: &'a BumpaloArena) -> Option<&'a Identifier<'a>> {
         if let TokenKind::Identifier(name) = self.tokenizer.peek_kind() {
             let name = name.clone();
-            let code = Code::with_interpreted(arena, self.tokenizer.next_token());
+            let token = self.tokenizer.next_token();
 
-            Some(arena.alloc(Identifier::new(arena, name, code)))
+            Some(arena.alloc(Identifier::new(arena, name, token)))
         } else {
             None
         }
@@ -401,21 +401,14 @@ impl<'a, 't> Parser<'a, 't> {
         self.debug_trace("parse_variable_declaration_stmt");
 
         let decl = self.parse_variable_declaration(arena)?;
-        let code = Code::with_node(arena, NodeKind::VariableDeclaration(decl));
-
-        Some(arena.alloc(Statement::new(
-            StatementKind::VariableDeclaration(decl),
-            code,
-        )))
+        Some(arena.alloc(Statement::new(StatementKind::VariableDeclaration(decl))))
     }
 
     fn parse_stmt_expr(&mut self, arena: &'a BumpaloArena) -> Option<&'a Statement<'a>> {
         self.debug_trace("parse_stmt_expr");
 
         let expr = self.parse_expr(arena)?;
-        let code = Code::with_node(arena, NodeKind::Expression(expr));
-
-        Some(arena.alloc(Statement::new(StatementKind::Expression(expr), code)))
+        Some(arena.alloc(Statement::new(StatementKind::Expression(expr))))
     }
 
     fn parse_expr(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
@@ -504,10 +497,9 @@ impl<'a, 't> Parser<'a, 't> {
         }
 
         // node
-        let expr = UnaryExpression::new(operator, operand);
-        let kind = ExpressionKind::UnaryExpression(expr);
+        let expr = arena.alloc(UnaryExpression::new(operator, operand, code));
 
-        Some(arena.alloc(Expression::new(kind, code)))
+        Some(arena.alloc(Expression::new(ExpressionKind::UnaryExpression(expr))))
     }
 
     fn parse_access(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
@@ -539,9 +531,9 @@ impl<'a, 't> Parser<'a, 't> {
                         NodeKind::Expression,
                     );
 
-                    ExpressionKind::SubscriptExpression(SubscriptExpression::new(
-                        arena, operand, arguments,
-                    ))
+                    let node =
+                        arena.alloc(SubscriptExpression::new(arena, operand, arguments, code));
+                    ExpressionKind::SubscriptExpression(node)
                 }
                 TokenKind::Char('(') => {
                     let arguments = self._parse_elements(
@@ -553,7 +545,8 @@ impl<'a, 't> Parser<'a, 't> {
                         NodeKind::Expression,
                     );
 
-                    ExpressionKind::CallExpression(CallExpression::new(arena, operand, arguments))
+                    let node = arena.alloc(CallExpression::new(arena, operand, arguments, code));
+                    ExpressionKind::CallExpression(node)
                 }
                 TokenKind::Char('.') => {
                     code.interpret(self.tokenizer.next_token());
@@ -569,12 +562,13 @@ impl<'a, 't> Parser<'a, 't> {
                         );
                     }
 
-                    ExpressionKind::MemberExpression(MemberExpression::new(operand, field))
+                    let node = arena.alloc(MemberExpression::new(operand, field, code));
+                    ExpressionKind::MemberExpression(node)
                 }
                 _ => break,
             };
 
-            operand = arena.alloc(Expression::new(kind, code));
+            operand = arena.alloc(Expression::new(kind));
         }
 
         Some(operand)
@@ -614,38 +608,33 @@ impl<'a, 't> Parser<'a, 't> {
         Some(pattern)
     }
 
-    fn _read_integer(&mut self, arena: &'a BumpaloArena) -> (IntegerLiteral, Code<'a>) {
+    fn _read_integer(&mut self, arena: &'a BumpaloArena) -> &'a IntegerLiteral<'a> {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
-            let code = Code::with_interpreted(arena, token);
-
-            (IntegerLiteral::new(i), code)
+            arena.alloc(IntegerLiteral::new(i, token))
         } else {
             unreachable!()
         }
     }
 
     fn read_integer(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
-        let (literal, code) = self._read_integer(arena);
+        let literal = self._read_integer(arena);
 
-        arena.alloc(Expression::new(
-            ExpressionKind::IntegerLiteral(literal),
-            code,
-        ))
+        arena.alloc(Expression::new(ExpressionKind::IntegerLiteral(literal)))
     }
 
     fn read_integer_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
-        let (literal, code) = self._read_integer(arena);
+        let literal = self._read_integer(arena);
 
-        arena.alloc(Pattern::new(PatternKind::IntegerPattern(literal), code))
+        arena.alloc(Pattern::new(PatternKind::IntegerPattern(literal)))
     }
 
     fn read_identifier(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
         let id = self.parse_name(arena).unwrap();
-        let mut code = Code::with_node(arena, NodeKind::Identifier(id));
 
-        let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
+        let expr = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
+            let mut code = Code::with_node(arena, NodeKind::Identifier(id));
             let fields = self._parse_elements(
                 arena,
                 '{',
@@ -655,19 +644,21 @@ impl<'a, 't> Parser<'a, 't> {
                 NodeKind::ValueField,
             );
 
-            ExpressionKind::StructLiteral(StructLiteral::new(arena, id, fields))
+            let literal = arena.alloc(StructLiteral::new(arena, id, fields, code));
+            Expression::new(ExpressionKind::StructLiteral(literal))
         } else {
-            ExpressionKind::VariableExpression(id)
+            let expr = arena.alloc(VariableExpression::new(id));
+            Expression::new(ExpressionKind::VariableExpression(expr))
         };
 
-        arena.alloc(Expression::new(kind, code))
+        arena.alloc(expr)
     }
 
     fn read_identifier_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
         let id = self.parse_name(arena).unwrap();
-        let mut code = Code::with_node(arena, NodeKind::Identifier(id));
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
+            let mut code = Code::with_node(arena, NodeKind::Identifier(id));
             let fields = self._parse_elements(
                 arena,
                 '{',
@@ -677,15 +668,17 @@ impl<'a, 't> Parser<'a, 't> {
                 NodeKind::ValueFieldPattern,
             );
 
-            PatternKind::StructPattern(StructPattern::new(arena, id, fields))
+            let pattern = arena.alloc(StructPattern::new(arena, id, fields, code));
+            PatternKind::StructPattern(pattern)
         } else {
-            PatternKind::VariablePattern(id)
+            let pattern = arena.alloc(VariablePattern::new(id));
+            PatternKind::VariablePattern(pattern)
         };
 
-        arena.alloc(Pattern::new(kind, code))
+        arena.alloc(Pattern::new(kind))
     }
 
-    fn _read_string(&mut self, arena: &'a BumpaloArena) -> (StringLiteral<'a>, Code<'a>) {
+    fn _read_string(&mut self, arena: &'a BumpaloArena) -> &'a StringLiteral<'a> {
         let start_token = self.tokenizer.next_token(); // StringStart
         let mut code = Code::with_interpreted(arena, start_token);
         let mut string = String::new();
@@ -729,27 +722,24 @@ impl<'a, 't> Parser<'a, 't> {
 
         let value = if has_error { None } else { Some(string) };
 
-        (StringLiteral::new(arena, value), code)
+        arena.alloc(StringLiteral::new(arena, value, code))
     }
 
     fn read_string(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
-        let (string, code) = self._read_string(arena);
+        let string = self._read_string(arena);
 
-        arena.alloc(Expression::new(ExpressionKind::StringLiteral(string), code))
+        arena.alloc(Expression::new(ExpressionKind::StringLiteral(string)))
     }
 
     fn read_string_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
-        let (string, code) = self._read_string(arena);
-        arena.alloc(Pattern::new(PatternKind::StringPattern(string), code))
+        let string = self._read_string(arena);
+        arena.alloc(Pattern::new(PatternKind::StringPattern(string)))
     }
 
     fn read_paren(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
         let expr = self.read_grouped_expression(arena);
 
-        arena.alloc(Expression::new(
-            ExpressionKind::GroupedExpression(expr),
-            Code::with_node(arena, NodeKind::GroupedExpression(expr)),
-        ))
+        arena.alloc(Expression::new(ExpressionKind::GroupedExpression(expr)))
     }
 
     fn read_grouped_expression(&mut self, arena: &'a BumpaloArena) -> &'a GroupedExpression<'a> {
@@ -800,9 +790,9 @@ impl<'a, 't> Parser<'a, 't> {
             NodeKind::Expression,
         );
 
-        let expr = ArrayExpression::new(arena, elements);
+        let expr = arena.alloc(ArrayExpression::new(arena, elements, code));
 
-        arena.alloc(Expression::new(ExpressionKind::ArrayExpression(expr), code))
+        arena.alloc(Expression::new(ExpressionKind::ArrayExpression(expr)))
     }
 
     fn read_array_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
@@ -816,24 +806,27 @@ impl<'a, 't> Parser<'a, 't> {
             NodeKind::Pattern,
         );
 
-        arena.alloc(Pattern::new(
-            PatternKind::ArrayPattern(ArrayPattern::new(arena, elements)),
-            code,
-        ))
+        let pattern = arena.alloc(ArrayPattern::new(arena, elements, code));
+
+        arena.alloc(Pattern::new(PatternKind::ArrayPattern(pattern)))
     }
 
     fn read_rest_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
         let mut code = Code::with_interpreted(arena, self.tokenizer.next_token()); // "..."
         let name = self.parse_name(arena);
 
-        if let Some(ref node) = name {
-            code.node(NodeKind::Identifier(node));
-        }
+        let variable_pattern = if let Some(node) = name {
+            let variable_pattern: &VariablePattern<'_> = arena.alloc(VariablePattern::new(node));
 
-        arena.alloc(Pattern::new(
-            PatternKind::RestPattern(RestPattern::new(name)),
-            code,
-        ))
+            code.node(NodeKind::VariablePattern(variable_pattern));
+            Some(variable_pattern)
+        } else {
+            None
+        };
+
+        let pattern = arena.alloc(RestPattern::new(variable_pattern, code));
+
+        arena.alloc(Pattern::new(PatternKind::RestPattern(pattern)))
     }
 
     fn read_if_expression(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
@@ -864,9 +857,9 @@ impl<'a, 't> Parser<'a, 't> {
             None
         };
 
-        let expr = IfExpression::new(condition, then_body, else_body);
+        let expr = arena.alloc(IfExpression::new(condition, then_body, else_body, code));
 
-        arena.alloc(Expression::new(ExpressionKind::IfExpression(expr), code))
+        arena.alloc(Expression::new(ExpressionKind::IfExpression(expr)))
     }
 
     fn read_case_expression(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
@@ -918,9 +911,9 @@ impl<'a, 't> Parser<'a, 't> {
             }
         }
 
-        let expr = CaseExpression::new(arena, head, arms, else_body);
+        let expr = arena.alloc(CaseExpression::new(arena, head, arms, else_body, code));
 
-        arena.alloc(Expression::new(ExpressionKind::CaseExpression(expr), code))
+        arena.alloc(Expression::new(ExpressionKind::CaseExpression(expr)))
     }
 
     fn read_case_arm(&mut self, arena: &'a BumpaloArena) -> &'a CaseArm<'a> {
@@ -1212,12 +1205,9 @@ impl<'a, 't> Parser<'a, 't> {
             }
 
             // node
-            let expr = BinaryExpression::new(operator, lhs, rhs);
+            let expr = arena.alloc(BinaryExpression::new(operator, lhs, rhs, code));
 
-            lhs = arena.alloc(Expression::new(
-                ExpressionKind::BinaryExpression(expr),
-                code,
-            ));
+            lhs = arena.alloc(Expression::new(ExpressionKind::BinaryExpression(expr)));
         }
 
         Some(lhs)
@@ -1245,8 +1235,6 @@ impl<'a, 't> Parser<'a, 't> {
 
 #[cfg(test)]
 mod tests {
-    use std::slice;
-
     use super::*;
     use crate::arena::BumpaloArena;
     use crate::syntax::{EffectiveRange, ExpressionKind, SyntaxToken, Token};
@@ -1260,11 +1248,11 @@ mod tests {
         assert_matches!(
             stmt.expression().unwrap().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(42));
+                assert_eq!(n.value(), 42);
             }
         );
 
-        let mut code = stmt.expression().unwrap().code();
+        let mut code = stmt.expression().unwrap().integer_literal().unwrap().code();
         assert_eq!(code.len(), 1);
 
         let token = next_interpreted_token(&mut code);
@@ -1280,7 +1268,7 @@ mod tests {
 
             assert_matches!(expr.kind(), ExpressionKind::StringLiteral(..));
 
-            let mut tokens = stmt.expression().unwrap().code();
+            let mut tokens = stmt.expression().unwrap().string_literal().unwrap().code();
             assert_eq!(tokens.len(), 4);
 
             let token = next_interpreted_token(&mut tokens);
@@ -1339,17 +1327,22 @@ mod tests {
         assert_matches!(
             expr.lhs().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(1));
+                assert_eq!(n.value(), 1);
             }
         );
         assert_matches!(
             expr.rhs().unwrap().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(2));
+                assert_eq!(n.value(), 2);
             }
         );
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .binary_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 3);
 
         let node = next_node(&mut tokens);
@@ -1372,12 +1365,17 @@ mod tests {
         assert_matches!(
             expr.lhs().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(1));
+                assert_eq!(n.value(), 1);
             }
         );
         assert!(expr.rhs().is_none());
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .binary_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 3);
 
         let node = next_node(&mut tokens);
@@ -1401,17 +1399,23 @@ mod tests {
         assert_matches!(
             expr.lhs().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(1));
+                assert_eq!(n.value(), 1);
             }
         );
         assert_matches!(
             expr.rhs().unwrap().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(2));
+                assert_eq!(n.value(), 2);
             }
         );
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .binary_expression()
+            .unwrap()
+            .code();
+
         assert_eq!(tokens.len(), 5);
 
         let node = next_node(&mut tokens);
@@ -1442,11 +1446,16 @@ mod tests {
         assert_matches!(
             expr.operand().unwrap().kind(),
             ExpressionKind::IntegerLiteral(n) => {
-                assert_eq!(*n, IntegerLiteral::new(1));
+                assert_eq!(n.value(), 1);
             }
         );
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .unary_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1473,13 +1482,18 @@ mod tests {
                 assert_matches!(
                     operand.operand().unwrap().kind(),
                     ExpressionKind::IntegerLiteral(n) => {
-                        assert_eq!(*n, IntegerLiteral::new(1));
+                        assert_eq!(n.value(), 1);
                     }
                 );
             });
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .unary_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1500,19 +1514,24 @@ mod tests {
             assert!(id.is_some());
 
             let id = id.unwrap();
-            assert_eq!(id.to_string(), "a");
+            assert_eq!(id.name(), "a");
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
             assert_matches!(
                 arguments[0].kind(),
                 ExpressionKind::IntegerLiteral(n) => {
-                    assert_eq!(*n, IntegerLiteral::new(0));
+                    assert_eq!(n.value(), 0);
                 }
             );
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .subscript_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 4);
 
         let node = next_node(&mut tokens);
@@ -1539,13 +1558,18 @@ mod tests {
             assert!(id.is_some());
 
             let id = id.unwrap();
-            assert_eq!(id.to_string(), "a");
+            assert_eq!(id.name(), "a");
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 0);
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .subscript_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 3);
 
         let node = next_node(&mut tokens);
@@ -1569,19 +1593,25 @@ mod tests {
             assert!(id.is_some());
 
             let id = id.unwrap();
-            assert_eq!(id.to_string(), "a");
+            assert_eq!(id.name(), "a");
 
             let arguments = expr.arguments().collect::<Vec<_>>();
             assert_eq!(arguments.len(), 1);
             assert_matches!(
                 arguments[0].kind(),
                 ExpressionKind::IntegerLiteral(n) => {
-                    assert_eq!(*n, IntegerLiteral::new(1));
+                    assert_eq!(n.value(), 1);
                 }
             );
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .subscript_expression()
+            .unwrap()
+            .code();
+
         assert_eq!(tokens.len(), 4);
 
         tokens.next();
@@ -1607,7 +1637,12 @@ mod tests {
                 assert_matches!(arguments[0].kind(), ExpressionKind::StringLiteral(..));
             });
 
-            let mut tokens = stmt.expression().unwrap().code();
+            let mut tokens = stmt
+                .expression()
+                .unwrap()
+                .subscript_expression()
+                .unwrap()
+                .code();
             assert_eq!(tokens.len(), 4);
 
             tokens.next();
@@ -1632,7 +1667,12 @@ mod tests {
             assert_eq!(elements.len(), 0);
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .array_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 2);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1656,12 +1696,17 @@ mod tests {
             assert_matches!(
                 elements[0].kind(),
                 ExpressionKind::IntegerLiteral(n) => {
-                    assert_eq!(*n, IntegerLiteral::new(1));
+                    assert_eq!(n.value(), 1);
                 }
             );
         });
 
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt
+            .expression()
+            .unwrap()
+            .array_expression()
+            .unwrap()
+            .code();
         assert_eq!(tokens.len(), 4);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1729,7 +1774,7 @@ mod tests {
         assert!(stmt.expression().unwrap().if_expression().is_some());
 
         // tokens
-        let mut tokens = stmt.expression().unwrap().code();
+        let mut tokens = stmt.expression().unwrap().if_expression().unwrap().code();
         assert_eq!(tokens.len(), 4);
 
         let token = next_interpreted_token(&mut tokens);
@@ -1830,22 +1875,20 @@ mod tests {
         module.body().next().unwrap().statement().unwrap()
     }
 
-    fn next_node<'a, 'b>(tokens: &'a mut slice::Iter<'_, CodeKind<'b>>) -> &'a NodeKind<'b> {
+    fn next_node<'a, 'b>(tokens: &'a mut CodeKindIter<'_, 'b>) -> &'a NodeKind<'b> {
         unwrap_node(tokens.next().unwrap())
     }
 
-    fn next_interpreted_token<'a>(tokens: &'a mut slice::Iter<'_, CodeKind<'_>>) -> &'a Token {
+    fn next_interpreted_token<'a>(tokens: &'a mut CodeKindIter<'_, '_>) -> &'a Token {
         unwrap_interpreted_token(tokens.next().unwrap())
     }
 
-    fn next_missing_token(
-        tokens: &mut slice::Iter<'_, CodeKind<'_>>,
-    ) -> (EffectiveRange, MissingTokenKind) {
+    fn next_missing_token(tokens: &mut CodeKindIter<'_, '_>) -> (EffectiveRange, MissingTokenKind) {
         unwrap_missing_token(tokens.next().unwrap())
     }
 
     fn next_skipped_token<'a>(
-        tokens: &'a mut slice::Iter<'_, CodeKind<'_>>,
+        tokens: &'a mut CodeKindIter<'_, '_>,
     ) -> (&'a Token, MissingTokenKind) {
         unwrap_skipped_token(tokens.next().unwrap())
     }

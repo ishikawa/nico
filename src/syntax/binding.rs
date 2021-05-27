@@ -1,15 +1,11 @@
 //! This module contains implementations of `Visitor` that assigns meta information that can be
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
-    traverse, Block, CaseArm, Expression, FunctionDefinition, FunctionParameter, IntegerLiteral,
-    NodeKind, NodePath, Pattern, Program, StringLiteral, StructDefinition, VariableDeclaration,
-    Visitor,
+    traverse, Block, CaseArm, FunctionDefinition, FunctionParameter, NodeKind, NodePath,
+    PatternKind, Program, StructDefinition, VariableDeclaration, Visitor,
 };
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
-use crate::{
-    sem::{self, Type},
-    semantic::DefinitionKind,
-};
+use crate::{sem::Type, semantic::DefinitionKind};
 use crate::{semantic::Builtin, util::wrap};
 use std::{
     cell::{Cell, RefCell},
@@ -71,7 +67,7 @@ impl fmt::Display for Binding<'_> {
             DefinitionKind::StructDefinition(_) => write!(f, "struct `{}`", self.id),
             DefinitionKind::FunctionDefinition(_) => write!(f, "function `{}`", self.id),
             DefinitionKind::FunctionParameter(_) => write!(f, "function parameter `{}`", self.id),
-            DefinitionKind::Pattern(_) => write!(f, "local variable `{}`", self.id),
+            DefinitionKind::VariablePattern(_) => write!(f, "local variable `{}`", self.id),
         }
     }
 }
@@ -169,50 +165,46 @@ impl<'a> Scope<'a> {
                 );
             }
         } else if let Some(pattern) = declaration.pattern() {
-            self.register_pattern(arena, pattern);
+            self.register_pattern(arena, pattern.kind());
         }
     }
 
-    pub fn register_pattern(&self, arena: &'a BumpaloArena, pattern: &'a Pattern<'a>) {
-        match pattern.kind() {
-            super::PatternKind::IntegerPattern(_) => {}
-            super::PatternKind::StringPattern(_) => {}
-            super::PatternKind::VariablePattern(id) => {
+    pub fn register_pattern(&self, arena: &'a BumpaloArena, pattern: &PatternKind<'a>) {
+        match pattern {
+            PatternKind::IntegerPattern(_) => {}
+            PatternKind::StringPattern(_) => {}
+            PatternKind::VariablePattern(variable_pattern) => {
                 self.insert(
                     arena,
-                    Binding::new(arena, id.as_str(), DefinitionKind::Pattern(pattern)),
+                    Binding::new(
+                        arena,
+                        variable_pattern.name(),
+                        DefinitionKind::VariablePattern(variable_pattern),
+                    ),
                 );
             }
-            super::PatternKind::ArrayPattern(pat) => {
+            PatternKind::ArrayPattern(pat) => {
                 for pat in pat.elements() {
-                    self.register_pattern(arena, pat);
+                    self.register_pattern(arena, pat.kind());
                 }
             }
-            super::PatternKind::RestPattern(pat) => {
-                if let Some(id) = pat.id() {
-                    self.insert(
-                        arena,
-                        Binding::new(arena, id.as_str(), DefinitionKind::Pattern(pattern)),
-                    );
+            PatternKind::RestPattern(pat) => {
+                if let Some(variable_pattern) = pat.variable_pattern() {
+                    self.register_pattern(arena, &PatternKind::VariablePattern(variable_pattern));
                 }
             }
-            super::PatternKind::StructPattern(pat) => {
+            PatternKind::StructPattern(pat) => {
                 for field in pat.fields() {
-                    if let Some(value) = field.value() {
-                        self.register_pattern(arena, value);
-                    } else {
-                        // omitted
-                        let pattern = field.omitted_value().unwrap();
-
-                        self.insert(
-                            arena,
-                            Binding::new(
-                                arena,
-                                field.name().as_str(),
-                                DefinitionKind::Pattern(pattern),
-                            ),
-                        );
-                    }
+                    self.register_pattern(arena, &PatternKind::ValueFieldPattern(field));
+                }
+            }
+            PatternKind::ValueFieldPattern(field) => {
+                if let Some(value) = field.value() {
+                    self.register_pattern(arena, value.kind());
+                } else {
+                    // omitted
+                    let pattern = field.omitted_value().unwrap();
+                    self.register_pattern(arena, pattern.kind());
                 }
             }
         }
@@ -371,38 +363,6 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
     }
 }
 
-/// Assign types for primitives and declarations
-#[derive(Debug, Default)]
-struct TypeBinder {}
-
-impl TypeBinder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl<'a> Visitor<'a> for TypeBinder {
-    fn enter_integer_literal(
-        &mut self,
-        _path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        _literal: &'a IntegerLiteral,
-    ) {
-        let ty = expr.r#type();
-        ty.replace(sem::Type::Int32);
-    }
-
-    fn enter_string_literal(
-        &mut self,
-        _path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        _literal: &'a StringLiteral<'a>,
-    ) {
-        let ty = expr.r#type();
-        ty.replace(sem::Type::String);
-    }
-}
-
 pub fn bind<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
     let mut binder = TopLevelDeclarationBinder::new(arena);
     traverse(arena, &mut binder, node);
@@ -411,9 +371,6 @@ pub fn bind<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
     traverse(arena, &mut binder, node);
 
     let mut binder = VariableBinder::new(arena);
-    traverse(arena, &mut binder, node);
-
-    let mut binder = TypeBinder::new();
     traverse(arena, &mut binder, node);
 }
 

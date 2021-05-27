@@ -274,24 +274,8 @@ pub trait Visitor<'a> {
     fn enter_case_arm(&mut self, path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {}
     fn exit_case_arm(&mut self, path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {}
 
-    fn enter_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a Pattern<'a>) {}
-    fn exit_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a Pattern<'a>) {}
-
     fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {}
     fn exit_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {}
-
-    fn enter_value_field_pattern(
-        &mut self,
-        path: &'a NodePath<'a>,
-        pattern: &'a ValueFieldPattern<'a>,
-    ) {
-    }
-    fn exit_value_field_pattern(
-        &mut self,
-        path: &'a NodePath<'a>,
-        pattern: &'a ValueFieldPattern<'a>,
-    ) {
-    }
 
     fn enter_grouped_expression(
         &mut self,
@@ -309,92 +293,40 @@ pub trait Visitor<'a> {
     fn enter_expression(&mut self, path: &'a NodePath<'a>, expression: &'a Expression<'a>) {}
     fn exit_expression(&mut self, path: &'a NodePath<'a>, expression: &'a Expression<'a>) {}
 
-    fn enter_integer_literal(
+    fn enter_integer_literal(&mut self, path: &'a NodePath<'a>, literal: &'a IntegerLiteral<'a>) {}
+    fn exit_integer_literal(&mut self, path: &'a NodePath<'a>, literal: &'a IntegerLiteral<'a>) {}
+
+    fn enter_string_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StringLiteral<'a>) {}
+    fn exit_string_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StringLiteral<'a>) {}
+
+    fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {}
+    fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {}
+
+    fn enter_variable_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        literal: &'a IntegerLiteral,
+        expr: &'a VariableExpression<'a>,
     ) {
     }
-    fn exit_integer_literal(
+    fn exit_variable_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        literal: &'a IntegerLiteral,
+        expr: &'a VariableExpression<'a>,
     ) {
     }
 
-    fn enter_string_literal(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        literal: &'a StringLiteral<'a>,
-    ) {
-    }
-    fn exit_string_literal(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        literal: &'a StringLiteral<'a>,
-    ) {
-    }
-
-    fn enter_struct_literal(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        value: &'a StructLiteral<'a>,
-    ) {
-    }
-    fn exit_struct_literal(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        value: &'a StructLiteral<'a>,
-    ) {
-    }
-
-    fn enter_variable(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        id: &'a Identifier<'a>,
-    ) {
-    }
-    fn exit_variable(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        id: &'a Identifier<'a>,
-    ) {
-    }
-
-    fn enter_binary_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        bin_expr: &'a BinaryExpression<'a>,
-    ) {
-    }
-    fn exit_binary_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        bin_expr: &'a BinaryExpression<'a>,
-    ) {
-    }
+    fn enter_binary_expression(&mut self, path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {}
+    fn exit_binary_expression(&mut self, path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {}
 
     fn enter_unary_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         unary_expr: &'a UnaryExpression<'a>,
     ) {
     }
     fn exit_unary_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         unary_expr: &'a UnaryExpression<'a>,
     ) {
     }
@@ -402,44 +334,29 @@ pub trait Visitor<'a> {
     fn enter_subscript_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         subscript_expr: &'a SubscriptExpression<'a>,
     ) {
     }
     fn exit_subscript_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         subscript_expr: &'a SubscriptExpression<'a>,
     ) {
     }
 
-    fn enter_call_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        call_expr: &'a CallExpression<'a>,
-    ) {
+    fn enter_call_expression(&mut self, path: &'a NodePath<'a>, call_expr: &'a CallExpression<'a>) {
     }
-    fn exit_call_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        call_expr: &'a CallExpression<'a>,
-    ) {
-    }
+    fn exit_call_expression(&mut self, path: &'a NodePath<'a>, call_expr: &'a CallExpression<'a>) {}
 
-    fn enter_access_expression(
+    fn enter_member_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         member_expr: &'a MemberExpression<'a>,
     ) {
     }
-    fn exit_access_expression(
+    fn exit_member_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         member_expr: &'a MemberExpression<'a>,
     ) {
     }
@@ -447,45 +364,40 @@ pub trait Visitor<'a> {
     fn enter_array_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         array_expr: &'a ArrayExpression<'a>,
     ) {
     }
     fn exit_array_expression(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
         array_expr: &'a ArrayExpression<'a>,
     ) {
     }
 
-    fn enter_if_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        if_expr: &'a IfExpression<'a>,
-    ) {
-    }
-    fn exit_if_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        if_expr: &'a IfExpression<'a>,
-    ) {
-    }
+    fn enter_if_expression(&mut self, path: &'a NodePath<'a>, if_expr: &'a IfExpression<'a>) {}
+    fn exit_if_expression(&mut self, path: &'a NodePath<'a>, if_expr: &'a IfExpression<'a>) {}
 
-    fn enter_case_expression(
+    fn enter_case_expression(&mut self, path: &'a NodePath<'a>, case_expr: &'a CaseExpression<'a>) {
+    }
+    fn exit_case_expression(&mut self, path: &'a NodePath<'a>, case_expr: &'a CaseExpression<'a>) {}
+
+    fn enter_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a Pattern<'a>) {}
+    fn exit_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a Pattern<'a>) {}
+
+    fn enter_variable_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a VariablePattern<'a>) {
+    }
+    fn exit_variable_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a VariablePattern<'a>) {}
+
+    fn enter_value_field_pattern(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        case_expr: &'a CaseExpression<'a>,
+        pattern: &'a ValueFieldPattern<'a>,
     ) {
     }
-    fn exit_case_expression(
+    fn exit_value_field_pattern(
         &mut self,
         path: &'a NodePath<'a>,
-        expr: &'a Expression<'a>,
-        case_expr: &'a CaseExpression<'a>,
+        pattern: &'a ValueFieldPattern<'a>,
     ) {
     }
 }
@@ -556,67 +468,67 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::VariableDeclaration(kind) => {
             visitor.enter_variable_declaration(path, kind);
         }
-        NodeKind::CaseArm(kind) => {
-            visitor.enter_case_arm(path, kind);
-        }
-        NodeKind::Pattern(kind) => {
-            visitor.enter_pattern(path, kind);
-        }
         NodeKind::ValueField(kind) => {
             visitor.enter_value_field(path, kind);
         }
-        NodeKind::ValueFieldPattern(kind) => {
-            visitor.enter_value_field_pattern(path, kind);
+        // Expression
+        NodeKind::IntegerLiteral(value) => {
+            visitor.enter_integer_literal(path, value);
+        }
+        NodeKind::StringLiteral(value) => {
+            visitor.enter_string_literal(path, value);
+        }
+        NodeKind::VariableExpression(kind) => {
+            visitor.enter_variable_expression(path, kind);
+        }
+        NodeKind::BinaryExpression(kind) => {
+            visitor.enter_binary_expression(path, kind);
+        }
+        NodeKind::UnaryExpression(kind) => {
+            visitor.enter_unary_expression(path, kind);
+        }
+        NodeKind::SubscriptExpression(kind) => {
+            visitor.enter_subscript_expression(path, kind);
+        }
+        NodeKind::CallExpression(kind) => {
+            visitor.enter_call_expression(path, kind);
+        }
+        NodeKind::MemberExpression(kind) => {
+            visitor.enter_member_expression(path, kind);
+        }
+        NodeKind::ArrayExpression(kind) => {
+            visitor.enter_array_expression(path, kind);
+        }
+        NodeKind::StructLiteral(kind) => {
+            visitor.enter_struct_literal(path, kind);
+        }
+        NodeKind::IfExpression(kind) => {
+            visitor.enter_if_expression(path, kind);
+        }
+        NodeKind::CaseExpression(kind) => {
+            visitor.enter_case_expression(path, kind);
+        }
+        NodeKind::CaseArm(kind) => {
+            visitor.enter_case_arm(path, kind);
         }
         NodeKind::GroupedExpression(kind) => {
             visitor.enter_grouped_expression(path, kind);
         }
         NodeKind::Expression(expr) => {
             visitor.enter_expression(path, expr);
-
-            if !path.skipped() {
-                match expr.kind() {
-                    ExpressionKind::IntegerLiteral(value) => {
-                        visitor.enter_integer_literal(path, expr, value);
-                    }
-                    ExpressionKind::StringLiteral(value) => {
-                        visitor.enter_string_literal(path, expr, value);
-                    }
-                    ExpressionKind::StructLiteral(kind) => {
-                        visitor.enter_struct_literal(path, expr, kind);
-                    }
-                    ExpressionKind::VariableExpression(id) => {
-                        visitor.enter_variable(path, expr, id);
-                    }
-                    ExpressionKind::BinaryExpression(kind) => {
-                        visitor.enter_binary_expression(path, expr, kind);
-                    }
-                    ExpressionKind::UnaryExpression(kind) => {
-                        visitor.enter_unary_expression(path, expr, kind);
-                    }
-                    ExpressionKind::SubscriptExpression(kind) => {
-                        visitor.enter_subscript_expression(path, expr, kind);
-                    }
-                    ExpressionKind::CallExpression(kind) => {
-                        visitor.enter_call_expression(path, expr, kind);
-                    }
-                    ExpressionKind::MemberExpression(kind) => {
-                        visitor.enter_access_expression(path, expr, kind);
-                    }
-                    ExpressionKind::ArrayExpression(kind) => {
-                        visitor.enter_array_expression(path, expr, kind);
-                    }
-                    ExpressionKind::IfExpression(kind) => {
-                        visitor.enter_if_expression(path, expr, kind);
-                    }
-                    ExpressionKind::CaseExpression(kind) => {
-                        visitor.enter_case_expression(path, expr, kind);
-                    }
-                    _ => {
-                        // TODO: We shouldn't handle expression kind here. It is handled by traverse_children().
-                    }
-                }
-            }
+        }
+        // Pattern
+        NodeKind::Pattern(kind) => {
+            visitor.enter_pattern(path, kind);
+        }
+        NodeKind::VariablePattern(kind) => {
+            visitor.enter_variable_pattern(path, kind);
+        }
+        NodeKind::ArrayPattern(_) => { /* todo */ }
+        NodeKind::RestPattern(_) => { /* todo */ }
+        NodeKind::StructPattern(_) => { /* todo */ }
+        NodeKind::ValueFieldPattern(kind) => {
+            visitor.enter_value_field_pattern(path, kind);
         }
     }
 }
@@ -658,67 +570,67 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::VariableDeclaration(kind) => {
             visitor.exit_variable_declaration(path, kind);
         }
-        NodeKind::Pattern(kind) => {
-            visitor.exit_pattern(path, kind);
-        }
-        NodeKind::CaseArm(kind) => {
-            visitor.exit_case_arm(path, kind);
-        }
         NodeKind::ValueField(kind) => {
             visitor.exit_value_field(path, kind);
         }
-        NodeKind::ValueFieldPattern(kind) => {
-            visitor.exit_value_field_pattern(path, kind);
+        // Expression
+        NodeKind::IntegerLiteral(value) => {
+            visitor.exit_integer_literal(path, value);
+        }
+        NodeKind::StringLiteral(value) => {
+            visitor.exit_string_literal(path, value);
+        }
+        NodeKind::VariableExpression(kind) => {
+            visitor.exit_variable_expression(path, kind);
+        }
+        NodeKind::BinaryExpression(kind) => {
+            visitor.exit_binary_expression(path, kind);
+        }
+        NodeKind::UnaryExpression(kind) => {
+            visitor.exit_unary_expression(path, kind);
+        }
+        NodeKind::SubscriptExpression(kind) => {
+            visitor.exit_subscript_expression(path, kind);
+        }
+        NodeKind::MemberExpression(kind) => {
+            visitor.exit_member_expression(path, kind);
+        }
+        NodeKind::CallExpression(kind) => {
+            visitor.exit_call_expression(path, kind);
+        }
+        NodeKind::ArrayExpression(kind) => {
+            visitor.exit_array_expression(path, kind);
+        }
+        NodeKind::StructLiteral(kind) => {
+            visitor.exit_struct_literal(path, kind);
+        }
+        NodeKind::IfExpression(kind) => {
+            visitor.exit_if_expression(path, kind);
+        }
+        NodeKind::CaseExpression(kind) => {
+            visitor.exit_case_expression(path, kind);
+        }
+        NodeKind::CaseArm(kind) => {
+            visitor.exit_case_arm(path, kind);
         }
         NodeKind::GroupedExpression(kind) => {
             visitor.exit_grouped_expression(path, kind);
         }
         NodeKind::Expression(expr) => {
             visitor.exit_expression(path, expr);
-
-            if !path.skipped() {
-                match expr.kind() {
-                    ExpressionKind::IntegerLiteral(value) => {
-                        visitor.exit_integer_literal(path, expr, value);
-                    }
-                    ExpressionKind::StringLiteral(value) => {
-                        visitor.exit_string_literal(path, expr, value);
-                    }
-                    ExpressionKind::VariableExpression(id) => {
-                        visitor.exit_variable(path, expr, id);
-                    }
-                    ExpressionKind::StructLiteral(kind) => {
-                        visitor.exit_struct_literal(path, expr, kind);
-                    }
-                    ExpressionKind::BinaryExpression(kind) => {
-                        visitor.exit_binary_expression(path, expr, kind);
-                    }
-                    ExpressionKind::UnaryExpression(kind) => {
-                        visitor.exit_unary_expression(path, expr, kind);
-                    }
-                    ExpressionKind::SubscriptExpression(kind) => {
-                        visitor.exit_subscript_expression(path, expr, kind);
-                    }
-                    ExpressionKind::MemberExpression(kind) => {
-                        visitor.exit_access_expression(path, expr, kind);
-                    }
-                    ExpressionKind::CallExpression(kind) => {
-                        visitor.exit_call_expression(path, expr, kind);
-                    }
-                    ExpressionKind::ArrayExpression(kind) => {
-                        visitor.exit_array_expression(path, expr, kind);
-                    }
-                    ExpressionKind::IfExpression(kind) => {
-                        visitor.exit_if_expression(path, expr, kind);
-                    }
-                    ExpressionKind::CaseExpression(kind) => {
-                        visitor.exit_case_expression(path, expr, kind);
-                    }
-                    _ => {
-                        // TODO: We shouldn't handle expression kind here. It is handled by traverse_children().
-                    }
-                }
-            }
+        }
+        // Pattern
+        NodeKind::Pattern(kind) => {
+            visitor.exit_pattern(path, kind);
+        }
+        NodeKind::VariablePattern(kind) => {
+            visitor.exit_variable_pattern(path, kind);
+        }
+        NodeKind::ArrayPattern(_) => { /* todo */ }
+        NodeKind::RestPattern(_) => { /* todo */ }
+        NodeKind::StructPattern(_) => { /* todo */ }
+        NodeKind::ValueFieldPattern(kind) => {
+            visitor.exit_value_field_pattern(path, kind);
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::sem;
-use crate::syntax::{FunctionDefinition, FunctionParameter, Pattern, StructDefinition};
+use crate::syntax::{FunctionDefinition, FunctionParameter, StructDefinition, VariablePattern};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -36,7 +36,7 @@ pub enum DefinitionKind<'a> {
     StructDefinition(&'a StructDefinition<'a>),
     FunctionDefinition(&'a FunctionDefinition<'a>),
     FunctionParameter(&'a FunctionParameter<'a>),
-    Pattern(&'a Pattern<'a>),
+    VariablePattern(&'a VariablePattern<'a>),
 }
 
 impl<'a> DefinitionKind<'a> {
@@ -72,8 +72,8 @@ impl<'a> DefinitionKind<'a> {
         }
     }
 
-    pub fn pattern(&self) -> Option<&'a Pattern<'a>> {
-        if let DefinitionKind::Pattern(node) = self {
+    pub fn variable_pattern(&self) -> Option<&'a VariablePattern<'a>> {
+        if let DefinitionKind::VariablePattern(node) = self {
             Some(node)
         } else {
             None
@@ -97,7 +97,7 @@ impl<'a> DefinitionKind<'a> {
     }
 
     pub fn is_pattern(&self) -> bool {
-        matches!(self, Self::Pattern(..))
+        matches!(self, Self::VariablePattern(..))
     }
 
     pub fn ptr_eq(&self, other: &DefinitionKind<'a>) -> bool {
@@ -125,8 +125,8 @@ impl<'a> DefinitionKind<'a> {
             }
         }
 
-        if let DefinitionKind::Pattern(definition1) = self {
-            if let DefinitionKind::Pattern(definition2) = other {
+        if let DefinitionKind::VariablePattern(definition1) = self {
+            if let DefinitionKind::VariablePattern(definition2) = other {
                 return std::ptr::eq(*definition1, *definition2);
             }
         }
