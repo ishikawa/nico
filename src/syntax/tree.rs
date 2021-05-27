@@ -348,7 +348,7 @@ impl<'a> Code<'a> {
 
     pub fn with_interpreted(arena: &'a BumpaloArena, token: Token) -> Self {
         Self {
-            code: bumpalo::vec![in arena; CodeKind::SyntaxToken(SyntaxToken::Interpreted(token))],
+            code: bumpalo::vec![in arena; CodeKind::interpreted(token)],
         }
     }
 
@@ -359,8 +359,7 @@ impl<'a> Code<'a> {
     }
 
     pub fn interpret(&mut self, token: Token) -> &mut Self {
-        self.code
-            .push(CodeKind::SyntaxToken(SyntaxToken::Interpreted(token)));
+        self.code.push(CodeKind::interpreted(token));
         self
     }
 
@@ -401,6 +400,10 @@ impl CodeKind<'_> {
             CodeKind::Node(kind) => kind.range(),
             CodeKind::SyntaxToken(token) => token.range(),
         }
+    }
+
+    pub fn interpreted(token: Token) -> Self {
+        CodeKind::SyntaxToken(SyntaxToken::Interpreted(token))
     }
 }
 
@@ -565,14 +568,14 @@ impl fmt::Display for Program<'_> {
 #[derive(Debug)]
 pub struct Identifier<'a> {
     id: BumpaloString<'a>,
-    code: Code<'a>,
+    code: CodeKind<'a>,
 }
 
 impl<'a> Identifier<'a> {
-    pub fn new<S: AsRef<str>>(arena: &'a BumpaloArena, id: S, code: Code<'a>) -> Self {
+    pub fn new<S: AsRef<str>>(arena: &'a BumpaloArena, id: S, token: Token) -> Self {
         Self {
             id: BumpaloString::from_str_in(id.as_ref(), arena),
-            code,
+            code: CodeKind::interpreted(token),
         }
     }
 
@@ -589,7 +592,7 @@ impl<'a> AsRef<str> for Identifier<'a> {
 
 impl<'a> Node<'a> for Identifier<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
-        self.code.iter()
+        CodeKindIter::Once(Some(&self.code))
     }
 }
 

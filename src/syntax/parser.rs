@@ -333,9 +333,9 @@ impl<'a, 't> Parser<'a, 't> {
     fn parse_name(&mut self, arena: &'a BumpaloArena) -> Option<&'a Identifier<'a>> {
         if let TokenKind::Identifier(name) = self.tokenizer.peek_kind() {
             let name = name.clone();
-            let code = Code::with_interpreted(arena, self.tokenizer.next_token());
+            let token = self.tokenizer.next_token();
 
-            Some(arena.alloc(Identifier::new(arena, name, code)))
+            Some(arena.alloc(Identifier::new(arena, name, token)))
         } else {
             None
         }
