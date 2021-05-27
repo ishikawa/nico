@@ -1750,11 +1750,12 @@ impl fmt::Display for StringLiteral<'_> {
 #[derive(Debug)]
 pub struct VariableExpression<'a> {
     id: &'a Identifier<'a>,
-    code: Code<'a>,
+    code: CodeKind<'a>,
 }
 
 impl<'a> VariableExpression<'a> {
-    pub fn new(id: &'a Identifier<'a>, code: Code<'a>) -> Self {
+    pub fn new(id: &'a Identifier<'a>) -> Self {
+        let code = CodeKind::Node(NodeKind::Identifier(id));
         Self { id, code }
     }
 
@@ -1769,7 +1770,7 @@ impl<'a> VariableExpression<'a> {
 
 impl<'a> Node<'a> for VariableExpression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
-        self.code.iter()
+        CodeKindIter::from(&self.code)
     }
 }
 

@@ -632,9 +632,9 @@ impl<'a, 't> Parser<'a, 't> {
 
     fn read_identifier(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
         let id = self.parse_name(arena).unwrap();
-        let mut code = Code::with_node(arena, NodeKind::Identifier(id));
 
         let expr = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
+            let mut code = Code::with_node(arena, NodeKind::Identifier(id));
             let fields = self._parse_elements(
                 arena,
                 '{',
@@ -647,7 +647,7 @@ impl<'a, 't> Parser<'a, 't> {
             let literal = arena.alloc(StructLiteral::new(arena, id, fields, code));
             Expression::new(ExpressionKind::StructLiteral(literal))
         } else {
-            let expr = arena.alloc(VariableExpression::new(id, code));
+            let expr = arena.alloc(VariableExpression::new(id));
             Expression::new(ExpressionKind::VariableExpression(expr))
         };
 
