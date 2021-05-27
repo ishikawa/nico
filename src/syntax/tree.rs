@@ -1861,11 +1861,12 @@ impl fmt::Display for Pattern<'_> {
 #[derive(Debug)]
 pub struct VariablePattern<'a> {
     id: &'a Identifier<'a>,
-    code: Code<'a>,
+    code: CodeKind<'a>,
 }
 
 impl<'a> VariablePattern<'a> {
-    pub fn new(id: &'a Identifier<'a>, code: Code<'a>) -> Self {
+    pub fn new(id: &'a Identifier<'a>) -> Self {
+        let code = CodeKind::Node(NodeKind::Identifier(id));
         Self { id, code }
     }
 
@@ -1880,7 +1881,7 @@ impl<'a> VariablePattern<'a> {
 
 impl<'a> Node<'a> for VariablePattern<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
-        self.code.iter()
+        CodeKindIter::from(&self.code)
     }
 }
 
@@ -2021,7 +2022,7 @@ impl<'a> ValueFieldPattern<'a> {
                 code,
             }
         } else {
-            let expr = arena.alloc(VariablePattern::new(name, Code::new(arena)));
+            let expr = arena.alloc(VariablePattern::new(name));
             let kind = PatternKind::VariablePattern(expr);
             let omitted_value = arena.alloc(Pattern::new(kind));
 

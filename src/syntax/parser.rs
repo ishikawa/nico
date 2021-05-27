@@ -656,9 +656,9 @@ impl<'a, 't> Parser<'a, 't> {
 
     fn read_identifier_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
         let id = self.parse_name(arena).unwrap();
-        let mut code = Code::with_node(arena, NodeKind::Identifier(id));
 
         let kind = if *self.tokenizer.peek_kind() == TokenKind::Char('{') {
+            let mut code = Code::with_node(arena, NodeKind::Identifier(id));
             let fields = self._parse_elements(
                 arena,
                 '{',
@@ -671,7 +671,7 @@ impl<'a, 't> Parser<'a, 't> {
             let pattern = arena.alloc(StructPattern::new(arena, id, fields, code));
             PatternKind::StructPattern(pattern)
         } else {
-            let pattern = arena.alloc(VariablePattern::new(id, code));
+            let pattern = arena.alloc(VariablePattern::new(id));
             PatternKind::VariablePattern(pattern)
         };
 
@@ -816,10 +816,7 @@ impl<'a, 't> Parser<'a, 't> {
         let name = self.parse_name(arena);
 
         let variable_pattern = if let Some(node) = name {
-            let variable_pattern: &VariablePattern<'_> = arena.alloc(VariablePattern::new(
-                node,
-                Code::with_node(arena, NodeKind::Identifier(node)),
-            ));
+            let variable_pattern: &VariablePattern<'_> = arena.alloc(VariablePattern::new(node));
 
             code.node(NodeKind::VariablePattern(variable_pattern));
             Some(variable_pattern)
