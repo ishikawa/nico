@@ -401,21 +401,14 @@ impl<'a, 't> Parser<'a, 't> {
         self.debug_trace("parse_variable_declaration_stmt");
 
         let decl = self.parse_variable_declaration(arena)?;
-        let code = Code::with_node(arena, NodeKind::VariableDeclaration(decl));
-
-        Some(arena.alloc(Statement::new(
-            StatementKind::VariableDeclaration(decl),
-            code,
-        )))
+        Some(arena.alloc(Statement::new(StatementKind::VariableDeclaration(decl))))
     }
 
     fn parse_stmt_expr(&mut self, arena: &'a BumpaloArena) -> Option<&'a Statement<'a>> {
         self.debug_trace("parse_stmt_expr");
 
         let expr = self.parse_expr(arena)?;
-        let code = Code::with_node(arena, NodeKind::Expression(expr));
-
-        Some(arena.alloc(Statement::new(StatementKind::Expression(expr), code)))
+        Some(arena.alloc(Statement::new(StatementKind::Expression(expr))))
     }
 
     fn parse_expr(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {

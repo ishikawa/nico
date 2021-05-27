@@ -378,7 +378,7 @@ impl<'a> Code<'a> {
     }
 
     pub fn iter(&self) -> CodeKindIter<'_, 'a> {
-        CodeKindIter::Slice(self.code.iter())
+        CodeKindIter::from(self.code.iter())
     }
 
     // children
@@ -408,7 +408,12 @@ impl CodeKind<'_> {
 }
 
 #[derive(Debug)]
-pub enum CodeKindIter<'a, 'code> {
+pub struct CodeKindIter<'a, 'code> {
+    inner: CodeKindIterInner<'a, 'code>,
+}
+
+#[derive(Debug)]
+enum CodeKindIterInner<'a, 'code> {
     Once(Option<&'a CodeKind<'code>>),
     Slice(slice::Iter<'a, CodeKind<'code>>),
 }
@@ -421,26 +426,42 @@ impl CodeKindIter<'_, '_> {
     }
 }
 
+impl<'a, 'code> From<&'a CodeKind<'code>> for CodeKindIter<'a, 'code> {
+    fn from(kind: &'a CodeKind<'code>) -> Self {
+        Self {
+            inner: CodeKindIterInner::Once(Some(kind)),
+        }
+    }
+}
+
+impl<'a, 'code> From<slice::Iter<'a, CodeKind<'code>>> for CodeKindIter<'a, 'code> {
+    fn from(iter: slice::Iter<'a, CodeKind<'code>>) -> Self {
+        Self {
+            inner: CodeKindIterInner::Slice(iter),
+        }
+    }
+}
+
 impl<'a, 'code> Iterator for CodeKindIter<'a, 'code> {
     type Item = &'a CodeKind<'code>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            CodeKindIter::Once(kind) => kind.take(),
-            CodeKindIter::Slice(it) => it.next(),
+        match &mut self.inner {
+            CodeKindIterInner::Once(kind) => kind.take(),
+            CodeKindIterInner::Slice(it) => it.next(),
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        match self {
-            CodeKindIter::Once(kind) => {
+        match &self.inner {
+            CodeKindIterInner::Once(kind) => {
                 if kind.is_some() {
                     (1, Some(1))
                 } else {
                     (0, Some(0))
                 }
             }
-            CodeKindIter::Slice(it) => it.size_hint(),
+            CodeKindIterInner::Slice(it) => it.size_hint(),
         }
     }
 }
@@ -449,9 +470,9 @@ impl<'a, 'code> ExactSizeIterator for CodeKindIter<'a, 'code> {}
 
 impl<'a, 'code> DoubleEndedIterator for CodeKindIter<'a, 'code> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        match self {
-            CodeKindIter::Once(_) => self.next(),
-            CodeKindIter::Slice(it) => it.next_back(),
+        match &mut self.inner {
+            CodeKindIterInner::Once(_) => self.next(),
+            CodeKindIterInner::Slice(it) => it.next_back(),
         }
     }
 }
@@ -592,7 +613,7 @@ impl<'a> AsRef<str> for Identifier<'a> {
 
 impl<'a> Node<'a> for Identifier<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
-        CodeKindIter::Once(Some(&self.code))
+        CodeKindIter::from(&self.code)
     }
 }
 
@@ -857,7 +878,7 @@ impl fmt::Display for VariableDeclaration<'_> {
 #[derive(Debug)]
 pub struct Statement<'a> {
     kind: StatementKind<'a>,
-    code: Code<'a>,
+    code: CodeKind<'a>,
 }
 
 #[derive(Debug)]
@@ -866,8 +887,18 @@ pub enum StatementKind<'a> {
     VariableDeclaration(&'a VariableDeclaration<'a>),
 }
 
+impl<'a> StatementKind<'a> {
+    pub fn node(&self) -> NodeKind<'a> {
+        match self {
+            StatementKind::Expression(node) => NodeKind::Expression(node),
+            StatementKind::VariableDeclaration(node) => NodeKind::VariableDeclaration(node),
+        }
+    }
+}
+
 impl<'a> Statement<'a> {
-    pub fn new(kind: StatementKind<'a>, code: Code<'a>) -> Self {
+    pub fn new(kind: StatementKind<'a>) -> Self {
+        let code = CodeKind::Node(kind.node());
         Self { kind, code }
     }
 
@@ -894,7 +925,7 @@ impl<'a> Statement<'a> {
 
 impl<'a> Node<'a> for Statement<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
-        self.code.iter()
+        CodeKindIter::from(&self.code)
     }
 }
 
