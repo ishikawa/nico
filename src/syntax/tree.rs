@@ -99,6 +99,49 @@ pub enum NodeKind<'a> {
     GroupedExpression(&'a GroupedExpression<'a>),
 }
 
+impl<'a> From<&ExpressionKind<'a>> for NodeKind<'a> {
+    fn from(expr: &ExpressionKind<'a>) -> Self {
+        match expr {
+            ExpressionKind::IntegerLiteral(kind) => NodeKind::IntegerLiteral(kind),
+            ExpressionKind::StringLiteral(kind) => NodeKind::StringLiteral(kind),
+            ExpressionKind::StructLiteral(kind) => NodeKind::StructLiteral(kind),
+            ExpressionKind::VariableExpression(kind) => NodeKind::VariableExpression(kind),
+            ExpressionKind::BinaryExpression(kind) => NodeKind::BinaryExpression(kind),
+            ExpressionKind::UnaryExpression(kind) => NodeKind::UnaryExpression(kind),
+            ExpressionKind::SubscriptExpression(kind) => NodeKind::SubscriptExpression(kind),
+            ExpressionKind::CallExpression(kind) => NodeKind::CallExpression(kind),
+            ExpressionKind::ArrayExpression(kind) => NodeKind::ArrayExpression(kind),
+            ExpressionKind::MemberExpression(kind) => NodeKind::MemberExpression(kind),
+            ExpressionKind::IfExpression(kind) => NodeKind::IfExpression(kind),
+            ExpressionKind::CaseExpression(kind) => NodeKind::CaseExpression(kind),
+            ExpressionKind::GroupedExpression(kind) => NodeKind::GroupedExpression(kind),
+        }
+    }
+}
+
+impl<'a> From<&StatementKind<'a>> for NodeKind<'a> {
+    fn from(stmt: &StatementKind<'a>) -> Self {
+        match stmt {
+            StatementKind::Expression(node) => NodeKind::Expression(node),
+            StatementKind::VariableDeclaration(node) => NodeKind::VariableDeclaration(node),
+        }
+    }
+}
+
+impl<'a> From<&PatternKind<'a>> for NodeKind<'a> {
+    fn from(pat: &PatternKind<'a>) -> Self {
+        match pat {
+            PatternKind::IntegerPattern(kind) => NodeKind::IntegerLiteral(kind),
+            PatternKind::StringPattern(kind) => NodeKind::StringLiteral(kind),
+            PatternKind::VariablePattern(kind) => NodeKind::VariablePattern(kind),
+            PatternKind::ArrayPattern(kind) => NodeKind::ArrayPattern(kind),
+            PatternKind::RestPattern(kind) => NodeKind::RestPattern(kind),
+            PatternKind::StructPattern(kind) => NodeKind::StructPattern(kind),
+            PatternKind::ValueFieldPattern(kind) => NodeKind::ValueFieldPattern(kind),
+        }
+    }
+}
+
 impl<'a> NodeKind<'a> {
     pub fn program(&self) -> Option<&'a Program<'a>> {
         if let NodeKind::Program(program) = self {
@@ -887,18 +930,9 @@ pub enum StatementKind<'a> {
     VariableDeclaration(&'a VariableDeclaration<'a>),
 }
 
-impl<'a> StatementKind<'a> {
-    pub fn node(&self) -> NodeKind<'a> {
-        match self {
-            StatementKind::Expression(node) => NodeKind::Expression(node),
-            StatementKind::VariableDeclaration(node) => NodeKind::VariableDeclaration(node),
-        }
-    }
-}
-
 impl<'a> Statement<'a> {
     pub fn new(kind: StatementKind<'a>) -> Self {
-        let code = CodeKind::Node(kind.node());
+        let code = CodeKind::Node(NodeKind::from(&kind));
         Self { kind, code }
     }
 
@@ -984,7 +1018,7 @@ pub struct Expression<'a> {
 
 impl<'a> Expression<'a> {
     pub fn new(kind: ExpressionKind<'a>) -> Self {
-        let code = CodeKind::Node(kind.node());
+        let code = CodeKind::Node(NodeKind::from(&kind));
         Self { kind, code }
     }
 
@@ -1793,34 +1827,15 @@ pub enum ExpressionKind<'a> {
     GroupedExpression(&'a GroupedExpression<'a>),
 }
 
-impl<'a> ExpressionKind<'a> {
-    pub fn node(&self) -> NodeKind<'a> {
-        match self {
-            ExpressionKind::IntegerLiteral(kind) => NodeKind::IntegerLiteral(kind),
-            ExpressionKind::StringLiteral(kind) => NodeKind::StringLiteral(kind),
-            ExpressionKind::StructLiteral(kind) => NodeKind::StructLiteral(kind),
-            ExpressionKind::VariableExpression(kind) => NodeKind::VariableExpression(kind),
-            ExpressionKind::BinaryExpression(kind) => NodeKind::BinaryExpression(kind),
-            ExpressionKind::UnaryExpression(kind) => NodeKind::UnaryExpression(kind),
-            ExpressionKind::SubscriptExpression(kind) => NodeKind::SubscriptExpression(kind),
-            ExpressionKind::CallExpression(kind) => NodeKind::CallExpression(kind),
-            ExpressionKind::ArrayExpression(kind) => NodeKind::ArrayExpression(kind),
-            ExpressionKind::MemberExpression(kind) => NodeKind::MemberExpression(kind),
-            ExpressionKind::IfExpression(kind) => NodeKind::IfExpression(kind),
-            ExpressionKind::CaseExpression(kind) => NodeKind::CaseExpression(kind),
-            ExpressionKind::GroupedExpression(kind) => NodeKind::GroupedExpression(kind),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Pattern<'a> {
     kind: PatternKind<'a>,
-    code: Code<'a>,
+    code: CodeKind<'a>,
 }
 
 impl<'a> Pattern<'a> {
-    pub fn new(kind: PatternKind<'a>, code: Code<'a>) -> Self {
+    pub fn new(kind: PatternKind<'a>) -> Self {
+        let code = CodeKind::Node(NodeKind::from(&kind));
         Self { kind, code }
     }
 
@@ -1831,7 +1846,7 @@ impl<'a> Pattern<'a> {
 
 impl<'a> Node<'a> for Pattern<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
-        self.code.iter()
+        CodeKindIter::from(&self.code)
     }
 }
 
@@ -2006,10 +2021,7 @@ impl<'a> ValueFieldPattern<'a> {
         } else {
             let expr = arena.alloc(VariablePattern::new(name, Code::new(arena)));
             let kind = PatternKind::VariablePattern(expr);
-            let omitted_value = arena.alloc(Pattern::new(
-                kind,
-                Code::with_node(arena, NodeKind::VariablePattern(expr)),
-            ));
+            let omitted_value = arena.alloc(Pattern::new(kind));
 
             Self {
                 name,

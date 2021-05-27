@@ -628,10 +628,7 @@ impl<'a, 't> Parser<'a, 't> {
     fn read_integer_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
         let literal = self._read_integer(arena);
 
-        arena.alloc(Pattern::new(
-            PatternKind::IntegerPattern(literal),
-            Code::with_node(arena, NodeKind::IntegerLiteral(literal)),
-        ))
+        arena.alloc(Pattern::new(PatternKind::IntegerPattern(literal)))
     }
 
     fn read_identifier(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
@@ -673,17 +670,13 @@ impl<'a, 't> Parser<'a, 't> {
             );
 
             let pattern = arena.alloc(StructPattern::new(arena, id, fields, code));
-
-            code = Code::with_node(arena, NodeKind::StructPattern(pattern));
             PatternKind::StructPattern(pattern)
         } else {
             let pattern = arena.alloc(VariablePattern::new(id, code));
-
-            code = Code::with_node(arena, NodeKind::VariablePattern(pattern));
             PatternKind::VariablePattern(pattern)
         };
 
-        arena.alloc(Pattern::new(kind, code))
+        arena.alloc(Pattern::new(kind))
     }
 
     fn _read_string(&mut self, arena: &'a BumpaloArena) -> &'a StringLiteral<'a> {
@@ -741,10 +734,7 @@ impl<'a, 't> Parser<'a, 't> {
 
     fn read_string_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
         let string = self._read_string(arena);
-        arena.alloc(Pattern::new(
-            PatternKind::StringPattern(string),
-            Code::with_node(arena, NodeKind::StringLiteral(string)),
-        ))
+        arena.alloc(Pattern::new(PatternKind::StringPattern(string)))
     }
 
     fn read_paren(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
@@ -819,10 +809,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         let pattern = arena.alloc(ArrayPattern::new(arena, elements, code));
 
-        arena.alloc(Pattern::new(
-            PatternKind::ArrayPattern(pattern),
-            Code::with_node(arena, NodeKind::ArrayPattern(pattern)),
-        ))
+        arena.alloc(Pattern::new(PatternKind::ArrayPattern(pattern)))
     }
 
     fn read_rest_pattern(&mut self, arena: &'a BumpaloArena) -> &'a Pattern<'a> {
@@ -843,10 +830,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         let pattern = arena.alloc(RestPattern::new(variable_pattern, code));
 
-        arena.alloc(Pattern::new(
-            PatternKind::RestPattern(pattern),
-            Code::with_node(arena, NodeKind::RestPattern(pattern)),
-        ))
+        arena.alloc(Pattern::new(PatternKind::RestPattern(pattern)))
     }
 
     fn read_if_expression(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
