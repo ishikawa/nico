@@ -49,8 +49,8 @@ use std::rc::Rc;
 use std::slice;
 use std::{cell::RefCell, fmt};
 
-pub trait Node<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>>;
+pub trait Node<'arena> {
+    fn code(&self) -> CodeKindIter<'_, 'arena>;
 
     /// Returns the effective range of this node.
     fn range(&self) -> EffectiveRange {
@@ -295,7 +295,7 @@ impl<'a> NodeKind<'a> {
 }
 
 impl<'a> Node<'a> for NodeKind<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         match self {
             NodeKind::Program(kind) => kind.code(),
             NodeKind::TopLevel(kind) => kind.code(),
@@ -378,8 +378,8 @@ impl<'a> Code<'a> {
         self
     }
 
-    pub fn iter(&self) -> slice::Iter<'_, CodeKind<'a>> {
-        self.code.iter()
+    pub fn iter(&self) -> CodeKindIter<'_, 'a> {
+        CodeKindIter::Slice(self.code.iter())
     }
 
     // children
@@ -405,6 +405,55 @@ impl CodeKind<'_> {
 }
 
 #[derive(Debug)]
+pub enum CodeKindIter<'a, 'code> {
+    Once(Option<&'a CodeKind<'code>>),
+    Slice(slice::Iter<'a, CodeKind<'code>>),
+}
+
+impl CodeKindIter<'_, '_> {
+    // Move this into ExactSizeIterator, when its is_empty()
+    // coming in stable version.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl<'a, 'code> Iterator for CodeKindIter<'a, 'code> {
+    type Item = &'a CodeKind<'code>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            CodeKindIter::Once(kind) => kind.take(),
+            CodeKindIter::Slice(it) => it.next(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            CodeKindIter::Once(kind) => {
+                if kind.is_some() {
+                    (1, Some(1))
+                } else {
+                    (0, Some(0))
+                }
+            }
+            CodeKindIter::Slice(it) => it.size_hint(),
+        }
+    }
+}
+
+impl<'a, 'code> ExactSizeIterator for CodeKindIter<'a, 'code> {}
+
+impl<'a, 'code> DoubleEndedIterator for CodeKindIter<'a, 'code> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match self {
+            CodeKindIter::Once(_) => self.next(),
+            CodeKindIter::Slice(it) => it.next_back(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct TopLevel<'a> {
     kind: TopLevelKind<'a>,
     code: Code<'a>,
@@ -425,7 +474,7 @@ impl<'a> TopLevel<'a> {
 }
 
 impl<'a> Node<'a> for TopLevel<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -502,7 +551,7 @@ impl<'a> Program<'a> {
 }
 
 impl<'a> Node<'a> for Program<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -539,7 +588,7 @@ impl<'a> AsRef<str> for Identifier<'a> {
 }
 
 impl<'a> Node<'a> for Identifier<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -592,7 +641,7 @@ impl<'a> StructDefinition<'a> {
 }
 
 impl<'a> Node<'a> for StructDefinition<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -637,7 +686,7 @@ impl<'a> TypeField<'a> {
 }
 
 impl<'a> Node<'a> for TypeField<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -669,7 +718,7 @@ impl<'a> TypeAnnotation<'a> {
 }
 
 impl<'a> Node<'a> for TypeAnnotation<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -718,7 +767,7 @@ impl<'a> FunctionDefinition<'a> {
 }
 
 impl<'a> Node<'a> for FunctionDefinition<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -750,7 +799,7 @@ impl<'a> FunctionParameter<'a> {
 }
 
 impl<'a> Node<'a> for FunctionParameter<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -791,7 +840,7 @@ impl<'a> VariableDeclaration<'a> {
 }
 
 impl<'a> Node<'a> for VariableDeclaration<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -841,7 +890,7 @@ impl<'a> Statement<'a> {
 }
 
 impl<'a> Node<'a> for Statement<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -882,7 +931,7 @@ impl<'a> Block<'a> {
 }
 
 impl<'a> Node<'a> for Block<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1018,7 +1067,7 @@ impl<'a> Expression<'a> {
 }
 
 impl<'a> Node<'a> for Expression<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1060,7 +1109,7 @@ impl<'a> StructLiteral<'a> {
 }
 
 impl<'a> Node<'a> for StructLiteral<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1097,7 +1146,7 @@ impl<'a> ValueField<'a> {
 }
 
 impl<'a> Node<'a> for ValueField<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1145,7 +1194,7 @@ impl<'a> BinaryExpression<'a> {
 }
 
 impl<'a> Node<'a> for BinaryExpression<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1186,7 +1235,7 @@ impl<'a> UnaryExpression<'a> {
 }
 
 impl<'a> Node<'a> for UnaryExpression<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1276,7 +1325,7 @@ impl<'a> SubscriptExpression<'a> {
 }
 
 impl<'a> Node<'a> for SubscriptExpression<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1318,7 +1367,7 @@ impl<'a> CallExpression<'a> {
 }
 
 impl<'a> Node<'a> for CallExpression<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1359,7 +1408,7 @@ impl<'a> MemberExpression<'a> {
 }
 
 impl<'a> Node<'a> for MemberExpression<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1398,7 +1447,7 @@ impl<'a> ArrayExpression<'a> {
 }
 
 impl<'a> Node<'a> for ArrayExpression<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1446,7 +1495,7 @@ impl<'a> IfExpression<'a> {
 }
 
 impl<'a> Node<'a> for IfExpression<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1495,7 +1544,7 @@ impl<'a> CaseExpression<'a> {
 }
 
 impl<'a> Node<'a> for CaseExpression<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1554,7 +1603,7 @@ impl<'a> CaseArm<'a> {
 }
 
 impl<'a> Node<'a> for CaseArm<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1582,7 +1631,7 @@ impl<'a> IntegerLiteral<'a> {
 }
 
 impl<'a> Node<'a> for IntegerLiteral<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1613,7 +1662,7 @@ impl<'a> StringLiteral<'a> {
 }
 
 impl<'a> Node<'a> for StringLiteral<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1649,7 +1698,7 @@ impl<'a> VariableExpression<'a> {
 }
 
 impl<'a> Node<'a> for VariableExpression<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1677,7 +1726,7 @@ impl<'a> GroupedExpression<'a> {
 }
 
 impl<'a> Node<'a> for GroupedExpression<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1726,7 +1775,7 @@ impl<'a> Pattern<'a> {
 }
 
 impl<'a> Node<'a> for Pattern<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1758,7 +1807,7 @@ impl<'a> VariablePattern<'a> {
 }
 
 impl<'a> Node<'a> for VariablePattern<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1793,7 +1842,7 @@ impl<'a> ArrayPattern<'a> {
 }
 
 impl<'a> Node<'a> for ArrayPattern<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1824,7 +1873,7 @@ impl<'a> RestPattern<'a> {
 }
 
 impl<'a> Node<'a> for RestPattern<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1866,7 +1915,7 @@ impl<'a> StructPattern<'a> {
 }
 
 impl<'a> Node<'a> for StructPattern<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }
@@ -1930,7 +1979,7 @@ impl<'a> ValueFieldPattern<'a> {
 }
 
 impl<'a> Node<'a> for ValueFieldPattern<'a> {
-    fn code(&self) -> slice::Iter<'_, CodeKind<'a>> {
+    fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 }

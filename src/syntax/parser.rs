@@ -1295,8 +1295,6 @@ impl<'a, 't> Parser<'a, 't> {
 
 #[cfg(test)]
 mod tests {
-    use std::slice;
-
     use super::*;
     use crate::arena::BumpaloArena;
     use crate::syntax::{EffectiveRange, ExpressionKind, SyntaxToken, Token};
@@ -1937,22 +1935,20 @@ mod tests {
         module.body().next().unwrap().statement().unwrap()
     }
 
-    fn next_node<'a, 'b>(tokens: &'a mut slice::Iter<'_, CodeKind<'b>>) -> &'a NodeKind<'b> {
+    fn next_node<'a, 'b>(tokens: &'a mut CodeKindIter<'_, 'b>) -> &'a NodeKind<'b> {
         unwrap_node(tokens.next().unwrap())
     }
 
-    fn next_interpreted_token<'a>(tokens: &'a mut slice::Iter<'_, CodeKind<'_>>) -> &'a Token {
+    fn next_interpreted_token<'a>(tokens: &'a mut CodeKindIter<'_, '_>) -> &'a Token {
         unwrap_interpreted_token(tokens.next().unwrap())
     }
 
-    fn next_missing_token(
-        tokens: &mut slice::Iter<'_, CodeKind<'_>>,
-    ) -> (EffectiveRange, MissingTokenKind) {
+    fn next_missing_token(tokens: &mut CodeKindIter<'_, '_>) -> (EffectiveRange, MissingTokenKind) {
         unwrap_missing_token(tokens.next().unwrap())
     }
 
     fn next_skipped_token<'a>(
-        tokens: &'a mut slice::Iter<'_, CodeKind<'_>>,
+        tokens: &'a mut CodeKindIter<'_, '_>,
     ) -> (&'a Token, MissingTokenKind) {
         unwrap_skipped_token(tokens.next().unwrap())
     }
