@@ -1686,11 +1686,12 @@ impl fmt::Display for CaseArm<'_> {
 #[derive(Debug)]
 pub struct IntegerLiteral<'a> {
     value: i32,
-    code: Code<'a>,
+    code: CodeKind<'a>,
 }
 
 impl<'a> IntegerLiteral<'a> {
-    pub fn new(value: i32, code: Code<'a>) -> Self {
+    pub fn new(value: i32, token: Token) -> Self {
+        let code = CodeKind::interpreted(token);
         Self { value, code }
     }
 
@@ -1701,7 +1702,7 @@ impl<'a> IntegerLiteral<'a> {
 
 impl<'a> Node<'a> for IntegerLiteral<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
-        self.code.iter()
+        CodeKindIter::from(&self.code)
     }
 }
 

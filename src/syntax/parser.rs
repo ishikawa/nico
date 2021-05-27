@@ -612,8 +612,7 @@ impl<'a, 't> Parser<'a, 't> {
         let token = self.tokenizer.next_token();
 
         if let TokenKind::Integer(i) = token.kind {
-            let code = Code::with_interpreted(arena, token);
-            arena.alloc(IntegerLiteral::new(i, code))
+            arena.alloc(IntegerLiteral::new(i, token))
         } else {
             unreachable!()
         }
