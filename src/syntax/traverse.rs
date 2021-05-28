@@ -1,4 +1,4 @@
-use super::{EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Trivia, TriviaKind};
+use super::{CodeKind, EffectiveRange, MissingTokenKind, Scope, SyntaxToken, Trivia, TriviaKind};
 use crate::arena::{BumpaloArena, BumpaloBox};
 use crate::syntax::tree::*;
 use crate::syntax::Token;
