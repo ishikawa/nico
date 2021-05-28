@@ -1,6 +1,6 @@
 use super::{EffectiveRange, MissingTokenKind, Node, NodeKind, SyntaxToken, Token};
 use crate::arena::{BumpaloArena, BumpaloVec};
-use std::slice;
+use std::{collections::VecDeque, slice};
 
 #[derive(Debug)]
 pub struct Code<'a> {
@@ -8,51 +8,12 @@ pub struct Code<'a> {
 }
 
 impl<'a> Code<'a> {
-    pub fn new(arena: &'a BumpaloArena) -> Self {
-        Self {
-            code: BumpaloVec::new_in(arena),
-        }
-    }
-
-    pub fn with_interpreted(arena: &'a BumpaloArena, token: Token) -> Self {
-        Self {
-            code: bumpalo::vec![in arena; CodeKind::interpreted(token)],
-        }
-    }
-
-    pub fn with_node(arena: &'a BumpaloArena, node: NodeKind<'a>) -> Code<'a> {
-        Code {
-            code: bumpalo::vec![in arena; CodeKind::Node(node)],
-        }
-    }
-
-    pub fn interpret(&mut self, token: Token) -> &mut Self {
-        self.code.push(CodeKind::interpreted(token));
-        self
-    }
-
-    pub fn missing(&mut self, range: EffectiveRange, item: MissingTokenKind) -> &mut Self {
-        self.code
-            .push(CodeKind::SyntaxToken(SyntaxToken::Missing { range, item }));
-        self
-    }
-
-    pub fn skip(&mut self, token: Token, expected: MissingTokenKind) -> &mut Self {
-        self.code.push(CodeKind::SyntaxToken(SyntaxToken::Skipped {
-            token,
-            expected,
-        }));
-        self
+    pub fn new(code: BumpaloVec<'a, CodeKind<'a>>) -> Self {
+        Self { code }
     }
 
     pub fn iter(&self) -> CodeKindIter<'_, 'a> {
         CodeKindIter::from(self.code.iter())
-    }
-
-    // children
-    pub fn node(&mut self, node: NodeKind<'a>) -> &mut Code<'a> {
-        self.code.push(CodeKind::Node(node));
-        self
     }
 }
 
@@ -72,6 +33,52 @@ impl CodeKind<'_> {
 
     pub fn interpreted(token: Token) -> Self {
         CodeKind::SyntaxToken(SyntaxToken::Interpreted(token))
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct CodeBuilder<'code> {
+    buffer: VecDeque<CodeKind<'code>>,
+}
+
+impl<'code> CodeBuilder<'code> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn node(&mut self, node: NodeKind<'code>) -> &mut Self {
+        self.buffer.push_back(CodeKind::Node(node));
+        self
+    }
+
+    pub fn interpret(&mut self, token: Token) -> &mut Self {
+        self.buffer.push_back(CodeKind::interpreted(token));
+        self
+    }
+
+    pub fn missing(&mut self, range: EffectiveRange, item: MissingTokenKind) -> &mut Self {
+        self.buffer
+            .push_back(CodeKind::SyntaxToken(SyntaxToken::Missing { range, item }));
+        self
+    }
+
+    pub fn skip(&mut self, token: Token, expected: MissingTokenKind) -> &mut Self {
+        self.buffer
+            .push_back(CodeKind::SyntaxToken(SyntaxToken::Skipped {
+                token,
+                expected,
+            }));
+        self
+    }
+
+    pub fn build(&mut self, arena: &'code BumpaloArena) -> Code<'code> {
+        let mut vec = BumpaloVec::with_capacity_in(self.buffer.len(), arena);
+
+        while let Some(kind) = self.buffer.pop_front() {
+            vec.push(kind);
+        }
+
+        Code::new(vec)
     }
 }
 
