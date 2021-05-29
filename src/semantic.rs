@@ -1,7 +1,32 @@
+mod types;
 use crate::sem;
-use crate::syntax::{FunctionDefinition, FunctionParameter, StructDefinition, VariablePattern};
+use crate::syntax::{
+    FunctionDefinition, FunctionParameter, NodeKind, StructDefinition, VariablePattern,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
+
+use self::types::TypeKind;
+
+#[derive(Debug)]
+pub struct SemanticValue<'a> {
+    r#type: TypeKind<'a>,
+    node: Option<NodeKind<'a>>,
+}
+
+impl<'a> SemanticValue<'a> {
+    pub fn new(r#type: TypeKind<'a>, node: Option<NodeKind<'a>>) -> Self {
+        Self { r#type, node }
+    }
+
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.r#type
+    }
+
+    pub fn node(&self) -> Option<&NodeKind<'a>> {
+        self.node.as_ref()
+    }
+}
 
 /// `Builtin` is where a binding to "built-in" primitives/functions are defined.
 /// It's not a part of an AST, so it doesn't have tokens.
