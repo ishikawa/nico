@@ -85,11 +85,11 @@ impl<'a> TypeKind<'a> {
     }
 
     pub fn is_function_type(&self) -> bool {
-        self.struct_type().is_some()
+        self.function_type().is_some()
     }
 
     pub fn is_struct_type(&self) -> bool {
-        self.function_type().is_some()
+        self.struct_type().is_some()
     }
 
     pub fn is_array_type(&self) -> bool {

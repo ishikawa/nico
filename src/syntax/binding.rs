@@ -1,8 +1,10 @@
 //! This module contains implementations of `Visitor` that assigns meta information that can be
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
-    traverse, Block, CaseArm, FunctionDefinition, FunctionParameter, NodeKind, NodePath,
-    PatternKind, Program, StructDefinition, VariableDeclaration, Visitor,
+    traverse, ArrayExpression, BinaryExpression, Block, CallExpression, CaseArm, CaseExpression,
+    FunctionDefinition, FunctionParameter, IfExpression, MemberExpression, NodeKind, NodePath,
+    PatternKind, Program, StructDefinition, StructLiteral, SubscriptExpression, UnaryExpression,
+    ValueField, VariableDeclaration, VariableExpression, VariablePattern, Visitor,
 };
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
 use crate::semantic::{self, SemanticValue, TypeKind, TypeVariable};
@@ -324,6 +326,66 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         param: &'a FunctionParameter<'a>,
     ) {
         param.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_struct_literal(&mut self, _path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_value_field(&mut self, _path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
+        field.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_unary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a UnaryExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_array_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a ArrayExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_call_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CallExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_subscript_expression(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        expr: &'a SubscriptExpression<'a>,
+    ) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_member_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a MemberExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_case_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CaseExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_if_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a IfExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_variable_expression(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        expr: &'a VariableExpression<'a>,
+    ) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn enter_variable_pattern(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        pattern: &'a VariablePattern<'a>,
+    ) {
+        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 }
 

@@ -24,4 +24,12 @@ impl<'a> SemanticValue<'a> {
     pub fn is_builtin(&self) -> bool {
         self.node.is_none()
     }
+
+    pub fn is_function_parameter(&self) -> bool {
+        if let Some(node) = self.node() {
+            node.is_function_parameter()
+        } else {
+            false
+        }
+    }
 }
