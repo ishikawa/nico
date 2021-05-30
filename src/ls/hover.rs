@@ -32,7 +32,7 @@ impl<'a> Hover<'a> {
         name.map_or("{{unknown}}".to_string(), |x| x.to_string())
     }
 
-    fn describe_type(&self, ty: &'a TypeKind<'a>) -> String {
+    fn describe_type(&self, ty: TypeKind<'a>) -> String {
         let description = match ty {
             TypeKind::Int32 => "The 32-bit signed integer type.",
             TypeKind::Boolean => "The boolean type.",
@@ -69,7 +69,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         }
 
         self.result
-            .replace((self.describe_type(&annotation.r#type()), annotation.range()));
+            .replace((self.describe_type(annotation.r#type()), annotation.range()));
         path.stop();
     }
 
@@ -86,7 +86,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
 
         // TODO: Use type info
         if let Some(binding) = scope.get_binding(literal.name().as_str()) {
-            let value = binding.value();
+            let value = binding.semantic_value();
 
             if let Some(struct_type) = value.r#type().struct_type() {
                 self.result.replace((

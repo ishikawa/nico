@@ -44,7 +44,7 @@
 //! ```
 use super::{Code, CodeKind, CodeKindIter, EffectiveRange, Scope, Token};
 use crate::arena::{BumpaloArena, BumpaloString, BumpaloVec};
-use crate::semantic::TypeKind;
+use crate::semantic::{SemanticValue, TypeKind};
 use std::cell::Cell;
 use std::fmt;
 
@@ -527,7 +527,9 @@ pub struct StructDefinition<'a> {
     name: Option<&'a Identifier<'a>>,
     fields: BumpaloVec<'a, &'a TypeField<'a>>,
     code: Code<'a>,
+    // for semantic analysis
     r#type: Cell<Option<TypeKind<'a>>>,
+    semantic_value: Cell<Option<&'a SemanticValue<'a>>>,
 }
 
 impl<'a> StructDefinition<'a> {
@@ -541,7 +543,9 @@ impl<'a> StructDefinition<'a> {
             name,
             fields: BumpaloVec::from_iter_in(fields, arena),
             code,
+            // for semantic analysis
             r#type: Cell::default(),
+            semantic_value: Cell::default(),
         }
     }
 
@@ -553,23 +557,21 @@ impl<'a> StructDefinition<'a> {
         self.fields.iter().copied()
     }
 
-    pub fn get_field_type(&self, name: &str) -> Option<TypeKind<'a>> {
-        self.fields
-            .iter()
-            .find(|f| {
-                f.name()
-                    .map_or(false, |field_name| field_name.as_str() == name)
-            })
-            .and_then(|f| f.type_annotation)
-            .map(|annotation| annotation.r#type)
-    }
-
+    // for semantic analysis
     pub fn r#type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn semantic_value(&self) -> Option<&'a SemanticValue<'a>> {
+        self.semantic_value.get()
+    }
+
+    pub fn assign_semantic_value(&self, value: &'a SemanticValue<'a>) {
+        self.semantic_value.replace(Some(value));
     }
 }
 
@@ -668,7 +670,9 @@ pub struct FunctionDefinition<'a> {
     parameters: BumpaloVec<'a, &'a FunctionParameter<'a>>,
     body: &'a Block<'a>,
     code: Code<'a>,
+    // for semantic analysis
     r#type: Cell<Option<TypeKind<'a>>>,
+    semantic_value: Cell<Option<&'a SemanticValue<'a>>>,
 }
 
 impl<'a> FunctionDefinition<'a> {
@@ -684,7 +688,9 @@ impl<'a> FunctionDefinition<'a> {
             parameters: BumpaloVec::from_iter_in(parameters, arena),
             body,
             code,
+            // for semantic analysis
             r#type: Cell::default(),
+            semantic_value: Cell::default(),
         }
     }
 
@@ -700,12 +706,21 @@ impl<'a> FunctionDefinition<'a> {
         self.parameters.iter().copied()
     }
 
+    // for semantic analysis
     pub fn r#type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn semantic_value(&self) -> Option<&'a SemanticValue<'a>> {
+        self.semantic_value.get()
+    }
+
+    pub fn assign_semantic_value(&self, value: &'a SemanticValue<'a>) {
+        self.semantic_value.replace(Some(value));
     }
 }
 
@@ -729,7 +744,9 @@ impl fmt::Display for FunctionDefinition<'_> {
 pub struct FunctionParameter<'a> {
     name: &'a Identifier<'a>,
     code: Code<'a>,
+    // for semantic analysis
     r#type: Cell<Option<TypeKind<'a>>>,
+    semantic_value: Cell<Option<&'a SemanticValue<'a>>>,
 }
 
 impl<'a> FunctionParameter<'a> {
@@ -737,7 +754,9 @@ impl<'a> FunctionParameter<'a> {
         Self {
             name,
             code,
+            // for semantic analysis
             r#type: Cell::default(),
+            semantic_value: Cell::default(),
         }
     }
 
@@ -745,12 +764,21 @@ impl<'a> FunctionParameter<'a> {
         self.name
     }
 
+    // for semantic analysis
     pub fn r#type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn semantic_value(&self) -> Option<&'a SemanticValue<'a>> {
+        self.semantic_value.get()
+    }
+
+    pub fn assign_semantic_value(&self, value: &'a SemanticValue<'a>) {
+        self.semantic_value.replace(Some(value));
     }
 }
 
@@ -1898,7 +1926,9 @@ impl fmt::Display for Pattern<'_> {
 pub struct VariablePattern<'a> {
     id: &'a Identifier<'a>,
     code: CodeKind<'a>,
+    // for semantic analysis
     r#type: Cell<Option<TypeKind<'a>>>,
+    semantic_value: Cell<Option<&'a SemanticValue<'a>>>,
 }
 
 impl<'a> VariablePattern<'a> {
@@ -1907,7 +1937,9 @@ impl<'a> VariablePattern<'a> {
         Self {
             id,
             code,
+            // for semantic analysis
             r#type: Cell::default(),
+            semantic_value: Cell::default(),
         }
     }
 
@@ -1919,12 +1951,21 @@ impl<'a> VariablePattern<'a> {
         self.id.as_str()
     }
 
+    // for semantic analysis
     pub fn r#type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn semantic_value(&self) -> Option<&'a SemanticValue<'a>> {
+        self.semantic_value.get()
+    }
+
+    pub fn assign_semantic_value(&self, value: &'a SemanticValue<'a>) {
+        self.semantic_value.replace(Some(value));
     }
 }
 

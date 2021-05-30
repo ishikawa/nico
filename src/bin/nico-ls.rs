@@ -2,7 +2,6 @@ use log::{info, warn};
 use lsp_types::*;
 use nico::arena::BumpaloArena;
 use nico::ls::{self, server::ServerCapabilitiesBuilder};
-use nico::sem;
 use nico::syntax::VariableExpression;
 use nico::syntax::{
     self, EffectiveRange, MissingTokenKind, Node, NodePath, ParseError, Parser, StructLiteral,
@@ -223,10 +222,12 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
     fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, value: &StructLiteral) {
         // Expected struct for name
         if let Some(binding) = path.scope().get_binding(value.name().as_str()) {
-            if !binding.kind().is_struct_definition() {
+            let ty = binding.semantic_value().r#type();
+
+            if !ty.is_struct_type() {
                 self.add_diagnostic(
                     value.name().range(),
-                    format!("Expected struct, found '{}'.", binding),
+                    format!("Expected struct, found '{}'.", ty),
                 );
             }
         } else {
@@ -371,21 +372,21 @@ impl SemanticTokenizer {
             SemanticTokenType::PROPERTY
         } else if parent.is_variable_expression() {
             if let Some(binding) = scope.get_binding(id.as_str()) {
-                let definition = binding.kind();
+                let ty = binding.semantic_value().r#type();
 
-                if definition.is_function_definition() {
+                if ty.is_function_type() {
                     return SemanticTokenType::FUNCTION;
-                } else if definition.is_function_parameter() {
+                } else if ty.is_function_type() {
                     return SemanticTokenType::PARAMETER;
-                } else if definition.is_struct_definition() {
+                } else if ty.is_struct_type() {
                     return SemanticTokenType::STRUCT;
-                } else if let Some(builtin) = definition.builtin() {
+                } else if binding.semantic_value().is_builtin() {
                     self.add_token_modifiers_bitset(
                         modifiers,
                         SemanticTokenModifier::DEFAULT_LIBRARY,
                     );
 
-                    if let sem::Type::Function { .. } = *builtin.r#type().borrow() {
+                    if ty.is_function_type() {
                         return SemanticTokenType::FUNCTION;
                     }
                 }

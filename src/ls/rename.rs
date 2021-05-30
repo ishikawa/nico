@@ -1,5 +1,6 @@
 //! Rename operation
 use crate::arena::BumpaloArena;
+use crate::semantic::SemanticValue;
 use crate::syntax::VariableExpression;
 use crate::syntax::VariablePattern;
 use crate::syntax::{
@@ -30,16 +31,11 @@ impl<'a> Rename<'a> {
     }
 
     pub fn rename(&mut self, program: &'a Program<'a>) -> Option<Vec<EffectiveRange>> {
-        if let Some(RenameOperation { kind, .. }) = self.operation.as_ref() {
-            match kind {
-                RenameOperationKind::Definition(definition) => {
-                    let mut visitor = RenameDefinition::new(definition.clone());
-                    syntax::traverse(self.arena, &mut visitor, program);
+        if let Some(operation) = self.operation.as_ref() {
+            let mut visitor = RenameDefinition::new(operation.semantic_value());
+            syntax::traverse(self.arena, &mut visitor, program);
 
-                    return Some(visitor.ranges);
-                }
-                RenameOperationKind::Unknown => {}
-            }
+            return Some(visitor.ranges);
         }
 
         None
@@ -57,52 +53,34 @@ impl<'a> syntax::Visitor<'a> for Rename<'a> {
             // Renaming variable
             if parent.is_variable_expression() {
                 if let Some(binding) = scope.get_binding(id.as_str()) {
-                    self.operation = Some(RenameOperation::new(
-                        id,
-                        RenameOperationKind::Definition(binding.kind().clone()),
-                    ));
+                    self.operation = Some(RenameOperation::new(id, binding.semantic_value()));
                 }
             }
             // Renaming struct name
             else if parent.is_struct_literal() {
                 // TODO: Use type info
                 if let Some(binding) = scope.get_binding(id.as_str()) {
-                    if let DefinitionKind::StructDefinition(_) = binding.kind() {
-                        self.operation = Some(RenameOperation::new(
-                            id,
-                            RenameOperationKind::Definition(binding.kind().clone()),
-                        ));
+                    if binding.semantic_value().r#type().struct_type().is_some() {
+                        self.operation = Some(RenameOperation::new(id, binding.semantic_value()));
                     }
                 }
             } else if let Some(struct_def) = parent.struct_definition() {
                 self.operation = Some(RenameOperation::new(
                     id,
-                    RenameOperationKind::Definition(DefinitionKind::StructDefinition(struct_def)),
+                    struct_def.semantic_value().unwrap(),
                 ));
             }
             // Renaming function name
             else if let Some(function) = parent.function_definition() {
-                self.operation = Some(RenameOperation::new(
-                    id,
-                    RenameOperationKind::Definition(DefinitionKind::FunctionDefinition(function)),
-                ));
+                self.operation = Some(RenameOperation::new(id, function.semantic_value().unwrap()));
             }
             // Renaming function parameter
             else if let Some(param) = parent.function_parameter() {
-                self.operation = Some(RenameOperation::new(
-                    id,
-                    RenameOperationKind::Definition(DefinitionKind::FunctionParameter(param)),
-                ));
+                self.operation = Some(RenameOperation::new(id, param.semantic_value().unwrap()));
             }
             // Renaming pattern
             else if let Some(pattern) = parent.variable_pattern() {
-                self.operation = Some(RenameOperation::new(
-                    id,
-                    RenameOperationKind::Definition(DefinitionKind::VariablePattern(pattern)),
-                ));
-            } else {
-                // dummy
-                self.operation = Some(RenameOperation::new(id, RenameOperationKind::Unknown));
+                self.operation = Some(RenameOperation::new(id, pattern.semantic_value().unwrap()));
             }
 
             path.stop();
@@ -115,37 +93,35 @@ impl<'a> syntax::Visitor<'a> for Rename<'a> {
 #[derive(Debug)]
 struct RenameOperation<'a> {
     id: &'a Identifier<'a>,
-    kind: RenameOperationKind<'a>,
+    semantic_value: &'a SemanticValue<'a>,
 }
 
 impl<'a> RenameOperation<'a> {
-    fn new(id: &'a Identifier<'a>, kind: RenameOperationKind<'a>) -> Self {
-        Self { id, kind }
+    fn new(id: &'a Identifier<'a>, semantic_value: &'a SemanticValue<'a>) -> Self {
+        Self { id, semantic_value }
     }
-}
 
-#[derive(Debug, Clone)]
-enum RenameOperationKind<'a> {
-    Definition(DefinitionKind<'a>),
-    Unknown,
+    fn semantic_value(&self) -> &'a SemanticValue<'a> {
+        &self.semantic_value
+    }
 }
 
 #[derive(Debug)]
 struct RenameDefinition<'a> {
-    definition: DefinitionKind<'a>,
+    semantic_value: &'a SemanticValue<'a>,
     ranges: Vec<EffectiveRange>,
 }
 
 impl<'a> RenameDefinition<'a> {
-    fn new(definition: DefinitionKind<'a>) -> Self {
+    fn new(semantic_value: &'a SemanticValue<'a>) -> Self {
         Self {
-            definition,
+            semantic_value,
             ranges: vec![],
         }
     }
 
-    fn definition(&self) -> &DefinitionKind<'a> {
-        &self.definition
+    fn semantic_value(&self) -> &'a SemanticValue<'a> {
+        &self.semantic_value
     }
 }
 
@@ -155,8 +131,8 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         _path: &'a NodePath<'a>,
         struct_def: &'a StructDefinition<'a>,
     ) {
-        if let DefinitionKind::StructDefinition(definition) = self.definition {
-            if std::ptr::eq(definition, struct_def) {
+        if let Some(value) = struct_def.semantic_value() {
+            if std::ptr::eq(self.semantic_value(), value) {
                 if let Some(name) = struct_def.name() {
                     self.ranges.push(name.range());
                 }
@@ -166,13 +142,12 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
 
     fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, value: &'a StructLiteral<'a>) {
         let scope = path.scope();
-
         let binding = match scope.get_binding(value.name().as_str()) {
             None => return,
             Some(binding) => binding,
         };
 
-        if binding.kind().ptr_eq(self.definition()) {
+        if std::ptr::eq(self.semantic_value(), binding.semantic_value()) {
             self.ranges.push(value.name().range());
         }
     }
@@ -182,8 +157,8 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         _path: &'a NodePath<'a>,
         function: &'a FunctionDefinition<'a>,
     ) {
-        if let DefinitionKind::FunctionDefinition(definition) = self.definition {
-            if std::ptr::eq(definition, function) {
+        if let Some(value) = function.semantic_value() {
+            if std::ptr::eq(self.semantic_value(), value) {
                 if let Some(name) = function.name() {
                     self.ranges.push(name.range());
                 }
@@ -196,8 +171,8 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         _path: &'a NodePath<'a>,
         param: &'a FunctionParameter<'a>,
     ) {
-        if let DefinitionKind::FunctionParameter(definition) = self.definition {
-            if std::ptr::eq(definition, param) {
+        if let Some(value) = param.semantic_value() {
+            if std::ptr::eq(self.semantic_value(), value) {
                 self.ranges.push(param.name().range());
             }
         }
@@ -214,7 +189,7 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
             Some(binding) => binding,
         };
 
-        if binding.kind().ptr_eq(self.definition()) {
+        if std::ptr::eq(self.semantic_value(), binding.semantic_value()) {
             self.ranges.push(expr.range());
         }
     }
@@ -224,8 +199,8 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         _path: &'a NodePath<'a>,
         pattern: &'a VariablePattern<'a>,
     ) {
-        if let DefinitionKind::VariablePattern(definition) = self.definition {
-            if std::ptr::eq(definition, pattern) {
+        if let Some(value) = pattern.semantic_value() {
+            if std::ptr::eq(self.semantic_value(), value) {
                 self.ranges.push(pattern.range());
             }
         }

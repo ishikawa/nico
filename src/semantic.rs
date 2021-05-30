@@ -2,7 +2,7 @@ mod types;
 use crate::syntax::NodeKind;
 pub use types::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SemanticValue<'a> {
     r#type: TypeKind<'a>,
     node: Option<NodeKind<'a>>,
@@ -19,5 +19,9 @@ impl<'a> SemanticValue<'a> {
 
     pub fn node(&self) -> Option<&NodeKind<'a>> {
         self.node.as_ref()
+    }
+
+    pub fn is_builtin(&self) -> bool {
+        self.node.is_none()
     }
 }

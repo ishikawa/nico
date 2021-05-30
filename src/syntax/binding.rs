@@ -15,7 +15,7 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct Binding<'a> {
     id: BumpaloString<'a>,
-    value: &'a SemanticValue<'a>,
+    semantic_value: &'a SemanticValue<'a>,
 }
 
 impl<'a> Binding<'a> {
@@ -26,7 +26,7 @@ impl<'a> Binding<'a> {
     ) -> Self {
         Self {
             id: BumpaloString::from_str_in(name.as_ref(), arena),
-            value,
+            semantic_value: value,
         }
     }
 
@@ -57,19 +57,20 @@ impl<'a> Binding<'a> {
         name: S,
         function_type: &'a FunctionType<'a>,
     ) -> Self {
-        Self::new(
-            arena,
-            name.as_ref(),
-            &SemanticValue::new(TypeKind::FunctionType(function_type), None),
-        )
+        let value = arena.alloc(SemanticValue::new(
+            TypeKind::FunctionType(function_type),
+            None,
+        ));
+
+        Self::new(arena, name.as_ref(), value)
     }
 
     pub fn id(&self) -> &str {
         self.id.as_str()
     }
 
-    pub fn value(&self) -> &'a SemanticValue<'a> {
-        self.value
+    pub fn semantic_value(&self) -> &'a SemanticValue<'a> {
+        self.semantic_value
     }
 }
 
@@ -135,33 +136,35 @@ impl<'a> Scope<'a> {
         if let Some(fun) = declaration.function_definition() {
             if let Some(name) = fun.name() {
                 if let Some(ty) = fun.r#type() {
-                    let value = SemanticValue::new(ty, Some(NodeKind::FunctionDefinition(fun)));
+                    let value = arena.alloc(SemanticValue::new(
+                        ty,
+                        Some(NodeKind::FunctionDefinition(fun)),
+                    ));
 
-                    self.insert(
-                        arena,
-                        Binding::new(arena, name.as_str(), arena.alloc(value)),
-                    );
+                    self.insert(arena, Binding::new(arena, name.as_str(), value));
+                    fun.assign_semantic_value(value);
                 }
             }
         } else if let Some(param) = declaration.function_parameter() {
             if let Some(ty) = param.r#type() {
-                let value = SemanticValue::new(ty, Some(NodeKind::FunctionParameter(param)));
+                let value = arena.alloc(SemanticValue::new(
+                    ty,
+                    Some(NodeKind::FunctionParameter(param)),
+                ));
 
-                self.insert(
-                    arena,
-                    Binding::new(arena, param.name().as_str(), arena.alloc(value)),
-                );
+                self.insert(arena, Binding::new(arena, param.name().as_str(), value));
+                param.assign_semantic_value(value);
             }
-        } else if let Some(struct_def) = declaration.struct_definition() {
-            if let Some(name) = struct_def.name() {
-                if let Some(ty) = struct_def.r#type() {
-                    let value =
-                        SemanticValue::new(ty, Some(NodeKind::StructDefinition(struct_def)));
+        } else if let Some(struct_node) = declaration.struct_definition() {
+            if let Some(name) = struct_node.name() {
+                if let Some(ty) = struct_node.r#type() {
+                    let value = arena.alloc(SemanticValue::new(
+                        ty,
+                        Some(NodeKind::StructDefinition(struct_node)),
+                    ));
 
-                    self.insert(
-                        arena,
-                        Binding::new(arena, name.as_str(), arena.alloc(value)),
-                    );
+                    self.insert(arena, Binding::new(arena, name.as_str(), value));
+                    struct_node.assign_semantic_value(value);
                 }
             }
         } else if let Some(pattern) = declaration.pattern() {
@@ -175,13 +178,13 @@ impl<'a> Scope<'a> {
             PatternKind::StringPattern(_) => {}
             PatternKind::VariablePattern(variable_pattern) => {
                 if let Some(ty) = variable_pattern.r#type() {
-                    let value =
-                        SemanticValue::new(ty, Some(NodeKind::VariablePattern(variable_pattern)));
+                    let value = arena.alloc(SemanticValue::new(
+                        ty,
+                        Some(NodeKind::VariablePattern(variable_pattern)),
+                    ));
 
-                    self.insert(
-                        arena,
-                        Binding::new(arena, variable_pattern.name(), arena.alloc(value)),
-                    );
+                    self.insert(arena, Binding::new(arena, variable_pattern.name(), value));
+                    variable_pattern.assign_semantic_value(value);
                 }
             }
             PatternKind::ArrayPattern(pat) => {

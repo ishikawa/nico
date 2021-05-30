@@ -84,6 +84,14 @@ impl<'a> TypeKind<'a> {
         }
     }
 
+    pub fn is_function_type(&self) -> bool {
+        matches!(self, TypeKind::FunctionType(..))
+    }
+
+    pub fn is_struct_type(&self) -> bool {
+        matches!(self, TypeKind::StructType(..))
+    }
+
     pub fn prune(self) -> Self {
         if let TypeKind::TypeVariable(ty) = self {
             Self::TypeVariable(ty.prune())
