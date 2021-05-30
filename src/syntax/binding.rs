@@ -5,7 +5,9 @@ use super::{
     StructDefinition, VariableDeclaration, Visitor,
 };
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
-use crate::semantic::{FunctionParameter, FunctionType, SemanticValue, TypeKind, TypeVariable};
+use crate::semantic::{
+    self, FunctionParameter, FunctionType, SemanticValue, TypeKind, TypeVariable,
+};
 use crate::syntax;
 use std::{
     cell::{Cell, RefCell},
@@ -243,15 +245,77 @@ impl<'a> InitialTypeBinder<'a> {
         self.seq += 1;
         self.arena.alloc(var)
     }
+
+    fn build_struct_type(
+        &mut self,
+        definition: &'a StructDefinition<'a>,
+    ) -> Option<&'a semantic::StructType<'a>> {
+        let name = definition.name()?;
+        let mut field_types = vec![];
+
+        for f in definition.fields() {
+            let name = f.name()?.as_str();
+            let ty = f.type_annotation()?.r#type();
+
+            let field = &*self
+                .arena
+                .alloc(semantic::StructField::new(self.arena, name, ty));
+
+            field_types.push(field);
+        }
+
+        let ty = semantic::StructType::new(self.arena, name.as_str(), &field_types);
+        Some(&*self.arena.alloc(ty))
+    }
+
+    fn build_function_type(
+        &mut self,
+        definition: &'a FunctionDefinition<'a>,
+    ) -> Option<&'a semantic::FunctionType<'a>> {
+        let name = definition.name()?;
+        let params: Vec<_> = definition
+            .parameters()
+            .map(|p| {
+                let var = self.new_type_var();
+
+                &*self.arena.alloc(semantic::FunctionParameter::new(
+                    self.arena,
+                    p.name().as_str(),
+                    TypeKind::TypeVariable(var),
+                ))
+            })
+            .collect();
+
+        let ty = semantic::FunctionType::new(
+            self.arena,
+            name.as_str(),
+            &params,
+            TypeKind::TypeVariable(self.new_type_var()),
+        );
+
+        Some(&*self.arena.alloc(ty))
+    }
 }
 
 impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
+    fn enter_struct_definition(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        definition: &'a StructDefinition<'a>,
+    ) {
+        if let Some(ty) = self.build_struct_type(definition) {
+            definition.assign_type(TypeKind::StructType(ty))
+        }
+    }
+
     fn enter_function_definition(
         &mut self,
         _path: &'a NodePath<'a>,
         definition: &'a FunctionDefinition<'a>,
     ) {
-        definition.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        if let Some(ty) = self.build_function_type(definition) {
+            definition.assign_type(TypeKind::FunctionType(ty))
+        }
     }
 }
 
