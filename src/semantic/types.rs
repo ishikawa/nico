@@ -53,7 +53,7 @@ pub enum TypeKind<'a> {
 
 impl<'a> TypeKind<'a> {
     pub fn struct_type(&self) -> Option<&'a StructType<'a>> {
-        if let &TypeKind::StructType(ty) = self {
+        if let TypeKind::StructType(ty) = self {
             Some(ty)
         } else {
             None
@@ -61,7 +61,7 @@ impl<'a> TypeKind<'a> {
     }
 
     pub fn function_type(&self) -> Option<&'a FunctionType<'a>> {
-        if let &TypeKind::FunctionType(ty) = self {
+        if let TypeKind::FunctionType(ty) = self {
             Some(ty)
         } else {
             None
@@ -69,7 +69,7 @@ impl<'a> TypeKind<'a> {
     }
 
     pub fn array_type(&self) -> Option<&'a ArrayType<'a>> {
-        if let &TypeKind::ArrayType(ty) = self {
+        if let TypeKind::ArrayType(ty) = self {
             Some(ty)
         } else {
             None
@@ -77,7 +77,7 @@ impl<'a> TypeKind<'a> {
     }
 
     pub fn type_variable(&self) -> Option<&'a TypeVariable<'a>> {
-        if let &TypeKind::TypeVariable(ty) = self {
+        if let TypeKind::TypeVariable(ty) = self {
             Some(ty)
         } else {
             None
@@ -543,18 +543,15 @@ impl<'a> TypeVariable<'a> {
     }
 
     pub fn prune(&self) -> &Self {
-        let pruned = if let Some(inner) = self.inner.get() {
-            match inner {
-                TypeKind::TypeVariable(var) => var.prune(),
-                _ => return self,
-            }
+        let pruned = if let Some(TypeKind::TypeVariable(var)) = self.inner.get() {
+            var.prune()
         } else {
             return self;
         };
 
         // Prune intermediate type variables.
         self.inner.replace(Some(TypeKind::TypeVariable(pruned)));
-        return pruned;
+        pruned
     }
 
     pub fn replace_instance(&self, ty: TypeKind<'a>) {

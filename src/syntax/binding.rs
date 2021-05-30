@@ -38,9 +38,7 @@ impl<'a> Binding<'a> {
     ) -> Self {
         let params: Vec<_> = parameters
             .iter()
-            .map(|(name, ty)| {
-                &*arena.alloc(FunctionParameter::new(arena, name.as_ref(), ty.clone()))
-            })
+            .map(|(name, ty)| &*arena.alloc(FunctionParameter::new(arena, name.as_ref(), *ty)))
             .collect();
         let fun_type = arena.alloc(FunctionType::new(
             arena,
