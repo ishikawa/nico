@@ -146,9 +146,9 @@ impl<'a> TypeKind<'a> {
 impl Display for TypeKind<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypeKind::Int32 => write!(f, "Int32"),
-            TypeKind::Boolean => write!(f, "Boolean"),
-            TypeKind::String => write!(f, "String"),
+            TypeKind::Int32 => write!(f, "i32"),
+            TypeKind::Boolean => write!(f, "bool"),
+            TypeKind::String => write!(f, "str"),
             TypeKind::StructType(ty) => ty.fmt(f),
             TypeKind::FunctionType(ty) => ty.fmt(f),
             TypeKind::ArrayType(ty) => ty.fmt(f),
@@ -181,6 +181,13 @@ impl<'a> StructType<'a> {
 
     pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a StructField<'a>> + '_ {
         self.fields.iter().copied()
+    }
+
+    pub fn get_field_type(&self, name: &str) -> Option<TypeKind<'a>> {
+        self.fields
+            .iter()
+            .find(|f| f.name() == name)
+            .map(|f| f.r#type())
     }
 
     pub fn unify(

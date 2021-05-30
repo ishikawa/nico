@@ -1,12 +1,11 @@
+use std::fmt::Display;
+
 use crate::arena::BumpaloArena;
-use crate::{
-    sem,
-    syntax::{
-        self, EffectiveRange, Node, NodePath, Position, Program, StructDefinition, TypeAnnotation,
-        ValueField,
-    },
+use crate::semantic::StructType;
+use crate::semantic::TypeKind;
+use crate::syntax::{
+    self, EffectiveRange, Node, NodePath, Position, Program, TypeAnnotation, ValueField,
 };
-use std::{cell::RefCell, fmt, rc::Rc};
 
 #[derive(Debug)]
 pub struct Hover<'a> {
@@ -29,32 +28,32 @@ impl<'a> Hover<'a> {
         self.result.as_ref().map(|(s, r)| (s.as_str(), *r))
     }
 
-    fn describe_optional<T: fmt::Display>(&self, name: Option<T>) -> String {
+    fn describe_optional<T: Display>(&self, name: Option<T>) -> String {
         name.map_or("{{unknown}}".to_string(), |x| x.to_string())
     }
 
-    fn describe_type(&self, r#type: &Rc<RefCell<sem::Type>>) -> String {
-        let description = match *r#type.borrow() {
-            sem::Type::Int32 => "The 32-bit signed integer type.",
-            sem::Type::Boolean => "The boolean type.",
+    fn describe_type(&self, ty: &'a TypeKind<'a>) -> String {
+        let description = match ty {
+            TypeKind::Int32 => "The 32-bit signed integer type.",
+            TypeKind::Boolean => "The boolean type.",
             _ => "",
         };
 
-        format!("```nico\n{}\n```\n---\n{}", r#type.borrow(), description)
+        format!("```nico\n{}\n```\n---\n{}", ty, description)
     }
 
     fn describe_value_field(
         &self,
-        definition: &'a StructDefinition<'a>,
+        struct_type: &'a StructType<'a>,
         field: &'a ValueField<'a>,
     ) -> String {
-        let ty = definition.get_field_type(field.name().as_str());
+        let ty = struct_type.get_field_type(field.name().as_str());
 
         format!(
             "```nico\n{}.{}: {}\n```",
-            self.describe_optional(definition.name()),
+            struct_type.name(),
             field.name(),
-            self.describe_optional(ty.map(|x| x.borrow().to_string())),
+            self.describe_optional(ty),
         )
     }
 }
@@ -87,9 +86,11 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
 
         // TODO: Use type info
         if let Some(binding) = scope.get_binding(literal.name().as_str()) {
-            if let DefinitionKind::StructDefinition(ref definition) = binding.value() {
+            let value = binding.value();
+
+            if let Some(struct_type) = value.r#type().struct_type() {
                 self.result.replace((
-                    self.describe_value_field(definition, field),
+                    self.describe_value_field(struct_type, field),
                     field.name().range(),
                 ));
             }

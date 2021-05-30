@@ -2,12 +2,9 @@
 use crate::arena::BumpaloArena;
 use crate::syntax::VariableExpression;
 use crate::syntax::VariablePattern;
-use crate::{
-    semantic::DefinitionKind,
-    syntax::{
-        self, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node, NodePath,
-        Position, Program, StructDefinition, StructLiteral,
-    },
+use crate::syntax::{
+    self, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node, NodePath,
+    Position, Program, StructDefinition, StructLiteral,
 };
 
 #[derive(Debug)]
