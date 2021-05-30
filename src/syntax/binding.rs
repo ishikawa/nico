@@ -1,13 +1,11 @@
 //! This module contains implementations of `Visitor` that assigns meta information that can be
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
-    traverse, Block, CaseArm, FunctionDefinition, NodeKind, NodePath, PatternKind, Program,
-    StructDefinition, VariableDeclaration, Visitor,
+    traverse, Block, CaseArm, FunctionDefinition, FunctionParameter, NodeKind, NodePath,
+    PatternKind, Program, StructDefinition, VariableDeclaration, Visitor,
 };
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
-use crate::semantic::{
-    self, FunctionParameter, FunctionType, SemanticValue, TypeKind, TypeVariable,
-};
+use crate::semantic::{self, SemanticValue, TypeKind, TypeVariable};
 use crate::syntax;
 use std::{
     cell::{Cell, RefCell},
@@ -40,9 +38,11 @@ impl<'a> Binding<'a> {
     ) -> Self {
         let params: Vec<_> = parameters
             .iter()
-            .map(|(name, ty)| &*arena.alloc(FunctionParameter::new(arena, name.as_ref(), *ty)))
+            .map(|(name, ty)| {
+                &*arena.alloc(semantic::FunctionParameter::new(arena, name.as_ref(), *ty))
+            })
             .collect();
-        let fun_type = arena.alloc(FunctionType::new(
+        let fun_type = arena.alloc(semantic::FunctionType::new(
             arena,
             name.as_ref(),
             &params,
@@ -55,7 +55,7 @@ impl<'a> Binding<'a> {
     pub fn defined_function<S: AsRef<str>>(
         arena: &'a BumpaloArena,
         name: S,
-        function_type: &'a FunctionType<'a>,
+        function_type: &'a semantic::FunctionType<'a>,
     ) -> Self {
         let value = arena.alloc(SemanticValue::new(
             TypeKind::FunctionType(function_type),
@@ -316,6 +316,14 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         if let Some(ty) = self.build_function_type(definition) {
             definition.assign_type(TypeKind::FunctionType(ty))
         }
+    }
+
+    fn enter_function_parameter(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        param: &'a FunctionParameter<'a>,
+    ) {
+        param.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 }
 
