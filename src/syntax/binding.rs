@@ -5,7 +5,7 @@ use super::{
     StructDefinition, VariableDeclaration, Visitor,
 };
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
-use crate::semantic::{FunctionParameter, FunctionType, SemanticValue, TypeKind};
+use crate::semantic::{FunctionParameter, FunctionType, SemanticValue, TypeKind, TypeVariable};
 use crate::syntax;
 use std::{
     cell::{Cell, RefCell},
@@ -227,6 +227,36 @@ impl<'a> Scope<'a> {
     }
 }
 
+/// A visitor assigns an initial type (type variable or primitive type) to a node.
+#[derive(Debug)]
+struct InitialTypeBinder<'a> {
+    arena: &'a BumpaloArena,
+    seq: i32,
+}
+
+impl<'a> InitialTypeBinder<'a> {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
+        Self { arena, seq: 0 }
+    }
+
+    pub fn new_type_var(&mut self) -> &'a TypeVariable<'a> {
+        let var = TypeVariable::new(self.seq);
+
+        self.seq += 1;
+        self.arena.alloc(var)
+    }
+}
+
+impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
+    fn enter_function_definition(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        definition: &'a FunctionDefinition<'a>,
+    ) {
+        definition.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+}
+
 /// A Visitor collects only top-level declarations in order to resolve forward references.
 #[derive(Debug)]
 struct TopLevelDeclarationBinder<'a> {
@@ -368,6 +398,9 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
 }
 
 pub fn bind<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
+    let mut binder = InitialTypeBinder::new(arena);
+    traverse(arena, &mut binder, node);
+
     let mut binder = TopLevelDeclarationBinder::new(arena);
     traverse(arena, &mut binder, node);
 

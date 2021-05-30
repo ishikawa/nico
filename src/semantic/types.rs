@@ -524,6 +524,13 @@ pub struct TypeVariable<'a> {
 }
 
 impl<'a> TypeVariable<'a> {
+    pub fn new(label: i32) -> Self {
+        Self {
+            label,
+            inner: Cell::default(),
+        }
+    }
+
     pub fn instance(&self) -> Option<TypeKind<'a>> {
         if let Some(inner) = self.inner.get() {
             match inner {
