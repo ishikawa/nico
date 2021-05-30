@@ -53,26 +53,26 @@ pub enum TypeKind<'a> {
 
 impl<'a> TypeKind<'a> {
     pub fn struct_type(&self) -> Option<&'a StructType<'a>> {
-        if let TypeKind::StructType(ty) = self {
-            Some(ty)
-        } else {
-            None
+        match self {
+            TypeKind::StructType(ty) => Some(ty),
+            TypeKind::TypeVariable(var) => var.instance().and_then(|x| x.struct_type()),
+            _ => None,
         }
     }
 
     pub fn function_type(&self) -> Option<&'a FunctionType<'a>> {
-        if let TypeKind::FunctionType(ty) = self {
-            Some(ty)
-        } else {
-            None
+        match self {
+            TypeKind::FunctionType(ty) => Some(ty),
+            TypeKind::TypeVariable(var) => var.instance().and_then(|x| x.function_type()),
+            _ => None,
         }
     }
 
     pub fn array_type(&self) -> Option<&'a ArrayType<'a>> {
-        if let TypeKind::ArrayType(ty) = self {
-            Some(ty)
-        } else {
-            None
+        match self {
+            TypeKind::ArrayType(ty) => Some(ty),
+            TypeKind::TypeVariable(var) => var.instance().and_then(|x| x.array_type()),
+            _ => None,
         }
     }
 
@@ -85,11 +85,15 @@ impl<'a> TypeKind<'a> {
     }
 
     pub fn is_function_type(&self) -> bool {
-        matches!(self, TypeKind::FunctionType(..))
+        self.struct_type().is_some()
     }
 
     pub fn is_struct_type(&self) -> bool {
-        matches!(self, TypeKind::StructType(..))
+        self.function_type().is_some()
+    }
+
+    pub fn is_array_type(&self) -> bool {
+        self.array_type().is_some()
     }
 
     pub fn prune(self) -> Self {
