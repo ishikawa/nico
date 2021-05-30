@@ -1,8 +1,8 @@
 use super::*;
 use crate::arena::{BumpaloArena, BumpaloString};
+use crate::semantic::TypeKind;
+use crate::syntax::binding;
 use crate::util::naming::PrefixNaming;
-use crate::util::wrap;
-use crate::{sem, syntax::binding};
 
 const DEBUG: bool = false;
 
@@ -356,7 +356,7 @@ impl<'a, 't> Parser<'a, 't> {
         let mut code = CodeBuilder::new();
         code.interpret(self.expect_token(TokenKind::I32)?);
 
-        let ty = TypeAnnotation::new(wrap(sem::Type::Int32), code.build(arena));
+        let ty = TypeAnnotation::new(TypeKind::Int32, code.build(arena));
         Some(arena.alloc(ty))
     }
 

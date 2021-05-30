@@ -1,7 +1,6 @@
 use crate::arena::BumpaloArena;
 use crate::{
     sem,
-    semantic::DefinitionKind,
     syntax::{
         self, EffectiveRange, Node, NodePath, Position, Program, StructDefinition, TypeAnnotation,
         ValueField,
@@ -88,7 +87,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
 
         // TODO: Use type info
         if let Some(binding) = scope.get_binding(literal.name().as_str()) {
-            if let DefinitionKind::StructDefinition(ref definition) = binding.kind() {
+            if let DefinitionKind::StructDefinition(ref definition) = binding.value() {
                 self.result.replace((
                     self.describe_value_field(definition, field),
                     field.name().range(),

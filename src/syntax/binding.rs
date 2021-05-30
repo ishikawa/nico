@@ -1,53 +1,66 @@
 //! This module contains implementations of `Visitor` that assigns meta information that can be
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
-    traverse, Block, CaseArm, FunctionDefinition, FunctionParameter, NodeKind, NodePath,
-    PatternKind, Program, StructDefinition, VariableDeclaration, Visitor,
+    traverse, Block, CaseArm, FunctionDefinition, NodeKind, NodePath, PatternKind, Program,
+    StructDefinition, VariableDeclaration, Visitor,
 };
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
-use crate::{sem::Type, semantic::DefinitionKind};
-use crate::{semantic::Builtin, util::wrap};
+use crate::semantic::{FunctionParameter, FunctionType, SemanticValue, TypeKind};
+use crate::syntax;
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
-    fmt,
-    rc::Rc,
 };
 
 #[derive(Debug, Clone)]
 pub struct Binding<'a> {
     id: BumpaloString<'a>,
-    kind: &'a DefinitionKind<'a>,
+    value: &'a SemanticValue<'a>,
 }
 
 impl<'a> Binding<'a> {
-    pub fn new<S: AsRef<str>>(arena: &'a BumpaloArena, name: S, kind: DefinitionKind<'a>) -> Self {
+    pub fn new<S: AsRef<str>>(
+        arena: &'a BumpaloArena,
+        name: S,
+        value: &'a SemanticValue<'a>,
+    ) -> Self {
         Self {
             id: BumpaloString::from_str_in(name.as_ref(), arena),
-            kind: arena.alloc(kind),
+            value,
         }
     }
 
     pub fn builtin_function<S: AsRef<str>>(
         arena: &'a BumpaloArena,
         name: S,
-        function_type: Type,
+        parameters: &[(S, TypeKind<'a>)],
+        return_type: TypeKind<'a>,
     ) -> Self {
-        Self::defined_function(arena, name, &wrap(function_type))
+        let params: Vec<_> = parameters
+            .iter()
+            .map(|(name, ty)| {
+                &*arena.alloc(FunctionParameter::new(arena, name.as_ref(), ty.clone()))
+            })
+            .collect();
+        let fun_type = arena.alloc(FunctionType::new(
+            arena,
+            name.as_ref(),
+            &params,
+            return_type,
+        ));
+
+        Self::defined_function(arena, name, fun_type)
     }
 
     pub fn defined_function<S: AsRef<str>>(
         arena: &'a BumpaloArena,
         name: S,
-        function_type: &Rc<RefCell<Type>>,
+        function_type: &'a FunctionType<'a>,
     ) -> Self {
         Self::new(
             arena,
             name.as_ref(),
-            DefinitionKind::Builtin(Rc::new(Builtin::new(
-                name.as_ref().to_string(),
-                function_type,
-            ))),
+            &SemanticValue::new(TypeKind::FunctionType(function_type), None),
         )
     }
 
@@ -55,20 +68,8 @@ impl<'a> Binding<'a> {
         self.id.as_str()
     }
 
-    pub fn kind(&self) -> &'a DefinitionKind<'a> {
-        self.kind
-    }
-}
-
-impl fmt::Display for Binding<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            DefinitionKind::Builtin(_) => write!(f, "builtin `{}`", self.id),
-            DefinitionKind::StructDefinition(_) => write!(f, "struct `{}`", self.id),
-            DefinitionKind::FunctionDefinition(_) => write!(f, "function `{}`", self.id),
-            DefinitionKind::FunctionParameter(_) => write!(f, "function parameter `{}`", self.id),
-            DefinitionKind::VariablePattern(_) => write!(f, "local variable `{}`", self.id),
-        }
+    pub fn value(&self) -> &'a SemanticValue<'a> {
+        self.value
     }
 }
 
@@ -88,10 +89,8 @@ impl<'a> Scope<'a> {
             Binding::builtin_function(
                 arena,
                 "println_str",
-                Type::Function {
-                    params: vec![wrap(Type::String)],
-                    return_type: wrap(Type::Int32),
-                },
+                &[("arg0", TypeKind::String)],
+                TypeKind::Int32,
             ),
         );
         scope.insert(
@@ -99,10 +98,8 @@ impl<'a> Scope<'a> {
             Binding::builtin_function(
                 arena,
                 "println_i32",
-                Type::Function {
-                    params: vec![wrap(Type::Int32)],
-                    return_type: wrap(Type::Int32),
-                },
+                &[("arg0", TypeKind::Int32)],
+                TypeKind::Int32,
             ),
         );
         scope.insert(
@@ -110,10 +107,8 @@ impl<'a> Scope<'a> {
             Binding::builtin_function(
                 arena,
                 "debug_i32",
-                Type::Function {
-                    params: vec![wrap(Type::String), wrap(Type::Int32)],
-                    return_type: wrap(Type::Int32),
-                },
+                &[("message", TypeKind::String), ("value", TypeKind::Int32)],
+                TypeKind::Int32,
             ),
         );
 
@@ -139,30 +134,35 @@ impl<'a> Scope<'a> {
     pub fn register_declaration(&self, arena: &'a BumpaloArena, declaration: &NodeKind<'a>) {
         if let Some(fun) = declaration.function_definition() {
             if let Some(name) = fun.name() {
-                self.insert(
-                    arena,
-                    Binding::new(
+                if let Some(ty) = fun.r#type() {
+                    let value = SemanticValue::new(ty, Some(NodeKind::FunctionDefinition(fun)));
+
+                    self.insert(
                         arena,
-                        name.as_str(),
-                        DefinitionKind::FunctionDefinition(&fun),
-                    ),
-                );
+                        Binding::new(arena, name.as_str(), arena.alloc(value)),
+                    );
+                }
             }
         } else if let Some(param) = declaration.function_parameter() {
-            self.insert(
-                arena,
-                Binding::new(
-                    arena,
-                    param.name().as_str(),
-                    DefinitionKind::FunctionParameter(&param),
-                ),
-            );
-        } else if let Some(def) = declaration.struct_definition() {
-            if let Some(name) = def.name() {
+            if let Some(ty) = param.r#type() {
+                let value = SemanticValue::new(ty, Some(NodeKind::FunctionParameter(param)));
+
                 self.insert(
                     arena,
-                    Binding::new(arena, name.as_str(), DefinitionKind::StructDefinition(&def)),
+                    Binding::new(arena, param.name().as_str(), arena.alloc(value)),
                 );
+            }
+        } else if let Some(struct_def) = declaration.struct_definition() {
+            if let Some(name) = struct_def.name() {
+                if let Some(ty) = struct_def.r#type() {
+                    let value =
+                        SemanticValue::new(ty, Some(NodeKind::StructDefinition(struct_def)));
+
+                    self.insert(
+                        arena,
+                        Binding::new(arena, name.as_str(), arena.alloc(value)),
+                    );
+                }
             }
         } else if let Some(pattern) = declaration.pattern() {
             self.register_pattern(arena, pattern.kind());
@@ -174,14 +174,15 @@ impl<'a> Scope<'a> {
             PatternKind::IntegerPattern(_) => {}
             PatternKind::StringPattern(_) => {}
             PatternKind::VariablePattern(variable_pattern) => {
-                self.insert(
-                    arena,
-                    Binding::new(
+                if let Some(ty) = variable_pattern.r#type() {
+                    let value =
+                        SemanticValue::new(ty, Some(NodeKind::VariablePattern(variable_pattern)));
+
+                    self.insert(
                         arena,
-                        variable_pattern.name(),
-                        DefinitionKind::VariablePattern(variable_pattern),
-                    ),
-                );
+                        Binding::new(arena, variable_pattern.name(), arena.alloc(value)),
+                    );
+                }
             }
             PatternKind::ArrayPattern(pat) => {
                 for pat in pat.elements() {
@@ -333,7 +334,7 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
     fn enter_function_parameter(
         &mut self,
         path: &'a NodePath<'a>,
-        _param: &'a FunctionParameter<'a>,
+        _param: &'a syntax::FunctionParameter<'a>,
     ) {
         let node = path.node();
 
