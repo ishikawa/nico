@@ -61,7 +61,7 @@ pub trait Node<'arena> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum NodeKind<'a> {
     Program(&'a Program<'a>),
     TopLevel(&'a TopLevel<'a>),
@@ -323,16 +323,20 @@ impl<'a> NodeKind<'a> {
         matches!(self, Self::Pattern(..))
     }
 
+    pub fn is_variable_pattern(&self) -> bool {
+        matches!(self, Self::VariablePattern(..))
+    }
+
     pub fn is_struct_literal(&self) -> bool {
-        self.struct_literal().is_some()
+        matches!(self, Self::StructLiteral(..))
     }
 
     pub fn is_variable_expression(&self) -> bool {
-        self.variable_expression().is_some()
+        matches!(self, Self::VariableExpression(..))
     }
 
     pub fn is_member_expression(&self) -> bool {
-        self.member_expression().is_some()
+        matches!(self, Self::MemberExpression(..))
     }
 }
 

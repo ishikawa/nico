@@ -17,8 +17,8 @@ impl<'a> SemanticValue<'a> {
         self.r#type
     }
 
-    pub fn node(&self) -> Option<&NodeKind<'a>> {
-        self.node.as_ref()
+    pub fn node(&self) -> Option<NodeKind<'a>> {
+        self.node
     }
 
     pub fn is_builtin(&self) -> bool {
@@ -26,10 +26,12 @@ impl<'a> SemanticValue<'a> {
     }
 
     pub fn is_function_parameter(&self) -> bool {
-        if let Some(node) = self.node() {
-            node.is_function_parameter()
-        } else {
-            false
-        }
+        self.node()
+            .filter(NodeKind::is_function_parameter)
+            .is_some()
+    }
+
+    pub fn is_variable_pattern(&self) -> bool {
+        self.node().filter(NodeKind::is_variable_pattern).is_some()
     }
 }

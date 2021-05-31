@@ -9,6 +9,7 @@ use super::{
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
 use crate::semantic::{self, SemanticValue, TypeKind, TypeVariable};
 use crate::syntax;
+use std::fmt;
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
@@ -74,6 +75,38 @@ impl<'a> Binding<'a> {
     pub fn semantic_value(&self) -> &'a SemanticValue<'a> {
         self.semantic_value
     }
+
+    pub fn is_function_parameter(&self) -> bool {
+        self.semantic_value().is_function_parameter()
+    }
+
+    pub fn is_function(&self) -> bool {
+        self.semantic_value().r#type().is_function_type()
+    }
+
+    pub fn is_struct(&self) -> bool {
+        self.semantic_value().r#type().is_struct_type()
+    }
+
+    pub fn is_local_variable(&self) -> bool {
+        self.semantic_value().is_variable_pattern()
+    }
+}
+
+impl fmt::Display for Binding<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_function_parameter() {
+            write!(f, "function parameter `{}`", self.id())
+        } else if self.is_function() {
+            write!(f, "function `{}`", self.id())
+        } else if self.is_struct() {
+            write!(f, "struct `{}`", self.id())
+        } else if self.is_local_variable() {
+            write!(f, "local variable `{}`", self.id())
+        } else {
+            write!(f, "`{}`", self.id())
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -134,7 +167,7 @@ impl<'a> Scope<'a> {
         self.bindings.borrow_mut().insert(b.id(), b);
     }
 
-    pub fn register_declaration(&self, arena: &'a BumpaloArena, declaration: &NodeKind<'a>) {
+    pub fn register_declaration(&self, arena: &'a BumpaloArena, declaration: NodeKind<'a>) {
         if let Some(fun) = declaration.function_definition() {
             if let Some(name) = fun.name() {
                 if let Some(ty) = fun.r#type() {
@@ -404,7 +437,7 @@ impl<'a> TopLevelDeclarationBinder<'a> {
         }
     }
 
-    fn register_declaration(&mut self, node: &NodeKind<'a>) {
+    fn register_declaration(&mut self, node: NodeKind<'a>) {
         if let Some(ref declarations) = self.declarations {
             declarations.register_declaration(self.arena, node);
         }
@@ -517,14 +550,14 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
         if let Some(pattern) = declaration.pattern() {
             let scope = path.scope();
 
-            scope.register_declaration(self.arena, &NodeKind::Pattern(pattern));
+            scope.register_declaration(self.arena, NodeKind::Pattern(pattern));
         }
     }
 
     fn enter_case_arm(&mut self, _path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {
         if let Some(pattern) = arm.pattern() {
             arm.scope()
-                .register_declaration(self.arena, &NodeKind::Pattern(pattern));
+                .register_declaration(self.arena, NodeKind::Pattern(pattern));
         }
     }
 }

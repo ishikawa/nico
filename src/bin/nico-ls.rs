@@ -222,12 +222,10 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
     fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, value: &StructLiteral) {
         // Expected struct for name
         if let Some(binding) = path.scope().get_binding(value.name().as_str()) {
-            let ty = binding.semantic_value().r#type();
-
-            if !ty.is_struct_type() {
+            if !binding.is_struct() {
                 self.add_diagnostic(
                     value.name().range(),
-                    format!("Expected struct, found '{}'.", ty),
+                    format!("Expected struct, found '{}'.", binding),
                 );
             }
         } else {
