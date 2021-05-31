@@ -110,6 +110,7 @@ let cases: TestCase[] = [
       }
     ]
   },
+  // variable name
   {
     // prettier-ignore
     input: [

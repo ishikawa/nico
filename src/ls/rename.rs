@@ -1,13 +1,9 @@
 //! Rename operation
 use crate::arena::BumpaloArena;
-use crate::syntax::VariableExpression;
-use crate::syntax::VariablePattern;
-use crate::{
-    semantic::DefinitionKind,
-    syntax::{
-        self, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node, NodePath,
-        Position, Program, StructDefinition, StructLiteral,
-    },
+use crate::syntax::{
+    self, Binding, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node,
+    NodePath, Position, Program, StructDefinition, StructLiteral, VariableExpression,
+    VariablePattern,
 };
 
 #[derive(Debug)]
@@ -29,19 +25,19 @@ impl<'a> Rename<'a> {
     pub fn prepare(&mut self, program: &'a Program<'a>) -> Option<&'a Identifier<'a>> {
         self.operation = None;
         syntax::traverse(self.arena, self, program);
-        self.operation.as_ref().map(|op| op.id)
+        self.operation.as_ref().map(|op| op.id())
     }
 
     pub fn rename(&mut self, program: &'a Program<'a>) -> Option<Vec<EffectiveRange>> {
-        if let Some(RenameOperation { kind, .. }) = self.operation.as_ref() {
-            match kind {
-                RenameOperationKind::Definition(definition) => {
-                    let mut visitor = RenameDefinition::new(definition.clone());
-                    syntax::traverse(self.arena, &mut visitor, program);
+        if let Some(operation) = self.operation.as_ref() {
+            match operation.kind() {
+                RenameOperationKind::Binding(semantic_value) => {
+                    let mut visitor = RenameBinding::new(semantic_value);
 
+                    syntax::traverse(self.arena, &mut visitor, program);
                     return Some(visitor.ranges);
                 }
-                RenameOperationKind::Unknown => {}
+                RenameOperationKind::StructField(_) => todo!(),
             }
         }
 
@@ -60,52 +56,49 @@ impl<'a> syntax::Visitor<'a> for Rename<'a> {
             // Renaming variable
             if parent.is_variable_expression() {
                 if let Some(binding) = scope.get_binding(id.as_str()) {
-                    self.operation = Some(RenameOperation::new(
-                        id,
-                        RenameOperationKind::Definition(binding.kind().clone()),
-                    ));
+                    self.operation = Some(RenameOperation::rename_binding(id, binding));
                 }
             }
             // Renaming struct name
             else if parent.is_struct_literal() {
-                // TODO: Use type info
                 if let Some(binding) = scope.get_binding(id.as_str()) {
-                    if let DefinitionKind::StructDefinition(_) = binding.kind() {
-                        self.operation = Some(RenameOperation::new(
-                            id,
-                            RenameOperationKind::Definition(binding.kind().clone()),
-                        ));
+                    if binding.is_struct() {
+                        self.operation = Some(RenameOperation::rename_binding(id, binding));
                     }
                 }
             } else if let Some(struct_def) = parent.struct_definition() {
-                self.operation = Some(RenameOperation::new(
+                self.operation = Some(RenameOperation::rename_binding(
                     id,
-                    RenameOperationKind::Definition(DefinitionKind::StructDefinition(struct_def)),
+                    struct_def.binding().unwrap(),
                 ));
+            }
+            // Renaming struct member
+            else if parent.is_member_expression()
+                || parent.is_type_field()
+                || parent.is_value_field()
+            {
+                self.operation = Some(RenameOperation::rename_struct_field(id));
             }
             // Renaming function name
             else if let Some(function) = parent.function_definition() {
-                self.operation = Some(RenameOperation::new(
+                self.operation = Some(RenameOperation::rename_binding(
                     id,
-                    RenameOperationKind::Definition(DefinitionKind::FunctionDefinition(function)),
+                    function.binding().unwrap(),
                 ));
             }
             // Renaming function parameter
             else if let Some(param) = parent.function_parameter() {
-                self.operation = Some(RenameOperation::new(
+                self.operation = Some(RenameOperation::rename_binding(
                     id,
-                    RenameOperationKind::Definition(DefinitionKind::FunctionParameter(param)),
+                    param.binding().unwrap(),
                 ));
             }
             // Renaming pattern
             else if let Some(pattern) = parent.variable_pattern() {
-                self.operation = Some(RenameOperation::new(
+                self.operation = Some(RenameOperation::rename_binding(
                     id,
-                    RenameOperationKind::Definition(DefinitionKind::VariablePattern(pattern)),
+                    pattern.binding().unwrap(),
                 ));
-            } else {
-                // dummy
-                self.operation = Some(RenameOperation::new(id, RenameOperationKind::Unknown));
             }
 
             path.stop();
@@ -125,41 +118,57 @@ impl<'a> RenameOperation<'a> {
     fn new(id: &'a Identifier<'a>, kind: RenameOperationKind<'a>) -> Self {
         Self { id, kind }
     }
+
+    fn rename_binding(id: &'a Identifier<'a>, binding: &'a Binding<'a>) -> Self {
+        Self::new(id, RenameOperationKind::Binding(binding))
+    }
+
+    fn rename_struct_field(id: &'a Identifier<'a>) -> Self {
+        Self::new(id, RenameOperationKind::StructField(id))
+    }
+
+    fn id(&self) -> &'a Identifier<'a> {
+        self.id
+    }
+
+    fn kind(&self) -> RenameOperationKind<'a> {
+        self.kind
+    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 enum RenameOperationKind<'a> {
-    Definition(DefinitionKind<'a>),
-    Unknown,
+    Binding(&'a Binding<'a>),
+    StructField(&'a Identifier<'a>),
 }
 
 #[derive(Debug)]
-struct RenameDefinition<'a> {
-    definition: DefinitionKind<'a>,
+struct RenameBinding<'a> {
+    binding: &'a Binding<'a>,
     ranges: Vec<EffectiveRange>,
 }
 
-impl<'a> RenameDefinition<'a> {
-    fn new(definition: DefinitionKind<'a>) -> Self {
+impl<'a> RenameBinding<'a> {
+    fn new(binding: &'a Binding<'a>) -> Self {
         Self {
-            definition,
+            binding,
             ranges: vec![],
         }
     }
 
-    fn definition(&self) -> &DefinitionKind<'a> {
-        &self.definition
+    fn binding(&self) -> &'a Binding<'a> {
+        &self.binding
     }
 }
 
-impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
+impl<'a> syntax::Visitor<'a> for RenameBinding<'a> {
     fn enter_struct_definition(
         &mut self,
         _path: &'a NodePath<'a>,
         struct_def: &'a StructDefinition<'a>,
     ) {
-        if let DefinitionKind::StructDefinition(definition) = self.definition {
-            if std::ptr::eq(definition, struct_def) {
+        if let Some(binding) = struct_def.binding() {
+            if std::ptr::eq(self.binding(), binding) {
                 if let Some(name) = struct_def.name() {
                     self.ranges.push(name.range());
                 }
@@ -169,13 +178,12 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
 
     fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, value: &'a StructLiteral<'a>) {
         let scope = path.scope();
-
         let binding = match scope.get_binding(value.name().as_str()) {
             None => return,
             Some(binding) => binding,
         };
 
-        if binding.kind().ptr_eq(self.definition()) {
+        if std::ptr::eq(self.binding(), binding) {
             self.ranges.push(value.name().range());
         }
     }
@@ -185,8 +193,8 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         _path: &'a NodePath<'a>,
         function: &'a FunctionDefinition<'a>,
     ) {
-        if let DefinitionKind::FunctionDefinition(definition) = self.definition {
-            if std::ptr::eq(definition, function) {
+        if let Some(binding) = function.binding() {
+            if std::ptr::eq(self.binding(), binding) {
                 if let Some(name) = function.name() {
                     self.ranges.push(name.range());
                 }
@@ -199,8 +207,8 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         _path: &'a NodePath<'a>,
         param: &'a FunctionParameter<'a>,
     ) {
-        if let DefinitionKind::FunctionParameter(definition) = self.definition {
-            if std::ptr::eq(definition, param) {
+        if let Some(binding) = param.binding() {
+            if std::ptr::eq(self.binding(), binding) {
                 self.ranges.push(param.name().range());
             }
         }
@@ -217,7 +225,7 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
             Some(binding) => binding,
         };
 
-        if binding.kind().ptr_eq(self.definition()) {
+        if std::ptr::eq(self.binding(), binding) {
             self.ranges.push(expr.range());
         }
     }
@@ -227,8 +235,8 @@ impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
         _path: &'a NodePath<'a>,
         pattern: &'a VariablePattern<'a>,
     ) {
-        if let DefinitionKind::VariablePattern(definition) = self.definition {
-            if std::ptr::eq(definition, pattern) {
+        if let Some(binding) = pattern.binding() {
+            if std::ptr::eq(self.binding(), binding) {
                 self.ranges.push(pattern.range());
             }
         }

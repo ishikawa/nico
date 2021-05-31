@@ -42,11 +42,11 @@
 //! ArrayPattern        := "[" Pattern (, Pattern)* ,? "]"
 //! RestPattern         := "..." Id?
 //! ```
-use super::{Code, CodeKind, CodeKindIter, EffectiveRange, Scope, Token};
-use crate::arena::{BumpaloArena, BumpaloString, BumpaloVec};
-use crate::sem;
-use std::rc::Rc;
-use std::{cell::RefCell, fmt};
+use super::{Binding, Code, CodeKind, CodeKindIter, EffectiveRange, Scope, Token};
+use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString, BumpaloVec};
+use crate::semantic::TypeKind;
+use std::cell::Cell;
+use std::fmt;
 
 pub trait Node<'arena> {
     fn code(&self) -> CodeKindIter<'_, 'arena>;
@@ -61,7 +61,7 @@ pub trait Node<'arena> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum NodeKind<'a> {
     Program(&'a Program<'a>),
     TopLevel(&'a TopLevel<'a>),
@@ -230,7 +230,7 @@ impl<'a> NodeKind<'a> {
         }
     }
 
-    pub fn struct_field(&self) -> Option<&'a ValueField<'a>> {
+    pub fn value_field(&self) -> Option<&'a ValueField<'a>> {
         if let NodeKind::ValueField(node) = self {
             Some(node)
         } else {
@@ -303,7 +303,11 @@ impl<'a> NodeKind<'a> {
         matches!(self, Self::StructDefinition(..))
     }
 
-    pub fn is_struct_field(&self) -> bool {
+    pub fn is_type_field(&self) -> bool {
+        matches!(self, Self::TypeField(..))
+    }
+
+    pub fn is_value_field(&self) -> bool {
         matches!(self, Self::ValueField(..))
     }
 
@@ -323,16 +327,20 @@ impl<'a> NodeKind<'a> {
         matches!(self, Self::Pattern(..))
     }
 
+    pub fn is_variable_pattern(&self) -> bool {
+        matches!(self, Self::VariablePattern(..))
+    }
+
     pub fn is_struct_literal(&self) -> bool {
-        self.struct_literal().is_some()
+        matches!(self, Self::StructLiteral(..))
     }
 
     pub fn is_variable_expression(&self) -> bool {
-        self.variable_expression().is_some()
+        matches!(self, Self::VariableExpression(..))
     }
 
     pub fn is_member_expression(&self) -> bool {
-        self.member_expression().is_some()
+        matches!(self, Self::MemberExpression(..))
     }
 }
 
@@ -527,6 +535,9 @@ pub struct StructDefinition<'a> {
     name: Option<&'a Identifier<'a>>,
     fields: BumpaloVec<'a, &'a TypeField<'a>>,
     code: Code<'a>,
+    // for semantic analysis
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
 }
 
 impl<'a> StructDefinition<'a> {
@@ -540,6 +551,9 @@ impl<'a> StructDefinition<'a> {
             name,
             fields: BumpaloVec::from_iter_in(fields, arena),
             code,
+            // for semantic analysis
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            binding: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -551,15 +565,21 @@ impl<'a> StructDefinition<'a> {
         self.fields.iter().copied()
     }
 
-    pub fn get_field_type(&self, name: &str) -> Option<Rc<RefCell<sem::Type>>> {
-        self.fields
-            .iter()
-            .find(|f| {
-                f.name()
-                    .map_or(false, |field_name| field_name.as_str() == name)
-            })
-            .and_then(|f| f.type_annotation)
-            .map(|annotation| Rc::clone(&annotation.r#type))
+    // for semantic analysis
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
+    }
+
+    pub fn binding(&self) -> Option<&'a Binding<'a>> {
+        self.binding.get()
+    }
+
+    pub fn assign_binding(&self, binding: &'a Binding<'a>) {
+        self.binding.replace(Some(binding));
     }
 }
 
@@ -626,17 +646,17 @@ impl fmt::Display for TypeField<'_> {
 
 #[derive(Debug)]
 pub struct TypeAnnotation<'a> {
-    r#type: Rc<RefCell<sem::Type>>,
+    r#type: TypeKind<'a>,
     code: Code<'a>,
 }
 
 impl<'a> TypeAnnotation<'a> {
-    pub fn new(r#type: Rc<RefCell<sem::Type>>, code: Code<'a>) -> Self {
+    pub fn new(r#type: TypeKind<'a>, code: Code<'a>) -> Self {
         Self { r#type, code }
     }
 
-    pub fn r#type(&self) -> &Rc<RefCell<sem::Type>> {
-        &self.r#type
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.r#type
     }
 }
 
@@ -658,6 +678,9 @@ pub struct FunctionDefinition<'a> {
     parameters: BumpaloVec<'a, &'a FunctionParameter<'a>>,
     body: &'a Block<'a>,
     code: Code<'a>,
+    // for semantic analysis
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
 }
 
 impl<'a> FunctionDefinition<'a> {
@@ -673,6 +696,9 @@ impl<'a> FunctionDefinition<'a> {
             parameters: BumpaloVec::from_iter_in(parameters, arena),
             body,
             code,
+            // for semantic analysis
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            binding: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -686,6 +712,23 @@ impl<'a> FunctionDefinition<'a> {
 
     pub fn parameters(&self) -> impl ExactSizeIterator<Item = &'a FunctionParameter<'a>> + '_ {
         self.parameters.iter().copied()
+    }
+
+    // for semantic analysis
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
+    }
+
+    pub fn binding(&self) -> Option<&'a Binding<'a>> {
+        self.binding.get()
+    }
+
+    pub fn assign_binding(&self, binding: &'a Binding<'a>) {
+        self.binding.replace(Some(binding));
     }
 }
 
@@ -709,15 +752,41 @@ impl fmt::Display for FunctionDefinition<'_> {
 pub struct FunctionParameter<'a> {
     name: &'a Identifier<'a>,
     code: Code<'a>,
+    // for semantic analysis
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
 }
 
 impl<'a> FunctionParameter<'a> {
-    pub fn new(name: &'a Identifier<'a>, code: Code<'a>) -> Self {
-        Self { name, code }
+    pub fn new(arena: &'a BumpaloArena, name: &'a Identifier<'a>, code: Code<'a>) -> Self {
+        Self {
+            name,
+            code,
+            // for semantic analysis
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            binding: BumpaloBox::new_in(Cell::default(), arena),
+        }
     }
 
     pub fn name(&self) -> &'a Identifier<'a> {
         self.name
+    }
+
+    // for semantic analysis
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
+    }
+
+    pub fn binding(&self) -> Option<&'a Binding<'a>> {
+        self.binding.get()
+    }
+
+    pub fn assign_binding(&self, binding: &'a Binding<'a>) {
+        self.binding.replace(Some(binding));
     }
 }
 
@@ -989,6 +1058,24 @@ impl<'a> Expression<'a> {
     pub fn is_variable_expression(&self) -> bool {
         matches!(self.kind, ExpressionKind::VariableExpression(..))
     }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        match self.kind() {
+            ExpressionKind::IntegerLiteral(expr) => Some(expr.r#type()),
+            ExpressionKind::StringLiteral(expr) => Some(expr.r#type()),
+            ExpressionKind::VariableExpression(expr) => expr.r#type(),
+            ExpressionKind::BinaryExpression(expr) => expr.r#type(),
+            ExpressionKind::UnaryExpression(expr) => expr.r#type(),
+            ExpressionKind::SubscriptExpression(expr) => expr.r#type(),
+            ExpressionKind::CallExpression(expr) => expr.r#type(),
+            ExpressionKind::ArrayExpression(expr) => expr.r#type(),
+            ExpressionKind::IfExpression(expr) => expr.r#type(),
+            ExpressionKind::CaseExpression(expr) => expr.r#type(),
+            ExpressionKind::MemberExpression(expr) => expr.r#type(),
+            ExpressionKind::StructLiteral(expr) => expr.r#type(),
+            ExpressionKind::GroupedExpression(expr) => expr.r#type(),
+        }
+    }
 }
 
 impl<'a> Node<'a> for Expression<'a> {
@@ -1008,6 +1095,7 @@ pub struct StructLiteral<'a> {
     name: &'a Identifier<'a>,
     fields: BumpaloVec<'a, &'a ValueField<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> StructLiteral<'a> {
@@ -1021,6 +1109,7 @@ impl<'a> StructLiteral<'a> {
             name,
             fields: BumpaloVec::from_iter_in(fields, arena),
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -1030,6 +1119,14 @@ impl<'a> StructLiteral<'a> {
 
     pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a ValueField<'a>> + '_ {
         self.fields.iter().copied()
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1050,15 +1147,22 @@ pub struct ValueField<'a> {
     name: &'a Identifier<'a>,
     value: Option<&'a Expression<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> ValueField<'a> {
     pub fn new(
+        arena: &'a BumpaloArena,
         name: &'a Identifier<'a>,
         value: Option<&'a Expression<'a>>,
         code: Code<'a>,
     ) -> Self {
-        Self { name, value, code }
+        Self {
+            name,
+            value,
+            code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
+        }
     }
 
     pub fn name(&self) -> &'a Identifier<'a> {
@@ -1067,6 +1171,14 @@ impl<'a> ValueField<'a> {
 
     pub fn value(&self) -> Option<&'a Expression<'a>> {
         self.value
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1088,10 +1200,12 @@ pub struct BinaryExpression<'a> {
     lhs: &'a Expression<'a>,
     rhs: Option<&'a Expression<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> BinaryExpression<'a> {
     pub fn new(
+        arena: &'a BumpaloArena,
         operator: BinaryOperator,
         lhs: &'a Expression<'a>,
         rhs: Option<&'a Expression<'a>>,
@@ -1102,6 +1216,7 @@ impl<'a> BinaryExpression<'a> {
             lhs,
             rhs,
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -1115,6 +1230,14 @@ impl<'a> BinaryExpression<'a> {
 
     pub fn rhs(&self) -> Option<&'a Expression<'a>> {
         self.rhs
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1135,10 +1258,12 @@ pub struct UnaryExpression<'a> {
     operator: UnaryOperator,
     operand: Option<&'a Expression<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> UnaryExpression<'a> {
     pub fn new(
+        arena: &'a BumpaloArena,
         operator: UnaryOperator,
         operand: Option<&'a Expression<'a>>,
         code: Code<'a>,
@@ -1147,6 +1272,7 @@ impl<'a> UnaryExpression<'a> {
             operator,
             operand,
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -1156,6 +1282,14 @@ impl<'a> UnaryExpression<'a> {
 
     pub fn operand(&self) -> Option<&'a Expression<'a>> {
         self.operand
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1224,6 +1358,7 @@ pub struct SubscriptExpression<'a> {
     callee: &'a Expression<'a>,
     arguments: BumpaloVec<'a, &'a Expression<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> SubscriptExpression<'a> {
@@ -1237,6 +1372,7 @@ impl<'a> SubscriptExpression<'a> {
             callee,
             arguments: BumpaloVec::from_iter_in(arguments, arena),
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -1246,6 +1382,14 @@ impl<'a> SubscriptExpression<'a> {
 
     pub fn arguments(&self) -> impl ExactSizeIterator<Item = &'a Expression<'a>> + '_ {
         self.arguments.iter().copied()
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1266,6 +1410,7 @@ pub struct CallExpression<'a> {
     callee: &'a Expression<'a>,
     arguments: BumpaloVec<'a, &'a Expression<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> CallExpression<'a> {
@@ -1279,6 +1424,7 @@ impl<'a> CallExpression<'a> {
             callee,
             arguments: BumpaloVec::from_iter_in(arguments, arena),
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -1288,6 +1434,14 @@ impl<'a> CallExpression<'a> {
 
     pub fn arguments(&self) -> impl ExactSizeIterator<Item = &'a Expression<'a>> + '_ {
         self.arguments.iter().copied()
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1308,10 +1462,12 @@ pub struct MemberExpression<'a> {
     object: &'a Expression<'a>,
     field: Option<&'a Identifier<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> MemberExpression<'a> {
     pub fn new(
+        arena: &'a BumpaloArena,
         object: &'a Expression<'a>,
         field: Option<&'a Identifier<'a>>,
         code: Code<'a>,
@@ -1320,6 +1476,7 @@ impl<'a> MemberExpression<'a> {
             object,
             field,
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -1329,6 +1486,14 @@ impl<'a> MemberExpression<'a> {
 
     pub fn field(&self) -> Option<&'a Identifier<'a>> {
         self.field
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1352,6 +1517,7 @@ impl fmt::Display for MemberExpression<'_> {
 pub struct ArrayExpression<'a> {
     elements: BumpaloVec<'a, &'a Expression<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> ArrayExpression<'a> {
@@ -1363,11 +1529,20 @@ impl<'a> ArrayExpression<'a> {
         Self {
             elements: BumpaloVec::from_iter_in(elements, arena),
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
     pub fn elements(&self) -> impl ExactSizeIterator<Item = &'a Expression<'a>> + '_ {
         self.elements.iter().copied()
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1389,10 +1564,12 @@ pub struct IfExpression<'a> {
     then_body: &'a Block<'a>,
     else_body: Option<&'a Block<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> IfExpression<'a> {
     pub fn new(
+        arena: &'a BumpaloArena,
         condition: Option<&'a Expression<'a>>,
         then_body: &'a Block<'a>,
         else_body: Option<&'a Block<'a>>,
@@ -1403,6 +1580,7 @@ impl<'a> IfExpression<'a> {
             then_body,
             else_body,
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -1416,6 +1594,14 @@ impl<'a> IfExpression<'a> {
 
     pub fn else_body(&self) -> Option<&'a Block<'a>> {
         self.else_body
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1437,6 +1623,7 @@ pub struct CaseExpression<'a> {
     arms: BumpaloVec<'a, &'a CaseArm<'a>>,
     else_body: Option<&'a Block<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> CaseExpression<'a> {
@@ -1452,6 +1639,7 @@ impl<'a> CaseExpression<'a> {
             arms: BumpaloVec::from_iter_in(arms, arena),
             else_body,
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -1465,6 +1653,14 @@ impl<'a> CaseExpression<'a> {
 
     pub fn else_body(&self) -> Option<&'a Block<'a>> {
         self.else_body
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1554,6 +1750,10 @@ impl<'a> IntegerLiteral<'a> {
     pub fn value(&self) -> i32 {
         self.value
     }
+
+    pub fn r#type(&self) -> TypeKind<'a> {
+        TypeKind::Int32
+    }
 }
 
 impl<'a> Node<'a> for IntegerLiteral<'a> {
@@ -1585,6 +1785,10 @@ impl<'a> StringLiteral<'a> {
     pub fn value(&self) -> Option<&str> {
         self.value.as_deref()
     }
+
+    pub fn r#type(&self) -> TypeKind<'a> {
+        TypeKind::String
+    }
 }
 
 impl<'a> Node<'a> for StringLiteral<'a> {
@@ -1607,12 +1811,17 @@ impl fmt::Display for StringLiteral<'_> {
 pub struct VariableExpression<'a> {
     id: &'a Identifier<'a>,
     code: CodeKind<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> VariableExpression<'a> {
-    pub fn new(id: &'a Identifier<'a>) -> Self {
+    pub fn new(arena: &'a BumpaloArena, id: &'a Identifier<'a>) -> Self {
         let code = CodeKind::Node(NodeKind::Identifier(id));
-        Self { id, code }
+        Self {
+            id,
+            code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
+        }
     }
 
     pub fn id(&self) -> &'a Identifier<'a> {
@@ -1621,6 +1830,14 @@ impl<'a> VariableExpression<'a> {
 
     pub fn name(&self) -> &str {
         self.id.as_str()
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1649,6 +1866,10 @@ impl<'a> GroupedExpression<'a> {
 
     pub fn expression(&self) -> Option<&'a Expression<'a>> {
         self.expression
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.expression().and_then(|x| x.r#type())
     }
 }
 
@@ -1718,12 +1939,21 @@ impl fmt::Display for Pattern<'_> {
 pub struct VariablePattern<'a> {
     id: &'a Identifier<'a>,
     code: CodeKind<'a>,
+    // for semantic analysis
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
 }
 
 impl<'a> VariablePattern<'a> {
-    pub fn new(id: &'a Identifier<'a>) -> Self {
+    pub fn new(arena: &'a BumpaloArena, id: &'a Identifier<'a>) -> Self {
         let code = CodeKind::Node(NodeKind::Identifier(id));
-        Self { id, code }
+        Self {
+            id,
+            code,
+            // for semantic analysis
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            binding: BumpaloBox::new_in(Cell::default(), arena),
+        }
     }
 
     pub fn id(&self) -> &'a Identifier<'a> {
@@ -1732,6 +1962,23 @@ impl<'a> VariablePattern<'a> {
 
     pub fn name(&self) -> &str {
         self.id.as_str()
+    }
+
+    // for semantic analysis
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
+    }
+
+    pub fn binding(&self) -> Option<&'a Binding<'a>> {
+        self.binding.get()
+    }
+
+    pub fn assign_binding(&self, binding: &'a Binding<'a>) {
+        self.binding.replace(Some(binding));
     }
 }
 
@@ -1751,6 +1998,7 @@ impl fmt::Display for VariablePattern<'_> {
 pub struct ArrayPattern<'a> {
     elements: BumpaloVec<'a, &'a Pattern<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> ArrayPattern<'a> {
@@ -1762,11 +2010,20 @@ impl<'a> ArrayPattern<'a> {
         Self {
             elements: BumpaloVec::from_iter_in(elements, arena),
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
     pub fn elements(&self) -> impl ExactSizeIterator<Item = &'a Pattern<'a>> + '_ {
         self.elements.iter().copied()
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1786,18 +2043,32 @@ impl fmt::Display for ArrayPattern<'_> {
 pub struct RestPattern<'a> {
     variable_pattern: Option<&'a VariablePattern<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> RestPattern<'a> {
-    pub fn new(variable_pattern: Option<&'a VariablePattern<'a>>, code: Code<'a>) -> Self {
+    pub fn new(
+        arena: &'a BumpaloArena,
+        variable_pattern: Option<&'a VariablePattern<'a>>,
+        code: Code<'a>,
+    ) -> Self {
         Self {
             variable_pattern,
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
     pub fn variable_pattern(&self) -> Option<&'a VariablePattern<'a>> {
         self.variable_pattern
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1818,6 +2089,7 @@ pub struct StructPattern<'a> {
     name: &'a Identifier<'a>,
     fields: BumpaloVec<'a, &'a ValueFieldPattern<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> StructPattern<'a> {
@@ -1831,6 +2103,7 @@ impl<'a> StructPattern<'a> {
             name,
             fields: BumpaloVec::from_iter_in(fields, arena),
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -1840,6 +2113,14 @@ impl<'a> StructPattern<'a> {
 
     pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a ValueFieldPattern<'a>> + '_ {
         self.fields.iter().copied()
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1861,6 +2142,7 @@ pub struct ValueFieldPattern<'a> {
     value: Option<&'a Pattern<'a>>,
     omitted_value: Option<&'a Pattern<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> ValueFieldPattern<'a> {
@@ -1876,9 +2158,10 @@ impl<'a> ValueFieldPattern<'a> {
                 value,
                 omitted_value: None,
                 code,
+                r#type: BumpaloBox::new_in(Cell::default(), arena),
             }
         } else {
-            let expr = arena.alloc(VariablePattern::new(name));
+            let expr = arena.alloc(VariablePattern::new(arena, name));
             let kind = PatternKind::VariablePattern(expr);
             let omitted_value = arena.alloc(Pattern::new(kind));
 
@@ -1887,6 +2170,7 @@ impl<'a> ValueFieldPattern<'a> {
                 value,
                 omitted_value: Some(omitted_value),
                 code,
+                r#type: BumpaloBox::new_in(Cell::default(), arena),
             }
         }
     }
@@ -1901,6 +2185,14 @@ impl<'a> ValueFieldPattern<'a> {
 
     pub fn omitted_value(&self) -> Option<&'a Pattern<'a>> {
         self.omitted_value
+    }
+
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1925,6 +2217,20 @@ pub enum PatternKind<'a> {
     RestPattern(&'a RestPattern<'a>),
     StructPattern(&'a StructPattern<'a>),
     ValueFieldPattern(&'a ValueFieldPattern<'a>),
+}
+
+impl<'a> PatternKind<'a> {
+    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+        match self {
+            PatternKind::IntegerPattern(pat) => Some(pat.r#type()),
+            PatternKind::StringPattern(pat) => Some(pat.r#type()),
+            PatternKind::VariablePattern(pat) => pat.r#type(),
+            PatternKind::ArrayPattern(pat) => pat.r#type(),
+            PatternKind::RestPattern(pat) => pat.r#type(),
+            PatternKind::StructPattern(pat) => pat.r#type(),
+            PatternKind::ValueFieldPattern(pat) => pat.r#type(),
+        }
+    }
 }
 
 impl fmt::Display for NodeKind<'_> {

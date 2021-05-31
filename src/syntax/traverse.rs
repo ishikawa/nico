@@ -61,8 +61,8 @@ impl<'a> NodePath<'a> {
         )
     }
 
-    pub fn node(&self) -> &NodeKind<'a> {
-        &self.node
+    pub fn node(&self) -> NodeKind<'a> {
+        self.node
     }
 
     /// Returns `true` if `skip()` or `stop()` invoked.
@@ -432,7 +432,7 @@ fn traverse_path<'a>(
 }
 
 fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
-    let node = path.node().clone();
+    let node = path.node();
 
     match node {
         NodeKind::Program(kind) => {
@@ -529,12 +529,20 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::StructPattern(_) => { /* todo */ }
         NodeKind::ValueFieldPattern(kind) => {
             visitor.enter_value_field_pattern(path, kind);
+
+            if let Some(value_pattern) = kind.omitted_value() {
+                visitor.enter_pattern(path, value_pattern);
+
+                if let PatternKind::VariablePattern(variable_pattern) = value_pattern.kind() {
+                    visitor.enter_variable_pattern(path, variable_pattern);
+                }
+            }
         }
     }
 }
 
 fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
-    let node = path.node().clone();
+    let node = path.node();
 
     match node {
         NodeKind::Program(kind) => {
@@ -630,6 +638,14 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::RestPattern(_) => { /* todo */ }
         NodeKind::StructPattern(_) => { /* todo */ }
         NodeKind::ValueFieldPattern(kind) => {
+            if let Some(value_pattern) = kind.omitted_value() {
+                if let PatternKind::VariablePattern(variable_pattern) = value_pattern.kind() {
+                    visitor.exit_variable_pattern(path, variable_pattern);
+                }
+
+                visitor.exit_pattern(path, value_pattern);
+            }
+
             visitor.exit_value_field_pattern(path, kind);
         }
     }
@@ -640,7 +656,7 @@ fn traverse_children<'a>(
     visitor: &mut dyn Visitor<'a>,
     path: &'a NodePath<'a>,
 ) {
-    let node = path.node().clone();
+    let node = path.node();
 
     for kind in node.code() {
         if path.skipped() {
@@ -649,7 +665,7 @@ fn traverse_children<'a>(
 
         match kind {
             CodeKind::Node(node) => {
-                let child_path = arena.alloc(NodePath::child_path(arena, node.clone(), path));
+                let child_path = arena.alloc(NodePath::child_path(arena, *node, path));
                 traverse_path(arena, visitor, child_path);
 
                 // Propagates `stop`
