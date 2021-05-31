@@ -240,7 +240,7 @@ impl<'a, 't> Parser<'a, 't> {
             let code = CodeBuilder::new()
                 .node(NodeKind::Identifier(name))
                 .build(arena);
-            Some(arena.alloc(FunctionParameter::new(name, code)))
+            Some(arena.alloc(FunctionParameter::new(arena, name, code)))
         } else {
             None
         }
@@ -301,9 +301,9 @@ impl<'a, 't> Parser<'a, 't> {
                 );
             }
 
-            ValueField::new(name, value, code.build(arena))
+            ValueField::new(arena, name, value, code.build(arena))
         } else {
-            ValueField::new(name, None, code.build(arena))
+            ValueField::new(arena, name, None, code.build(arena))
         };
 
         Some(arena.alloc(field))
@@ -513,7 +513,12 @@ impl<'a, 't> Parser<'a, 't> {
         }
 
         // node
-        let expr = arena.alloc(UnaryExpression::new(operator, operand, code.build(arena)));
+        let expr = arena.alloc(UnaryExpression::new(
+            arena,
+            operator,
+            operand,
+            code.build(arena),
+        ));
 
         Some(arena.alloc(Expression::new(ExpressionKind::UnaryExpression(expr))))
     }
@@ -588,8 +593,12 @@ impl<'a, 't> Parser<'a, 't> {
                         );
                     }
 
-                    let node =
-                        arena.alloc(MemberExpression::new(operand, field, code.build(arena)));
+                    let node = arena.alloc(MemberExpression::new(
+                        arena,
+                        operand,
+                        field,
+                        code.build(arena),
+                    ));
                     ExpressionKind::MemberExpression(node)
                 }
                 _ => break,
@@ -676,7 +685,7 @@ impl<'a, 't> Parser<'a, 't> {
             let literal = arena.alloc(StructLiteral::new(arena, id, fields, code.build(arena)));
             Expression::new(ExpressionKind::StructLiteral(literal))
         } else {
-            let expr = arena.alloc(VariableExpression::new(id));
+            let expr = arena.alloc(VariableExpression::new(arena, id));
             Expression::new(ExpressionKind::VariableExpression(expr))
         };
 
@@ -702,7 +711,7 @@ impl<'a, 't> Parser<'a, 't> {
             let pattern = arena.alloc(StructPattern::new(arena, id, fields, code.build(arena)));
             PatternKind::StructPattern(pattern)
         } else {
-            let pattern = arena.alloc(VariablePattern::new(id));
+            let pattern = arena.alloc(VariablePattern::new(arena, id));
             PatternKind::VariablePattern(pattern)
         };
 
@@ -854,7 +863,8 @@ impl<'a, 't> Parser<'a, 't> {
         let name = self.parse_name(arena);
 
         let variable_pattern = if let Some(node) = name {
-            let variable_pattern: &VariablePattern<'_> = arena.alloc(VariablePattern::new(node));
+            let variable_pattern: &VariablePattern<'_> =
+                arena.alloc(VariablePattern::new(arena, node));
 
             code.node(NodeKind::VariablePattern(variable_pattern));
             Some(variable_pattern)
@@ -862,7 +872,7 @@ impl<'a, 't> Parser<'a, 't> {
             None
         };
 
-        let pattern = arena.alloc(RestPattern::new(variable_pattern, code.build(arena)));
+        let pattern = arena.alloc(RestPattern::new(arena, variable_pattern, code.build(arena)));
 
         arena.alloc(Pattern::new(PatternKind::RestPattern(pattern)))
     }
@@ -898,6 +908,7 @@ impl<'a, 't> Parser<'a, 't> {
         };
 
         let expr = arena.alloc(IfExpression::new(
+            arena,
             condition,
             then_body,
             else_body,
@@ -1264,7 +1275,13 @@ impl<'a, 't> Parser<'a, 't> {
             }
 
             // node
-            let expr = arena.alloc(BinaryExpression::new(operator, lhs, rhs, code.build(arena)));
+            let expr = arena.alloc(BinaryExpression::new(
+                arena,
+                operator,
+                lhs,
+                rhs,
+                code.build(arena),
+            ));
 
             lhs = arena.alloc(Expression::new(ExpressionKind::BinaryExpression(expr)));
         }

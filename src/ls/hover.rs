@@ -86,9 +86,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
 
         // TODO: Use type info
         if let Some(binding) = scope.get_binding(literal.name().as_str()) {
-            let value = binding.semantic_value();
-
-            if let Some(struct_type) = value.r#type().struct_type() {
+            if let Some(struct_type) = binding.r#type().struct_type() {
                 self.result.replace((
                     self.describe_value_field(struct_type, field),
                     field.name().range(),

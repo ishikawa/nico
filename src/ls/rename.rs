@@ -1,11 +1,9 @@
 //! Rename operation
 use crate::arena::BumpaloArena;
-use crate::semantic::SemanticValue;
-use crate::syntax::VariableExpression;
-use crate::syntax::VariablePattern;
 use crate::syntax::{
-    self, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node, NodePath,
-    Position, Program, StructDefinition, StructLiteral,
+    self, Binding, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node,
+    NodePath, Position, Program, StructDefinition, StructLiteral, VariableExpression,
+    VariablePattern,
 };
 
 #[derive(Debug)]
@@ -58,26 +56,20 @@ impl<'a> syntax::Visitor<'a> for Rename<'a> {
             // Renaming variable
             if parent.is_variable_expression() {
                 if let Some(binding) = scope.get_binding(id.as_str()) {
-                    self.operation = Some(RenameOperation::rename_binding(
-                        id,
-                        binding.semantic_value(),
-                    ));
+                    self.operation = Some(RenameOperation::rename_binding(id, binding));
                 }
             }
             // Renaming struct name
             else if parent.is_struct_literal() {
                 if let Some(binding) = scope.get_binding(id.as_str()) {
                     if binding.is_struct() {
-                        self.operation = Some(RenameOperation::rename_binding(
-                            id,
-                            binding.semantic_value(),
-                        ));
+                        self.operation = Some(RenameOperation::rename_binding(id, binding));
                     }
                 }
             } else if let Some(struct_def) = parent.struct_definition() {
                 self.operation = Some(RenameOperation::rename_binding(
                     id,
-                    struct_def.semantic_value().unwrap(),
+                    struct_def.binding().unwrap(),
                 ));
             }
             // Renaming struct member
@@ -91,21 +83,21 @@ impl<'a> syntax::Visitor<'a> for Rename<'a> {
             else if let Some(function) = parent.function_definition() {
                 self.operation = Some(RenameOperation::rename_binding(
                     id,
-                    function.semantic_value().unwrap(),
+                    function.binding().unwrap(),
                 ));
             }
             // Renaming function parameter
             else if let Some(param) = parent.function_parameter() {
                 self.operation = Some(RenameOperation::rename_binding(
                     id,
-                    param.semantic_value().unwrap(),
+                    param.binding().unwrap(),
                 ));
             }
             // Renaming pattern
             else if let Some(pattern) = parent.variable_pattern() {
                 self.operation = Some(RenameOperation::rename_binding(
                     id,
-                    pattern.semantic_value().unwrap(),
+                    pattern.binding().unwrap(),
                 ));
             }
 
@@ -127,8 +119,8 @@ impl<'a> RenameOperation<'a> {
         Self { id, kind }
     }
 
-    fn rename_binding(id: &'a Identifier<'a>, semantic_value: &'a SemanticValue<'a>) -> Self {
-        Self::new(id, RenameOperationKind::Binding(semantic_value))
+    fn rename_binding(id: &'a Identifier<'a>, binding: &'a Binding<'a>) -> Self {
+        Self::new(id, RenameOperationKind::Binding(binding))
     }
 
     fn rename_struct_field(id: &'a Identifier<'a>) -> Self {
@@ -146,26 +138,26 @@ impl<'a> RenameOperation<'a> {
 
 #[derive(Debug, Clone, Copy)]
 enum RenameOperationKind<'a> {
-    Binding(&'a SemanticValue<'a>),
+    Binding(&'a Binding<'a>),
     StructField(&'a Identifier<'a>),
 }
 
 #[derive(Debug)]
 struct RenameBinding<'a> {
-    semantic_value: &'a SemanticValue<'a>,
+    binding: &'a Binding<'a>,
     ranges: Vec<EffectiveRange>,
 }
 
 impl<'a> RenameBinding<'a> {
-    fn new(semantic_value: &'a SemanticValue<'a>) -> Self {
+    fn new(binding: &'a Binding<'a>) -> Self {
         Self {
-            semantic_value,
+            binding,
             ranges: vec![],
         }
     }
 
-    fn semantic_value(&self) -> &'a SemanticValue<'a> {
-        &self.semantic_value
+    fn binding(&self) -> &'a Binding<'a> {
+        &self.binding
     }
 }
 
@@ -175,8 +167,8 @@ impl<'a> syntax::Visitor<'a> for RenameBinding<'a> {
         _path: &'a NodePath<'a>,
         struct_def: &'a StructDefinition<'a>,
     ) {
-        if let Some(value) = struct_def.semantic_value() {
-            if std::ptr::eq(self.semantic_value(), value) {
+        if let Some(binding) = struct_def.binding() {
+            if std::ptr::eq(self.binding(), binding) {
                 if let Some(name) = struct_def.name() {
                     self.ranges.push(name.range());
                 }
@@ -191,7 +183,7 @@ impl<'a> syntax::Visitor<'a> for RenameBinding<'a> {
             Some(binding) => binding,
         };
 
-        if std::ptr::eq(self.semantic_value(), binding.semantic_value()) {
+        if std::ptr::eq(self.binding(), binding) {
             self.ranges.push(value.name().range());
         }
     }
@@ -201,8 +193,8 @@ impl<'a> syntax::Visitor<'a> for RenameBinding<'a> {
         _path: &'a NodePath<'a>,
         function: &'a FunctionDefinition<'a>,
     ) {
-        if let Some(value) = function.semantic_value() {
-            if std::ptr::eq(self.semantic_value(), value) {
+        if let Some(binding) = function.binding() {
+            if std::ptr::eq(self.binding(), binding) {
                 if let Some(name) = function.name() {
                     self.ranges.push(name.range());
                 }
@@ -215,8 +207,8 @@ impl<'a> syntax::Visitor<'a> for RenameBinding<'a> {
         _path: &'a NodePath<'a>,
         param: &'a FunctionParameter<'a>,
     ) {
-        if let Some(value) = param.semantic_value() {
-            if std::ptr::eq(self.semantic_value(), value) {
+        if let Some(binding) = param.binding() {
+            if std::ptr::eq(self.binding(), binding) {
                 self.ranges.push(param.name().range());
             }
         }
@@ -233,7 +225,7 @@ impl<'a> syntax::Visitor<'a> for RenameBinding<'a> {
             Some(binding) => binding,
         };
 
-        if std::ptr::eq(self.semantic_value(), binding.semantic_value()) {
+        if std::ptr::eq(self.binding(), binding) {
             self.ranges.push(expr.range());
         }
     }
@@ -243,8 +235,8 @@ impl<'a> syntax::Visitor<'a> for RenameBinding<'a> {
         _path: &'a NodePath<'a>,
         pattern: &'a VariablePattern<'a>,
     ) {
-        if let Some(value) = pattern.semantic_value() {
-            if std::ptr::eq(self.semantic_value(), value) {
+        if let Some(binding) = pattern.binding() {
+            if std::ptr::eq(self.binding(), binding) {
                 self.ranges.push(pattern.range());
             }
         }

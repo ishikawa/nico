@@ -371,10 +371,9 @@ impl SemanticTokenizer {
             SemanticTokenType::PROPERTY
         } else if parent.is_variable_expression() {
             if let Some(binding) = scope.get_binding(id.as_str()) {
-                let semantic_value = binding.semantic_value();
-                let ty = semantic_value.r#type();
+                let ty = binding.r#type();
 
-                if semantic_value.is_builtin() {
+                if binding.is_builtin() {
                     self.add_token_modifiers_bitset(
                         modifiers,
                         SemanticTokenModifier::DEFAULT_LIBRARY,
@@ -383,7 +382,7 @@ impl SemanticTokenizer {
 
                 if ty.is_function_type() {
                     return SemanticTokenType::FUNCTION;
-                } else if semantic_value.is_function_parameter() {
+                } else if binding.is_function_parameter() {
                     return SemanticTokenType::PARAMETER;
                 } else if ty.is_struct_type() {
                     return SemanticTokenType::STRUCT;
