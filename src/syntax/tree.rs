@@ -230,7 +230,7 @@ impl<'a> NodeKind<'a> {
         }
     }
 
-    pub fn struct_field(&self) -> Option<&'a ValueField<'a>> {
+    pub fn value_field(&self) -> Option<&'a ValueField<'a>> {
         if let NodeKind::ValueField(node) = self {
             Some(node)
         } else {
@@ -303,7 +303,11 @@ impl<'a> NodeKind<'a> {
         matches!(self, Self::StructDefinition(..))
     }
 
-    pub fn is_struct_field(&self) -> bool {
+    pub fn is_type_field(&self) -> bool {
+        matches!(self, Self::TypeField(..))
+    }
+
+    pub fn is_value_field(&self) -> bool {
         matches!(self, Self::ValueField(..))
     }
 

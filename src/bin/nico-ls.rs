@@ -366,7 +366,7 @@ impl SemanticTokenizer {
             SemanticTokenType::PARAMETER
         } else if parent.is_struct_definition() || parent.is_struct_literal() {
             SemanticTokenType::STRUCT
-        } else if parent.is_struct_field() || parent.is_member_expression() {
+        } else if parent.is_value_field() || parent.is_member_expression() {
             SemanticTokenType::PROPERTY
         } else if parent.is_variable_expression() {
             if let Some(binding) = scope.get_binding(id.as_str()) {

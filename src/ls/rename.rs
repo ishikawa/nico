@@ -27,15 +27,20 @@ impl<'a> Rename<'a> {
     pub fn prepare(&mut self, program: &'a Program<'a>) -> Option<&'a Identifier<'a>> {
         self.operation = None;
         syntax::traverse(self.arena, self, program);
-        self.operation.as_ref().map(|op| op.id)
+        self.operation.as_ref().map(|op| op.id())
     }
 
     pub fn rename(&mut self, program: &'a Program<'a>) -> Option<Vec<EffectiveRange>> {
         if let Some(operation) = self.operation.as_ref() {
-            let mut visitor = RenameDefinition::new(operation.semantic_value());
-            syntax::traverse(self.arena, &mut visitor, program);
+            match operation.kind() {
+                RenameOperationKind::Binding(semantic_value) => {
+                    let mut visitor = RenameBinding::new(semantic_value);
 
-            return Some(visitor.ranges);
+                    syntax::traverse(self.arena, &mut visitor, program);
+                    return Some(visitor.ranges);
+                }
+                RenameOperationKind::StructField(_) => todo!(),
+            }
         }
 
         None
@@ -53,34 +58,55 @@ impl<'a> syntax::Visitor<'a> for Rename<'a> {
             // Renaming variable
             if parent.is_variable_expression() {
                 if let Some(binding) = scope.get_binding(id.as_str()) {
-                    self.operation = Some(RenameOperation::new(id, binding.semantic_value()));
+                    self.operation = Some(RenameOperation::rename_binding(
+                        id,
+                        binding.semantic_value(),
+                    ));
                 }
             }
             // Renaming struct name
             else if parent.is_struct_literal() {
-                // TODO: Use type info
                 if let Some(binding) = scope.get_binding(id.as_str()) {
-                    if binding.semantic_value().r#type().struct_type().is_some() {
-                        self.operation = Some(RenameOperation::new(id, binding.semantic_value()));
+                    if binding.is_struct() {
+                        self.operation = Some(RenameOperation::rename_binding(
+                            id,
+                            binding.semantic_value(),
+                        ));
                     }
                 }
             } else if let Some(struct_def) = parent.struct_definition() {
-                self.operation = Some(RenameOperation::new(
+                self.operation = Some(RenameOperation::rename_binding(
                     id,
                     struct_def.semantic_value().unwrap(),
                 ));
             }
+            // Renaming struct member
+            else if parent.is_member_expression()
+                || parent.is_type_field()
+                || parent.is_value_field()
+            {
+                self.operation = Some(RenameOperation::rename_struct_field(id));
+            }
             // Renaming function name
             else if let Some(function) = parent.function_definition() {
-                self.operation = Some(RenameOperation::new(id, function.semantic_value().unwrap()));
+                self.operation = Some(RenameOperation::rename_binding(
+                    id,
+                    function.semantic_value().unwrap(),
+                ));
             }
             // Renaming function parameter
             else if let Some(param) = parent.function_parameter() {
-                self.operation = Some(RenameOperation::new(id, param.semantic_value().unwrap()));
+                self.operation = Some(RenameOperation::rename_binding(
+                    id,
+                    param.semantic_value().unwrap(),
+                ));
             }
             // Renaming pattern
             else if let Some(pattern) = parent.variable_pattern() {
-                self.operation = Some(RenameOperation::new(id, pattern.semantic_value().unwrap()));
+                self.operation = Some(RenameOperation::rename_binding(
+                    id,
+                    pattern.semantic_value().unwrap(),
+                ));
             }
 
             path.stop();
@@ -93,26 +119,44 @@ impl<'a> syntax::Visitor<'a> for Rename<'a> {
 #[derive(Debug)]
 struct RenameOperation<'a> {
     id: &'a Identifier<'a>,
-    semantic_value: &'a SemanticValue<'a>,
+    kind: RenameOperationKind<'a>,
 }
 
 impl<'a> RenameOperation<'a> {
-    fn new(id: &'a Identifier<'a>, semantic_value: &'a SemanticValue<'a>) -> Self {
-        Self { id, semantic_value }
+    fn new(id: &'a Identifier<'a>, kind: RenameOperationKind<'a>) -> Self {
+        Self { id, kind }
     }
 
-    fn semantic_value(&self) -> &'a SemanticValue<'a> {
-        &self.semantic_value
+    fn rename_binding(id: &'a Identifier<'a>, semantic_value: &'a SemanticValue<'a>) -> Self {
+        Self::new(id, RenameOperationKind::Binding(semantic_value))
+    }
+
+    fn rename_struct_field(id: &'a Identifier<'a>) -> Self {
+        Self::new(id, RenameOperationKind::StructField(id))
+    }
+
+    fn id(&self) -> &'a Identifier<'a> {
+        self.id
+    }
+
+    fn kind(&self) -> RenameOperationKind<'a> {
+        self.kind
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum RenameOperationKind<'a> {
+    Binding(&'a SemanticValue<'a>),
+    StructField(&'a Identifier<'a>),
+}
+
 #[derive(Debug)]
-struct RenameDefinition<'a> {
+struct RenameBinding<'a> {
     semantic_value: &'a SemanticValue<'a>,
     ranges: Vec<EffectiveRange>,
 }
 
-impl<'a> RenameDefinition<'a> {
+impl<'a> RenameBinding<'a> {
     fn new(semantic_value: &'a SemanticValue<'a>) -> Self {
         Self {
             semantic_value,
@@ -125,7 +169,7 @@ impl<'a> RenameDefinition<'a> {
     }
 }
 
-impl<'a> syntax::Visitor<'a> for RenameDefinition<'a> {
+impl<'a> syntax::Visitor<'a> for RenameBinding<'a> {
     fn enter_struct_definition(
         &mut self,
         _path: &'a NodePath<'a>,
