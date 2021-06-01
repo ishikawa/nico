@@ -87,9 +87,14 @@ impl<'a> Rename<'a> {
             let struct_type = object_type.struct_type()?;
 
             return Some(RenameOperation::rename_struct_field(struct_type, id));
-        } else if parent_node.is_type_field() || parent_node.is_value_field() {
+        } else if parent_node.is_type_field() {
             let struct_def = parent.expect_parent().node().struct_definition()?;
             let struct_type = struct_def.r#type()?.struct_type()?;
+
+            return Some(RenameOperation::rename_struct_field(struct_type, id));
+        } else if parent_node.is_value_field() {
+            let struct_literal = parent.expect_parent().node().struct_literal()?;
+            let struct_type = struct_literal.r#type()?.struct_type()?;
 
             return Some(RenameOperation::rename_struct_field(struct_type, id));
         }

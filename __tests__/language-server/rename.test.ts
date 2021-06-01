@@ -226,6 +226,15 @@ let cases: TestCase[] = [
           character: 11
         },
         newName: "c"
+      },
+      // let a = A { b: 123 }
+      //             ^
+      {
+        position: {
+          line: 2,
+          character: 12
+        },
+        newName: "c"
       }
     ]
   }
