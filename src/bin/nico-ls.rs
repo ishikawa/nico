@@ -384,8 +384,6 @@ impl SemanticTokenizer {
                     return SemanticTokenType::FUNCTION;
                 } else if binding.is_function_parameter() {
                     return SemanticTokenType::PARAMETER;
-                } else if ty.is_struct_type() {
-                    return SemanticTokenType::STRUCT;
                 }
             }
 
