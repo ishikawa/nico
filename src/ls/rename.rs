@@ -61,47 +61,50 @@ impl<'a> Rename<'a> {
     ) -> Option<RenameOperation<'a>> {
         let parent = path.expect_parent();
         let scope = parent.scope();
-        let parent = parent.node();
+        let parent_node = parent.node();
 
         // Renaming variable
-        if parent.is_variable_expression() {
+        if parent_node.is_variable_expression() {
             let binding = scope.get_binding(id.as_str())?;
             return Some(RenameOperation::rename_binding(id, binding));
         }
         // Renaming struct name
-        else if parent.is_struct_literal() {
+        else if parent_node.is_struct_literal() {
             let binding = scope.get_binding(id.as_str())?;
 
             if binding.is_struct() {
                 return Some(RenameOperation::rename_binding(id, binding));
             }
-        } else if let Some(struct_def) = parent.struct_definition() {
+        } else if let Some(struct_def) = parent_node.struct_definition() {
             let binding = struct_def.binding()?;
             return Some(RenameOperation::rename_binding(id, binding));
         }
         // Renaming struct member
-        else if let Some(member_expr) = parent.member_expression() {
+        else if let Some(member_expr) = parent_node.member_expression() {
             // In the case of MemberExpression, rename is possible only if
             // the target object type is struct.
             let object_type = member_expr.object().r#type()?;
             let struct_type = object_type.struct_type()?;
 
             return Some(RenameOperation::rename_struct_field(struct_type, id));
-        } else if parent.is_type_field() || parent.is_value_field() {
-            todo!();
+        } else if parent_node.is_type_field() || parent_node.is_value_field() {
+            let struct_def = parent.expect_parent().node().struct_definition()?;
+            let struct_type = struct_def.r#type()?.struct_type()?;
+
+            return Some(RenameOperation::rename_struct_field(struct_type, id));
         }
         // Renaming function name
-        else if let Some(function) = parent.function_definition() {
+        else if let Some(function) = parent_node.function_definition() {
             let binding = function.binding()?;
             return Some(RenameOperation::rename_binding(id, binding));
         }
         // Renaming function parameter
-        else if let Some(param) = parent.function_parameter() {
+        else if let Some(param) = parent_node.function_parameter() {
             let binding = param.binding()?;
             return Some(RenameOperation::rename_binding(id, binding));
         }
         // Renaming pattern
-        else if let Some(pattern) = parent.variable_pattern() {
+        else if let Some(pattern) = parent_node.variable_pattern() {
             let binding = pattern.binding()?;
             return Some(RenameOperation::rename_binding(id, binding));
         }

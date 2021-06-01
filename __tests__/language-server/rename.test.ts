@@ -207,6 +207,27 @@ let cases: TestCase[] = [
         newName: "z"
       }
     ]
+  },
+  // struct field
+  {
+    // prettier-ignore
+    input: [
+      "struct A { b: i32 }",
+      "",
+      "let a = A { b: 123 }",
+      "a.b"
+    ].join("\n"),
+    requests: [
+      // struct A { b: i32 }
+      //            ^
+      {
+        position: {
+          line: 0,
+          character: 11
+        },
+        newName: "c"
+      }
+    ]
   }
 ];
 
@@ -215,7 +236,7 @@ filterTestCases(cases).forEach((testCase, i) => {
   let name = getTestName(testCase);
 
   testCase.requests.forEach(({ position, newName }, j) => {
-    test(`${i}: prepare rename - \`${name}\` at ${position}`, async done => {
+    test(`${i}: rename - \`${name}\` at ${position}`, async done => {
       const agent = new LanguageServerAgent(server!, { sequence: i * 100 + j });
 
       // Open document and no compilation errors
