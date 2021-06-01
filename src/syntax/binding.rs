@@ -366,12 +366,10 @@ impl<'a> InitialTypeBinder<'a> {
         let params: Vec<_> = definition
             .parameters()
             .map(|p| {
-                let var = self.new_type_var();
-
                 &*self.arena.alloc(semantic::FunctionParameter::new(
                     self.arena,
                     p.name().as_str(),
-                    TypeKind::TypeVariable(var),
+                    p.r#type().unwrap(),
                 ))
             })
             .collect();
@@ -388,7 +386,7 @@ impl<'a> InitialTypeBinder<'a> {
 }
 
 impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
-    fn enter_struct_definition(
+    fn exit_struct_definition(
         &mut self,
         _path: &'a NodePath<'a>,
         definition: &'a StructDefinition<'a>,
@@ -398,7 +396,7 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         }
     }
 
-    fn enter_function_definition(
+    fn exit_function_definition(
         &mut self,
         _path: &'a NodePath<'a>,
         definition: &'a FunctionDefinition<'a>,
@@ -408,7 +406,7 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         }
     }
 
-    fn enter_function_parameter(
+    fn exit_function_parameter(
         &mut self,
         _path: &'a NodePath<'a>,
         param: &'a FunctionParameter<'a>,
@@ -416,31 +414,31 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         param.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_struct_literal(&mut self, _path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {
+    fn exit_struct_literal(&mut self, _path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_value_field(&mut self, _path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
+    fn exit_value_field(&mut self, _path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
         field.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
+    fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_unary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a UnaryExpression<'a>) {
+    fn exit_unary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a UnaryExpression<'a>) {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_array_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a ArrayExpression<'a>) {
+    fn exit_array_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a ArrayExpression<'a>) {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_call_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CallExpression<'a>) {
+    fn exit_call_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CallExpression<'a>) {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_subscript_expression(
+    fn exit_subscript_expression(
         &mut self,
         _path: &'a NodePath<'a>,
         expr: &'a SubscriptExpression<'a>,
@@ -448,19 +446,19 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_member_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a MemberExpression<'a>) {
+    fn exit_member_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a MemberExpression<'a>) {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_case_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CaseExpression<'a>) {
+    fn exit_case_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CaseExpression<'a>) {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_if_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a IfExpression<'a>) {
+    fn exit_if_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a IfExpression<'a>) {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_variable_expression(
+    fn exit_variable_expression(
         &mut self,
         _path: &'a NodePath<'a>,
         expr: &'a VariableExpression<'a>,
@@ -468,11 +466,7 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn enter_variable_pattern(
-        &mut self,
-        _path: &'a NodePath<'a>,
-        pattern: &'a VariablePattern<'a>,
-    ) {
+    fn exit_variable_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a VariablePattern<'a>) {
         pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 }
@@ -617,6 +611,76 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
     }
 }
 
+#[derive(Debug)]
+struct TypeInferencer<'a> {
+    arena: &'a BumpaloArena,
+}
+
+impl<'a> TypeInferencer<'a> {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
+        Self { arena }
+    }
+}
+
+impl<'a> Visitor<'a> for TypeInferencer<'a> {
+    fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
+        let binding = match path.scope().get_binding(literal.name().as_str()) {
+            Some(binding) => binding,
+            None => return,
+        };
+
+        let struct_def = match binding.struct_definition() {
+            Some(struct_def) => struct_def,
+            None => return,
+        };
+
+        literal
+            .r#type()
+            .unwrap()
+            .unify(self.arena, struct_def.r#type().unwrap())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+    }
+
+    fn exit_variable_declaration(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        declaration: &'a VariableDeclaration<'a>,
+    ) {
+        let pattern = match declaration.pattern() {
+            Some(pattern) => pattern,
+            None => return,
+        };
+
+        let init = match declaration.init() {
+            Some(init) => init,
+            None => return,
+        };
+
+        if let PatternKind::VariablePattern(var_pattern) = pattern.kind() {
+            var_pattern
+                .r#type()
+                .unwrap()
+                .unify(self.arena, init.r#type().unwrap())
+                .unwrap_or_else(|err| panic!("Type error: {}", err));
+        } else {
+            todo!("warn: except for variable pattern, we can't infer type.");
+        }
+    }
+
+    fn exit_variable_expression(
+        &mut self,
+        path: &'a NodePath<'a>,
+        expr: &'a VariableExpression<'a>,
+    ) {
+        if let Some(binding) = path.scope().get_binding(expr.name()) {
+            expr.r#type()
+                .unwrap()
+                .unify(self.arena, binding.r#type())
+                .unwrap_or_else(|err| panic!("Type error: {}", err));
+        }
+    }
+}
+
 pub fn bind<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
     let mut binder = InitialTypeBinder::new(arena);
     traverse(arena, &mut binder, node);
@@ -628,6 +692,9 @@ pub fn bind<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
     traverse(arena, &mut binder, node);
 
     let mut binder = VariableBinder::new(arena);
+    traverse(arena, &mut binder, node);
+
+    let mut binder = TypeInferencer::new(arena);
     traverse(arena, &mut binder, node);
 }
 
