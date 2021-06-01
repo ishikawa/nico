@@ -602,3 +602,59 @@ Object {
   },
 }
 `;
+
+exports[`6: rename - \`struct A { b: i32 }
+
+let a = A { b: 123 }
+a.b\` at [object Object] 3`] = `
+Object {
+  "error": null,
+  "id": 1602,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "changes": Object {
+      "file:///home/user/nico/samplestruct%20A%20%7B%20b%3A%20i32%20%7D%0A%0Alet%20a%20%3D%20A%20%7B.nico": Array [
+        Object {
+          "newText": "c",
+          "range": Object {
+            "end": Object {
+              "character": 12,
+              "line": 0,
+            },
+            "start": Object {
+              "character": 11,
+              "line": 0,
+            },
+          },
+        },
+        Object {
+          "newText": "c",
+          "range": Object {
+            "end": Object {
+              "character": 13,
+              "line": 2,
+            },
+            "start": Object {
+              "character": 12,
+              "line": 2,
+            },
+          },
+        },
+        Object {
+          "newText": "c",
+          "range": Object {
+            "end": Object {
+              "character": 3,
+              "line": 3,
+            },
+            "start": Object {
+              "character": 2,
+              "line": 3,
+            },
+          },
+        },
+      ],
+    },
+  },
+}
+`;
