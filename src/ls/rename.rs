@@ -1,6 +1,7 @@
 //! Rename operation
 use crate::arena::BumpaloArena;
 use crate::semantic::StructType;
+use crate::syntax::TypeField;
 use crate::syntax::{
     self, Binding, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node,
     NodePath, Position, Program, StructDefinition, StructLiteral, VariableExpression,
@@ -32,13 +33,18 @@ impl<'a> Rename<'a> {
     pub fn rename(&mut self, program: &'a Program<'a>) -> Option<Vec<EffectiveRange>> {
         if let Some(operation) = self.operation.as_ref() {
             match operation.kind() {
-                RenameOperationKind::Binding(semantic_value) => {
-                    let mut visitor = RenameBinding::new(semantic_value);
+                RenameOperationKind::Binding(binding) => {
+                    let mut visitor = RenameBinding::new(binding);
 
                     syntax::traverse(self.arena, &mut visitor, program);
                     return Some(visitor.ranges);
                 }
-                RenameOperationKind::StructField(_, _) => todo!(),
+                RenameOperationKind::StructField(struct_type, field) => {
+                    let mut visitor = RenameStructField::new(struct_type, field);
+
+                    syntax::traverse(self.arena, &mut visitor, program);
+                    return Some(visitor.ranges);
+                }
             }
         }
 
@@ -243,6 +249,42 @@ impl<'a> syntax::Visitor<'a> for RenameBinding<'a> {
         if let Some(binding) = pattern.binding() {
             if std::ptr::eq(self.binding(), binding) {
                 self.ranges.push(pattern.range());
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct RenameStructField<'a> {
+    struct_type: &'a StructType<'a>,
+    field: &'a Identifier<'a>,
+    ranges: Vec<EffectiveRange>,
+}
+
+impl<'a> RenameStructField<'a> {
+    fn new(struct_type: &'a StructType<'a>, field: &'a Identifier<'a>) -> Self {
+        Self {
+            struct_type,
+            field,
+            ranges: vec![],
+        }
+    }
+}
+
+impl<'a> syntax::Visitor<'a> for RenameStructField<'a> {
+    fn enter_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {
+        // struct type match
+        let struct_definition = path.parent().unwrap().node().struct_definition().unwrap();
+        let struct_type = struct_definition.r#type().unwrap().struct_type().unwrap();
+
+        if struct_type.name() != self.struct_type.name() {
+            return;
+        }
+
+        // field match
+        if let Some(name) = field.name() {
+            if name.as_str() == self.field.as_str() {
+                self.ranges.push(name.range());
             }
         }
     }
