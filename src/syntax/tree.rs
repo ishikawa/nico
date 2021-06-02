@@ -1125,6 +1125,10 @@ impl<'a> StructLiteral<'a> {
         self.fields.iter().copied()
     }
 
+    pub fn struct_type(&self) -> Option<&'a StructType<'a>> {
+        self.r#type().and_then(|ty| ty.struct_type())
+    }
+
     pub fn r#type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }

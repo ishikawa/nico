@@ -233,18 +233,32 @@ pub trait Visitor<'a> {
     fn enter_function_parameter(
         &mut self,
         path: &'a NodePath<'a>,
+        function: &'a FunctionDefinition<'a>,
         param: &'a FunctionParameter<'a>,
     ) {
     }
     fn exit_function_parameter(
         &mut self,
         path: &'a NodePath<'a>,
+        function: &'a FunctionDefinition<'a>,
         param: &'a FunctionParameter<'a>,
     ) {
     }
 
-    fn enter_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {}
-    fn exit_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {}
+    fn enter_type_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_def: &'a StructDefinition<'a>,
+        field: &'a TypeField<'a>,
+    ) {
+    }
+    fn exit_type_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_def: &'a StructDefinition<'a>,
+        field: &'a TypeField<'a>,
+    ) {
+    }
 
     fn enter_type_annotation(
         &mut self,
@@ -274,8 +288,20 @@ pub trait Visitor<'a> {
     fn enter_case_arm(&mut self, path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {}
     fn exit_case_arm(&mut self, path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {}
 
-    fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {}
-    fn exit_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {}
+    fn enter_value_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_literal: &'a StructLiteral<'a>,
+        field: &'a ValueField<'a>,
+    ) {
+    }
+    fn exit_value_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_literal: &'a StructLiteral<'a>,
+        field: &'a ValueField<'a>,
+    ) {
+    }
 
     fn enter_grouped_expression(
         &mut self,
@@ -454,13 +480,19 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.enter_function_definition(path, kind);
         }
         NodeKind::TypeField(kind) => {
-            visitor.enter_type_field(path, kind);
+            let parent = path.expect_parent();
+            let struct_def = parent.node().struct_definition().unwrap();
+
+            visitor.enter_type_field(path, struct_def, kind);
         }
         NodeKind::TypeAnnotation(kind) => {
             visitor.enter_type_annotation(path, kind);
         }
         NodeKind::FunctionParameter(kind) => {
-            visitor.enter_function_parameter(path, kind);
+            let parent_path = path.expect_parent();
+            let fun = parent_path.node().function_definition().unwrap();
+
+            visitor.enter_function_parameter(path, fun, kind);
         }
         NodeKind::Statement(kind) => {
             visitor.enter_statement(path, kind);
@@ -469,7 +501,10 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.enter_variable_declaration(path, kind);
         }
         NodeKind::ValueField(kind) => {
-            visitor.enter_value_field(path, kind);
+            let parent = path.expect_parent();
+            let literal = parent.node().struct_literal().unwrap();
+
+            visitor.enter_value_field(path, literal, kind);
         }
         // Expression
         NodeKind::IntegerLiteral(value) => {
@@ -564,13 +599,19 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.exit_function_definition(path, kind);
         }
         NodeKind::TypeField(kind) => {
-            visitor.exit_type_field(path, kind);
+            let parent = path.expect_parent();
+            let struct_def = parent.node().struct_definition().unwrap();
+
+            visitor.exit_type_field(path, struct_def, kind);
         }
         NodeKind::TypeAnnotation(kind) => {
             visitor.exit_type_annotation(path, kind);
         }
         NodeKind::FunctionParameter(kind) => {
-            visitor.exit_function_parameter(path, kind);
+            let parent_path = path.expect_parent();
+            let fun = parent_path.node().function_definition().unwrap();
+
+            visitor.exit_function_parameter(path, fun, kind);
         }
         NodeKind::Statement(kind) => {
             visitor.exit_statement(path, kind);
@@ -579,7 +620,10 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.exit_variable_declaration(path, kind);
         }
         NodeKind::ValueField(kind) => {
-            visitor.exit_value_field(path, kind);
+            let parent = path.expect_parent();
+            let literal = parent.node().struct_literal().unwrap();
+
+            visitor.exit_value_field(path, literal, kind);
         }
         // Expression
         NodeKind::IntegerLiteral(value) => {

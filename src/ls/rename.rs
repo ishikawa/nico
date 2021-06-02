@@ -1,6 +1,5 @@
 //! Rename operation
 use crate::arena::BumpaloArena;
-use crate::pick;
 use crate::semantic::StructType;
 use crate::syntax::MemberExpression;
 use crate::syntax::TypeField;
@@ -10,6 +9,7 @@ use crate::syntax::{
     NodePath, Position, Program, StructDefinition, StructLiteral, VariableExpression,
     VariablePattern,
 };
+use crate::unwrap_or_return;
 
 #[derive(Debug)]
 pub struct Rename<'a> {
@@ -227,6 +227,7 @@ impl<'a> syntax::Visitor<'a> for RenameBinding<'a> {
     fn enter_function_parameter(
         &mut self,
         _path: &'a NodePath<'a>,
+        _fun: &'a FunctionDefinition<'a>,
         param: &'a FunctionParameter<'a>,
     ) {
         if let Some(binding) = param.binding() {
@@ -283,10 +284,14 @@ impl<'a> RenameStructField<'a> {
 }
 
 impl<'a> syntax::Visitor<'a> for RenameStructField<'a> {
-    fn enter_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {
+    fn enter_type_field(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        struct_definition: &'a StructDefinition<'a>,
+        field: &'a TypeField<'a>,
+    ) {
         // struct type match
-        let struct_definition = path.expect_parent().node().struct_definition().unwrap();
-        let struct_type = struct_definition.r#type().unwrap().struct_type().unwrap();
+        let struct_type = unwrap_or_return!(struct_definition.struct_type());
 
         if struct_type.name() != self.struct_type.name() {
             return;
@@ -300,9 +305,13 @@ impl<'a> syntax::Visitor<'a> for RenameStructField<'a> {
         }
     }
 
-    fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
-        let struct_literal = path.expect_parent().node().struct_literal().unwrap();
-        let struct_type = struct_literal.r#type().unwrap().struct_type().unwrap();
+    fn enter_value_field(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        struct_literal: &'a StructLiteral<'a>,
+        field: &'a ValueField<'a>,
+    ) {
+        let struct_type = unwrap_or_return!(struct_literal.struct_type());
 
         if struct_type.name() != self.struct_type.name() {
             return;
@@ -321,14 +330,14 @@ impl<'a> syntax::Visitor<'a> for RenameStructField<'a> {
         _path: &'a NodePath<'a>,
         member_expr: &'a MemberExpression<'a>,
     ) {
-        let object_type = pick!(member_expr.object().r#type());
-        let struct_type = pick!(object_type.struct_type());
+        let object_type = unwrap_or_return!(member_expr.object().r#type());
+        let struct_type = unwrap_or_return!(object_type.struct_type());
 
         if struct_type.name() != self.struct_type.name() {
             return;
         }
 
-        let field = pick!(member_expr.field());
+        let field = unwrap_or_return!(member_expr.field());
 
         if field.as_str() == self.field.as_str() {
             self.ranges.push(field.range());

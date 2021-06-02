@@ -1,14 +1,16 @@
 use std::fmt::Display;
 
 use crate::arena::BumpaloArena;
-use crate::pick;
 use crate::semantic::StructType;
 use crate::semantic::TypeKind;
 use crate::syntax::MemberExpression;
+use crate::syntax::StructDefinition;
+use crate::syntax::StructLiteral;
 use crate::syntax::TypeField;
 use crate::syntax::{
     self, EffectiveRange, Node, NodePath, Position, Program, TypeAnnotation, ValueField,
 };
+use crate::unwrap_or_return;
 
 #[derive(Debug)]
 pub struct Hover<'a> {
@@ -55,25 +57,32 @@ impl<'a> Hover<'a> {
             self.describe_optional(ty),
         )
     }
+
+    fn can_hover(&self, range: EffectiveRange, path: &'a NodePath<'a>) -> Option<&'a NodePath<'a>> {
+        if range.contains(self.position) {
+            Some(path)
+        } else {
+            None
+        }
+    }
 }
 
 impl<'a> syntax::Visitor<'a> for Hover<'a> {
-    fn enter_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {
-        let field_name = pick!(field.name());
+    fn enter_type_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_def: &'a StructDefinition<'a>,
+        field: &'a TypeField<'a>,
+    ) {
+        let field_name = unwrap_or_return!(field.name());
+        let range = field_name.range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
 
-        if field_name.range().contains(self.position) {
-            path.stop();
-        } else {
-            return;
-        }
-
-        let parent = path.expect_parent();
-        let struct_def = pick!(parent.node().struct_definition());
-        let struct_type = pick!(struct_def.struct_type());
+        let struct_type = unwrap_or_return!(struct_def.struct_type());
 
         self.result.replace((
             self.describe_struct_field(struct_type, field_name.as_str()),
-            field_name.range(),
+            range,
         ));
     }
 
@@ -82,31 +91,27 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         path: &'a NodePath<'a>,
         annotation: &'a TypeAnnotation<'a>,
     ) {
-        if annotation.range().contains(self.position) {
-            path.stop();
-        } else {
-            return;
-        }
+        let range = annotation.range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
 
         self.result
-            .replace((self.describe_type(annotation.r#type()), annotation.range()));
+            .replace((self.describe_type(annotation.r#type()), range));
     }
 
-    fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
-        if field.name().range().contains(self.position) {
-            path.stop();
-        } else {
-            return;
-        }
+    fn enter_value_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_literal: &'a StructLiteral<'a>,
+        field: &'a ValueField<'a>,
+    ) {
+        let range = field.name().range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
 
-        let parent = path.expect_parent();
-        let literal = pick!(parent.node().struct_literal());
-        let binding = pick!(parent.scope().get_binding(literal.name().as_str()));
-        let struct_type = pick!(binding.r#type().struct_type());
+        let struct_type = unwrap_or_return!(struct_literal.struct_type());
 
         self.result.replace((
             self.describe_struct_field(struct_type, field.name().as_str()),
-            field.name().range(),
+            range,
         ));
     }
 
@@ -115,20 +120,16 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         path: &'a NodePath<'a>,
         member_expr: &'a MemberExpression<'a>,
     ) {
-        let field = pick!(member_expr.field());
+        let field = unwrap_or_return!(member_expr.field());
+        let range = field.range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
 
-        if field.range().contains(self.position) {
-            path.stop();
-        } else {
-            return;
-        }
-
-        let object_type = pick!(member_expr.object().r#type());
-        let struct_type = pick!(object_type.struct_type());
+        let object_type = unwrap_or_return!(member_expr.object().r#type());
+        let struct_type = unwrap_or_return!(object_type.struct_type());
 
         self.result.replace((
             self.describe_struct_field(struct_type, field.as_str()),
-            field.range(),
+            range,
         ));
     }
 }
