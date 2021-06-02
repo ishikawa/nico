@@ -1,6 +1,5 @@
 //! Rename operation
 use crate::arena::BumpaloArena;
-use crate::pick;
 use crate::semantic::StructType;
 use crate::syntax::MemberExpression;
 use crate::syntax::TypeField;
@@ -10,6 +9,7 @@ use crate::syntax::{
     NodePath, Position, Program, StructDefinition, StructLiteral, VariableExpression,
     VariablePattern,
 };
+use crate::unwrap_or_return;
 
 #[derive(Debug)]
 pub struct Rename<'a> {
@@ -321,14 +321,14 @@ impl<'a> syntax::Visitor<'a> for RenameStructField<'a> {
         _path: &'a NodePath<'a>,
         member_expr: &'a MemberExpression<'a>,
     ) {
-        let object_type = pick!(member_expr.object().r#type());
-        let struct_type = pick!(object_type.struct_type());
+        let object_type = unwrap_or_return!(member_expr.object().r#type());
+        let struct_type = unwrap_or_return!(object_type.struct_type());
 
         if struct_type.name() != self.struct_type.name() {
             return;
         }
 
-        let field = pick!(member_expr.field());
+        let field = unwrap_or_return!(member_expr.field());
 
         if field.as_str() == self.field.as_str() {
             self.ranges.push(field.range());

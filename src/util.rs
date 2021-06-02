@@ -8,7 +8,7 @@ pub fn wrap<T>(ty: T) -> Rc<RefCell<T>> {
 
 /// Unwraps an optional value or early return.
 #[macro_export]
-macro_rules! pick {
+macro_rules! unwrap_or_return {
     ($expr:expr $(,)?) => {
         match $expr {
             Some(val) => val,
