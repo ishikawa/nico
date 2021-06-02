@@ -306,7 +306,7 @@ impl<'a> syntax::Visitor<'a> for RenameStructField<'a> {
         struct_literal: &'a StructLiteral<'a>,
         field: &'a ValueField<'a>,
     ) {
-        let struct_type = struct_literal.r#type().unwrap().struct_type().unwrap();
+        let struct_type = unwrap_or_return!(struct_literal.struct_type());
 
         if struct_type.name() != self.struct_type.name() {
             return;

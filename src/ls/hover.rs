@@ -103,8 +103,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         let range = field.name().range();
         unwrap_or_return!(self.can_hover(range, path)).stop();
 
-        let binding = unwrap_or_return!(path.scope().get_binding(struct_literal.name().as_str()));
-        let struct_type = unwrap_or_return!(binding.r#type().struct_type());
+        let struct_type = unwrap_or_return!(struct_literal.struct_type());
 
         self.result.replace((
             self.describe_struct_field(struct_type, field.name().as_str()),
