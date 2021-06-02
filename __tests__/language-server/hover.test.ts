@@ -42,6 +42,14 @@ let cases: TestCase[] = [
           line: 1,
           character: 12
         }
+      },
+      // struct A { a: i32 }
+      //            ^
+      {
+        position: {
+          line: 0,
+          character: 11
+        }
       }
     ]
   }
