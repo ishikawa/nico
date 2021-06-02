@@ -274,8 +274,20 @@ pub trait Visitor<'a> {
     fn enter_case_arm(&mut self, path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {}
     fn exit_case_arm(&mut self, path: &'a NodePath<'a>, arm: &'a CaseArm<'a>) {}
 
-    fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {}
-    fn exit_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {}
+    fn enter_value_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_literal: &'a StructLiteral<'a>,
+        field: &'a ValueField<'a>,
+    ) {
+    }
+    fn exit_value_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_literal: &'a StructLiteral<'a>,
+        field: &'a ValueField<'a>,
+    ) {
+    }
 
     fn enter_grouped_expression(
         &mut self,
@@ -469,7 +481,10 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.enter_variable_declaration(path, kind);
         }
         NodeKind::ValueField(kind) => {
-            visitor.enter_value_field(path, kind);
+            let parent = path.expect_parent();
+            let literal = parent.node().struct_literal().unwrap();
+
+            visitor.enter_value_field(path, literal, kind);
         }
         // Expression
         NodeKind::IntegerLiteral(value) => {
@@ -579,7 +594,10 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.exit_variable_declaration(path, kind);
         }
         NodeKind::ValueField(kind) => {
-            visitor.exit_value_field(path, kind);
+            let parent = path.expect_parent();
+            let literal = parent.node().struct_literal().unwrap();
+
+            visitor.exit_value_field(path, literal, kind);
         }
         // Expression
         NodeKind::IntegerLiteral(value) => {

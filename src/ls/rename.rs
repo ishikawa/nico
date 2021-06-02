@@ -300,8 +300,12 @@ impl<'a> syntax::Visitor<'a> for RenameStructField<'a> {
         }
     }
 
-    fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
-        let struct_literal = path.expect_parent().node().struct_literal().unwrap();
+    fn enter_value_field(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        struct_literal: &'a StructLiteral<'a>,
+        field: &'a ValueField<'a>,
+    ) {
         let struct_type = struct_literal.r#type().unwrap().struct_type().unwrap();
 
         if struct_type.name() != self.struct_type.name() {

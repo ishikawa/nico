@@ -4,6 +4,7 @@ use crate::arena::BumpaloArena;
 use crate::semantic::StructType;
 use crate::semantic::TypeKind;
 use crate::syntax::MemberExpression;
+use crate::syntax::StructLiteral;
 use crate::syntax::TypeField;
 use crate::syntax::{
     self, EffectiveRange, Node, NodePath, Position, Program, TypeAnnotation, ValueField,
@@ -93,13 +94,16 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
             .replace((self.describe_type(annotation.r#type()), range));
     }
 
-    fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
+    fn enter_value_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_literal: &'a StructLiteral<'a>,
+        field: &'a ValueField<'a>,
+    ) {
         let range = field.name().range();
         unwrap_or_return!(self.can_hover(range, path)).stop();
 
-        let parent = path.expect_parent();
-        let literal = unwrap_or_return!(parent.node().struct_literal());
-        let binding = unwrap_or_return!(parent.scope().get_binding(literal.name().as_str()));
+        let binding = unwrap_or_return!(path.scope().get_binding(struct_literal.name().as_str()));
         let struct_type = unwrap_or_return!(binding.r#type().struct_type());
 
         self.result.replace((

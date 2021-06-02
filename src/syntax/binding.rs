@@ -418,7 +418,12 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn exit_value_field(&mut self, _path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
+    fn exit_value_field(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        _struct_literal: &'a StructLiteral<'a>,
+        field: &'a ValueField<'a>,
+    ) {
         field.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
