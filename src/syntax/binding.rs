@@ -409,6 +409,7 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
     fn exit_function_parameter(
         &mut self,
         _path: &'a NodePath<'a>,
+        _fun: &'a FunctionDefinition<'a>,
         param: &'a FunctionParameter<'a>,
     ) {
         param.assign_type(TypeKind::TypeVariable(self.new_type_var()))
@@ -586,13 +587,10 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
     fn enter_function_parameter(
         &mut self,
         path: &'a NodePath<'a>,
+        fun: &'a FunctionDefinition<'a>,
         _param: &'a syntax::FunctionParameter<'a>,
     ) {
         let node = path.node();
-
-        let parent_path = path.expect_parent();
-        let fun = parent_path.node().function_definition().unwrap();
-
         fun.body().scope().register_declaration(self.arena, node);
     }
 

@@ -60,9 +60,9 @@ impl<'a> Hover<'a> {
 
     fn can_hover(&self, range: EffectiveRange, path: &'a NodePath<'a>) -> Option<&'a NodePath<'a>> {
         if range.contains(self.position) {
-            return Some(path);
+            Some(path)
         } else {
-            return None;
+            None
         }
     }
 }

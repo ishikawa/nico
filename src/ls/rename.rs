@@ -227,6 +227,7 @@ impl<'a> syntax::Visitor<'a> for RenameBinding<'a> {
     fn enter_function_parameter(
         &mut self,
         _path: &'a NodePath<'a>,
+        _fun: &'a FunctionDefinition<'a>,
         param: &'a FunctionParameter<'a>,
     ) {
         if let Some(binding) = param.binding() {

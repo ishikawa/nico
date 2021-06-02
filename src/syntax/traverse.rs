@@ -233,12 +233,14 @@ pub trait Visitor<'a> {
     fn enter_function_parameter(
         &mut self,
         path: &'a NodePath<'a>,
+        function: &'a FunctionDefinition<'a>,
         param: &'a FunctionParameter<'a>,
     ) {
     }
     fn exit_function_parameter(
         &mut self,
         path: &'a NodePath<'a>,
+        function: &'a FunctionDefinition<'a>,
         param: &'a FunctionParameter<'a>,
     ) {
     }
@@ -487,7 +489,10 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.enter_type_annotation(path, kind);
         }
         NodeKind::FunctionParameter(kind) => {
-            visitor.enter_function_parameter(path, kind);
+            let parent_path = path.expect_parent();
+            let fun = parent_path.node().function_definition().unwrap();
+
+            visitor.enter_function_parameter(path, fun, kind);
         }
         NodeKind::Statement(kind) => {
             visitor.enter_statement(path, kind);
@@ -603,7 +608,10 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.exit_type_annotation(path, kind);
         }
         NodeKind::FunctionParameter(kind) => {
-            visitor.exit_function_parameter(path, kind);
+            let parent_path = path.expect_parent();
+            let fun = parent_path.node().function_definition().unwrap();
+
+            visitor.exit_function_parameter(path, fun, kind);
         }
         NodeKind::Statement(kind) => {
             visitor.exit_statement(path, kind);
