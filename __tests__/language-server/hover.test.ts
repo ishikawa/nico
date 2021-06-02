@@ -18,20 +18,25 @@ afterAll(() => {
 });
 
 let cases: TestCase[] = [
-  // function name
+  // struct field
   {
     // prettier-ignore
     input: [
       "struct A { a: i32 }",
-      "let a = A { a: 100 }"
+      "let a = A { a: 100 }",
+      "a.a"
     ].join("\n"),
     requests: [
+      // struct A { a: i32 }
+      //                ^
       {
         position: {
           line: 0,
           character: 15
         }
       },
+      // let a = A { a: 100 }
+      //             ^
       {
         position: {
           line: 1,
