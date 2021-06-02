@@ -1,7 +1,8 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`0: hover - \`struct A { a: i32 }
-let a = A { a: 100 }\` at [object Object] 1`] = `
+let a = A { a: 100 }
+a.a\` at [object Object] 1`] = `
 Object {
   "error": null,
   "id": 1100,
@@ -30,7 +31,8 @@ The 32-bit signed integer type.",
 `;
 
 exports[`0: hover - \`struct A { a: i32 }
-let a = A { a: 100 }\` at [object Object] 2`] = `
+let a = A { a: 100 }
+a.a\` at [object Object] 2`] = `
 Object {
   "error": null,
   "id": 1101,
@@ -50,6 +52,62 @@ A.a: i32
       "start": Object {
         "character": 12,
         "line": 1,
+      },
+    },
+  },
+}
+`;
+
+exports[`0: hover - \`struct A { a: i32 }
+let a = A { a: 100 }
+a.a\` at [object Object] 3`] = `
+Object {
+  "error": null,
+  "id": 1102,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "contents": Object {
+      "kind": "markdown",
+      "value": "\`\`\`nico
+A.a: i32
+\`\`\`",
+    },
+    "range": Object {
+      "end": Object {
+        "character": 12,
+        "line": 0,
+      },
+      "start": Object {
+        "character": 11,
+        "line": 0,
+      },
+    },
+  },
+}
+`;
+
+exports[`0: hover - \`struct A { a: i32 }
+let a = A { a: 100 }
+a.a\` at [object Object] 4`] = `
+Object {
+  "error": null,
+  "id": 1103,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "contents": Object {
+      "kind": "markdown",
+      "value": "\`\`\`nico
+A.a: i32
+\`\`\`",
+    },
+    "range": Object {
+      "end": Object {
+        "character": 3,
+        "line": 2,
+      },
+      "start": Object {
+        "character": 2,
+        "line": 2,
       },
     },
   },

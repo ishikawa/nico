@@ -44,7 +44,7 @@
 //! ```
 use super::{Binding, Code, CodeKind, CodeKindIter, EffectiveRange, Scope, Token};
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString, BumpaloVec};
-use crate::semantic::TypeKind;
+use crate::semantic::{StructType, TypeKind};
 use std::cell::Cell;
 use std::fmt;
 
@@ -563,6 +563,10 @@ impl<'a> StructDefinition<'a> {
 
     pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
         self.fields.iter().copied()
+    }
+
+    pub fn struct_type(&self) -> Option<&'a StructType<'a>> {
+        self.r#type.get().and_then(|ty| ty.struct_type())
     }
 
     // for semantic analysis

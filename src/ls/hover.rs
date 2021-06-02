@@ -1,8 +1,11 @@
 use std::fmt::Display;
 
 use crate::arena::BumpaloArena;
+use crate::pick;
 use crate::semantic::StructType;
 use crate::semantic::TypeKind;
+use crate::syntax::MemberExpression;
+use crate::syntax::TypeField;
 use crate::syntax::{
     self, EffectiveRange, Node, NodePath, Position, Program, TypeAnnotation, ValueField,
 };
@@ -42,58 +45,90 @@ impl<'a> Hover<'a> {
         format!("```nico\n{}\n```\n---\n{}", ty, description)
     }
 
-    fn describe_value_field(
-        &self,
-        struct_type: &'a StructType<'a>,
-        field: &'a ValueField<'a>,
-    ) -> String {
-        let ty = struct_type.get_field_type(field.name().as_str());
+    fn describe_struct_field(&self, struct_type: &'a StructType<'a>, field_name: &str) -> String {
+        let ty = struct_type.get_field_type(field_name);
 
         format!(
             "```nico\n{}.{}: {}\n```",
             struct_type.name(),
-            field.name(),
+            field_name,
             self.describe_optional(ty),
         )
     }
 }
 
 impl<'a> syntax::Visitor<'a> for Hover<'a> {
+    fn enter_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {
+        let field_name = pick!(field.name());
+
+        if field_name.range().contains(self.position) {
+            path.stop();
+        } else {
+            return;
+        }
+
+        let parent = path.expect_parent();
+        let struct_def = pick!(parent.node().struct_definition());
+        let struct_type = pick!(struct_def.struct_type());
+
+        self.result.replace((
+            self.describe_struct_field(struct_type, field_name.as_str()),
+            field_name.range(),
+        ));
+    }
+
     fn enter_type_annotation(
         &mut self,
         path: &'a NodePath<'a>,
         annotation: &'a TypeAnnotation<'a>,
     ) {
-        if !annotation.range().contains(self.position) {
+        if annotation.range().contains(self.position) {
+            path.stop();
+        } else {
             return;
         }
 
         self.result
             .replace((self.describe_type(annotation.r#type()), annotation.range()));
-        path.stop();
     }
 
     fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
-        if !field.name().range().contains(self.position) {
+        if field.name().range().contains(self.position) {
+            path.stop();
+        } else {
             return;
         }
 
         let parent = path.expect_parent();
-        let scope = parent.scope();
-        let parent = parent.node();
+        let literal = pick!(parent.node().struct_literal());
+        let binding = pick!(parent.scope().get_binding(literal.name().as_str()));
+        let struct_type = pick!(binding.r#type().struct_type());
 
-        let literal = parent.struct_literal().unwrap();
+        self.result.replace((
+            self.describe_struct_field(struct_type, field.name().as_str()),
+            field.name().range(),
+        ));
+    }
 
-        // TODO: Use type info
-        if let Some(binding) = scope.get_binding(literal.name().as_str()) {
-            if let Some(struct_type) = binding.r#type().struct_type() {
-                self.result.replace((
-                    self.describe_value_field(struct_type, field),
-                    field.name().range(),
-                ));
-            }
+    fn enter_member_expression(
+        &mut self,
+        path: &'a NodePath<'a>,
+        member_expr: &'a MemberExpression<'a>,
+    ) {
+        let field = pick!(member_expr.field());
+
+        if field.range().contains(self.position) {
+            path.stop();
+        } else {
+            return;
         }
 
-        path.stop();
+        let object_type = pick!(member_expr.object().r#type());
+        let struct_type = pick!(object_type.struct_type());
+
+        self.result.replace((
+            self.describe_struct_field(struct_type, field.as_str()),
+            field.range(),
+        ));
     }
 }
