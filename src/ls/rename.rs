@@ -283,10 +283,14 @@ impl<'a> RenameStructField<'a> {
 }
 
 impl<'a> syntax::Visitor<'a> for RenameStructField<'a> {
-    fn enter_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {
+    fn enter_type_field(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        struct_definition: &'a StructDefinition<'a>,
+        field: &'a TypeField<'a>,
+    ) {
         // struct type match
-        let struct_definition = path.expect_parent().node().struct_definition().unwrap();
-        let struct_type = struct_definition.r#type().unwrap().struct_type().unwrap();
+        let struct_type = unwrap_or_return!(struct_definition.struct_type());
 
         if struct_type.name() != self.struct_type.name() {
             return;

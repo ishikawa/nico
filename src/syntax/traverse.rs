@@ -243,8 +243,20 @@ pub trait Visitor<'a> {
     ) {
     }
 
-    fn enter_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {}
-    fn exit_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {}
+    fn enter_type_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_def: &'a StructDefinition<'a>,
+        field: &'a TypeField<'a>,
+    ) {
+    }
+    fn exit_type_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_def: &'a StructDefinition<'a>,
+        field: &'a TypeField<'a>,
+    ) {
+    }
 
     fn enter_type_annotation(
         &mut self,
@@ -466,7 +478,10 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.enter_function_definition(path, kind);
         }
         NodeKind::TypeField(kind) => {
-            visitor.enter_type_field(path, kind);
+            let parent = path.expect_parent();
+            let struct_def = parent.node().struct_definition().unwrap();
+
+            visitor.enter_type_field(path, struct_def, kind);
         }
         NodeKind::TypeAnnotation(kind) => {
             visitor.enter_type_annotation(path, kind);
@@ -579,7 +594,10 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.exit_function_definition(path, kind);
         }
         NodeKind::TypeField(kind) => {
-            visitor.exit_type_field(path, kind);
+            let parent = path.expect_parent();
+            let struct_def = parent.node().struct_definition().unwrap();
+
+            visitor.exit_type_field(path, struct_def, kind);
         }
         NodeKind::TypeAnnotation(kind) => {
             visitor.exit_type_annotation(path, kind);

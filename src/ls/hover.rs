@@ -4,6 +4,7 @@ use crate::arena::BumpaloArena;
 use crate::semantic::StructType;
 use crate::semantic::TypeKind;
 use crate::syntax::MemberExpression;
+use crate::syntax::StructDefinition;
 use crate::syntax::StructLiteral;
 use crate::syntax::TypeField;
 use crate::syntax::{
@@ -67,13 +68,16 @@ impl<'a> Hover<'a> {
 }
 
 impl<'a> syntax::Visitor<'a> for Hover<'a> {
-    fn enter_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {
+    fn enter_type_field(
+        &mut self,
+        path: &'a NodePath<'a>,
+        struct_def: &'a StructDefinition<'a>,
+        field: &'a TypeField<'a>,
+    ) {
         let field_name = unwrap_or_return!(field.name());
         let range = field_name.range();
         unwrap_or_return!(self.can_hover(range, path)).stop();
 
-        let parent = path.expect_parent();
-        let struct_def = unwrap_or_return!(parent.node().struct_definition());
         let struct_type = unwrap_or_return!(struct_def.struct_type());
 
         self.result.replace((
