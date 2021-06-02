@@ -50,6 +50,14 @@ let cases: TestCase[] = [
           line: 0,
           character: 11
         }
+      },
+      // a.a
+      //   ^
+      {
+        position: {
+          line: 2,
+          character: 2
+        }
       }
     ]
   }

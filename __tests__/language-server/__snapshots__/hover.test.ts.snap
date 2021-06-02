@@ -85,3 +85,31 @@ A.a: i32
   },
 }
 `;
+
+exports[`0: hover - \`struct A { a: i32 }
+let a = A { a: 100 }
+a.a\` at [object Object] 4`] = `
+Object {
+  "error": null,
+  "id": 1103,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "contents": Object {
+      "kind": "markdown",
+      "value": "\`\`\`nico
+A.a: i32
+\`\`\`",
+    },
+    "range": Object {
+      "end": Object {
+        "character": 3,
+        "line": 2,
+      },
+      "start": Object {
+        "character": 2,
+        "line": 2,
+      },
+    },
+  },
+}
+`;

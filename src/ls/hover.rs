@@ -4,6 +4,7 @@ use crate::arena::BumpaloArena;
 use crate::pick;
 use crate::semantic::StructType;
 use crate::semantic::TypeKind;
+use crate::syntax::MemberExpression;
 use crate::syntax::TypeField;
 use crate::syntax::{
     self, EffectiveRange, Node, NodePath, Position, Program, TypeAnnotation, ValueField,
@@ -60,7 +61,9 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
     fn enter_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {
         let field_name = pick!(field.name());
 
-        if !field_name.range().contains(self.position) {
+        if field_name.range().contains(self.position) {
+            path.stop();
+        } else {
             return;
         }
 
@@ -72,8 +75,6 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
             self.describe_struct_field(struct_type, field_name.as_str()),
             field_name.range(),
         ));
-
-        path.stop();
     }
 
     fn enter_type_annotation(
@@ -81,17 +82,20 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         path: &'a NodePath<'a>,
         annotation: &'a TypeAnnotation<'a>,
     ) {
-        if !annotation.range().contains(self.position) {
+        if annotation.range().contains(self.position) {
+            path.stop();
+        } else {
             return;
         }
 
         self.result
             .replace((self.describe_type(annotation.r#type()), annotation.range()));
-        path.stop();
     }
 
     fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
-        if !field.name().range().contains(self.position) {
+        if field.name().range().contains(self.position) {
+            path.stop();
+        } else {
             return;
         }
 
@@ -104,7 +108,27 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
             self.describe_struct_field(struct_type, field.name().as_str()),
             field.name().range(),
         ));
+    }
 
-        path.stop();
+    fn enter_member_expression(
+        &mut self,
+        path: &'a NodePath<'a>,
+        member_expr: &'a MemberExpression<'a>,
+    ) {
+        let field = pick!(member_expr.field());
+
+        if field.range().contains(self.position) {
+            path.stop();
+        } else {
+            return;
+        }
+
+        let object_type = pick!(member_expr.object().r#type());
+        let struct_type = pick!(object_type.struct_type());
+
+        self.result.replace((
+            self.describe_struct_field(struct_type, field.as_str()),
+            field.range(),
+        ));
     }
 }
