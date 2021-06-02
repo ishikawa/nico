@@ -55,17 +55,21 @@ impl<'a> Hover<'a> {
             self.describe_optional(ty),
         )
     }
+
+    fn can_hover(&self, range: EffectiveRange, path: &'a NodePath<'a>) -> Option<&'a NodePath<'a>> {
+        if range.contains(self.position) {
+            return Some(path);
+        } else {
+            return None;
+        }
+    }
 }
 
 impl<'a> syntax::Visitor<'a> for Hover<'a> {
     fn enter_type_field(&mut self, path: &'a NodePath<'a>, field: &'a TypeField<'a>) {
         let field_name = unwrap_or_return!(field.name());
-
-        if field_name.range().contains(self.position) {
-            path.stop();
-        } else {
-            return;
-        }
+        let range = field_name.range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
 
         let parent = path.expect_parent();
         let struct_def = unwrap_or_return!(parent.node().struct_definition());
@@ -73,7 +77,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
 
         self.result.replace((
             self.describe_struct_field(struct_type, field_name.as_str()),
-            field_name.range(),
+            range,
         ));
     }
 
@@ -82,22 +86,16 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         path: &'a NodePath<'a>,
         annotation: &'a TypeAnnotation<'a>,
     ) {
-        if annotation.range().contains(self.position) {
-            path.stop();
-        } else {
-            return;
-        }
+        let range = annotation.range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
 
         self.result
-            .replace((self.describe_type(annotation.r#type()), annotation.range()));
+            .replace((self.describe_type(annotation.r#type()), range));
     }
 
     fn enter_value_field(&mut self, path: &'a NodePath<'a>, field: &'a ValueField<'a>) {
-        if field.name().range().contains(self.position) {
-            path.stop();
-        } else {
-            return;
-        }
+        let range = field.name().range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
 
         let parent = path.expect_parent();
         let literal = unwrap_or_return!(parent.node().struct_literal());
@@ -106,7 +104,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
 
         self.result.replace((
             self.describe_struct_field(struct_type, field.name().as_str()),
-            field.name().range(),
+            range,
         ));
     }
 
@@ -116,19 +114,15 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         member_expr: &'a MemberExpression<'a>,
     ) {
         let field = unwrap_or_return!(member_expr.field());
-
-        if field.range().contains(self.position) {
-            path.stop();
-        } else {
-            return;
-        }
+        let range = field.range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
 
         let object_type = unwrap_or_return!(member_expr.object().r#type());
         let struct_type = unwrap_or_return!(object_type.struct_type());
 
         self.result.replace((
             self.describe_struct_field(struct_type, field.as_str()),
-            field.range(),
+            range,
         ));
     }
 }
