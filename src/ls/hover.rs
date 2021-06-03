@@ -124,7 +124,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         let range = field.range();
         unwrap_or_return!(self.can_hover(range, path)).stop();
 
-        let object_type = unwrap_or_return!(member_expr.object().r#type());
+        let object_type = member_expr.object().r#type();
         let struct_type = unwrap_or_return!(object_type.struct_type());
 
         self.result.replace((

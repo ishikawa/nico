@@ -1,13 +1,12 @@
 //! Rename operation
 use crate::arena::BumpaloArena;
-use crate::semantic::StructType;
+use crate::semantic::{Binding, StructType};
 use crate::syntax::MemberExpression;
 use crate::syntax::TypeField;
 use crate::syntax::ValueField;
 use crate::syntax::{
-    self, Binding, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node,
-    NodePath, Position, Program, StructDefinition, StructLiteral, VariableExpression,
-    VariablePattern,
+    self, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node, NodePath,
+    Position, Program, StructDefinition, StructLiteral, VariableExpression, VariablePattern,
 };
 use crate::unwrap_or_return;
 
@@ -83,18 +82,18 @@ impl<'a> Rename<'a> {
         else if let Some(member_expr) = parent_node.member_expression() {
             // In the case of MemberExpression, rename is possible only if
             // the target object type is struct.
-            let object_type = member_expr.object().r#type()?;
+            let object_type = member_expr.object().r#type();
             let struct_type = object_type.struct_type()?;
 
             return Some(RenameOperation::rename_struct_field(struct_type, id));
         } else if parent_node.is_type_field() {
             let struct_def = parent.expect_parent().node().struct_definition()?;
-            let struct_type = struct_def.r#type()?.struct_type()?;
+            let struct_type = struct_def.struct_type()?;
 
             return Some(RenameOperation::rename_struct_field(struct_type, id));
         } else if parent_node.is_value_field() {
             let struct_literal = parent.expect_parent().node().struct_literal()?;
-            let struct_type = struct_literal.r#type()?.struct_type()?;
+            let struct_type = struct_literal.struct_type()?;
 
             return Some(RenameOperation::rename_struct_field(struct_type, id));
         }
@@ -330,7 +329,7 @@ impl<'a> syntax::Visitor<'a> for RenameStructField<'a> {
         _path: &'a NodePath<'a>,
         member_expr: &'a MemberExpression<'a>,
     ) {
-        let object_type = unwrap_or_return!(member_expr.object().r#type());
+        let object_type = member_expr.object().r#type();
         let struct_type = unwrap_or_return!(object_type.struct_type());
 
         if struct_type.name() != self.struct_type.name() {

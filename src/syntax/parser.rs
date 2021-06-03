@@ -1,7 +1,6 @@
 use super::*;
 use crate::arena::{BumpaloArena, BumpaloString};
-use crate::semantic::TypeKind;
-use crate::syntax::binding;
+use crate::semantic::{self, TypeKind};
 use crate::util::naming::PrefixNaming;
 
 const DEBUG: bool = false;
@@ -71,7 +70,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         let program = arena.alloc(Program::new(arena, body, code.build(arena)));
 
-        binding::bind(arena, program);
+        semantic::analyze(arena, program);
 
         program
     }
@@ -821,7 +820,7 @@ impl<'a, 't> Parser<'a, 't> {
 
         // Because parentheses which groups an expression is not part of
         // AST, we have to incorporate it into another node.
-        arena.alloc(GroupedExpression::new(node, code.build(arena)))
+        arena.alloc(GroupedExpression::new(arena, node, code.build(arena)))
     }
 
     fn read_array(&mut self, arena: &'a BumpaloArena) -> &'a Expression<'a> {
