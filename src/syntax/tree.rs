@@ -570,7 +570,11 @@ impl<'a> StructDefinition<'a> {
     }
 
     // for semantic analysis
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -719,7 +723,11 @@ impl<'a> FunctionDefinition<'a> {
     }
 
     // for semantic analysis
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -777,7 +785,11 @@ impl<'a> FunctionParameter<'a> {
     }
 
     // for semantic analysis
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1063,10 +1075,10 @@ impl<'a> Expression<'a> {
         matches!(self.kind, ExpressionKind::VariableExpression(..))
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
         match self.kind() {
-            ExpressionKind::IntegerLiteral(expr) => Some(expr.r#type()),
-            ExpressionKind::StringLiteral(expr) => Some(expr.r#type()),
+            ExpressionKind::IntegerLiteral(expr) => expr.r#type(),
+            ExpressionKind::StringLiteral(expr) => expr.r#type(),
             ExpressionKind::VariableExpression(expr) => expr.r#type(),
             ExpressionKind::BinaryExpression(expr) => expr.r#type(),
             ExpressionKind::UnaryExpression(expr) => expr.r#type(),
@@ -1126,10 +1138,14 @@ impl<'a> StructLiteral<'a> {
     }
 
     pub fn struct_type(&self) -> Option<&'a StructType<'a>> {
-        self.r#type().and_then(|ty| ty.struct_type())
+        self.r#type().struct_type()
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1181,7 +1197,11 @@ impl<'a> ValueField<'a> {
         self.value
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1240,7 +1260,11 @@ impl<'a> BinaryExpression<'a> {
         self.rhs
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1292,7 +1316,11 @@ impl<'a> UnaryExpression<'a> {
         self.operand
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1392,7 +1420,11 @@ impl<'a> SubscriptExpression<'a> {
         self.arguments.iter().copied()
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1444,7 +1476,11 @@ impl<'a> CallExpression<'a> {
         self.arguments.iter().copied()
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1496,7 +1532,11 @@ impl<'a> MemberExpression<'a> {
         self.field
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1545,7 +1585,11 @@ impl<'a> ArrayExpression<'a> {
         self.elements.iter().copied()
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1604,7 +1648,11 @@ impl<'a> IfExpression<'a> {
         self.else_body
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1663,7 +1711,11 @@ impl<'a> CaseExpression<'a> {
         self.else_body
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1840,7 +1892,11 @@ impl<'a> VariableExpression<'a> {
         self.id.as_str()
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -1865,19 +1921,37 @@ impl fmt::Display for VariableExpression<'_> {
 pub struct GroupedExpression<'a> {
     expression: Option<&'a Expression<'a>>,
     code: Code<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
 }
 
 impl<'a> GroupedExpression<'a> {
-    pub fn new(expression: Option<&'a Expression<'a>>, code: Code<'a>) -> Self {
-        Self { expression, code }
+    pub fn new(
+        arena: &'a BumpaloArena,
+        expression: Option<&'a Expression<'a>>,
+        code: Code<'a>,
+    ) -> Self {
+        Self {
+            expression,
+            code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
+        }
     }
 
     pub fn expression(&self) -> Option<&'a Expression<'a>> {
         self.expression
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
-        self.expression().and_then(|x| x.r#type())
+    // for semantic analysis
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
@@ -1973,7 +2047,11 @@ impl<'a> VariablePattern<'a> {
     }
 
     // for semantic analysis
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -2026,7 +2104,11 @@ impl<'a> ArrayPattern<'a> {
         self.elements.iter().copied()
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -2071,7 +2153,11 @@ impl<'a> RestPattern<'a> {
         self.variable_pattern
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -2123,7 +2209,11 @@ impl<'a> StructPattern<'a> {
         self.fields.iter().copied()
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -2195,7 +2285,11 @@ impl<'a> ValueFieldPattern<'a> {
         self.omitted_value
     }
 
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
 
@@ -2228,10 +2322,10 @@ pub enum PatternKind<'a> {
 }
 
 impl<'a> PatternKind<'a> {
-    pub fn r#type(&self) -> Option<TypeKind<'a>> {
+    pub fn r#type(&self) -> TypeKind<'a> {
         match self {
-            PatternKind::IntegerPattern(pat) => Some(pat.r#type()),
-            PatternKind::StringPattern(pat) => Some(pat.r#type()),
+            PatternKind::IntegerPattern(pat) => pat.r#type(),
+            PatternKind::StringPattern(pat) => pat.r#type(),
             PatternKind::VariablePattern(pat) => pat.r#type(),
             PatternKind::ArrayPattern(pat) => pat.r#type(),
             PatternKind::RestPattern(pat) => pat.r#type(),

@@ -2,9 +2,9 @@
 //! determined solely from the structure of the abstract syntax tree.
 use super::{
     traverse, ArrayExpression, BinaryExpression, Block, CallExpression, CaseArm, CaseExpression,
-    FunctionDefinition, FunctionParameter, IfExpression, MemberExpression, NodeKind, NodePath,
-    PatternKind, Program, StructDefinition, StructLiteral, SubscriptExpression, UnaryExpression,
-    ValueField, VariableDeclaration, VariableExpression, VariablePattern, Visitor,
+    FunctionDefinition, FunctionParameter, GroupedExpression, IfExpression, MemberExpression,
+    NodeKind, NodePath, PatternKind, Program, StructDefinition, StructLiteral, SubscriptExpression,
+    UnaryExpression, ValueField, VariableDeclaration, VariableExpression, VariablePattern, Visitor,
 };
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
 use crate::semantic::{self, TypeKind, TypeVariable};
@@ -217,43 +217,37 @@ impl<'a> Scope<'a> {
     pub fn register_declaration(&self, arena: &'a BumpaloArena, declaration: NodeKind<'a>) {
         if let Some(fun) = declaration.function_definition() {
             if let Some(name) = fun.name() {
-                if let Some(ty) = fun.r#type() {
-                    let binding = Binding::alloc_in(
-                        arena,
-                        name.as_str(),
-                        ty,
-                        Some(BindingNodeKind::FunctionDefinition(fun)),
-                    );
-
-                    self.insert(binding);
-                    fun.assign_binding(binding);
-                }
-            }
-        } else if let Some(param) = declaration.function_parameter() {
-            if let Some(ty) = param.r#type() {
                 let binding = Binding::alloc_in(
                     arena,
-                    param.name().as_str(),
-                    ty,
-                    Some(BindingNodeKind::FunctionParameter(param)),
+                    name.as_str(),
+                    fun.r#type(),
+                    Some(BindingNodeKind::FunctionDefinition(fun)),
                 );
 
                 self.insert(binding);
-                param.assign_binding(binding);
+                fun.assign_binding(binding);
             }
+        } else if let Some(param) = declaration.function_parameter() {
+            let binding = Binding::alloc_in(
+                arena,
+                param.name().as_str(),
+                param.r#type(),
+                Some(BindingNodeKind::FunctionParameter(param)),
+            );
+
+            self.insert(binding);
+            param.assign_binding(binding);
         } else if let Some(struct_node) = declaration.struct_definition() {
             if let Some(name) = struct_node.name() {
-                if let Some(ty) = struct_node.r#type() {
-                    let binding = Binding::alloc_in(
-                        arena,
-                        name.as_str(),
-                        ty,
-                        Some(BindingNodeKind::StructDefinition(struct_node)),
-                    );
+                let binding = Binding::alloc_in(
+                    arena,
+                    name.as_str(),
+                    struct_node.r#type(),
+                    Some(BindingNodeKind::StructDefinition(struct_node)),
+                );
 
-                    self.insert(binding);
-                    struct_node.assign_binding(binding);
-                }
+                self.insert(binding);
+                struct_node.assign_binding(binding);
             }
         } else if let Some(pattern) = declaration.pattern() {
             self.register_pattern(arena, pattern.kind());
@@ -265,17 +259,15 @@ impl<'a> Scope<'a> {
             PatternKind::IntegerPattern(_) => {}
             PatternKind::StringPattern(_) => {}
             PatternKind::VariablePattern(variable_pattern) => {
-                if let Some(ty) = variable_pattern.r#type() {
-                    let binding = Binding::alloc_in(
-                        arena,
-                        variable_pattern.name(),
-                        ty,
-                        Some(BindingNodeKind::VariablePattern(variable_pattern)),
-                    );
+                let binding = Binding::alloc_in(
+                    arena,
+                    variable_pattern.name(),
+                    variable_pattern.r#type(),
+                    Some(BindingNodeKind::VariablePattern(variable_pattern)),
+                );
 
-                    self.insert(binding);
-                    variable_pattern.assign_binding(binding);
-                }
+                self.insert(binding);
+                variable_pattern.assign_binding(binding);
             }
             PatternKind::ArrayPattern(pat) => {
                 for pat in pat.elements() {
@@ -369,7 +361,7 @@ impl<'a> InitialTypeBinder<'a> {
                 &*self.arena.alloc(semantic::FunctionParameter::new(
                     self.arena,
                     p.name().as_str(),
-                    p.r#type().unwrap(),
+                    p.r#type(),
                 ))
             })
             .collect();
@@ -468,6 +460,14 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         &mut self,
         _path: &'a NodePath<'a>,
         expr: &'a VariableExpression<'a>,
+    ) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_grouped_expression(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        expr: &'a GroupedExpression<'a>,
     ) {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
@@ -639,8 +639,7 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
 
         literal
             .r#type()
-            .unwrap()
-            .unify(self.arena, struct_def.r#type().unwrap())
+            .unify(self.arena, struct_def.r#type())
             .unwrap_or_else(|err| panic!("Type error: {}", err));
     }
 
@@ -662,8 +661,7 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         if let PatternKind::VariablePattern(var_pattern) = pattern.kind() {
             var_pattern
                 .r#type()
-                .unwrap()
-                .unify(self.arena, init.r#type().unwrap())
+                .unify(self.arena, init.r#type())
                 .unwrap_or_else(|err| panic!("Type error: {}", err));
         } else {
             todo!("warn: except for variable pattern, we can't infer type.");
@@ -677,8 +675,20 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
     ) {
         if let Some(binding) = path.scope().get_binding(expr.name()) {
             expr.r#type()
-                .unwrap()
                 .unify(self.arena, binding.r#type())
+                .unwrap_or_else(|err| panic!("Type error: {}", err));
+        }
+    }
+
+    fn exit_grouped_expression(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        grouped_expr: &'a GroupedExpression<'a>,
+    ) {
+        if let Some(expr) = grouped_expr.expression() {
+            grouped_expr
+                .r#type()
+                .unify(self.arena, expr.r#type())
                 .unwrap_or_else(|err| panic!("Type error: {}", err));
         }
     }
