@@ -6,7 +6,7 @@ mod tokenizer;
 mod traverse;
 mod tree;
 
-pub use binding::{Binding, Scope};
+pub use binding::Scope;
 pub use code::*;
 pub use errors::{ParseError, ParseErrorKind};
 pub use parser::Parser;

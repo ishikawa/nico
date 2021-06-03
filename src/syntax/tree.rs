@@ -42,9 +42,9 @@
 //! ArrayPattern        := "[" Pattern (, Pattern)* ,? "]"
 //! RestPattern         := "..." Id?
 //! ```
-use super::{Binding, Code, CodeKind, CodeKindIter, EffectiveRange, Scope, Token};
+use super::{Code, CodeKind, CodeKindIter, EffectiveRange, Scope, Token};
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString, BumpaloVec};
-use crate::semantic::{StructType, TypeKind};
+use crate::semantic::{Binding, StructType, TypeKind};
 use std::cell::Cell;
 use std::fmt;
 

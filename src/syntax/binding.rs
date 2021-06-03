@@ -6,152 +6,13 @@ use super::{
     NodeKind, NodePath, PatternKind, Program, StructDefinition, StructLiteral, SubscriptExpression,
     UnaryExpression, ValueField, VariableDeclaration, VariableExpression, VariablePattern, Visitor,
 };
-use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString};
-use crate::semantic::{self, TypeKind, TypeVariable};
+use crate::arena::{BumpaloArena, BumpaloBox};
+use crate::semantic::{self, Binding, TypeKind, TypeVariable};
 use crate::syntax;
-use std::fmt;
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
 };
-
-#[derive(Debug, Clone)]
-pub struct Binding<'a> {
-    id: BumpaloString<'a>,
-    r#type: TypeKind<'a>,
-    kind: Option<BindingNodeKind<'a>>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum BindingNodeKind<'a> {
-    StructDefinition(&'a StructDefinition<'a>),
-    FunctionDefinition(&'a FunctionDefinition<'a>),
-    FunctionParameter(&'a FunctionParameter<'a>),
-    VariablePattern(&'a VariablePattern<'a>),
-}
-
-impl<'a> Binding<'a> {
-    pub fn new(
-        id: BumpaloString<'a>,
-        r#type: TypeKind<'a>,
-        kind: Option<BindingNodeKind<'a>>,
-    ) -> Self {
-        Self { id, r#type, kind }
-    }
-
-    pub fn alloc_in<S: AsRef<str>>(
-        arena: &'a BumpaloArena,
-        name: S,
-        r#type: TypeKind<'a>,
-        kind: Option<BindingNodeKind<'a>>,
-    ) -> &'a Binding<'a> {
-        let binding = Self {
-            id: BumpaloString::from_str_in(name.as_ref(), arena),
-            r#type,
-            kind,
-        };
-
-        arena.alloc(binding)
-    }
-
-    pub fn builtin_function<S: AsRef<str>>(
-        arena: &'a BumpaloArena,
-        name: S,
-        parameters: &[(S, TypeKind<'a>)],
-        return_type: TypeKind<'a>,
-    ) -> &'a Binding<'a> {
-        let params: Vec<_> = parameters
-            .iter()
-            .map(|(name, ty)| {
-                &*arena.alloc(semantic::FunctionParameter::new(arena, name.as_ref(), *ty))
-            })
-            .collect();
-        let fun_type = arena.alloc(semantic::FunctionType::new(
-            arena,
-            name.as_ref(),
-            &params,
-            return_type,
-        ));
-
-        Self::alloc_in(arena, name.as_ref(), TypeKind::FunctionType(fun_type), None)
-    }
-
-    pub fn id(&self) -> &str {
-        self.id.as_str()
-    }
-
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.r#type
-    }
-
-    pub fn struct_definition(&self) -> Option<&'a StructDefinition<'a>> {
-        if let Some(BindingNodeKind::StructDefinition(node)) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn function_definition(&self) -> Option<&'a FunctionDefinition<'a>> {
-        if let Some(BindingNodeKind::FunctionDefinition(node)) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn function_parameter(&self) -> Option<&'a FunctionParameter<'a>> {
-        if let Some(BindingNodeKind::FunctionParameter(node)) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn variable_pattern(&self) -> Option<&'a VariablePattern<'a>> {
-        if let Some(BindingNodeKind::VariablePattern(node)) = self.kind {
-            Some(node)
-        } else {
-            None
-        }
-    }
-
-    pub fn is_function_parameter(&self) -> bool {
-        self.function_parameter().is_some()
-    }
-
-    pub fn is_function(&self) -> bool {
-        self.function_definition().is_some() || self.r#type().is_function_type()
-    }
-
-    pub fn is_struct(&self) -> bool {
-        self.struct_definition().is_some() || self.r#type().is_struct_type()
-    }
-
-    pub fn is_local_variable(&self) -> bool {
-        self.variable_pattern().is_some()
-    }
-
-    pub fn is_builtin(&self) -> bool {
-        self.kind.is_none()
-    }
-}
-
-impl fmt::Display for Binding<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_function_parameter() {
-            write!(f, "function parameter `{}`", self.id())
-        } else if self.is_function() {
-            write!(f, "function `{}`", self.id())
-        } else if self.is_struct() {
-            write!(f, "struct `{}`", self.id())
-        } else if self.is_local_variable() {
-            write!(f, "local variable `{}`", self.id())
-        } else {
-            write!(f, "`{}`", self.id())
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct Scope<'a> {
@@ -203,36 +64,17 @@ impl<'a> Scope<'a> {
 
     pub fn register_declaration(&self, arena: &'a BumpaloArena, declaration: NodeKind<'a>) {
         if let Some(fun) = declaration.function_definition() {
-            if let Some(name) = fun.name() {
-                let binding = Binding::alloc_in(
-                    arena,
-                    name.as_str(),
-                    fun.r#type(),
-                    Some(BindingNodeKind::FunctionDefinition(fun)),
-                );
-
+            if let Some(binding) = Binding::alloc_function_in(arena, fun) {
                 self.insert(binding);
                 fun.assign_binding(binding);
             }
         } else if let Some(param) = declaration.function_parameter() {
-            let binding = Binding::alloc_in(
-                arena,
-                param.name().as_str(),
-                param.r#type(),
-                Some(BindingNodeKind::FunctionParameter(param)),
-            );
+            let binding = Binding::alloc_function_parameter_in(arena, param);
 
             self.insert(binding);
             param.assign_binding(binding);
         } else if let Some(struct_node) = declaration.struct_definition() {
-            if let Some(name) = struct_node.name() {
-                let binding = Binding::alloc_in(
-                    arena,
-                    name.as_str(),
-                    struct_node.r#type(),
-                    Some(BindingNodeKind::StructDefinition(struct_node)),
-                );
-
+            if let Some(binding) = Binding::alloc_struct_in(arena, struct_node) {
                 self.insert(binding);
                 struct_node.assign_binding(binding);
             }
@@ -246,12 +88,7 @@ impl<'a> Scope<'a> {
             PatternKind::IntegerPattern(_) => {}
             PatternKind::StringPattern(_) => {}
             PatternKind::VariablePattern(variable_pattern) => {
-                let binding = Binding::alloc_in(
-                    arena,
-                    variable_pattern.name(),
-                    variable_pattern.r#type(),
-                    Some(BindingNodeKind::VariablePattern(variable_pattern)),
-                );
+                let binding = Binding::alloc_variable_pattern_in(arena, &variable_pattern);
 
                 self.insert(binding);
                 variable_pattern.assign_binding(binding);

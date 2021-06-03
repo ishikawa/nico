@@ -1,13 +1,12 @@
 //! Rename operation
 use crate::arena::BumpaloArena;
-use crate::semantic::StructType;
+use crate::semantic::{Binding, StructType};
 use crate::syntax::MemberExpression;
 use crate::syntax::TypeField;
 use crate::syntax::ValueField;
 use crate::syntax::{
-    self, Binding, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node,
-    NodePath, Position, Program, StructDefinition, StructLiteral, VariableExpression,
-    VariablePattern,
+    self, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node, NodePath,
+    Position, Program, StructDefinition, StructLiteral, VariableExpression, VariablePattern,
 };
 use crate::unwrap_or_return;
 
