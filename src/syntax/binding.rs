@@ -73,20 +73,7 @@ impl<'a> Binding<'a> {
             return_type,
         ));
 
-        Self::defined_function(arena, name, fun_type)
-    }
-
-    pub fn defined_function<S: AsRef<str>>(
-        arena: &'a BumpaloArena,
-        name: S,
-        function_type: &'a semantic::FunctionType<'a>,
-    ) -> &'a Binding<'a> {
-        Self::alloc_in(
-            arena,
-            name.as_ref(),
-            TypeKind::FunctionType(function_type),
-            None,
-        )
+        Self::alloc_in(arena, name.as_ref(), TypeKind::FunctionType(fun_type), None)
     }
 
     pub fn id(&self) -> &str {
