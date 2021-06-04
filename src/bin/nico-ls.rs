@@ -643,6 +643,7 @@ impl<'a> Connection<'a> {
 
         let capabilities = ServerCapabilitiesBuilder::new()
             .initialized(&params)
+            // Semantic token
             .semantic_token_types(&[
                 SemanticTokenType::KEYWORD,
                 SemanticTokenType::VARIABLE,
@@ -783,6 +784,13 @@ impl<'a> Connection<'a> {
             }
         }
 
+        Ok(None)
+    }
+
+    fn on_text_document_completion(
+        &mut self,
+        params: &CompletionParams,
+    ) -> Result<Option<CompletionList>, HandlerError> {
         Ok(None)
     }
 
@@ -984,6 +992,12 @@ fn event_loop_main(conn: &mut Connection<'_>) -> Result<(), HandlerError> {
             let params = request.take_params::<RenameParams>()?;
 
             let result = conn.on_text_document_rename(&params)?;
+            conn.send_response(&request_id.unwrap(), result)?;
+        }
+        "textDocument/completion" => {
+            let params = request.take_params::<CompletionParams>()?;
+
+            let result = conn.on_text_document_completion(&params)?;
             conn.send_response(&request_id.unwrap(), result)?;
         }
         // Notifications
