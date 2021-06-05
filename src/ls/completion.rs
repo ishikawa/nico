@@ -50,9 +50,7 @@ impl<'a> Completion<'a> {
             Some(CompletionItemKind::Function)
         } else if binding.is_defined_struct() {
             Some(CompletionItemKind::Struct)
-        } else if binding.is_function_parameter() {
-            Some(CompletionItemKind::Variable)
-        } else if binding.is_local_variable() {
+        } else if binding.is_function_parameter() || binding.is_local_variable() {
             Some(CompletionItemKind::Variable)
         } else {
             None
