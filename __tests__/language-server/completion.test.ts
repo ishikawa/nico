@@ -31,6 +31,29 @@ let cases: TestCase[] = [
         }
       }
     ]
+  },
+  // suggests struct or variable (case-insensitive)
+  {
+    // prettier-ignore
+    input: [
+      "struct Rectangle {",
+      "  width: i32",
+      "  height: i32",
+      "}",
+      "let rect = Rectangle { width: 30, height: 50 }",
+      "",
+      "rc",
+    ].join("\n"),
+    requests: [
+      // rc|
+      //   ^
+      {
+        position: {
+          line: 6,
+          character: 2
+        }
+      }
+    ]
   }
 ];
 

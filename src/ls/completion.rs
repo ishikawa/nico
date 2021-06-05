@@ -71,20 +71,20 @@ impl<'a> syntax::Visitor<'a> for Completion<'a> {
         let range = id.range();
         unwrap_or_return!(self.can_completion(range, path)).stop();
 
+        let input_str = id.as_str();
         let mut parent_scope = Some(path.scope());
 
         while let Some(scope) = parent_scope {
             for (name, binding) in scope.borrow_bindings().iter() {
                 // Search case insensitively
-                'outer: for c1 in id.as_str().chars() {
-                    for c2 in name.chars() {
-                        if c1.to_ascii_lowercase() == c2.to_ascii_lowercase() {
-                            self.add_candidate(name, binding);
-                            break 'outer;
-                        }
-                    }
+                if input_str.chars().all(|c1| {
+                    name.chars()
+                        .any(|c2| c1.to_ascii_lowercase() == c2.to_ascii_lowercase())
+                }) {
+                    self.add_candidate(name, binding);
                 }
             }
+
             parent_scope = scope.parent();
         }
     }
