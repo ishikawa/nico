@@ -1,0 +1,22 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`0: completion - \`p\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1000,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "isIncomplete": false,
+    "items": Array [
+      Object {
+        "kind": 3,
+        "label": "println_str",
+      },
+      Object {
+        "kind": 3,
+        "label": "println_i32",
+      },
+    ],
+  },
+}
+`;
