@@ -85,7 +85,7 @@ filterTestCases(cases).forEach((testCase, i) => {
 
   testCase.position.forEach((position, j) => {
     test(`${i}: prepare rename - \`${name}\` at ${position}`, async done => {
-      const agent = new LanguageServerAgent(server!, { sequence: i * 100 + j });
+      const agent = new LanguageServerAgent(server!, { sequence: [i, j] });
 
       // Open document and no compilation errors
       const diagnostics = await agent.openDocument(name, src);

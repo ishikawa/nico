@@ -79,7 +79,7 @@ end
 bar()\` at [object Object] 1`] = `
 Object {
   "error": null,
-  "id": 1100,
+  "id": 1010,
   "jsonrpc": "2.0",
   "result": Object {
     "placeholder": "bar",
@@ -102,7 +102,7 @@ exports[`2: prepare rename - \`fun foo(x)
 end\` at [object Object] 1`] = `
 Object {
   "error": null,
-  "id": 1200,
+  "id": 1020,
   "jsonrpc": "2.0",
   "result": Object {
     "placeholder": "x",
