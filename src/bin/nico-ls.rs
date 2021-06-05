@@ -769,8 +769,8 @@ impl<'a> Connection<'a> {
             syntax_position(params.text_document_position.position),
         );
 
-        if rename.prepare(&node).is_some() {
-            if let Some(ranges) = rename.rename(&node) {
+        if rename.prepare(node).is_some() {
+            if let Some(ranges) = rename.rename(node) {
                 let edits = ranges
                     .iter()
                     .map(|r| TextEdit::new(lsp_range(*r), params.new_name.clone()))
@@ -791,6 +791,21 @@ impl<'a> Connection<'a> {
         &mut self,
         params: &CompletionParams,
     ) -> Result<Option<CompletionList>, HandlerError> {
+        info!("[on_text_document_completion] {:?}", params);
+        let uri = &params.text_document_position.text_document.uri;
+        let node = self.get_compiled_result(uri)?;
+        let mut completion = ls::Completion::new(
+            self.arena,
+            syntax_position(params.text_document_position.position),
+        );
+
+        if let Some(items) = completion.propose(node) {
+            return Ok(Some(CompletionList {
+                is_incomplete: false,
+                items,
+            }));
+        }
+
         Ok(None)
     }
 
