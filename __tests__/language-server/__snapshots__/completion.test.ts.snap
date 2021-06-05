@@ -36,12 +36,12 @@ Object {
     "isIncomplete": false,
     "items": Array [
       Object {
-        "kind": 6,
-        "label": "rect",
-      },
-      Object {
         "kind": 22,
         "label": "Rectangle",
+      },
+      Object {
+        "kind": 6,
+        "label": "rect",
       },
     ],
   },

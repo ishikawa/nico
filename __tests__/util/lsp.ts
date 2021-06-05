@@ -1,7 +1,7 @@
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import { EventEmitter } from "events";
 
-const DEBUG = true;
+const DEBUG = false;
 
 // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#baseProtocol
 export interface Message {

@@ -29,7 +29,8 @@ impl<'a> Completion<'a> {
         if self.candidates.is_empty() {
             None
         } else {
-            Some(std::mem::take(&mut self.candidates))
+            let candidates = std::mem::take(&mut self.candidates);
+            Some(candidates)
         }
     }
 
@@ -87,5 +88,10 @@ impl<'a> syntax::Visitor<'a> for Completion<'a> {
 
             parent_scope = scope.parent();
         }
+
+        // Sort alphabetically
+        // TODO: sort by matching score (edit distance).
+        self.candidates
+            .sort_by(|a, b| a.label.partial_cmp(&b.label).unwrap())
     }
 }
