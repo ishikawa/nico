@@ -2,8 +2,7 @@
 //! https://code.visualstudio.com/api/language-extensions/programmatic-language-features#show-code-completion-proposals
 use crate::arena::BumpaloArena;
 use crate::semantic::Binding;
-use crate::syntax::{self, EffectiveRange, Identifier, Node, NodePath, Position, Program};
-use crate::unwrap_or_return;
+use crate::syntax::{self, Identifier, Node, NodePath, Position, Program};
 use lsp_types::CompletionItem;
 use lsp_types::CompletionItemKind;
 
@@ -34,18 +33,6 @@ impl<'a> Completion<'a> {
         }
     }
 
-    fn can_completion(
-        &self,
-        range: EffectiveRange,
-        path: &'a NodePath<'a>,
-    ) -> Option<&'a NodePath<'a>> {
-        if range.contains(self.position) {
-            Some(path)
-        } else {
-            None
-        }
-    }
-
     fn add_candidate(&mut self, name: &str, binding: &Binding<'_>) {
         let kind = if binding.is_defined_function() {
             Some(CompletionItemKind::Function)
@@ -69,8 +56,12 @@ impl<'a> Completion<'a> {
 
 impl<'a> syntax::Visitor<'a> for Completion<'a> {
     fn enter_identifier(&mut self, path: &'a NodePath<'a>, id: &'a Identifier<'a>) {
-        let range = id.range();
-        unwrap_or_return!(self.can_completion(range, path)).stop();
+        // Find the position of the current input position.
+        if id.range().contains(self.position) {
+            path.stop();
+        } else {
+            return;
+        }
 
         let input_str = id.as_str();
         let mut parent_scope = Some(path.scope());
