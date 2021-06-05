@@ -5,7 +5,7 @@ let a = A { a: 100 }
 a.a\` at [object Object] 1`] = `
 Object {
   "error": null,
-  "id": 1100,
+  "id": 1000,
   "jsonrpc": "2.0",
   "result": Object {
     "contents": Object {
@@ -35,7 +35,7 @@ let a = A { a: 100 }
 a.a\` at [object Object] 2`] = `
 Object {
   "error": null,
-  "id": 1101,
+  "id": 1001,
   "jsonrpc": "2.0",
   "result": Object {
     "contents": Object {
@@ -63,7 +63,7 @@ let a = A { a: 100 }
 a.a\` at [object Object] 3`] = `
 Object {
   "error": null,
-  "id": 1102,
+  "id": 1002,
   "jsonrpc": "2.0",
   "result": Object {
     "contents": Object {
@@ -91,7 +91,7 @@ let a = A { a: 100 }
 a.a\` at [object Object] 4`] = `
 Object {
   "error": null,
-  "id": 1103,
+  "id": 1003,
   "jsonrpc": "2.0",
   "result": Object {
     "contents": Object {

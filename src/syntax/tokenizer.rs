@@ -22,6 +22,12 @@ pub struct Position {
     pub character: u32,
 }
 
+impl fmt::Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "line:{}:{}", self.line, self.character)
+    }
+}
+
 // The effective range of a token.
 // `start` inclusive, `end` exclusive.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default)]
@@ -44,6 +50,12 @@ impl EffectiveRange {
     }
 }
 
+impl fmt::Display for EffectiveRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{{}-{}}}", self.start, self.end)
+    }
+}
+
 pub trait TextToken {
     fn text(&self) -> &str;
 
@@ -62,6 +74,40 @@ pub struct Token {
     pub range: EffectiveRange,
     pub leading_trivia: Vec<Trivia>,
     text: String,
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.kind {
+            TokenKind::Identifier(value) => write!(f, "Identifier({})", value)?,
+            TokenKind::Integer(value) => write!(f, "Integer({})", value)?,
+            TokenKind::If => write!(f, "`if`")?,
+            TokenKind::Else => write!(f, "`else`")?,
+            TokenKind::End => write!(f, "`end`")?,
+            TokenKind::Fun => write!(f, "`fun`")?,
+            TokenKind::Case => write!(f, "`case`")?,
+            TokenKind::When => write!(f, "`when`")?,
+            TokenKind::Export => write!(f, "`export`")?,
+            TokenKind::Let => write!(f, "`let`")?,
+            TokenKind::Range => write!(f, "`..`")?,
+            TokenKind::Rest => write!(f, "`...`")?,
+            TokenKind::Struct => write!(f, "`struct`")?,
+            TokenKind::I32 => write!(f, "`i32`")?,
+            TokenKind::Eq => write!(f, "`==`")?,
+            TokenKind::Ne => write!(f, "`!=`")?,
+            TokenKind::Le => write!(f, "`<=`")?,
+            TokenKind::Ge => write!(f, "`>=`")?,
+            TokenKind::Char(c) => write!(f, "`{}`", c)?,
+            TokenKind::Eos => write!(f, "`(eos)`")?,
+            TokenKind::StringStart => write!(f, "`\"...`")?,
+            TokenKind::StringContent(content) => write!(f, "`{}`", content)?,
+            TokenKind::StringEscapeSequence(c) => write!(f, "`\\{}`", c)?,
+            TokenKind::StringUnrecognizedEscapeSequence(c) => write!(f, "`?\\{}`", c)?,
+            TokenKind::StringEnd => write!(f, "`...\"`")?,
+        };
+
+        write!(f, " at {}", self.range)
+    }
 }
 
 /// Trivia is not part of the normal language syntax and can appear anywhere between any two tokens.
@@ -571,18 +617,6 @@ impl<'a> Tokenizer<'a> {
         }
 
         trivia
-    }
-}
-
-impl fmt::Display for Position {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "line:{}:{}", self.line, self.character)
-    }
-}
-
-impl fmt::Display for EffectiveRange {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{{}-{}}}", self.start, self.end)
     }
 }
 

@@ -1,0 +1,49 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`0: completion - \`p\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1000,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "isIncomplete": false,
+    "items": Array [
+      Object {
+        "kind": 3,
+        "label": "println_i32",
+      },
+      Object {
+        "kind": 3,
+        "label": "println_str",
+      },
+    ],
+  },
+}
+`;
+
+exports[`1: completion - \`struct Rectangle {
+  width: i32
+  height: i32
+}
+let rect = Rectangle { width: 30, height: 50 }
+
+rc\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1010,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "isIncomplete": false,
+    "items": Array [
+      Object {
+        "kind": 22,
+        "label": "Rectangle",
+      },
+      Object {
+        "kind": 6,
+        "label": "rect",
+      },
+    ],
+  },
+}
+`;

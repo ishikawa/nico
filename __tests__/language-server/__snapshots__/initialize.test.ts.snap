@@ -7,6 +7,7 @@ Object {
   "jsonrpc": "2.0",
   "result": Object {
     "capabilities": Object {
+      "hoverProvider": true,
       "semanticTokensProvider": Object {
         "full": true,
         "legend": Object {
@@ -223,6 +224,17 @@ Object {
             "property",
           ],
         },
+      },
+      "signatureHelpProvider": Object {
+        "retriggerCharacters": Array [
+          ",",
+        ],
+        "triggerCharacters": Array [
+          "(",
+          ")",
+          "{",
+          "}",
+        ],
       },
       "textDocumentSync": 2,
     },

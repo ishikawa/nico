@@ -8,7 +8,7 @@ interface TestCase extends TestCaseBase {
 let server: LanguageServer | undefined;
 
 beforeAll(async () => {
-  server = await spawn_server({ rename: true });
+  server = await spawn_server({ completion: true });
 });
 
 afterAll(() => {
@@ -18,44 +18,38 @@ afterAll(() => {
 });
 
 let cases: TestCase[] = [
-  // struct field
+  // suggests built-in functions
+  {
+    input: ["p"].join("\n"),
+    requests: [
+      // p|
+      //  ^
+      {
+        position: {
+          line: 0,
+          character: 1
+        }
+      }
+    ]
+  },
+  // suggests struct or variable (case-insensitive)
   {
     // prettier-ignore
     input: [
-      "struct A { a: i32 }",
-      "let a = A { a: 100 }",
-      "a.a"
+      "struct Rectangle {",
+      "  width: i32",
+      "  height: i32",
+      "}",
+      "let rect = Rectangle { width: 30, height: 50 }",
+      "",
+      "rc",
     ].join("\n"),
     requests: [
-      // struct A { a: i32 }
-      //                ^
-      {
-        position: {
-          line: 0,
-          character: 15
-        }
-      },
-      // let a = A { a: 100 }
-      //             ^
-      {
-        position: {
-          line: 1,
-          character: 12
-        }
-      },
-      // struct A { a: i32 }
-      //            ^
-      {
-        position: {
-          line: 0,
-          character: 11
-        }
-      },
-      // a.a
+      // rc|
       //   ^
       {
         position: {
-          line: 2,
+          line: 6,
           character: 2
         }
       }
@@ -68,14 +62,13 @@ filterTestCases(cases).forEach((testCase, i) => {
   let name = getTestName(testCase);
 
   testCase.requests.forEach(({ position }, j) => {
-    test(`${i}: hover - \`${name}\` at ${position}`, async done => {
+    test(`${i}: completion - \`${name}\` at ${position}`, async done => {
       const agent = new LanguageServerAgent(server!, { sequence: [i, j] });
 
-      // Open document and no compilation errors
-      const diagnostics = await agent.openDocument(name, src);
-      expect(diagnostics).toHaveLength(0);
+      // Allow compilation errors
+      const _ = await agent.openDocument(name, src);
 
-      const response = await agent.hover(name, position);
+      const response = await agent.completion(name, position);
       expect(response).toMatchSnapshot();
 
       done();

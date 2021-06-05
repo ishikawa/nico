@@ -50,7 +50,7 @@ let a = A { b: 123 }
 a.b\` at [object Object] 1`] = `
 Object {
   "error": null,
-  "id": 1100,
+  "id": 1010,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
@@ -92,7 +92,7 @@ exports[`2: rename - \`fun foo(x)
 end\` at [object Object] 1`] = `
 Object {
   "error": null,
-  "id": 1200,
+  "id": 1020,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
@@ -134,7 +134,7 @@ exports[`2: rename - \`fun foo(x)
 end\` at [object Object] 2`] = `
 Object {
   "error": null,
-  "id": 1201,
+  "id": 1021,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
@@ -175,7 +175,7 @@ exports[`3: rename - \`let foo = 100
 println_i32(foo)\` at [object Object] 1`] = `
 Object {
   "error": null,
-  "id": 1300,
+  "id": 1030,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
@@ -216,7 +216,7 @@ exports[`3: rename - \`let foo = 100
 println_i32(foo)\` at [object Object] 2`] = `
 Object {
   "error": null,
-  "id": 1301,
+  "id": 1031,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
@@ -259,7 +259,7 @@ let a = A { b: 123 }
 a.b\` at [object Object] 1`] = `
 Object {
   "error": null,
-  "id": 1400,
+  "id": 1040,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
@@ -302,7 +302,7 @@ let a = A { b: 123 }
 a.b\` at [object Object] 2`] = `
 Object {
   "error": null,
-  "id": 1401,
+  "id": 1041,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
@@ -348,7 +348,7 @@ else
 end\` at [object Object] 1`] = `
 Object {
   "error": null,
-  "id": 1500,
+  "id": 1050,
   "jsonrpc": "2.0",
   "result": null,
 }
@@ -363,7 +363,7 @@ else
 end\` at [object Object] 2`] = `
 Object {
   "error": null,
-  "id": 1501,
+  "id": 1051,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
@@ -409,7 +409,7 @@ else
 end\` at [object Object] 3`] = `
 Object {
   "error": null,
-  "id": 1502,
+  "id": 1052,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
@@ -455,7 +455,7 @@ else
 end\` at [object Object] 4`] = `
 Object {
   "error": null,
-  "id": 1503,
+  "id": 1053,
   "jsonrpc": "2.0",
   "result": null,
 }
@@ -470,7 +470,7 @@ else
 end\` at [object Object] 5`] = `
 Object {
   "error": null,
-  "id": 1504,
+  "id": 1054,
   "jsonrpc": "2.0",
   "result": null,
 }
@@ -485,7 +485,7 @@ else
 end\` at [object Object] 6`] = `
 Object {
   "error": null,
-  "id": 1505,
+  "id": 1055,
   "jsonrpc": "2.0",
   "result": null,
 }
@@ -497,7 +497,7 @@ let a = A { b: 123 }
 a.b\` at [object Object] 1`] = `
 Object {
   "error": null,
-  "id": 1600,
+  "id": 1060,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
@@ -553,7 +553,7 @@ let a = A { b: 123 }
 a.b\` at [object Object] 2`] = `
 Object {
   "error": null,
-  "id": 1601,
+  "id": 1061,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
@@ -609,7 +609,7 @@ let a = A { b: 123 }
 a.b\` at [object Object] 3`] = `
 Object {
   "error": null,
-  "id": 1602,
+  "id": 1062,
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {

@@ -643,6 +643,7 @@ impl<'a> Connection<'a> {
 
         let capabilities = ServerCapabilitiesBuilder::new()
             .initialized(&params)
+            // Semantic token
             .semantic_token_types(&[
                 SemanticTokenType::KEYWORD,
                 SemanticTokenType::VARIABLE,
@@ -768,8 +769,8 @@ impl<'a> Connection<'a> {
             syntax_position(params.text_document_position.position),
         );
 
-        if rename.prepare(&node).is_some() {
-            if let Some(ranges) = rename.rename(&node) {
+        if rename.prepare(node).is_some() {
+            if let Some(ranges) = rename.rename(node) {
                 let edits = ranges
                     .iter()
                     .map(|r| TextEdit::new(lsp_range(*r), params.new_name.clone()))
@@ -781,6 +782,28 @@ impl<'a> Connection<'a> {
                     change_annotations: None,
                 }));
             }
+        }
+
+        Ok(None)
+    }
+
+    fn on_text_document_completion(
+        &mut self,
+        params: &CompletionParams,
+    ) -> Result<Option<CompletionList>, HandlerError> {
+        info!("[on_text_document_completion] {:?}", params);
+        let uri = &params.text_document_position.text_document.uri;
+        let node = self.get_compiled_result(uri)?;
+        let mut completion = ls::Completion::new(
+            self.arena,
+            syntax_position(params.text_document_position.position),
+        );
+
+        if let Some(items) = completion.propose(node) {
+            return Ok(Some(CompletionList {
+                is_incomplete: false,
+                items,
+            }));
         }
 
         Ok(None)
@@ -984,6 +1007,12 @@ fn event_loop_main(conn: &mut Connection<'_>) -> Result<(), HandlerError> {
             let params = request.take_params::<RenameParams>()?;
 
             let result = conn.on_text_document_rename(&params)?;
+            conn.send_response(&request_id.unwrap(), result)?;
+        }
+        "textDocument/completion" => {
+            let params = request.take_params::<CompletionParams>()?;
+
+            let result = conn.on_text_document_completion(&params)?;
             conn.send_response(&request_id.unwrap(), result)?;
         }
         // Notifications

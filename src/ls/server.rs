@@ -1,8 +1,9 @@
 use lsp_types::{
-    HoverProviderCapability, InitializeParams, OneOf, RenameOptions, SemanticTokenModifier,
-    SemanticTokenType, SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
-    SemanticTokensServerCapabilities, ServerCapabilities, SignatureHelpOptions,
-    TextDocumentSyncCapability, TextDocumentSyncKind, WorkDoneProgressOptions,
+    CompletionOptions, HoverProviderCapability, InitializeParams, OneOf, RenameOptions,
+    SemanticTokenModifier, SemanticTokenType, SemanticTokensFullOptions, SemanticTokensLegend,
+    SemanticTokensOptions, SemanticTokensServerCapabilities, ServerCapabilities,
+    SignatureHelpOptions, TextDocumentSyncCapability, TextDocumentSyncKind,
+    WorkDoneProgressOptions,
 };
 use std::collections::HashSet;
 
@@ -45,6 +46,7 @@ impl<'a> ServerCapabilitiesBuilder<'a> {
         ServerCapabilities {
             hover_provider: self.build_hover_provider(params),
             rename_provider: self.build_rename_provider(params),
+            completion_provider: self.build_completion_provider(params),
             signature_help_provider: self.build_signature_help_provider(params),
             text_document_sync: Some(TextDocumentSyncCapability::Kind(
                 TextDocumentSyncKind::Incremental,
@@ -103,6 +105,16 @@ impl<'a> ServerCapabilitiesBuilder<'a> {
         } else {
             Some(OneOf::Left(true))
         }
+    }
+
+    fn build_completion_provider(&self, params: &InitializeParams) -> Option<CompletionOptions> {
+        let text_document = params.capabilities.text_document.as_ref()?;
+        let _ = text_document.completion.as_ref()?;
+
+        Some(CompletionOptions {
+            trigger_characters: Some(["."].iter().map(|s| s.to_string()).collect()),
+            ..CompletionOptions::default()
+        })
     }
 
     fn build_semantic_token_types(&self, params: &InitializeParams) -> Vec<SemanticTokenType> {

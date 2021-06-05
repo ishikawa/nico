@@ -160,6 +160,15 @@ impl<'a> Binding<'a> {
         }
     }
 
+    pub fn is_defined_function(&self) -> bool {
+        self.function_definition().is_some()
+            || (self.is_builtin() && self.r#type().is_function_type())
+    }
+
+    pub fn is_defined_struct(&self) -> bool {
+        self.struct_definition().is_some() || (self.is_builtin() && self.r#type().is_struct_type())
+    }
+
     pub fn is_function_parameter(&self) -> bool {
         self.function_parameter().is_some()
     }

@@ -139,6 +139,7 @@ export type Position = {
 
 // server
 type InitializeOptions = {
+  completion?: boolean | Record<string, any>;
   hover?: boolean | Record<string, any>;
   signatureHelp?: boolean | Record<string, any>;
   rename?: boolean | Record<string, any>;
@@ -305,13 +306,13 @@ export class RequestBuilder {
     };
   }
 
-  initialize({ rename, hover, signatureHelp }: InitializeOptions = {}): RequestMessage {
+  initialize({ completion, rename, hover, signatureHelp }: InitializeOptions = {}): RequestMessage {
     const expand = (
       name: string,
       param: boolean | undefined | null | Record<string, any>,
       defaultValue: Record<string, any>
     ): Record<string, any> => {
-      if (!rename) {
+      if (!param) {
         return {};
       } else if (param === true) {
         return { [name]: defaultValue };
@@ -324,6 +325,30 @@ export class RequestBuilder {
       trace: "verbose",
       capabilities: {
         textDocument: {
+          ...expand("completion", completion, {
+            dynamicRegistration: true,
+            contextSupport: true,
+            completionItem: {
+              snippetSupport: true,
+              commitCharactersSupport: true,
+              documentationFormat: ["markdown", "plaintext"],
+              deprecatedSupport: true,
+              preselectSupport: true,
+              tagSupport: {
+                valueSet: [1]
+              },
+              insertReplaceSupport: true,
+              resolveSupport: {
+                properties: ["documentation", "detail", "additionalTextEdits"]
+              },
+              insertTextModeSupport: {
+                valueSet: [1, 2]
+              }
+            },
+            completionItemKind: {
+              valueSet: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
+            }
+          }),
           ...expand("rename", rename, {
             dynamicRegistration: true,
             prepareSupport: true,
@@ -448,6 +473,18 @@ export class RequestBuilder {
     });
   }
 
+  completion(uri: string, position: Position): RequestMessage {
+    return this.buildRequest("textDocument/completion", {
+      textDocument: {
+        uri
+      },
+      position,
+      context: {
+        triggerKind: 1
+      }
+    });
+  }
+
   initialized(): NotificationMessage {
     return this.buildNotification("initialized", {});
   }
@@ -464,15 +501,40 @@ export class RequestBuilder {
   }
 }
 
+export type LanguageServerAgentOptions = {
+  // The sequence base number for RPC requests.
+  // If you specify an array of number, the base number will be
+  // calculated from its elements.
+  sequence?: number | number[];
+};
+
+const calculateSequenceFromArray = (seeds: number[]): number => {
+  //(i + 1) * 100 + j
+  let sequence = 0;
+  let multiplier = 1;
+
+  for (let i = seeds.length - 1; i >= 0; i--) {
+    sequence += seeds[i] * multiplier;
+    multiplier *= 10;
+  }
+
+  return sequence;
+};
+
+const calculateSequence = (sequence: LanguageServerAgentOptions["sequence"]) => {
+  const seq = sequence == null ? 0 : Array.isArray(sequence) ? calculateSequenceFromArray(sequence) : sequence;
+  return 1000 + seq;
+};
+
 export class LanguageServerAgent {
   server: LanguageServer;
   builder: RequestBuilder;
 
-  constructor(server: LanguageServer, options: { sequence?: number }) {
+  constructor(server: LanguageServer, options: LanguageServerAgentOptions) {
     const { sequence } = options;
 
     this.server = server;
-    this.builder = new RequestBuilder({ id: 1000 + (sequence ?? 0) });
+    this.builder = new RequestBuilder({ id: calculateSequence(sequence) });
   }
 
   async openDocument(filename: string, src: string): Promise<any[]> {
@@ -516,6 +578,13 @@ export class LanguageServerAgent {
     const uri = getDocumentUri(filename);
 
     const request = this.builder.hover(uri, position);
+    return this.server.sendRequest(request);
+  }
+
+  async completion(filename: string, position: Position) {
+    const uri = getDocumentUri(filename);
+
+    const request = this.builder.completion(uri, position);
     return this.server.sendRequest(request);
   }
 }

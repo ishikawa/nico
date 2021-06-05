@@ -4,6 +4,7 @@ use crate::syntax::{
     self, Block, CaseArm, FunctionDefinition, NodeKind, NodePath, PatternKind, Program,
     StructDefinition, VariableDeclaration, Visitor,
 };
+use std::cell::Ref;
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
@@ -125,6 +126,10 @@ impl<'a> Scope<'a> {
         }
 
         None
+    }
+
+    pub fn borrow_bindings(&self) -> Ref<'_, HashMap<&'a str, &'a Binding<'a>>> {
+        self.bindings.borrow()
     }
 }
 
