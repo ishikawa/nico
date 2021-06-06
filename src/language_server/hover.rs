@@ -1,8 +1,5 @@
-use std::fmt::Display;
-
+use super::description;
 use crate::arena::BumpaloArena;
-use crate::semantic::StructType;
-use crate::semantic::TypeKind;
 use crate::syntax::MemberExpression;
 use crate::syntax::StructDefinition;
 use crate::syntax::StructLiteral;
@@ -33,31 +30,6 @@ impl<'a> Hover<'a> {
         self.result.as_ref().map(|(s, r)| (s.as_str(), *r))
     }
 
-    fn describe_optional<T: Display>(&self, name: Option<T>) -> String {
-        name.map_or("{{unknown}}".to_string(), |x| x.to_string())
-    }
-
-    fn describe_type(&self, ty: TypeKind<'a>) -> String {
-        let description = match ty {
-            TypeKind::Int32 => "The 32-bit signed integer type.",
-            TypeKind::Boolean => "The boolean type.",
-            _ => "",
-        };
-
-        format!("```nico\n{}\n```\n---\n{}", ty, description)
-    }
-
-    fn describe_struct_field(&self, struct_type: &'a StructType<'a>, field_name: &str) -> String {
-        let ty = struct_type.get_field_type(field_name);
-
-        format!(
-            "```nico\n{}.{}: {}\n```",
-            struct_type.name(),
-            field_name,
-            self.describe_optional(ty),
-        )
-    }
-
     fn can_hover(&self, range: EffectiveRange, path: &'a NodePath<'a>) -> Option<&'a NodePath<'a>> {
         if range.contains(self.position) {
             Some(path)
@@ -81,7 +53,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         let struct_type = unwrap_or_return!(struct_def.struct_type());
 
         self.result.replace((
-            self.describe_struct_field(struct_type, field_name.as_str()),
+            description::format_struct_field(struct_type, field_name.as_str()),
             range,
         ));
     }
@@ -95,7 +67,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         unwrap_or_return!(self.can_hover(range, path)).stop();
 
         self.result
-            .replace((self.describe_type(annotation.r#type()), range));
+            .replace((description::describe_type(annotation.r#type()), range));
     }
 
     fn enter_value_field(
@@ -110,7 +82,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         let struct_type = unwrap_or_return!(struct_literal.struct_type());
 
         self.result.replace((
-            self.describe_struct_field(struct_type, field.name().as_str()),
+            description::format_struct_field(struct_type, field.name().as_str()),
             range,
         ));
     }
@@ -128,7 +100,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         let struct_type = unwrap_or_return!(object_type.struct_type());
 
         self.result.replace((
-            self.describe_struct_field(struct_type, field.as_str()),
+            description::format_struct_field(struct_type, field.as_str()),
             range,
         ));
     }

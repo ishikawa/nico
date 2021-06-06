@@ -36,10 +36,12 @@ Object {
     "isIncomplete": false,
     "items": Array [
       Object {
+        "detail": "struct Rectangle {width: i32}",
         "kind": 22,
         "label": "Rectangle",
       },
       Object {
+        "detail": "let rect: ?1",
         "kind": 6,
         "label": "rect",
       },

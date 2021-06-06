@@ -3,6 +3,8 @@ use crate::semantic::{self, TypeKind};
 use crate::syntax::{FunctionDefinition, FunctionParameter, StructDefinition, VariablePattern};
 use std::fmt;
 
+use super::{FunctionType, StructType};
+
 #[derive(Debug, Clone)]
 pub struct Binding<'a> {
     id: BumpaloString<'a>,
@@ -160,13 +162,30 @@ impl<'a> Binding<'a> {
         }
     }
 
+    /// Returns the function type if the binding points to a defined function.
+    pub fn defined_function_type(&self) -> Option<&'a FunctionType<'a>> {
+        if self.is_builtin() || self.function_definition().is_some() {
+            self.r#type().function_type()
+        } else {
+            None
+        }
+    }
+
+    /// Returns the struct type if the binding points to a defined struct.
+    pub fn defined_struct_type(&self) -> Option<&'a StructType<'a>> {
+        if self.is_builtin() || self.struct_definition().is_some() {
+            self.r#type().struct_type()
+        } else {
+            None
+        }
+    }
+
     pub fn is_defined_function(&self) -> bool {
-        self.function_definition().is_some()
-            || (self.is_builtin() && self.r#type().is_function_type())
+        self.defined_function_type().is_some()
     }
 
     pub fn is_defined_struct(&self) -> bool {
-        self.struct_definition().is_some() || (self.is_builtin() && self.r#type().is_struct_type())
+        self.defined_struct_type().is_some()
     }
 
     pub fn is_function_parameter(&self) -> bool {

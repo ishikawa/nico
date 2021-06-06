@@ -1,7 +1,7 @@
 use log::{info, warn};
 use lsp_types::*;
 use nico::arena::BumpaloArena;
-use nico::ls::{self, server::ServerCapabilitiesBuilder};
+use nico::language_server::{self, server::ServerCapabilitiesBuilder};
 use nico::syntax::VariableExpression;
 use nico::syntax::{
     self, EffectiveRange, MissingTokenKind, Node, NodePath, ParseError, Parser, StructLiteral,
@@ -721,7 +721,7 @@ impl<'a> Connection<'a> {
         info!("[on_text_document_hover] {:?}", params);
         let uri = &params.text_document_position_params.text_document.uri;
         let node = self.get_compiled_result(uri)?;
-        let mut hover = ls::Hover::new(
+        let mut hover = language_server::Hover::new(
             self.arena,
             syntax_position(params.text_document_position_params.position),
         );
@@ -745,7 +745,7 @@ impl<'a> Connection<'a> {
     ) -> Result<Option<PrepareRenameResponse>, HandlerError> {
         info!("[on_text_document_prepare_rename] {:?}", params);
         let node = self.get_compiled_result(&params.text_document.uri)?;
-        let mut rename = ls::Rename::new(self.arena, syntax_position(params.position));
+        let mut rename = language_server::Rename::new(self.arena, syntax_position(params.position));
 
         if let Some(id) = rename.prepare(&node) {
             return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
@@ -764,7 +764,7 @@ impl<'a> Connection<'a> {
         info!("[on_text_document_prepare_rename] {:?}", params);
         let uri = &params.text_document_position.text_document.uri;
         let node = self.get_compiled_result(uri)?;
-        let mut rename = ls::Rename::new(
+        let mut rename = language_server::Rename::new(
             self.arena,
             syntax_position(params.text_document_position.position),
         );
@@ -794,7 +794,7 @@ impl<'a> Connection<'a> {
         info!("[on_text_document_completion] {:?}", params);
         let uri = &params.text_document_position.text_document.uri;
         let node = self.get_compiled_result(uri)?;
-        let mut completion = ls::Completion::new(
+        let mut completion = language_server::Completion::new(
             self.arena,
             syntax_position(params.text_document_position.position),
         );

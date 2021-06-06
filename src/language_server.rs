@@ -1,4 +1,5 @@
 mod completion;
+mod description;
 mod hover;
 mod rename;
 
