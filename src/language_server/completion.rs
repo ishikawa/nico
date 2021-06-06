@@ -48,10 +48,10 @@ impl<'a> Completion<'a> {
 
         let detail = if let Some(pattern) = binding.variable_pattern() {
             Some(description::format_local_variable(pattern))
-        } else if let Some(struct_type) = binding.defined_struct_type() {
-            Some(struct_type.to_string())
         } else {
-            None
+            binding
+                .defined_struct_type()
+                .map(|struct_type| struct_type.to_string())
         };
 
         let item = CompletionItem {
