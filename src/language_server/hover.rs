@@ -53,7 +53,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         let struct_type = unwrap_or_return!(struct_def.struct_type());
 
         self.result.replace((
-            description::describe_struct_field(struct_type, field_name.as_str()),
+            description::format_struct_field(struct_type, field_name.as_str()),
             range,
         ));
     }
@@ -82,7 +82,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         let struct_type = unwrap_or_return!(struct_literal.struct_type());
 
         self.result.replace((
-            description::describe_struct_field(struct_type, field.name().as_str()),
+            description::format_struct_field(struct_type, field.name().as_str()),
             range,
         ));
     }
@@ -100,7 +100,7 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         let struct_type = unwrap_or_return!(object_type.struct_type());
 
         self.result.replace((
-            description::describe_struct_field(struct_type, field.as_str()),
+            description::format_struct_field(struct_type, field.as_str()),
             range,
         ));
     }

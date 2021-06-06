@@ -6,6 +6,8 @@ use crate::syntax::{self, Identifier, Node, NodePath, Position, Program};
 use lsp_types::CompletionItem;
 use lsp_types::CompletionItemKind;
 
+use super::description;
+
 #[derive(Debug)]
 pub struct Completion<'a> {
     arena: &'a BumpaloArena,
@@ -44,9 +46,18 @@ impl<'a> Completion<'a> {
             None
         };
 
+        let detail = if let Some(pattern) = binding.variable_pattern() {
+            Some(description::format_local_variable(pattern))
+        } else if let Some(struct_type) = binding.defined_struct_type() {
+            Some(struct_type.to_string())
+        } else {
+            None
+        };
+
         let item = CompletionItem {
             label: name.to_string(),
             kind,
+            detail,
             ..CompletionItem::default()
         };
 
