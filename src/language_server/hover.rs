@@ -1,12 +1,8 @@
 use super::description;
 use crate::arena::BumpaloArena;
-use crate::syntax::MemberExpression;
-use crate::syntax::StructDefinition;
-use crate::syntax::StructLiteral;
-use crate::syntax::TypeField;
-use crate::syntax::VariableExpression;
 use crate::syntax::{
-    self, EffectiveRange, Node, NodePath, Position, Program, TypeAnnotation, ValueField,
+    self, EffectiveRange, MemberExpression, Node, NodePath, Position, Program, StructDefinition,
+    StructLiteral, TypeAnnotation, TypeField, ValueField, VariableExpression, VariablePattern,
 };
 use crate::unwrap_or_return;
 
@@ -116,6 +112,16 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
 
         let binding = unwrap_or_return!(path.scope().get_binding(expr.name()));
         let pattern = unwrap_or_return!(binding.variable_pattern());
+
+        self.result.replace((
+            description::code_fence(description::format_local_variable(pattern)),
+            range,
+        ));
+    }
+
+    fn enter_variable_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a VariablePattern<'a>) {
+        let range = pattern.range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
 
         self.result.replace((
             description::code_fence(description::format_local_variable(pattern)),
