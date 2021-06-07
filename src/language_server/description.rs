@@ -6,7 +6,7 @@ pub fn code_fence<T: Display>(content: T) -> String {
     format!("```nico\n{}\n```", content)
 }
 
-fn format_type_specifier<'a>(ty: Option<TypeKind<'a>>) -> String {
+fn format_type_specifier(ty: Option<TypeKind<'_>>) -> String {
     ty.and_then(|ty| {
         if let Some(var) = ty.type_variable() {
             var.instance()
