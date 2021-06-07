@@ -10,7 +10,6 @@ pub use types::*;
 use crate::arena::BumpaloArena;
 use crate::syntax::traverse;
 use crate::syntax::Program;
-use inferencer::{InitialTypeBinder, TypeInferencer};
 use scope::{ScopeChainBinder, TopLevelDeclarationBinder, VariableBinder};
 
 pub fn analyze<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {

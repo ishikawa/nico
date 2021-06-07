@@ -7,14 +7,8 @@ pub fn code_fence<T: Display>(content: T) -> String {
 }
 
 fn format_type_specifier(ty: Option<TypeKind<'_>>) -> String {
-    ty.and_then(|ty| {
-        if let Some(var) = ty.type_variable() {
-            var.instance()
-        } else {
-            Some(ty)
-        }
-    })
-    .map_or("{{unknown}}".to_string(), |x| x.type_specifier())
+    ty.map(|ty| ty.prune())
+        .map_or("{{unknown}}".to_string(), |x| x.type_specifier())
 }
 
 pub fn format_struct_field<'a>(struct_type: &'a StructType<'a>, field_name: &str) -> String {
