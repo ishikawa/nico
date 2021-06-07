@@ -6,6 +6,7 @@ use crate::syntax::{
     StructDefinition, StructLiteral, SubscriptExpression, UnaryExpression, ValueField,
     VariableDeclaration, VariableExpression, VariablePattern, Visitor,
 };
+use crate::unwrap_or_return;
 
 /// A visitor assigns an initial type (type variable or primitive type) to a node.
 #[derive(Debug)]
@@ -209,15 +210,8 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         _path: &'a NodePath<'a>,
         declaration: &'a VariableDeclaration<'a>,
     ) {
-        let pattern = match declaration.pattern() {
-            Some(pattern) => pattern,
-            None => return,
-        };
-
-        let init = match declaration.init() {
-            Some(init) => init,
-            None => return,
-        };
+        let pattern = unwrap_or_return!(declaration.pattern());
+        let init = unwrap_or_return!(declaration.init());
 
         if let PatternKind::VariablePattern(var_pattern) = pattern.kind() {
             var_pattern

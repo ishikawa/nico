@@ -4,6 +4,7 @@ use crate::syntax::MemberExpression;
 use crate::syntax::StructDefinition;
 use crate::syntax::StructLiteral;
 use crate::syntax::TypeField;
+use crate::syntax::VariableExpression;
 use crate::syntax::{
     self, EffectiveRange, Node, NodePath, Position, Program, TypeAnnotation, ValueField,
 };
@@ -101,6 +102,23 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
 
         self.result.replace((
             description::format_struct_field(struct_type, field.as_str()),
+            range,
+        ));
+    }
+
+    fn enter_variable_expression(
+        &mut self,
+        path: &'a NodePath<'a>,
+        expr: &'a VariableExpression<'a>,
+    ) {
+        let range = expr.range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
+
+        let binding = unwrap_or_return!(path.scope().get_binding(expr.name()));
+        let pattern = unwrap_or_return!(binding.variable_pattern());
+
+        self.result.replace((
+            description::code_fence(description::format_local_variable(pattern)),
             range,
         ));
     }

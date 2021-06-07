@@ -2,6 +2,12 @@ use crate::arena::{BumpaloArena, BumpaloString, BumpaloVec};
 use std::cell::Cell;
 use std::fmt::Display;
 
+pub trait Type {
+    /// Returns a string which depicts type specification.
+    /// e.g. i32, Rectangle, String[]
+    fn type_specifier(&self) -> String;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TypeError<'a> {
     TypeMismatchError(TypeMismatchError<'a>),
@@ -176,6 +182,18 @@ impl Display for TypeKind<'_> {
     }
 }
 
+impl Type for TypeKind<'_> {
+    fn type_specifier(&self) -> String {
+        match self {
+            TypeKind::StructType(ty) => ty.type_specifier(),
+            TypeKind::FunctionType(ty) => ty.type_specifier(),
+            TypeKind::ArrayType(ty) => ty.type_specifier(),
+            TypeKind::TypeVariable(ty) => ty.type_specifier(),
+            _ => self.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructType<'a> {
     name: BumpaloString<'a>,
@@ -262,6 +280,12 @@ impl Display for StructType<'_> {
             }
         }
         write!(f, "}}")
+    }
+}
+
+impl Type for StructType<'_> {
+    fn type_specifier(&self) -> String {
+        self.name().to_string()
     }
 }
 
@@ -435,6 +459,25 @@ impl Display for FunctionType<'_> {
     }
 }
 
+impl Type for FunctionType<'_> {
+    fn type_specifier(&self) -> String {
+        let mut buffer = String::new();
+        let mut it = self.parameters().peekable();
+
+        buffer.push('(');
+        while let Some(param) = it.next() {
+            buffer.push_str(&param.to_string());
+            if it.peek().is_some() {
+                buffer.push_str(", ");
+            }
+        }
+        buffer.push_str(") -> ");
+        buffer.push_str(&self.return_type().type_specifier());
+
+        buffer
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionParameter<'a> {
     name: BumpaloString<'a>,
@@ -482,7 +525,7 @@ impl<'a> FunctionParameter<'a> {
 
 impl Display for FunctionParameter<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.name(), self.r#type())
+        write!(f, "{}: {}", self.name(), self.r#type().type_specifier())
     }
 }
 
@@ -524,7 +567,13 @@ impl<'a> ArrayType<'a> {
 
 impl Display for ArrayType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}[]", self.element_type())
+        write!(f, "{}[]", self.element_type().type_specifier())
+    }
+}
+
+impl Type for ArrayType<'_> {
+    fn type_specifier(&self) -> String {
+        self.to_string()
     }
 }
 
@@ -573,6 +622,12 @@ impl<'a> TypeVariable<'a> {
 impl Display for TypeVariable<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "?{}", self.label)
+    }
+}
+
+impl Type for TypeVariable<'_> {
+    fn type_specifier(&self) -> String {
+        self.to_string()
     }
 }
 

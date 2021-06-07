@@ -41,7 +41,7 @@ Object {
         "label": "Rectangle",
       },
       Object {
-        "detail": "let rect: ?1",
+        "detail": "let rect: Rectangle",
         "kind": 6,
         "label": "rect",
       },
