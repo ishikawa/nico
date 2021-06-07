@@ -111,12 +111,18 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         unwrap_or_return!(self.can_hover(range, path)).stop();
 
         let binding = unwrap_or_return!(path.scope().get_binding(expr.name()));
-        let pattern = unwrap_or_return!(binding.variable_pattern());
 
-        self.result.replace((
-            description::code_fence(description::format_local_variable(pattern)),
-            range,
-        ));
+        if let Some(pattern) = binding.variable_pattern() {
+            self.result.replace((
+                description::code_fence(description::format_local_variable(pattern)),
+                range,
+            ));
+        } else if let Some(param) = binding.function_parameter() {
+            self.result.replace((
+                description::code_fence(description::format_function_parameter(param)),
+                range,
+            ));
+        }
     }
 
     fn enter_variable_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a VariablePattern<'a>) {

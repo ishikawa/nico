@@ -1,5 +1,5 @@
 use crate::semantic::{StructType, Type, TypeKind};
-use crate::syntax::VariablePattern;
+use crate::syntax::{self, VariablePattern};
 use std::fmt::Display;
 
 pub fn code_fence<T: Display>(content: T) -> String {
@@ -33,6 +33,14 @@ pub fn format_local_variable<'a>(pattern: &'a VariablePattern<'a>) -> String {
         "let {}: {}",
         pattern.name(),
         format_type_specifier(Some(pattern.r#type()))
+    )
+}
+
+pub fn format_function_parameter<'a>(param: &'a syntax::FunctionParameter<'a>) -> String {
+    format!(
+        "(parameter) {}: {}",
+        param.name().as_str(),
+        format_type_specifier(Some(param.r#type()))
     )
 }
 
