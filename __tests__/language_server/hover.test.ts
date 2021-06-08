@@ -68,6 +68,33 @@ let cases: TestCase[] = [
         }
       }
     ]
+  },
+  // Type inference: binary expression
+  {
+    // prettier-ignore
+    input: [
+      "fun foo(n)",
+      "  n + 1",
+      "end"
+    ].join("\n"),
+    requests: [
+      // fun foo(n)
+      //          ^
+      {
+        position: {
+          line: 0,
+          character: 9
+        }
+      },
+      //   n + 1
+      //    ^
+      {
+        position: {
+          line: 1,
+          character: 3
+        }
+      }
+    ]
   }
 ];
 

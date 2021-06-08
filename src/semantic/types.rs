@@ -120,11 +120,7 @@ impl<'a> TypeKind<'a> {
 
     pub fn prune(self) -> Self {
         if let TypeKind::TypeVariable(ty) = self {
-            if let Some(instance) = ty.instance() {
-                instance.prune()
-            } else {
-                Self::TypeVariable(ty)
-            }
+            ty.prune()
         } else {
             self
         }
@@ -151,6 +147,7 @@ impl<'a> TypeKind<'a> {
                 // `ty1` was pruned, so its instance must be `None`
                 assert!(var.instance().is_none());
                 if ty1 != ty2 {
+                    debug!("[unify] replace: {} -> {}", ty1, ty2);
                     var.replace_instance(ty2);
                 }
 
@@ -618,16 +615,16 @@ impl<'a> TypeVariable<'a> {
         }
     }
 
-    pub fn prune(&self) -> &Self {
-        let pruned = if let Some(TypeKind::TypeVariable(var)) = self.inner.get() {
-            var.prune()
+    /// Returns the deepest type variable or concrete type.
+    pub fn prune(&'a self) -> TypeKind<'a> {
+        if let Some(inner) = self.inner.get() {
+            match inner {
+                TypeKind::TypeVariable(var) => var.prune(),
+                ty => ty,
+            }
         } else {
-            return self;
-        };
-
-        // Prune intermediate type variables.
-        self.inner.replace(Some(TypeKind::TypeVariable(pruned)));
-        pruned
+            TypeKind::TypeVariable(self)
+        }
     }
 
     pub fn replace_instance(&self, ty: TypeKind<'a>) {

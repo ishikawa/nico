@@ -1,8 +1,9 @@
 use super::description;
 use crate::arena::BumpaloArena;
 use crate::syntax::{
-    self, EffectiveRange, MemberExpression, Node, NodePath, Position, Program, StructDefinition,
-    StructLiteral, TypeAnnotation, TypeField, ValueField, VariableExpression, VariablePattern,
+    self, EffectiveRange, FunctionDefinition, FunctionParameter, MemberExpression, Node, NodePath,
+    Position, Program, StructDefinition, StructLiteral, TypeAnnotation, TypeField, ValueField,
+    VariableExpression, VariablePattern,
 };
 use crate::unwrap_or_return;
 
@@ -37,6 +38,21 @@ impl<'a> Hover<'a> {
 }
 
 impl<'a> syntax::Visitor<'a> for Hover<'a> {
+    fn enter_function_parameter(
+        &mut self,
+        path: &'a NodePath<'a>,
+        _function: &'a FunctionDefinition<'a>,
+        param: &'a FunctionParameter<'a>,
+    ) {
+        let range = param.name().range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
+
+        self.result.replace((
+            description::code_fence(description::format_function_parameter(param)),
+            range,
+        ));
+    }
+
     fn enter_type_field(
         &mut self,
         path: &'a NodePath<'a>,
