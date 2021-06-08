@@ -11,6 +11,11 @@ fn format_type_specifier(ty: Option<TypeKind<'_>>) -> String {
         .map_or("{{unknown}}".to_string(), |x| x.type_specifier())
 }
 
+/// "struct A"
+pub fn format_struct_type_phrase(ty: &StructType<'_>) -> String {
+    format!("struct {}", ty.name())
+}
+
 pub fn format_struct_field<'a>(struct_type: &'a StructType<'a>, field_name: &str) -> String {
     let ty = struct_type.get_field_type(field_name);
 

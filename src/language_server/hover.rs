@@ -53,6 +53,32 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
         ));
     }
 
+    fn enter_struct_definition(
+        &mut self,
+        path: &'a NodePath<'a>,
+        definition: &'a StructDefinition<'a>,
+    ) {
+        let range = unwrap_or_return!(definition.name()).range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
+
+        let struct_type = unwrap_or_return!(definition.struct_type());
+        self.result.replace((
+            description::code_fence(description::format_struct_type_phrase(struct_type)),
+            range,
+        ));
+    }
+
+    fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {
+        let range = expr.name().range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
+
+        let struct_type = unwrap_or_return!(expr.r#type().struct_type());
+        self.result.replace((
+            description::code_fence(description::format_struct_type_phrase(struct_type)),
+            range,
+        ));
+    }
+
     fn enter_type_field(
         &mut self,
         path: &'a NodePath<'a>,

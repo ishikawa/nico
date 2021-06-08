@@ -48,6 +48,8 @@ impl<'a> Completion<'a> {
 
         let detail = if let Some(pattern) = binding.variable_pattern() {
             Some(description::format_local_variable(pattern))
+        } else if let Some(param) = binding.function_parameter() {
+            Some(description::format_function_parameter(param))
         } else {
             binding
                 .defined_struct_type()
