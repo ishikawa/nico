@@ -91,7 +91,8 @@ let cases: TestCase[] = [
     input: [
       "fun foo(n)",
       "  n + 1",
-      "end"
+      "end",
+      "foo(1)"
     ].join("\n"),
     requests: [
       // fun foo(n)
@@ -108,6 +109,22 @@ let cases: TestCase[] = [
         position: {
           line: 1,
           character: 3
+        }
+      },
+      // fun foo(n)
+      //     ^
+      {
+        position: {
+          line: 0,
+          character: 5
+        }
+      },
+      // foo(1)
+      // ^
+      {
+        position: {
+          line: 3,
+          character: 0
         }
       }
     ]

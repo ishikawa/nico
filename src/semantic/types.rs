@@ -112,14 +112,6 @@ impl<'a> TypeKind<'a> {
         self.array_type().is_some()
     }
 
-    pub fn prune(self) -> Self {
-        if let TypeKind::TypeVariable(ty) = self {
-            ty.prune()
-        } else {
-            self
-        }
-    }
-
     pub fn unify(
         &self,
         arena: &'a BumpaloArena,
@@ -127,8 +119,8 @@ impl<'a> TypeKind<'a> {
     ) -> Result<TypeKind<'a>, TypeError<'a>> {
         debug!("[unify] {} - {}", self, other);
 
-        let ty1 = self.prune();
-        let ty2 = other.prune();
+        let ty1 = self.terminal_type();
+        let ty2 = other.terminal_type();
         debug!("[unify] prune: {} - {}", ty1, ty2);
 
         // Already unified.
@@ -172,6 +164,14 @@ impl<'a> TypeKind<'a> {
 
         let mismatch = TypeMismatchError::new(ty2, ty1);
         Err(TypeError::TypeMismatchError(mismatch))
+    }
+
+    fn terminal_type(self) -> Self {
+        if let TypeKind::TypeVariable(ty) = self {
+            ty.terminal_type()
+        } else {
+            self
+        }
     }
 
     pub fn type_specifier(&self) -> String {
@@ -653,11 +653,11 @@ impl<'a> TypeVariable<'a> {
         }
     }
 
-    /// Returns the deepest type variable or concrete type.
-    pub fn prune(&'a self) -> TypeKind<'a> {
+    /// Returns the type variable or concrete type at the deepest position in type chain.
+    pub fn terminal_type(&'a self) -> TypeKind<'a> {
         if let Some(inner) = self.inner.get() {
             match inner {
-                TypeKind::TypeVariable(var) => var.prune(),
+                TypeKind::TypeVariable(var) => var.terminal_type(),
                 ty => ty,
             }
         } else {
@@ -665,22 +665,37 @@ impl<'a> TypeVariable<'a> {
         }
     }
 
+    /// Prune unnecessary indirections.
+    pub fn prune(&self) {
+        self.inner.replace(self.instance());
+    }
+
     pub fn replace_instance(&self, ty: TypeKind<'a>) {
         self.inner.replace(Some(ty));
     }
 
     pub fn type_specifier(&self) -> String {
-        self.to_string()
+        // Prints the instance type if a type variable is already pruned.
+        if let Some(inner) = self.inner.get() {
+            inner.type_specifier()
+        } else {
+            self.to_string()
+        }
     }
 
     pub fn resolve_type(&'a self, _arena: &'a BumpaloArena) -> TypeKind<'a> {
-        self.prune()
+        self.terminal_type()
     }
 }
 
 impl Display for TypeVariable<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "?{}", self.label)
+        // Prints the instance type if a type variable is already pruned.
+        if let Some(inner) = self.inner.get() {
+            inner.fmt(f)
+        } else {
+            write!(f, "?{}", self.label)
+        }
     }
 }
 
@@ -870,6 +885,30 @@ impl<'a> TypeInferencer<'a> {
 }
 
 impl<'a> Visitor<'a> for TypeInferencer<'a> {
+    fn exit_function_definition(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        function: &'a FunctionDefinition<'a>,
+    ) {
+        let function_type = unwrap_or_return!(function.function_type());
+
+        // The return type in a function is actually the return type of the last expression that
+        // occurs in the function body.
+        if let Some(stmt) = function.body().statements().last() {
+            if let Some(expr) = stmt.expression() {
+                debug!(
+                    "[inference] return_type: {}, {}",
+                    function_type.return_type(),
+                    expr.r#type()
+                );
+                function_type
+                    .return_type()
+                    .unify(self.arena, expr.r#type())
+                    .unwrap_or_else(|err| panic!("Type error: {}", err));
+            }
+        }
+    }
+
     fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
         let binding = match path.scope().get_binding(literal.name().as_str()) {
             Some(binding) => binding,
@@ -922,9 +961,14 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         let lhs = expr.lhs();
         let rhs = unwrap_or_return!(expr.rhs());
 
-        debug!("[inference] binary_expression: {}, {}", lhs, rhs);
+        debug!("[inference] binary_expression (operand): {}, {}", lhs, rhs);
         lhs.r#type()
             .unify(self.arena, rhs.r#type())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+
+        debug!("[inference] binary_expression: {}, {}", expr.r#type(), lhs);
+        expr.r#type()
+            .unify(self.arena, lhs.r#type())
             .unwrap_or_else(|err| panic!("Type error: {}", err));
     }
 
@@ -939,5 +983,43 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
                 .unify(self.arena, expr.r#type())
                 .unwrap_or_else(|err| panic!("Type error: {}", err));
         }
+    }
+}
+
+/// Indirect references by type variables are still necessary after type inference is complete.
+/// However, unnecessary indirect references can be removed.
+#[derive(Debug)]
+pub(super) struct TypeVariablePruner<'a> {
+    arena: &'a BumpaloArena,
+}
+
+impl<'a> TypeVariablePruner<'a> {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
+        Self { arena }
+    }
+
+    fn prune(&self, ty: TypeKind<'a>) {
+        if let Some(type_variable) = ty.type_variable() {
+            type_variable.prune()
+        }
+    }
+}
+
+impl<'a> Visitor<'a> for TypeVariablePruner<'a> {
+    fn exit_function_definition(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        definition: &'a FunctionDefinition<'a>,
+    ) {
+        self.prune(definition.r#type());
+    }
+
+    fn exit_function_parameter(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        _function: &'a FunctionDefinition<'a>,
+        param: &'a syntax::FunctionParameter<'a>,
+    ) {
+        self.prune(param.r#type());
     }
 }

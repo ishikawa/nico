@@ -7,8 +7,7 @@ pub fn code_fence<T: Display>(content: T) -> String {
 }
 
 fn format_type_specifier(ty: Option<TypeKind<'_>>) -> String {
-    ty.map(|ty| ty.prune())
-        .map_or("{{unknown}}".to_string(), |x| x.type_specifier())
+    ty.map_or("{{unknown}}".to_string(), |x| x.type_specifier())
 }
 
 /// "struct A"
