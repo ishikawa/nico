@@ -52,10 +52,10 @@ impl<'a> Completion<'a> {
             Some(description::format_function_parameter(param))
         } else if let Some(function_type) = binding.defined_function_type() {
             Some(function_type.to_string())
-        } else if let Some(struct_type) = binding.defined_struct_type() {
-            Some(struct_type.to_string())
         } else {
-            None
+            binding
+                .defined_struct_type()
+                .map(|struct_type| struct_type.to_string())
         };
 
         let item = CompletionItem {
