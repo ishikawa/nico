@@ -11,12 +11,6 @@ use log::debug;
 use std::cell::Cell;
 use std::fmt::Display;
 
-pub trait Type {
-    /// Returns a string which depicts type specification.
-    /// e.g. i32, Rectangle, String[]
-    fn type_specifier(&self) -> String;
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TypeError<'a> {
     TypeMismatchError(TypeMismatchError<'a>),
@@ -179,6 +173,28 @@ impl<'a> TypeKind<'a> {
         let mismatch = TypeMismatchError::new(ty2, ty1);
         Err(TypeError::TypeMismatchError(mismatch))
     }
+
+    pub fn type_specifier(&self) -> String {
+        match self {
+            TypeKind::StructType(ty) => ty.type_specifier(),
+            TypeKind::FunctionType(ty) => ty.type_specifier(),
+            TypeKind::ArrayType(ty) => ty.type_specifier(),
+            TypeKind::TypeVariable(ty) => ty.type_specifier(),
+            _ => self.to_string(),
+        }
+    }
+
+    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
+        match self {
+            TypeKind::Int32 => TypeKind::Int32,
+            TypeKind::Boolean => TypeKind::Boolean,
+            TypeKind::String => TypeKind::String,
+            TypeKind::StructType(ty) => ty.resolve_type(arena),
+            TypeKind::FunctionType(ty) => ty.resolve_type(arena),
+            TypeKind::ArrayType(ty) => ty.resolve_type(arena),
+            TypeKind::TypeVariable(ty) => ty.resolve_type(arena),
+        }
+    }
 }
 
 impl Display for TypeKind<'_> {
@@ -191,18 +207,6 @@ impl Display for TypeKind<'_> {
             TypeKind::FunctionType(ty) => ty.fmt(f),
             TypeKind::ArrayType(ty) => ty.fmt(f),
             TypeKind::TypeVariable(ty) => ty.fmt(f),
-        }
-    }
-}
-
-impl Type for TypeKind<'_> {
-    fn type_specifier(&self) -> String {
-        match self {
-            TypeKind::StructType(ty) => ty.type_specifier(),
-            TypeKind::FunctionType(ty) => ty.type_specifier(),
-            TypeKind::ArrayType(ty) => ty.type_specifier(),
-            TypeKind::TypeVariable(ty) => ty.type_specifier(),
-            _ => self.to_string(),
         }
     }
 }
@@ -277,6 +281,26 @@ impl<'a> StructType<'a> {
 
         Ok(TypeKind::StructType(self))
     }
+
+    pub fn type_specifier(&self) -> String {
+        self.name().to_string()
+    }
+
+    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
+        let fields: Vec<_> = self
+            .fields()
+            .map(|f| {
+                &*arena.alloc(StructField::new(
+                    arena,
+                    f.name(),
+                    f.r#type().resolve_type(arena),
+                ))
+            })
+            .collect();
+
+        let struct_type = &*arena.alloc(Self::new(arena, self.name(), &fields));
+        TypeKind::StructType(struct_type)
+    }
 }
 
 impl Display for StructType<'_> {
@@ -293,12 +317,6 @@ impl Display for StructType<'_> {
             }
         }
         write!(f, "}}")
-    }
-}
-
-impl Type for StructType<'_> {
-    fn type_specifier(&self) -> String {
-        self.name().to_string()
     }
 }
 
@@ -453,27 +471,8 @@ impl<'a> FunctionType<'a> {
 
         Ok(TypeKind::FunctionType(self))
     }
-}
 
-impl Display for FunctionType<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ", self.name())?;
-
-        let mut it = self.parameters().peekable();
-
-        write!(f, "(")?;
-        while let Some(param) = it.next() {
-            write!(f, "{}", param)?;
-            if it.peek().is_some() {
-                write!(f, ", ")?;
-            }
-        }
-        write!(f, ") -> {}", self.return_type())
-    }
-}
-
-impl Type for FunctionType<'_> {
-    fn type_specifier(&self) -> String {
+    pub fn type_specifier(&self) -> String {
         let mut buffer = String::new();
         let mut it = self.parameters().peekable();
 
@@ -488,6 +487,40 @@ impl Type for FunctionType<'_> {
         buffer.push_str(&self.return_type().type_specifier());
 
         buffer
+    }
+
+    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
+        let parameters: Vec<_> = self
+            .parameters()
+            .map(|p| {
+                &*arena.alloc(FunctionParameter::new(
+                    arena,
+                    p.name(),
+                    p.r#type().resolve_type(arena),
+                ))
+            })
+            .collect();
+        let return_type = self.return_type.resolve_type(arena);
+        let function_type = &*arena.alloc(Self::new(arena, self.name(), &parameters, return_type));
+
+        TypeKind::FunctionType(function_type)
+    }
+}
+
+impl Display for FunctionType<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "fun {}", self.name())?;
+
+        let mut it = self.parameters().peekable();
+
+        write!(f, "(")?;
+        while let Some(param) = it.next() {
+            write!(f, "{}", param)?;
+            if it.peek().is_some() {
+                write!(f, ", ")?;
+            }
+        }
+        write!(f, ") -> {}", self.return_type())
     }
 }
 
@@ -576,17 +609,22 @@ impl<'a> ArrayType<'a> {
             },
         }
     }
+
+    pub fn type_specifier(&self) -> String {
+        self.to_string()
+    }
+
+    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
+        let element_type = self.element_type.resolve_type(arena);
+        let array_type = &*arena.alloc(Self::new(element_type));
+
+        TypeKind::ArrayType(array_type)
+    }
 }
 
 impl Display for ArrayType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}[]", self.element_type().type_specifier())
-    }
-}
-
-impl Type for ArrayType<'_> {
-    fn type_specifier(&self) -> String {
-        self.to_string()
     }
 }
 
@@ -630,17 +668,19 @@ impl<'a> TypeVariable<'a> {
     pub fn replace_instance(&self, ty: TypeKind<'a>) {
         self.inner.replace(Some(ty));
     }
+
+    pub fn type_specifier(&self) -> String {
+        self.to_string()
+    }
+
+    pub fn resolve_type(&'a self, _arena: &'a BumpaloArena) -> TypeKind<'a> {
+        self.prune()
+    }
 }
 
 impl Display for TypeVariable<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "?{}", self.label)
-    }
-}
-
-impl Type for TypeVariable<'_> {
-    fn type_specifier(&self) -> String {
-        self.to_string()
     }
 }
 

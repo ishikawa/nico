@@ -38,6 +38,19 @@ impl<'a> Hover<'a> {
 }
 
 impl<'a> syntax::Visitor<'a> for Hover<'a> {
+    fn enter_function_definition(
+        &mut self,
+        path: &'a NodePath<'a>,
+        definition: &'a FunctionDefinition<'a>,
+    ) {
+        let range = unwrap_or_return!(definition.name()).range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
+
+        let function_type = unwrap_or_return!(definition.function_type());
+        self.result
+            .replace((description::code_fence(function_type.to_string()), range));
+    }
+
     fn enter_function_parameter(
         &mut self,
         path: &'a NodePath<'a>,
@@ -159,6 +172,9 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
                 description::code_fence(description::format_local_variable(pattern)),
                 range,
             ));
+        } else if let Some(function_type) = binding.defined_function_type() {
+            self.result
+                .replace((description::code_fence(function_type.to_string()), range));
         } else if let Some(param) = binding.function_parameter() {
             self.result.replace((
                 description::code_fence(description::format_function_parameter(param)),

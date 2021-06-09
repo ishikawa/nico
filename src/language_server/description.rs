@@ -1,4 +1,4 @@
-use crate::semantic::{StructType, Type, TypeKind};
+use crate::semantic::{StructType, TypeKind};
 use crate::syntax::{self, VariablePattern};
 use std::fmt::Display;
 
@@ -16,7 +16,7 @@ pub fn format_struct_type_phrase(ty: &StructType<'_>) -> String {
     format!("struct {}", ty.name())
 }
 
-pub fn format_struct_field<'a>(struct_type: &'a StructType<'a>, field_name: &str) -> String {
+pub fn format_struct_field<'a>(struct_type: &StructType<'_>, field_name: &str) -> String {
     let ty = struct_type.get_field_type(field_name);
 
     code_fence(format!(
@@ -27,7 +27,7 @@ pub fn format_struct_field<'a>(struct_type: &'a StructType<'a>, field_name: &str
     ))
 }
 
-pub fn format_local_variable<'a>(pattern: &'a VariablePattern<'a>) -> String {
+pub fn format_local_variable<'a>(pattern: &VariablePattern<'_>) -> String {
     format!(
         "let {}: {}",
         pattern.name(),
@@ -35,7 +35,7 @@ pub fn format_local_variable<'a>(pattern: &'a VariablePattern<'a>) -> String {
     )
 }
 
-pub fn format_function_parameter<'a>(param: &'a syntax::FunctionParameter<'a>) -> String {
+pub fn format_function_parameter<'a>(param: &syntax::FunctionParameter<'_>) -> String {
     format!(
         "(parameter) {}: {}",
         param.name().as_str(),

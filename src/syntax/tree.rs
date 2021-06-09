@@ -44,7 +44,7 @@
 //! ```
 use super::{Code, CodeKind, CodeKindIter, EffectiveRange, Token};
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString, BumpaloVec};
-use crate::semantic::{Binding, Scope, StructType, TypeKind};
+use crate::semantic::{Binding, FunctionType, Scope, StructType, TypeKind};
 use std::cell::Cell;
 use std::fmt;
 
@@ -720,6 +720,10 @@ impl<'a> FunctionDefinition<'a> {
 
     pub fn parameters(&self) -> impl ExactSizeIterator<Item = &'a FunctionParameter<'a>> + '_ {
         self.parameters.iter().copied()
+    }
+
+    pub fn function_type(&self) -> Option<&'a FunctionType<'a>> {
+        self.r#type.get().and_then(|ty| ty.function_type())
     }
 
     // for semantic analysis
