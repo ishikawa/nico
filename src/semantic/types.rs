@@ -61,6 +61,7 @@ pub enum TypeKind<'a> {
     Int32,
     Boolean,
     String,
+    Void,
     StructType(&'a StructType<'a>),
     FunctionType(&'a FunctionType<'a>),
     ArrayType(&'a ArrayType<'a>),
@@ -189,6 +190,7 @@ impl<'a> TypeKind<'a> {
             TypeKind::Int32 => TypeKind::Int32,
             TypeKind::Boolean => TypeKind::Boolean,
             TypeKind::String => TypeKind::String,
+            TypeKind::Void => TypeKind::Void,
             TypeKind::StructType(ty) => ty.resolve_type(arena),
             TypeKind::FunctionType(ty) => ty.resolve_type(arena),
             TypeKind::ArrayType(ty) => ty.resolve_type(arena),
@@ -203,6 +205,7 @@ impl Display for TypeKind<'_> {
             TypeKind::Int32 => write!(f, "i32"),
             TypeKind::Boolean => write!(f, "bool"),
             TypeKind::String => write!(f, "str"),
+            TypeKind::Void => write!(f, "void"),
             TypeKind::StructType(ty) => ty.fmt(f),
             TypeKind::FunctionType(ty) => ty.fmt(f),
             TypeKind::ArrayType(ty) => ty.fmt(f),
@@ -828,6 +831,10 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
+    fn exit_block(&mut self, _path: &'a NodePath<'a>, block: &'a syntax::Block<'a>) {
+        block.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
     fn exit_call_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CallExpression<'a>) {
         expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
@@ -885,6 +892,27 @@ impl<'a> TypeInferencer<'a> {
 }
 
 impl<'a> Visitor<'a> for TypeInferencer<'a> {
+    fn exit_block(&mut self, _path: &'a NodePath<'a>, block: &'a syntax::Block<'a>) {
+        // The type of a block is actually the return type of the last expression that
+        // occurs in the body.
+        if let Some(stmt) = block.statements().last() {
+            if let Some(expr) = stmt.expression() {
+                debug!("[inference] block: {}, {}", block.r#type(), expr.r#type());
+                block
+                    .r#type()
+                    .unify(self.arena, expr.r#type())
+                    .unwrap_or_else(|err| panic!("Type error: {}", err));
+                return;
+            }
+        }
+
+        // Otherwise, the type of a block is `void`
+        block
+            .r#type()
+            .unify(self.arena, TypeKind::Void)
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+    }
+
     fn exit_function_definition(
         &mut self,
         _path: &'a NodePath<'a>,
@@ -892,21 +920,15 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
     ) {
         let function_type = unwrap_or_return!(function.function_type());
 
-        // The return type in a function is actually the return type of the last expression that
-        // occurs in the function body.
-        if let Some(stmt) = function.body().statements().last() {
-            if let Some(expr) = stmt.expression() {
-                debug!(
-                    "[inference] return_type: {}, {}",
-                    function_type.return_type(),
-                    expr.r#type()
-                );
-                function_type
-                    .return_type()
-                    .unify(self.arena, expr.r#type())
-                    .unwrap_or_else(|err| panic!("Type error: {}", err));
-            }
-        }
+        debug!(
+            "[inference] return_type: {}, {}",
+            function_type.return_type(),
+            function.body().r#type()
+        );
+        function_type
+            .return_type()
+            .unify(self.arena, function.body().r#type())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
     }
 
     fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {

@@ -918,6 +918,7 @@ impl fmt::Display for Statement<'_> {
 pub struct Block<'a> {
     statements: BumpaloVec<'a, &'a Statement<'a>>,
     scope: &'a Scope<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
     code: Code<'a>,
 }
 
@@ -931,6 +932,7 @@ impl<'a> Block<'a> {
             statements: BumpaloVec::from_iter_in(statements, arena),
             scope: arena.alloc(Scope::new(arena)),
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -940,6 +942,18 @@ impl<'a> Block<'a> {
 
     pub fn statements(&self) -> impl ExactSizeIterator<Item = &'a Statement<'a>> + '_ {
         self.statements.iter().copied()
+    }
+
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 
