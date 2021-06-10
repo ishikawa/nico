@@ -981,7 +981,7 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             grouped_expr
                 .r#type()
                 .unify(self.arena, expr.r#type())
-                .unwrap_or_else(|err| panic!("Type error: {}", err));
+                .unwrap_or_else(|err| panic!("Unexpected type error: {}", err));
         }
     }
 }
