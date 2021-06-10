@@ -1035,6 +1035,53 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             .unify(self.arena, ty)
             .unwrap_or_else(|err| panic!("Type error: {}", err));
     }
+
+    fn exit_call_expression(&mut self, _path: &'a NodePath<'a>, call_expr: &'a CallExpression<'a>) {
+        let function_type = call_expr.callee().r#type();
+        let function_type = function_type
+            .function_type()
+            .unwrap_or_else(|| panic!("Expected callable function, found {}", function_type));
+
+        // return type
+        debug!(
+            "[inference] call_expression: {}, {}",
+            call_expr,
+            call_expr.callee()
+        );
+        call_expr
+            .r#type()
+            .unify(self.arena, function_type.return_type())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+
+        // arguments
+        let parameters = function_type.parameters();
+        let arguments = call_expr.arguments();
+
+        if parameters.len() != arguments.len() {
+            panic!(
+                "Expected {} arguments, found {}",
+                parameters.len(),
+                arguments.len()
+            );
+        }
+
+        parameters
+            .zip(arguments)
+            .enumerate()
+            .for_each(|(i, (p, a))| {
+                debug!("[inference] call_expression (arg #{}): {}, {}", i, p, a);
+                p.r#type()
+                    .unify(self.arena, a.r#type())
+                    .unwrap_or_else(|err| {
+                        panic!(
+                            "Type error at arg #{} of function `{}`: {}",
+                            i,
+                            function_type.name(),
+                            err
+                        )
+                    });
+            })
+    }
 }
 
 /// Indirect references by type variables are still necessary after type inference is complete.
