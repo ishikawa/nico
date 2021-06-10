@@ -10,7 +10,6 @@ pub use types::*;
 use crate::arena::BumpaloArena;
 use crate::syntax::traverse;
 use crate::syntax::Program;
-use inferencer::{InitialTypeBinder, TypeInferencer};
 use scope::{ScopeChainBinder, TopLevelDeclarationBinder, VariableBinder};
 
 pub fn analyze<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
@@ -27,6 +26,9 @@ pub fn analyze<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
     traverse(arena, &mut binder, node);
 
     let mut binder = TypeInferencer::new(arena);
+    traverse(arena, &mut binder, node);
+
+    let mut binder = TypeVariablePruner::new(arena);
     traverse(arena, &mut binder, node);
 }
 

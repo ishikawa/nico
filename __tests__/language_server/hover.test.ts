@@ -58,6 +58,74 @@ let cases: TestCase[] = [
           line: 2,
           character: 2
         }
+      },
+      // let a = A { a: 100 }
+      //     ^
+      {
+        position: {
+          line: 1,
+          character: 5
+        }
+      },
+      // struct A { a: i32 }
+      //         ^
+      {
+        position: {
+          line: 0,
+          character: 8
+        }
+      },
+      // let a = A { a: 100 }
+      //          ^
+      {
+        position: {
+          line: 1,
+          character: 9
+        }
+      }
+    ]
+  },
+  // Type inference: binary expression
+  {
+    // prettier-ignore
+    input: [
+      "fun foo(n)",
+      "  n + 1",
+      "end",
+      "foo(1)"
+    ].join("\n"),
+    requests: [
+      // fun foo(n)
+      //          ^
+      {
+        position: {
+          line: 0,
+          character: 9
+        }
+      },
+      //   n + 1
+      //    ^
+      {
+        position: {
+          line: 1,
+          character: 3
+        }
+      },
+      // fun foo(n)
+      //     ^
+      {
+        position: {
+          line: 0,
+          character: 5
+        }
+      },
+      // foo(1)
+      // ^
+      {
+        position: {
+          line: 3,
+          character: 0
+        }
       }
     ]
   }

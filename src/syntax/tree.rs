@@ -44,7 +44,7 @@
 //! ```
 use super::{Code, CodeKind, CodeKindIter, EffectiveRange, Token};
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString, BumpaloVec};
-use crate::semantic::{Binding, Scope, StructType, TypeKind};
+use crate::semantic::{Binding, FunctionType, Scope, StructType, TypeKind};
 use std::cell::Cell;
 use std::fmt;
 
@@ -722,6 +722,10 @@ impl<'a> FunctionDefinition<'a> {
         self.parameters.iter().copied()
     }
 
+    pub fn function_type(&self) -> Option<&'a FunctionType<'a>> {
+        self.r#type.get().and_then(|ty| ty.function_type())
+    }
+
     // for semantic analysis
     pub fn r#type(&self) -> TypeKind<'a> {
         self.get_type().expect("Uninitialized semantic value.")
@@ -914,6 +918,7 @@ impl fmt::Display for Statement<'_> {
 pub struct Block<'a> {
     statements: BumpaloVec<'a, &'a Statement<'a>>,
     scope: &'a Scope<'a>,
+    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
     code: Code<'a>,
 }
 
@@ -927,6 +932,7 @@ impl<'a> Block<'a> {
             statements: BumpaloVec::from_iter_in(statements, arena),
             scope: arena.alloc(Scope::new(arena)),
             code,
+            r#type: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
 
@@ -936,6 +942,18 @@ impl<'a> Block<'a> {
 
     pub fn statements(&self) -> impl ExactSizeIterator<Item = &'a Statement<'a>> + '_ {
         self.statements.iter().copied()
+    }
+
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
     }
 }
 

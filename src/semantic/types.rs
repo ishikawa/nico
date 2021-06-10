@@ -1,4 +1,13 @@
-use crate::arena::{BumpaloArena, BumpaloString, BumpaloVec};
+use crate::arena::BumpaloArena;
+use crate::arena::{BumpaloString, BumpaloVec};
+use crate::syntax::{
+    self, ArrayExpression, BinaryExpression, CallExpression, CaseExpression, FunctionDefinition,
+    GroupedExpression, IfExpression, MemberExpression, NodePath, PatternKind, StructDefinition,
+    StructLiteral, SubscriptExpression, UnaryExpression, ValueField, VariableDeclaration,
+    VariableExpression, VariablePattern, Visitor,
+};
+use crate::unwrap_or_return;
+use log::debug;
 use std::cell::Cell;
 use std::fmt::Display;
 
@@ -52,6 +61,7 @@ pub enum TypeKind<'a> {
     Int32,
     Boolean,
     String,
+    Void,
     StructType(&'a StructType<'a>),
     FunctionType(&'a FunctionType<'a>),
     ArrayType(&'a ArrayType<'a>),
@@ -103,21 +113,16 @@ impl<'a> TypeKind<'a> {
         self.array_type().is_some()
     }
 
-    pub fn prune(self) -> Self {
-        if let TypeKind::TypeVariable(ty) = self {
-            Self::TypeVariable(ty.prune())
-        } else {
-            self
-        }
-    }
-
     pub fn unify(
         &self,
         arena: &'a BumpaloArena,
         other: TypeKind<'a>,
     ) -> Result<TypeKind<'a>, TypeError<'a>> {
-        let ty1 = self.prune();
-        let ty2 = other.prune();
+        debug!("[unify] {} - {}", self, other);
+
+        let ty1 = self.terminal_type();
+        let ty2 = other.terminal_type();
+        debug!("[unify] prune: {} - {}", ty1, ty2);
 
         // Already unified.
         if ty1 == ty2 {
@@ -129,6 +134,7 @@ impl<'a> TypeKind<'a> {
                 // `ty1` was pruned, so its instance must be `None`
                 assert!(var.instance().is_none());
                 if ty1 != ty2 {
+                    debug!("[unify] replace: {} -> {}", ty1, ty2);
                     var.replace_instance(ty2);
                 }
 
@@ -160,6 +166,37 @@ impl<'a> TypeKind<'a> {
         let mismatch = TypeMismatchError::new(ty2, ty1);
         Err(TypeError::TypeMismatchError(mismatch))
     }
+
+    fn terminal_type(self) -> Self {
+        if let TypeKind::TypeVariable(ty) = self {
+            ty.terminal_type()
+        } else {
+            self
+        }
+    }
+
+    pub fn type_specifier(&self) -> String {
+        match self {
+            TypeKind::StructType(ty) => ty.type_specifier(),
+            TypeKind::FunctionType(ty) => ty.type_specifier(),
+            TypeKind::ArrayType(ty) => ty.type_specifier(),
+            TypeKind::TypeVariable(ty) => ty.type_specifier(),
+            _ => self.to_string(),
+        }
+    }
+
+    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
+        match self {
+            TypeKind::Int32 => TypeKind::Int32,
+            TypeKind::Boolean => TypeKind::Boolean,
+            TypeKind::String => TypeKind::String,
+            TypeKind::Void => TypeKind::Void,
+            TypeKind::StructType(ty) => ty.resolve_type(arena),
+            TypeKind::FunctionType(ty) => ty.resolve_type(arena),
+            TypeKind::ArrayType(ty) => ty.resolve_type(arena),
+            TypeKind::TypeVariable(ty) => ty.resolve_type(arena),
+        }
+    }
 }
 
 impl Display for TypeKind<'_> {
@@ -168,6 +205,7 @@ impl Display for TypeKind<'_> {
             TypeKind::Int32 => write!(f, "i32"),
             TypeKind::Boolean => write!(f, "bool"),
             TypeKind::String => write!(f, "str"),
+            TypeKind::Void => write!(f, "void"),
             TypeKind::StructType(ty) => ty.fmt(f),
             TypeKind::FunctionType(ty) => ty.fmt(f),
             TypeKind::ArrayType(ty) => ty.fmt(f),
@@ -245,6 +283,26 @@ impl<'a> StructType<'a> {
         }
 
         Ok(TypeKind::StructType(self))
+    }
+
+    pub fn type_specifier(&self) -> String {
+        self.name().to_string()
+    }
+
+    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
+        let fields: Vec<_> = self
+            .fields()
+            .map(|f| {
+                &*arena.alloc(StructField::new(
+                    arena,
+                    f.name(),
+                    f.r#type().resolve_type(arena),
+                ))
+            })
+            .collect();
+
+        let struct_type = &*arena.alloc(Self::new(arena, self.name(), &fields));
+        TypeKind::StructType(struct_type)
     }
 }
 
@@ -416,11 +474,45 @@ impl<'a> FunctionType<'a> {
 
         Ok(TypeKind::FunctionType(self))
     }
+
+    pub fn type_specifier(&self) -> String {
+        let mut buffer = String::new();
+        let mut it = self.parameters().peekable();
+
+        buffer.push('(');
+        while let Some(param) = it.next() {
+            buffer.push_str(&param.to_string());
+            if it.peek().is_some() {
+                buffer.push_str(", ");
+            }
+        }
+        buffer.push_str(") -> ");
+        buffer.push_str(&self.return_type().type_specifier());
+
+        buffer
+    }
+
+    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
+        let parameters: Vec<_> = self
+            .parameters()
+            .map(|p| {
+                &*arena.alloc(FunctionParameter::new(
+                    arena,
+                    p.name(),
+                    p.r#type().resolve_type(arena),
+                ))
+            })
+            .collect();
+        let return_type = self.return_type.resolve_type(arena);
+        let function_type = &*arena.alloc(Self::new(arena, self.name(), &parameters, return_type));
+
+        TypeKind::FunctionType(function_type)
+    }
 }
 
 impl Display for FunctionType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ", self.name())?;
+        write!(f, "fun {}", self.name())?;
 
         let mut it = self.parameters().peekable();
 
@@ -482,7 +574,7 @@ impl<'a> FunctionParameter<'a> {
 
 impl Display for FunctionParameter<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.name(), self.r#type())
+        write!(f, "{}: {}", self.name(), self.r#type().type_specifier())
     }
 }
 
@@ -520,11 +612,22 @@ impl<'a> ArrayType<'a> {
             },
         }
     }
+
+    pub fn type_specifier(&self) -> String {
+        self.to_string()
+    }
+
+    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
+        let element_type = self.element_type.resolve_type(arena);
+        let array_type = &*arena.alloc(Self::new(element_type));
+
+        TypeKind::ArrayType(array_type)
+    }
 }
 
 impl Display for ArrayType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}[]", self.element_type())
+        write!(f, "{}[]", self.element_type().type_specifier())
     }
 }
 
@@ -553,31 +656,468 @@ impl<'a> TypeVariable<'a> {
         }
     }
 
-    pub fn prune(&self) -> &Self {
-        let pruned = if let Some(TypeKind::TypeVariable(var)) = self.inner.get() {
-            var.prune()
+    /// Returns the type variable or concrete type at the deepest position in type chain.
+    pub fn terminal_type(&'a self) -> TypeKind<'a> {
+        if let Some(inner) = self.inner.get() {
+            match inner {
+                TypeKind::TypeVariable(var) => var.terminal_type(),
+                ty => ty,
+            }
         } else {
-            return self;
-        };
+            TypeKind::TypeVariable(self)
+        }
+    }
 
-        // Prune intermediate type variables.
-        self.inner.replace(Some(TypeKind::TypeVariable(pruned)));
-        pruned
+    /// Prune unnecessary indirections.
+    pub fn prune(&self) {
+        self.inner.replace(self.instance());
     }
 
     pub fn replace_instance(&self, ty: TypeKind<'a>) {
         self.inner.replace(Some(ty));
     }
+
+    pub fn type_specifier(&self) -> String {
+        // Prints the instance type if a type variable is already pruned.
+        if let Some(inner) = self.inner.get() {
+            inner.type_specifier()
+        } else {
+            self.to_string()
+        }
+    }
+
+    pub fn resolve_type(&'a self, _arena: &'a BumpaloArena) -> TypeKind<'a> {
+        self.terminal_type()
+    }
 }
 
 impl Display for TypeVariable<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "?{}", self.label)
+        // Prints the instance type if a type variable is already pruned.
+        if let Some(inner) = self.inner.get() {
+            inner.fmt(f)
+        } else {
+            write!(f, "?{}", self.label)
+        }
     }
 }
 
 impl<'a> PartialEq for TypeVariable<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.label == other.label
+    }
+}
+
+// --- Type inference visitors ---
+
+/// A visitor assigns an initial type (type variable or primitive type) to a node.
+#[derive(Debug)]
+pub(super) struct InitialTypeBinder<'a> {
+    arena: &'a BumpaloArena,
+    seq: i32,
+}
+
+impl<'a> InitialTypeBinder<'a> {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
+        Self { arena, seq: 0 }
+    }
+
+    pub fn new_type_var(&mut self) -> &'a TypeVariable<'a> {
+        let var = TypeVariable::new(self.seq);
+
+        self.seq += 1;
+        self.arena.alloc(var)
+    }
+
+    fn build_struct_type(
+        &mut self,
+        definition: &'a StructDefinition<'a>,
+    ) -> Option<&'a StructType<'a>> {
+        let name = definition.name()?;
+        let mut field_types = vec![];
+
+        for f in definition.fields() {
+            let name = f.name()?.as_str();
+            let ty = f.type_annotation()?.r#type();
+
+            let field = &*self.arena.alloc(StructField::new(self.arena, name, ty));
+
+            field_types.push(field);
+        }
+
+        let ty = StructType::new(self.arena, name.as_str(), &field_types);
+        Some(&*self.arena.alloc(ty))
+    }
+
+    fn build_function_type(
+        &mut self,
+        definition: &'a FunctionDefinition<'a>,
+    ) -> Option<&'a FunctionType<'a>> {
+        let name = definition.name()?;
+        let params: Vec<_> = definition
+            .parameters()
+            .map(|p| {
+                &*self.arena.alloc(FunctionParameter::new(
+                    self.arena,
+                    p.name().as_str(),
+                    p.r#type(),
+                ))
+            })
+            .collect();
+
+        let ty = FunctionType::new(
+            self.arena,
+            name.as_str(),
+            &params,
+            TypeKind::TypeVariable(self.new_type_var()),
+        );
+
+        Some(&*self.arena.alloc(ty))
+    }
+}
+
+impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
+    fn exit_struct_definition(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        definition: &'a StructDefinition<'a>,
+    ) {
+        if let Some(ty) = self.build_struct_type(definition) {
+            definition.assign_type(TypeKind::StructType(ty))
+        }
+    }
+
+    fn exit_function_definition(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        definition: &'a FunctionDefinition<'a>,
+    ) {
+        if let Some(ty) = self.build_function_type(definition) {
+            definition.assign_type(TypeKind::FunctionType(ty))
+        }
+    }
+
+    fn exit_function_parameter(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        _fun: &'a FunctionDefinition<'a>,
+        param: &'a syntax::FunctionParameter<'a>,
+    ) {
+        param.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_struct_literal(&mut self, _path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_value_field(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        _struct_literal: &'a StructLiteral<'a>,
+        field: &'a ValueField<'a>,
+    ) {
+        field.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_unary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a UnaryExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_array_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a ArrayExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_block(&mut self, _path: &'a NodePath<'a>, block: &'a syntax::Block<'a>) {
+        block.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_call_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CallExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_subscript_expression(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        expr: &'a SubscriptExpression<'a>,
+    ) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_member_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a MemberExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_case_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CaseExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_if_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a IfExpression<'a>) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_variable_expression(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        expr: &'a VariableExpression<'a>,
+    ) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_grouped_expression(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        expr: &'a GroupedExpression<'a>,
+    ) {
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_variable_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a VariablePattern<'a>) {
+        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct TypeInferencer<'a> {
+    arena: &'a BumpaloArena,
+}
+
+impl<'a> TypeInferencer<'a> {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
+        Self { arena }
+    }
+}
+
+impl<'a> Visitor<'a> for TypeInferencer<'a> {
+    fn exit_block(&mut self, _path: &'a NodePath<'a>, block: &'a syntax::Block<'a>) {
+        // The type of a block is actually the return type of the last expression that
+        // occurs in the body.
+        if let Some(stmt) = block.statements().last() {
+            if let Some(expr) = stmt.expression() {
+                debug!("[inference] block: {}, {}", block, expr);
+                block
+                    .r#type()
+                    .unify(self.arena, expr.r#type())
+                    .unwrap_or_else(|err| panic!("Type error: {}", err));
+                return;
+            }
+        }
+
+        // Otherwise, the type of a block is `void`
+        block
+            .r#type()
+            .unify(self.arena, TypeKind::Void)
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+    }
+
+    fn exit_function_definition(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        function: &'a FunctionDefinition<'a>,
+    ) {
+        let function_type = unwrap_or_return!(function.function_type());
+
+        debug!(
+            "[inference] return_type: {}, {}",
+            function_type,
+            function.body()
+        );
+        function_type
+            .return_type()
+            .unify(self.arena, function.body().r#type())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+    }
+
+    fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
+        let binding = match path.scope().get_binding(literal.name().as_str()) {
+            Some(binding) => binding,
+            None => return,
+        };
+
+        let struct_def = match binding.struct_definition() {
+            Some(struct_def) => struct_def,
+            None => return,
+        };
+
+        literal
+            .r#type()
+            .unify(self.arena, struct_def.r#type())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+    }
+
+    fn exit_variable_declaration(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        declaration: &'a VariableDeclaration<'a>,
+    ) {
+        let pattern = unwrap_or_return!(declaration.pattern());
+        let init = unwrap_or_return!(declaration.init());
+
+        if let PatternKind::VariablePattern(var_pattern) = pattern.kind() {
+            debug!("[inference] variable_pattern: {}, {}", var_pattern, init);
+            var_pattern
+                .r#type()
+                .unify(self.arena, init.r#type())
+                .unwrap_or_else(|err| panic!("Type error: {}", err));
+        } else {
+            todo!("warn: except for variable pattern, we can't infer type.");
+        }
+    }
+
+    fn exit_variable_expression(
+        &mut self,
+        path: &'a NodePath<'a>,
+        expr: &'a VariableExpression<'a>,
+    ) {
+        if let Some(binding) = path.scope().get_binding(expr.name()) {
+            debug!("[inference] variable_expression: {}, {}", expr, binding);
+            expr.r#type()
+                .unify(self.arena, binding.r#type())
+                .unwrap_or_else(|err| panic!("Type error: {}", err));
+        }
+    }
+
+    fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
+        let lhs = expr.lhs();
+        let rhs = unwrap_or_return!(expr.rhs());
+
+        debug!("[inference] binary_expression (operand): {}, {}", lhs, rhs);
+        lhs.r#type()
+            .unify(self.arena, rhs.r#type())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+
+        debug!("[inference] binary_expression: {}, {}", expr, lhs);
+        expr.r#type()
+            .unify(self.arena, lhs.r#type())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+    }
+
+    fn exit_grouped_expression(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        grouped_expr: &'a GroupedExpression<'a>,
+    ) {
+        if let Some(expr) = grouped_expr.expression() {
+            debug!("[inference] grouped_expression: {}, {}", grouped_expr, expr);
+            grouped_expr
+                .r#type()
+                .unify(self.arena, expr.r#type())
+                .unwrap_or_else(|err| panic!("Unexpected type error: {}", err));
+        }
+    }
+
+    fn exit_if_expression(&mut self, _path: &'a NodePath<'a>, if_expr: &'a IfExpression<'a>) {
+        // The type of `then_body` and `else_body` must be same.
+        // If `else_body` is omitted, the type of `if` is `void`.
+        let then_body = if_expr.then_body();
+
+        let ty = if let Some(else_body) = if_expr.else_body() {
+            debug!(
+                "[inference] if_expression (body): {}, {}",
+                then_body, else_body
+            );
+            then_body
+                .r#type()
+                .unify(self.arena, else_body.r#type())
+                .unwrap_or_else(|err| panic!("Type error: {}", err));
+
+            then_body.r#type()
+        } else {
+            TypeKind::Void
+        };
+
+        debug!("[inference] if_expression: {}", if_expr);
+        if_expr
+            .r#type()
+            .unify(self.arena, ty)
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+    }
+
+    fn exit_call_expression(&mut self, _path: &'a NodePath<'a>, call_expr: &'a CallExpression<'a>) {
+        let function_type = call_expr.callee().r#type();
+        let function_type = function_type
+            .function_type()
+            .unwrap_or_else(|| panic!("Expected callable function, found {}", function_type));
+
+        // return type
+        debug!(
+            "[inference] call_expression: {}, {}",
+            call_expr,
+            call_expr.callee()
+        );
+        call_expr
+            .r#type()
+            .unify(self.arena, function_type.return_type())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+
+        // arguments
+        let parameters = function_type.parameters();
+        let arguments = call_expr.arguments();
+
+        if parameters.len() != arguments.len() {
+            panic!(
+                "Expected {} arguments, found {}",
+                parameters.len(),
+                arguments.len()
+            );
+        }
+
+        parameters
+            .zip(arguments)
+            .enumerate()
+            .for_each(|(i, (p, a))| {
+                debug!("[inference] call_expression (arg #{}): {}, {}", i, p, a);
+                p.r#type()
+                    .unify(self.arena, a.r#type())
+                    .unwrap_or_else(|err| {
+                        panic!(
+                            "Type error at arg #{} of function `{}`: {}",
+                            i,
+                            function_type.name(),
+                            err
+                        )
+                    });
+            })
+    }
+}
+
+/// Indirect references by type variables are still necessary after type inference is complete.
+/// However, unnecessary indirect references can be removed.
+#[derive(Debug)]
+pub(super) struct TypeVariablePruner<'a> {
+    arena: &'a BumpaloArena,
+}
+
+impl<'a> TypeVariablePruner<'a> {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
+        Self { arena }
+    }
+
+    fn prune(&self, ty: TypeKind<'a>) {
+        if let Some(type_variable) = ty.type_variable() {
+            type_variable.prune()
+        }
+    }
+}
+
+impl<'a> Visitor<'a> for TypeVariablePruner<'a> {
+    fn exit_function_definition(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        definition: &'a FunctionDefinition<'a>,
+    ) {
+        self.prune(definition.r#type());
+    }
+
+    fn exit_function_parameter(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        _function: &'a FunctionDefinition<'a>,
+        param: &'a syntax::FunctionParameter<'a>,
+    ) {
+        self.prune(param.r#type());
     }
 }

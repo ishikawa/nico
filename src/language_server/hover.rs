@@ -1,11 +1,9 @@
 use super::description;
 use crate::arena::BumpaloArena;
-use crate::syntax::MemberExpression;
-use crate::syntax::StructDefinition;
-use crate::syntax::StructLiteral;
-use crate::syntax::TypeField;
 use crate::syntax::{
-    self, EffectiveRange, Node, NodePath, Position, Program, TypeAnnotation, ValueField,
+    self, EffectiveRange, FunctionDefinition, FunctionParameter, MemberExpression, Node, NodePath,
+    Position, Program, StructDefinition, StructLiteral, TypeAnnotation, TypeField, ValueField,
+    VariableExpression, VariablePattern,
 };
 use crate::unwrap_or_return;
 
@@ -40,6 +38,60 @@ impl<'a> Hover<'a> {
 }
 
 impl<'a> syntax::Visitor<'a> for Hover<'a> {
+    fn enter_function_definition(
+        &mut self,
+        path: &'a NodePath<'a>,
+        definition: &'a FunctionDefinition<'a>,
+    ) {
+        let range = unwrap_or_return!(definition.name()).range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
+
+        let function_type = unwrap_or_return!(definition.function_type());
+        self.result
+            .replace((description::code_fence(function_type.to_string()), range));
+    }
+
+    fn enter_function_parameter(
+        &mut self,
+        path: &'a NodePath<'a>,
+        _function: &'a FunctionDefinition<'a>,
+        param: &'a FunctionParameter<'a>,
+    ) {
+        let range = param.name().range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
+
+        self.result.replace((
+            description::code_fence(description::format_function_parameter(param)),
+            range,
+        ));
+    }
+
+    fn enter_struct_definition(
+        &mut self,
+        path: &'a NodePath<'a>,
+        definition: &'a StructDefinition<'a>,
+    ) {
+        let range = unwrap_or_return!(definition.name()).range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
+
+        let struct_type = unwrap_or_return!(definition.struct_type());
+        self.result.replace((
+            description::code_fence(description::format_struct_type_phrase(struct_type)),
+            range,
+        ));
+    }
+
+    fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {
+        let range = expr.name().range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
+
+        let struct_type = unwrap_or_return!(expr.r#type().struct_type());
+        self.result.replace((
+            description::code_fence(description::format_struct_type_phrase(struct_type)),
+            range,
+        ));
+    }
+
     fn enter_type_field(
         &mut self,
         path: &'a NodePath<'a>,
@@ -101,6 +153,42 @@ impl<'a> syntax::Visitor<'a> for Hover<'a> {
 
         self.result.replace((
             description::format_struct_field(struct_type, field.as_str()),
+            range,
+        ));
+    }
+
+    fn enter_variable_expression(
+        &mut self,
+        path: &'a NodePath<'a>,
+        expr: &'a VariableExpression<'a>,
+    ) {
+        let range = expr.range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
+
+        let binding = unwrap_or_return!(path.scope().get_binding(expr.name()));
+
+        if let Some(pattern) = binding.variable_pattern() {
+            self.result.replace((
+                description::code_fence(description::format_local_variable(pattern)),
+                range,
+            ));
+        } else if let Some(function_type) = binding.defined_function_type() {
+            self.result
+                .replace((description::code_fence(function_type.to_string()), range));
+        } else if let Some(param) = binding.function_parameter() {
+            self.result.replace((
+                description::code_fence(description::format_function_parameter(param)),
+                range,
+            ));
+        }
+    }
+
+    fn enter_variable_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a VariablePattern<'a>) {
+        let range = pattern.range();
+        unwrap_or_return!(self.can_hover(range, path)).stop();
+
+        self.result.replace((
+            description::code_fence(description::format_local_variable(pattern)),
             range,
         ));
     }
