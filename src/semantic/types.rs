@@ -897,7 +897,7 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         // occurs in the body.
         if let Some(stmt) = block.statements().last() {
             if let Some(expr) = stmt.expression() {
-                debug!("[inference] block: {}, {}", block.r#type(), expr.r#type());
+                debug!("[inference] block: {}, {}", block, expr);
                 block
                     .r#type()
                     .unify(self.arena, expr.r#type())
@@ -922,8 +922,8 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
 
         debug!(
             "[inference] return_type: {}, {}",
-            function_type.return_type(),
-            function.body().r#type()
+            function_type,
+            function.body()
         );
         function_type
             .return_type()
@@ -957,6 +957,7 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         let init = unwrap_or_return!(declaration.init());
 
         if let PatternKind::VariablePattern(var_pattern) = pattern.kind() {
+            debug!("[inference] variable_pattern: {}, {}", var_pattern, init);
             var_pattern
                 .r#type()
                 .unify(self.arena, init.r#type())
@@ -988,7 +989,7 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             .unify(self.arena, rhs.r#type())
             .unwrap_or_else(|err| panic!("Type error: {}", err));
 
-        debug!("[inference] binary_expression: {}, {}", expr.r#type(), lhs);
+        debug!("[inference] binary_expression: {}, {}", expr, lhs);
         expr.r#type()
             .unify(self.arena, lhs.r#type())
             .unwrap_or_else(|err| panic!("Type error: {}", err));
@@ -1000,11 +1001,39 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         grouped_expr: &'a GroupedExpression<'a>,
     ) {
         if let Some(expr) = grouped_expr.expression() {
+            debug!("[inference] grouped_expression: {}, {}", grouped_expr, expr);
             grouped_expr
                 .r#type()
                 .unify(self.arena, expr.r#type())
                 .unwrap_or_else(|err| panic!("Unexpected type error: {}", err));
         }
+    }
+
+    fn exit_if_expression(&mut self, _path: &'a NodePath<'a>, if_expr: &'a IfExpression<'a>) {
+        // The type of `then_body` and `else_body` must be same.
+        // If `else_body` is omitted, the type of `if` is `void`.
+        let then_body = if_expr.then_body();
+
+        let ty = if let Some(else_body) = if_expr.else_body() {
+            debug!(
+                "[inference] if_expression (body): {}, {}",
+                then_body, else_body
+            );
+            then_body
+                .r#type()
+                .unify(self.arena, else_body.r#type())
+                .unwrap_or_else(|err| panic!("Type error: {}", err));
+
+            then_body.r#type()
+        } else {
+            TypeKind::Void
+        };
+
+        debug!("[inference] if_expression: {}", if_expr);
+        if_expr
+            .r#type()
+            .unify(self.arena, ty)
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
     }
 }
 
