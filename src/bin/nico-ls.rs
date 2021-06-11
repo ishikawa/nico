@@ -2,11 +2,11 @@ use log::{info, warn};
 use lsp_types::*;
 use nico::arena::BumpaloArena;
 use nico::language_server::{self, server::ServerCapabilitiesBuilder};
-use nico::syntax::VariableExpression;
 use nico::syntax::{
     self, EffectiveRange, MissingTokenKind, Node, NodePath, ParseError, Parser, StructLiteral,
     TextToken, Token, TokenKind, Trivia,
 };
+use nico::syntax::{CallExpression, VariableExpression};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -233,6 +233,16 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
                 value.name().range(),
                 format!("Cannot find name '{}'.", value.name()),
             );
+        }
+    }
+
+    fn enter_call_expression(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        call_expr: &'a CallExpression<'a>,
+    ) {
+        for e in &call_expr.errors().semantic_errors() {
+            self.add_diagnostic(call_expr.range(), e.to_string());
         }
     }
 
