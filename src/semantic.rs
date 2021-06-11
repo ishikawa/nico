@@ -1,9 +1,11 @@
 mod binding;
+mod errors;
 mod inferencer;
 mod scope;
 mod types;
 
 pub use binding::Binding;
+pub use errors::SemanticError;
 pub use scope::Scope;
 pub use types::*;
 

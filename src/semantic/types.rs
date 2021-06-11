@@ -1,5 +1,6 @@
 use crate::arena::BumpaloArena;
 use crate::arena::{BumpaloString, BumpaloVec};
+use crate::semantic::SemanticError;
 use crate::syntax::{
     self, ArrayExpression, BinaryExpression, CallExpression, CaseExpression, FunctionDefinition,
     GroupedExpression, IfExpression, MemberExpression, NodePath, PatternKind, StructDefinition,
@@ -1058,11 +1059,12 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         let arguments = call_expr.arguments();
 
         if parameters.len() != arguments.len() {
-            panic!(
-                "Expected {} arguments, found {}",
-                parameters.len(),
-                arguments.len()
-            );
+            call_expr
+                .errors()
+                .push_semantic_error(SemanticError::ArgumentCountMismatch {
+                    expected: parameters.len(),
+                    found: arguments.len(),
+                });
         }
 
         parameters

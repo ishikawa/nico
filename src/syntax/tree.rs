@@ -44,8 +44,8 @@
 //! ```
 use super::{Code, CodeKind, CodeKindIter, EffectiveRange, Token};
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString, BumpaloVec};
-use crate::semantic::{Binding, FunctionType, Scope, StructType, TypeKind};
-use std::cell::Cell;
+use crate::semantic::{Binding, FunctionType, Scope, SemanticError, StructType, TypeKind};
+use std::cell::{Cell, Ref, RefCell};
 use std::fmt;
 
 pub trait Node<'arena> {
@@ -1464,11 +1464,52 @@ impl fmt::Display for SubscriptExpression<'_> {
 }
 
 #[derive(Debug)]
+pub struct AstErrors<'a> {
+    semantic_errors: BumpaloBox<'a, RefCell<BumpaloVec<'a, SemanticError>>>,
+}
+
+impl<'a> AstErrors<'a> {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
+        Self {
+            semantic_errors: BumpaloBox::new_in(
+                RefCell::new(BumpaloVec::with_capacity_in(0, arena)),
+                arena,
+            ),
+        }
+    }
+
+    pub fn push_semantic_error(&self, error: SemanticError) {
+        self.semantic_errors.borrow_mut().push(error);
+    }
+
+    pub fn semantic_errors(&self) -> RefVecIter<'_, 'a, SemanticError> {
+        RefVecIter {
+            vec: self.semantic_errors.borrow(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct RefVecIter<'r, 'arena, T> {
+    vec: Ref<'r, BumpaloVec<'arena, T>>,
+}
+
+impl<'a: 'r, 'r, 'arena, T> IntoIterator for &'a RefVecIter<'r, 'arena, T> {
+    type IntoIter = std::slice::Iter<'r, T>;
+    type Item = &'r T;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.vec.iter()
+    }
+}
+
+#[derive(Debug)]
 pub struct CallExpression<'a> {
     callee: &'a Expression<'a>,
     arguments: BumpaloVec<'a, &'a Expression<'a>>,
     code: Code<'a>,
     r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> CallExpression<'a> {
@@ -1483,6 +1524,7 @@ impl<'a> CallExpression<'a> {
             arguments: BumpaloVec::from_iter_in(arguments, arena),
             code,
             r#type: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1504,6 +1546,10 @@ impl<'a> CallExpression<'a> {
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
