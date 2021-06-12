@@ -728,6 +728,8 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
     ) {
         if let Some(ty) = self.build_struct_type(definition) {
             definition.assign_type(TypeKind::StructType(ty))
+        } else {
+            definition.assign_type(TypeKind::TypeVariable(self.new_type_var()))
         }
     }
 
@@ -738,6 +740,8 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
     ) {
         if let Some(ty) = self.build_function_type(definition) {
             definition.assign_type(TypeKind::FunctionType(ty))
+        } else {
+            definition.assign_type(TypeKind::TypeVariable(self.new_type_var()))
         }
     }
 
