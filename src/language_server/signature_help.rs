@@ -1,4 +1,5 @@
 use crate::arena::BumpaloArena;
+use crate::semantic::TypeKind;
 use crate::syntax::{self, CallExpression, Node, NodePath, Position, Program};
 use crate::unwrap_or_return;
 use lsp_types::{ParameterInformation, ParameterLabel, SignatureHelp, SignatureInformation};
@@ -45,7 +46,7 @@ impl<'a> syntax::Visitor<'a> for SignatureHelpOperation<'a> {
         label.push_str(function_type.name());
         label.push('(');
 
-        // parameters
+        // --- parameters
         let mut it = function_type.parameters().peekable();
 
         while let Some(param) = it.next() {
@@ -65,6 +66,15 @@ impl<'a> syntax::Visitor<'a> for SignatureHelpOperation<'a> {
             }
         }
         label.push(')');
+
+        // --- return type
+        match function_type.return_type() {
+            TypeKind::Void => {}
+            TypeKind::TypeVariable(_) => {}
+            ty => {
+                label.push_str(&format!(" -> {}", ty));
+            }
+        };
 
         // find the index of an active parameter
         let active_param_index = call_expr
