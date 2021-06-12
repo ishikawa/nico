@@ -43,8 +43,9 @@ impl<'a> syntax::Visitor<'a> for SignatureHelpOperation<'a> {
 
         label.push_str("fun ");
         label.push_str(function_type.name());
-        label.push_str("(");
+        label.push('(');
 
+        // parameters
         let mut it = function_type.parameters().peekable();
 
         while let Some(param) = it.next() {
@@ -63,7 +64,14 @@ impl<'a> syntax::Visitor<'a> for SignatureHelpOperation<'a> {
                 label.push_str(", ");
             }
         }
-        label.push_str(")");
+        label.push(')');
+
+        // find the index of an active parameter
+        let active_param_index = call_expr
+            .arguments()
+            .position(|x| self.position <= x.range().end)
+            .unwrap_or(call_expr.arguments().len());
+        let active_param_index = u32::try_from(active_param_index).unwrap();
 
         let info = SignatureInformation {
             label,
@@ -75,7 +83,7 @@ impl<'a> syntax::Visitor<'a> for SignatureHelpOperation<'a> {
         let help = SignatureHelp {
             signatures: vec![info],
             active_signature: Some(0),
-            active_parameter: Some(0),
+            active_parameter: Some(active_param_index),
         };
 
         self.result.replace(help);
