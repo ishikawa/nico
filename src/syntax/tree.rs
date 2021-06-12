@@ -1465,7 +1465,7 @@ impl fmt::Display for SubscriptExpression<'_> {
 
 #[derive(Debug)]
 pub struct AstErrors<'a> {
-    semantic_errors: BumpaloBox<'a, RefCell<BumpaloVec<'a, SemanticError>>>,
+    semantic_errors: BumpaloBox<'a, RefCell<BumpaloVec<'a, SemanticError<'a>>>>,
 }
 
 impl<'a> AstErrors<'a> {
@@ -1478,11 +1478,11 @@ impl<'a> AstErrors<'a> {
         }
     }
 
-    pub fn push_semantic_error(&self, error: SemanticError) {
+    pub fn push_semantic_error(&self, error: SemanticError<'a>) {
         self.semantic_errors.borrow_mut().push(error);
     }
 
-    pub fn semantic_errors(&self) -> RefVecIter<'_, 'a, SemanticError> {
+    pub fn semantic_errors(&self) -> RefVecIter<'_, 'a, SemanticError<'a>> {
         RefVecIter {
             vec: self.semantic_errors.borrow(),
         }

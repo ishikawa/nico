@@ -1038,10 +1038,16 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
     }
 
     fn exit_call_expression(&mut self, _path: &'a NodePath<'a>, call_expr: &'a CallExpression<'a>) {
-        let function_type = call_expr.callee().r#type();
-        let function_type = function_type
-            .function_type()
-            .unwrap_or_else(|| panic!("Expected callable function, found {}", function_type));
+        let callee_type = call_expr.callee().r#type();
+
+        let function_type = if let Some(function_type) = callee_type.function_type() {
+            function_type
+        } else {
+            call_expr
+                .errors()
+                .push_semantic_error(SemanticError::CalleeIsNotCallable { callee_type });
+            return;
+        };
 
         // return type
         debug!(
