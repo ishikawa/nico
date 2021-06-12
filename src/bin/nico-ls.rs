@@ -727,6 +727,22 @@ impl<'a> Connection<'a> {
         })
     }
 
+    // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_completion
+    fn on_text_document_signature_help(
+        &self,
+        params: &SignatureHelpParams,
+    ) -> Result<Option<SignatureHelp>, HandlerError> {
+        info!("[on_text_document_signature_help] {:?}", params);
+        let uri = &params.text_document_position_params.text_document.uri;
+        let node = self.get_compiled_result(uri)?;
+        let mut operation = language_server::SignatureHelpOperation::new(
+            self.arena,
+            syntax_position(params.text_document_position_params.position),
+        );
+
+        Ok(operation.help(&node))
+    }
+
     fn on_text_document_hover(&self, params: &HoverParams) -> Result<Option<Hover>, HandlerError> {
         info!("[on_text_document_hover] {:?}", params);
         let uri = &params.text_document_position_params.text_document.uri;
@@ -1005,6 +1021,12 @@ fn event_loop_main(conn: &mut Connection<'_>) -> Result<(), HandlerError> {
             let params = request.take_params::<HoverParams>()?;
 
             let result = conn.on_text_document_hover(&params)?;
+            conn.send_response(&request_id.unwrap(), result)?;
+        }
+        "textDocument/signatureHelp" => {
+            let params = request.take_params::<SignatureHelpParams>()?;
+
+            let result = conn.on_text_document_signature_help(&params)?;
             conn.send_response(&request_id.unwrap(), result)?;
         }
         "textDocument/prepareRename" => {
