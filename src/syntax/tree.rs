@@ -1536,6 +1536,11 @@ impl<'a> CallExpression<'a> {
         self.arguments.iter().copied()
     }
 
+    pub fn callee_type(&self) -> Option<&'a FunctionType<'a>> {
+        let function_type = self.callee().r#type();
+        function_type.function_type()
+    }
+
     pub fn r#type(&self) -> TypeKind<'a> {
         self.get_type().expect("Uninitialized semantic value.")
     }

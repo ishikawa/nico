@@ -732,7 +732,15 @@ impl<'a> Connection<'a> {
         &self,
         params: &SignatureHelpParams,
     ) -> Result<Option<SignatureHelp>, HandlerError> {
-        Ok(None)
+        info!("[on_text_document_signature_help] {:?}", params);
+        let uri = &params.text_document_position_params.text_document.uri;
+        let node = self.get_compiled_result(uri)?;
+        let mut operation = language_server::SignatureHelpOperation::new(
+            self.arena,
+            syntax_position(params.text_document_position_params.position),
+        );
+
+        Ok(operation.help(&node))
     }
 
     fn on_text_document_hover(&self, params: &HoverParams) -> Result<Option<Hover>, HandlerError> {
