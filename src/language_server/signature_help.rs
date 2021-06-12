@@ -68,9 +68,8 @@ impl<'a> syntax::Visitor<'a> for SignatureHelpOperation<'a> {
         label.push(')');
 
         // --- return type
-        match function_type.return_type() {
+        match function_type.return_type().terminal_type() {
             TypeKind::Void => {}
-            TypeKind::TypeVariable(_) => {}
             ty => {
                 label.push_str(&format!(" -> {}", ty));
             }
@@ -80,7 +79,7 @@ impl<'a> syntax::Visitor<'a> for SignatureHelpOperation<'a> {
         let active_param_index = call_expr
             .arguments()
             .position(|x| self.position <= x.range().end)
-            .unwrap_or(call_expr.arguments().len());
+            .unwrap_or_else(|| call_expr.arguments().len());
         let active_param_index = u32::try_from(active_param_index).unwrap();
 
         let info = SignatureInformation {

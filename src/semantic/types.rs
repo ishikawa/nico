@@ -168,7 +168,7 @@ impl<'a> TypeKind<'a> {
         Err(TypeError::TypeMismatchError(mismatch))
     }
 
-    fn terminal_type(self) -> Self {
+    pub fn terminal_type(self) -> Self {
         if let TypeKind::TypeVariable(ty) = self {
             ty.terminal_type()
         } else {
@@ -183,19 +183,6 @@ impl<'a> TypeKind<'a> {
             TypeKind::ArrayType(ty) => ty.type_specifier(),
             TypeKind::TypeVariable(ty) => ty.type_specifier(),
             _ => self.to_string(),
-        }
-    }
-
-    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
-        match self {
-            TypeKind::Int32 => TypeKind::Int32,
-            TypeKind::Boolean => TypeKind::Boolean,
-            TypeKind::String => TypeKind::String,
-            TypeKind::Void => TypeKind::Void,
-            TypeKind::StructType(ty) => ty.resolve_type(arena),
-            TypeKind::FunctionType(ty) => ty.resolve_type(arena),
-            TypeKind::ArrayType(ty) => ty.resolve_type(arena),
-            TypeKind::TypeVariable(ty) => ty.resolve_type(arena),
         }
     }
 }
@@ -288,22 +275,6 @@ impl<'a> StructType<'a> {
 
     pub fn type_specifier(&self) -> String {
         self.name().to_string()
-    }
-
-    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
-        let fields: Vec<_> = self
-            .fields()
-            .map(|f| {
-                &*arena.alloc(StructField::new(
-                    arena,
-                    f.name(),
-                    f.r#type().resolve_type(arena),
-                ))
-            })
-            .collect();
-
-        let struct_type = &*arena.alloc(Self::new(arena, self.name(), &fields));
-        TypeKind::StructType(struct_type)
     }
 }
 
@@ -492,23 +463,6 @@ impl<'a> FunctionType<'a> {
 
         buffer
     }
-
-    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
-        let parameters: Vec<_> = self
-            .parameters()
-            .map(|p| {
-                &*arena.alloc(FunctionParameter::new(
-                    arena,
-                    p.name(),
-                    p.r#type().resolve_type(arena),
-                ))
-            })
-            .collect();
-        let return_type = self.return_type.resolve_type(arena);
-        let function_type = &*arena.alloc(Self::new(arena, self.name(), &parameters, return_type));
-
-        TypeKind::FunctionType(function_type)
-    }
 }
 
 impl Display for FunctionType<'_> {
@@ -617,13 +571,6 @@ impl<'a> ArrayType<'a> {
     pub fn type_specifier(&self) -> String {
         self.to_string()
     }
-
-    pub fn resolve_type(&self, arena: &'a BumpaloArena) -> TypeKind<'a> {
-        let element_type = self.element_type.resolve_type(arena);
-        let array_type = &*arena.alloc(Self::new(element_type));
-
-        TypeKind::ArrayType(array_type)
-    }
 }
 
 impl Display for ArrayType<'_> {
@@ -685,10 +632,6 @@ impl<'a> TypeVariable<'a> {
         } else {
             self.to_string()
         }
-    }
-
-    pub fn resolve_type(&'a self, _arena: &'a BumpaloArena) -> TypeKind<'a> {
-        self.terminal_type()
     }
 }
 
