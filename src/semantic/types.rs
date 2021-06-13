@@ -114,12 +114,14 @@ impl<'a> TypeKind<'a> {
                     return fun_type1.unify(arena, fun_type2);
                 }
             }
-            _ => {
-                if let TypeKind::TypeVariable(_) = ty2 {
-                    // trying opposite side.
-                    return ty2.unify(arena, ty1);
-                }
-            }
+            _ => {}
+        }
+
+        // trying opposite side.
+        if let TypeKind::TypeVariable(_) = ty2 {
+            // unreachable
+            assert!(ty1.type_variable().is_none());
+            return ty2.unify(arena, ty1);
         }
 
         let mismatch = TypeMismatchError::new(ty2, ty1);
@@ -981,9 +983,12 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         parameters
             .zip(arguments)
             .enumerate()
-            .for_each(|(i, (p, arg))| {
-                debug!("[inference] call_expression (arg #{}): {}, {}", i, p, arg);
-                if let Err(err) = p.r#type().unify(self.arena, arg.r#type()) {
+            .for_each(|(i, (param, arg))| {
+                debug!(
+                    "[inference] call_expression (arg #{}): {}, {}",
+                    i, param, arg
+                );
+                if let Err(err) = arg.r#type().unify(self.arena, param.r#type()) {
                     arg.errors()
                         .push_semantic_error(SemanticError::TypeError(err));
                 }
