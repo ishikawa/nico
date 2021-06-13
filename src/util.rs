@@ -1,4 +1,6 @@
+pub mod collections;
 pub mod naming;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 
