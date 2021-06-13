@@ -1,5 +1,6 @@
 use crate::arena::BumpaloArena;
 use crate::arena::{BumpaloString, BumpaloVec};
+use crate::semantic::errors::TypeMismatchError;
 use crate::semantic::SemanticError;
 use crate::syntax::{
     self, ArrayExpression, BinaryExpression, CallExpression, CaseExpression, FunctionDefinition,
@@ -12,50 +13,7 @@ use log::debug;
 use std::cell::Cell;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TypeError<'a> {
-    TypeMismatchError(TypeMismatchError<'a>),
-}
-
-impl Display for TypeError<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self::TypeMismatchError(err) = self;
-        err.fmt(f)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TypeMismatchError<'a> {
-    expected_type: TypeKind<'a>,
-    actual_type: TypeKind<'a>,
-}
-
-impl<'a> TypeMismatchError<'a> {
-    pub fn new(expected_type: TypeKind<'a>, actual_type: TypeKind<'a>) -> Self {
-        Self {
-            expected_type,
-            actual_type,
-        }
-    }
-
-    pub fn expected_type(&self) -> TypeKind<'a> {
-        self.expected_type
-    }
-
-    pub fn actual_type(&self) -> TypeKind<'a> {
-        self.actual_type
-    }
-}
-
-impl Display for TypeMismatchError<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "mismatched types")?;
-        write!(f, "expected ")?;
-        writeln!(f, "`{}`", self.expected_type())?;
-        write!(f, "   found ")?;
-        write!(f, "`{}`", self.actual_type())
-    }
-}
+use super::errors::TypeError;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TypeKind<'a> {

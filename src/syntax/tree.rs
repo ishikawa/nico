@@ -45,7 +45,8 @@
 use super::{Code, CodeKind, CodeKindIter, EffectiveRange, Token};
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString, BumpaloVec};
 use crate::semantic::{Binding, FunctionType, Scope, SemanticError, StructType, TypeKind};
-use std::cell::{Cell, Ref, RefCell};
+use crate::util::collections::RefVecIter;
+use std::cell::{Cell, RefCell};
 use std::fmt;
 
 pub trait Node<'arena> {
@@ -381,6 +382,30 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::ValueFieldPattern(kind) => kind.code(),
             NodeKind::GroupedExpression(kind) => kind.code(),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct AstErrors<'a> {
+    semantic_errors: BumpaloBox<'a, RefCell<BumpaloVec<'a, SemanticError<'a>>>>,
+}
+
+impl<'a> AstErrors<'a> {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
+        Self {
+            semantic_errors: BumpaloBox::new_in(
+                RefCell::new(BumpaloVec::with_capacity_in(0, arena)),
+                arena,
+            ),
+        }
+    }
+
+    pub fn push_semantic_error(&self, error: SemanticError<'a>) {
+        self.semantic_errors.borrow_mut().push(error);
+    }
+
+    pub fn semantic_errors(&self) -> RefVecIter<'_, 'a, SemanticError<'a>> {
+        RefVecIter::new(self.semantic_errors.borrow())
     }
 }
 
@@ -1460,46 +1485,6 @@ impl<'a> Node<'a> for SubscriptExpression<'a> {
 impl fmt::Display for SubscriptExpression<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SubscriptExpression({})", self.callee())
-    }
-}
-
-#[derive(Debug)]
-pub struct AstErrors<'a> {
-    semantic_errors: BumpaloBox<'a, RefCell<BumpaloVec<'a, SemanticError<'a>>>>,
-}
-
-impl<'a> AstErrors<'a> {
-    pub fn new(arena: &'a BumpaloArena) -> Self {
-        Self {
-            semantic_errors: BumpaloBox::new_in(
-                RefCell::new(BumpaloVec::with_capacity_in(0, arena)),
-                arena,
-            ),
-        }
-    }
-
-    pub fn push_semantic_error(&self, error: SemanticError<'a>) {
-        self.semantic_errors.borrow_mut().push(error);
-    }
-
-    pub fn semantic_errors(&self) -> RefVecIter<'_, 'a, SemanticError<'a>> {
-        RefVecIter {
-            vec: self.semantic_errors.borrow(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct RefVecIter<'r, 'arena, T> {
-    vec: Ref<'r, BumpaloVec<'arena, T>>,
-}
-
-impl<'a: 'r, 'r, 'arena, T> IntoIterator for &'a RefVecIter<'r, 'arena, T> {
-    type IntoIter = std::slice::Iter<'r, T>;
-    type Item = &'r T;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.vec.iter()
     }
 }
 
