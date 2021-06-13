@@ -1135,6 +1135,24 @@ impl<'a> Expression<'a> {
             ExpressionKind::GroupedExpression(expr) => expr.r#type(),
         }
     }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        match self.kind() {
+            ExpressionKind::IntegerLiteral(expr) => expr.errors(),
+            ExpressionKind::StringLiteral(expr) => expr.errors(),
+            ExpressionKind::VariableExpression(expr) => expr.errors(),
+            ExpressionKind::BinaryExpression(expr) => expr.errors(),
+            ExpressionKind::UnaryExpression(expr) => expr.errors(),
+            ExpressionKind::SubscriptExpression(expr) => expr.errors(),
+            ExpressionKind::CallExpression(expr) => expr.errors(),
+            ExpressionKind::ArrayExpression(expr) => expr.errors(),
+            ExpressionKind::IfExpression(expr) => expr.errors(),
+            ExpressionKind::CaseExpression(expr) => expr.errors(),
+            ExpressionKind::MemberExpression(expr) => expr.errors(),
+            ExpressionKind::StructLiteral(expr) => expr.errors(),
+            ExpressionKind::GroupedExpression(expr) => expr.errors(),
+        }
+    }
 }
 
 impl<'a> Node<'a> for Expression<'a> {
@@ -1155,6 +1173,7 @@ pub struct StructLiteral<'a> {
     fields: BumpaloVec<'a, &'a ValueField<'a>>,
     code: Code<'a>,
     r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> StructLiteral<'a> {
@@ -1169,6 +1188,7 @@ impl<'a> StructLiteral<'a> {
             fields: BumpaloVec::from_iter_in(fields, arena),
             code,
             r#type: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1194,6 +1214,10 @@ impl<'a> StructLiteral<'a> {
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1272,6 +1296,7 @@ pub struct BinaryExpression<'a> {
     rhs: Option<&'a Expression<'a>>,
     code: Code<'a>,
     r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> BinaryExpression<'a> {
@@ -1288,6 +1313,7 @@ impl<'a> BinaryExpression<'a> {
             rhs,
             code,
             r#type: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1314,6 +1340,10 @@ impl<'a> BinaryExpression<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl<'a> Node<'a> for BinaryExpression<'a> {
@@ -1334,6 +1364,7 @@ pub struct UnaryExpression<'a> {
     operand: Option<&'a Expression<'a>>,
     code: Code<'a>,
     r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> UnaryExpression<'a> {
@@ -1348,6 +1379,7 @@ impl<'a> UnaryExpression<'a> {
             operand,
             code,
             r#type: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1369,6 +1401,10 @@ impl<'a> UnaryExpression<'a> {
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1438,6 +1474,7 @@ pub struct SubscriptExpression<'a> {
     arguments: BumpaloVec<'a, &'a Expression<'a>>,
     code: Code<'a>,
     r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> SubscriptExpression<'a> {
@@ -1452,6 +1489,7 @@ impl<'a> SubscriptExpression<'a> {
             arguments: BumpaloVec::from_iter_in(arguments, arena),
             code,
             r#type: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1473,6 +1511,10 @@ impl<'a> SubscriptExpression<'a> {
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1561,6 +1603,7 @@ pub struct MemberExpression<'a> {
     field: Option<&'a Identifier<'a>>,
     code: Code<'a>,
     r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> MemberExpression<'a> {
@@ -1575,6 +1618,7 @@ impl<'a> MemberExpression<'a> {
             field,
             code,
             r#type: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1596,6 +1640,10 @@ impl<'a> MemberExpression<'a> {
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1620,6 +1668,7 @@ pub struct ArrayExpression<'a> {
     elements: BumpaloVec<'a, &'a Expression<'a>>,
     code: Code<'a>,
     r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> ArrayExpression<'a> {
@@ -1632,6 +1681,7 @@ impl<'a> ArrayExpression<'a> {
             elements: BumpaloVec::from_iter_in(elements, arena),
             code,
             r#type: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1649,6 +1699,10 @@ impl<'a> ArrayExpression<'a> {
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1671,6 +1725,7 @@ pub struct IfExpression<'a> {
     else_body: Option<&'a Block<'a>>,
     code: Code<'a>,
     r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> IfExpression<'a> {
@@ -1687,6 +1742,7 @@ impl<'a> IfExpression<'a> {
             else_body,
             code,
             r#type: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1713,6 +1769,10 @@ impl<'a> IfExpression<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl<'a> Node<'a> for IfExpression<'a> {
@@ -1734,6 +1794,7 @@ pub struct CaseExpression<'a> {
     else_body: Option<&'a Block<'a>>,
     code: Code<'a>,
     r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> CaseExpression<'a> {
@@ -1750,6 +1811,7 @@ impl<'a> CaseExpression<'a> {
             else_body,
             code,
             r#type: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1775,6 +1837,10 @@ impl<'a> CaseExpression<'a> {
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1853,12 +1919,17 @@ impl fmt::Display for CaseArm<'_> {
 pub struct IntegerLiteral<'a> {
     value: i32,
     code: CodeKind<'a>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> IntegerLiteral<'a> {
-    pub fn new(value: i32, token: Token) -> Self {
+    pub fn new(arena: &'a BumpaloArena, value: i32, token: Token) -> Self {
         let code = CodeKind::interpreted(token);
-        Self { value, code }
+        Self {
+            value,
+            code,
+            errors: AstErrors::new(arena),
+        }
     }
 
     pub fn value(&self) -> i32 {
@@ -1867,6 +1938,10 @@ impl<'a> IntegerLiteral<'a> {
 
     pub fn r#type(&self) -> TypeKind<'a> {
         TypeKind::Int32
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1886,6 +1961,7 @@ impl fmt::Display for IntegerLiteral<'_> {
 pub struct StringLiteral<'a> {
     value: Option<BumpaloString<'a>>,
     code: Code<'a>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> StringLiteral<'a> {
@@ -1893,6 +1969,7 @@ impl<'a> StringLiteral<'a> {
         Self {
             value: value.map(|x| BumpaloString::from_str_in(x.as_ref(), arena)),
             code,
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1902,6 +1979,9 @@ impl<'a> StringLiteral<'a> {
 
     pub fn r#type(&self) -> TypeKind<'a> {
         TypeKind::String
+    }
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1926,6 +2006,7 @@ pub struct VariableExpression<'a> {
     id: &'a Identifier<'a>,
     code: CodeKind<'a>,
     r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> VariableExpression<'a> {
@@ -1935,6 +2016,7 @@ impl<'a> VariableExpression<'a> {
             id,
             code,
             r#type: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1957,6 +2039,10 @@ impl<'a> VariableExpression<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl<'a> Node<'a> for VariableExpression<'a> {
@@ -1976,6 +2062,7 @@ pub struct GroupedExpression<'a> {
     expression: Option<&'a Expression<'a>>,
     code: Code<'a>,
     r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> GroupedExpression<'a> {
@@ -1988,6 +2075,7 @@ impl<'a> GroupedExpression<'a> {
             expression,
             code,
             r#type: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -2006,6 +2094,10 @@ impl<'a> GroupedExpression<'a> {
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 

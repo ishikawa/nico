@@ -981,18 +981,12 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         parameters
             .zip(arguments)
             .enumerate()
-            .for_each(|(i, (p, a))| {
-                debug!("[inference] call_expression (arg #{}): {}, {}", i, p, a);
-                p.r#type()
-                    .unify(self.arena, a.r#type())
-                    .unwrap_or_else(|err| {
-                        panic!(
-                            "Type error at arg #{} of function `{}`: {}",
-                            i,
-                            function_type.name(),
-                            err
-                        )
-                    });
+            .for_each(|(i, (p, arg))| {
+                debug!("[inference] call_expression (arg #{}): {}, {}", i, p, arg);
+                if let Err(err) = p.r#type().unify(self.arena, arg.r#type()) {
+                    arg.errors()
+                        .push_semantic_error(SemanticError::TypeError(err));
+                }
             })
     }
 }
