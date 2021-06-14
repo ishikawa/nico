@@ -19,8 +19,9 @@ pub enum TypeError<'a> {
 
 impl Display for TypeError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self::TypeMismatchError(err) = self;
-        err.fmt(f)
+        match self {
+            TypeError::TypeMismatchError(err) => err.fmt(f),
+        }
     }
 }
 

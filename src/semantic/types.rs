@@ -75,12 +75,12 @@ impl<'a> TypeKind<'a> {
     pub fn unify(
         &self,
         arena: &'a BumpaloArena,
-        other: TypeKind<'a>,
+        expected_type: TypeKind<'a>,
     ) -> Result<TypeKind<'a>, TypeError<'a>> {
-        debug!("[unify] {} - {}", self, other);
+        debug!("[unify] {} - {}", self, expected_type);
 
         let ty1 = self.terminal_type();
-        let ty2 = other.terminal_type();
+        let ty2 = expected_type.terminal_type();
         debug!("[unify] prune: {} - {}", ty1, ty2);
 
         // Already unified.
@@ -121,7 +121,16 @@ impl<'a> TypeKind<'a> {
         if let TypeKind::TypeVariable(_) = ty2 {
             // unreachable
             assert!(ty1.type_variable().is_none());
-            return ty2.unify(arena, ty1);
+
+            // reverse if mismatched error
+            return match ty2.unify(arena, ty1) {
+                Err(TypeError::TypeMismatchError(mismatch)) => {
+                    let mismatch =
+                        TypeMismatchError::new(mismatch.actual_type(), mismatch.expected_type());
+                    Err(TypeError::TypeMismatchError(mismatch))
+                }
+                u => u,
+            };
         }
 
         let mismatch = TypeMismatchError::new(ty2, ty1);
@@ -162,21 +171,44 @@ impl Display for TypeKind<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct StructType<'a> {
-    name: BumpaloString<'a>,
-    fields: BumpaloVec<'a, &'a StructField<'a>>,
+#[derive(Debug, Clone)]
+struct TypeFieldList<'a> {
+    fields: BumpaloVec<'a, &'a TypeField<'a>>,
 }
 
-impl<'a> StructType<'a> {
-    pub fn new(arena: &'a BumpaloArena, name: &str, field_types: &[&'a StructField<'a>]) -> Self {
+impl<'a> TypeFieldList<'a> {
+    pub fn new(arena: &'a BumpaloArena, field_types: &[&'a TypeField<'a>]) -> Self {
         let mut fields = BumpaloVec::with_capacity_in(field_types.len(), arena);
 
         fields.extend(field_types);
 
+        Self { fields }
+    }
+
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
+        self.fields.iter().copied()
+    }
+
+    pub fn get_field(&self, name: &str) -> Option<&'a TypeField<'a>> {
+        self.fields.iter().find(|f| f.name() == name).copied()
+    }
+
+    pub fn get_field_type(&self, name: &str) -> Option<TypeKind<'a>> {
+        self.get_field(name).map(|f| f.r#type())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StructType<'a> {
+    name: BumpaloString<'a>,
+    fields: TypeFieldList<'a>,
+}
+
+impl<'a> StructType<'a> {
+    pub fn new(arena: &'a BumpaloArena, name: &str, field_types: &[&'a TypeField<'a>]) -> Self {
         Self {
             name: BumpaloString::from_str_in(name, arena),
-            fields,
+            fields: TypeFieldList::new(arena, field_types),
         }
     }
 
@@ -184,44 +216,43 @@ impl<'a> StructType<'a> {
         self.name.as_str()
     }
 
-    pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a StructField<'a>> + '_ {
-        self.fields.iter().copied()
+    pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
+        self.fields.iter()
     }
 
     pub fn get_field_type(&self, name: &str) -> Option<TypeKind<'a>> {
-        self.fields
-            .iter()
-            .find(|f| f.name() == name)
-            .map(|f| f.r#type())
+        self.fields.get_field_type(name)
     }
 
+    /// Is a type `self` assignable to `other`?
     pub fn unify(
         &'a self,
         arena: &'a BumpaloArena,
-        other: &'a StructType<'a>,
+        expected_type: &'a StructType<'a>,
     ) -> Result<TypeKind<'a>, TypeError<'a>> {
-        if self.name() != other.name() {
-            let mismatch =
-                TypeMismatchError::new(TypeKind::StructType(other), TypeKind::StructType(self));
+        // Struct follows nominal subtyping.
+        if self.name() != expected_type.name() {
+            let mismatch = TypeMismatchError::new(
+                TypeKind::StructType(expected_type),
+                TypeKind::StructType(self),
+            );
             return Err(TypeError::TypeMismatchError(mismatch));
         }
 
-        for (i, (x, y)) in self.fields().zip(other.fields()).enumerate() {
+        for (i, (x, y)) in self.fields().zip(expected_type.fields()).enumerate() {
             if let Err(err) = x.unify(arena, y) {
                 match err {
                     TypeError::TypeMismatchError(mismatch) => {
                         let mut fields: Vec<_> = self.fields().collect();
 
-                        fields[i] = arena.alloc(StructField::new(
-                            arena,
-                            y.name(),
-                            mismatch.expected_type(),
-                        ));
+                        fields[i] =
+                            arena.alloc(TypeField::new(arena, y.name(), mismatch.expected_type()));
 
-                        let expected = arena.alloc(StructType::new(arena, other.name(), &fields));
+                        let expected =
+                            arena.alloc(StructType::new(arena, expected_type.name(), &fields));
                         let mismatch = TypeMismatchError::new(
                             TypeKind::StructType(expected),
-                            TypeKind::StructType(other),
+                            TypeKind::StructType(self),
                         );
 
                         return Err(TypeError::TypeMismatchError(mismatch));
@@ -235,6 +266,16 @@ impl<'a> StructType<'a> {
 
     pub fn type_specifier(&self) -> String {
         self.name().to_string()
+    }
+}
+
+impl PartialEq for StructType<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.name() != other.name() {
+            return false;
+        }
+
+        true
     }
 }
 
@@ -256,12 +297,12 @@ impl Display for StructType<'_> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct StructField<'a> {
+pub struct TypeField<'a> {
     name: BumpaloString<'a>,
     r#type: TypeKind<'a>,
 }
 
-impl<'a> StructField<'a> {
+impl<'a> TypeField<'a> {
     pub fn new(arena: &'a BumpaloArena, name: &str, r#type: TypeKind<'a>) -> Self {
         Self {
             name: BumpaloString::from_str_in(name, arena),
@@ -280,7 +321,7 @@ impl<'a> StructField<'a> {
     pub fn unify(
         &'a self,
         arena: &'a BumpaloArena,
-        other: &'a StructField<'a>,
+        other: &'a TypeField<'a>,
     ) -> Result<TypeKind<'a>, TypeError<'a>> {
         if self.name() != other.name() {
             let mismatch = TypeMismatchError::new(other.r#type(), self.r#type());
@@ -300,7 +341,7 @@ impl<'a> StructField<'a> {
     }
 }
 
-impl Display for StructField<'_> {
+impl Display for TypeField<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.name(), self.r#type())
     }
@@ -644,7 +685,7 @@ impl<'a> InitialTypeBinder<'a> {
             let name = f.name()?.as_str();
             let ty = f.type_annotation()?.r#type();
 
-            let field = &*self.arena.alloc(StructField::new(self.arena, name, ty));
+            let field = &*self.arena.alloc(TypeField::new(self.arena, name, ty));
 
             field_types.push(field);
         }
