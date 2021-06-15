@@ -655,7 +655,8 @@ impl<'a> PartialEq for TypeVariable<'a> {
 
 // --- Type inference visitors ---
 
-/// A visitor assigns an initial type (type variable or primitive type) to a node.
+/// A visitor assigns an initial type (type variable or primitive type) to a node
+/// without unification.
 #[derive(Debug)]
 pub(super) struct InitialTypeBinder<'a> {
     arena: &'a BumpaloArena,
@@ -781,7 +782,17 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
     }
 
     fn exit_block(&mut self, _path: &'a NodePath<'a>, block: &'a syntax::Block<'a>) {
-        block.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        // The type of a block is actually the return type of the last expression that
+        // occurs in the body.
+        if let Some(stmt) = block.statements().last() {
+            if let Some(expr) = stmt.expression() {
+                block.assign_type(expr.r#type());
+                return;
+            }
+        }
+
+        // Otherwise, the type of a block is `void`
+        block.assign_type(TypeKind::Void);
     }
 
     fn exit_call_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CallExpression<'a>) {
@@ -841,27 +852,6 @@ impl<'a> TypeInferencer<'a> {
 }
 
 impl<'a> Visitor<'a> for TypeInferencer<'a> {
-    fn exit_block(&mut self, _path: &'a NodePath<'a>, block: &'a syntax::Block<'a>) {
-        // The type of a block is actually the return type of the last expression that
-        // occurs in the body.
-        if let Some(stmt) = block.statements().last() {
-            if let Some(expr) = stmt.expression() {
-                debug!("[inference] block: {}, {}", block, expr);
-                block
-                    .r#type()
-                    .unify(self.arena, expr.r#type())
-                    .unwrap_or_else(|err| panic!("Type error: {}", err));
-                return;
-            }
-        }
-
-        // Otherwise, the type of a block is `void`
-        block
-            .r#type()
-            .unify(self.arena, TypeKind::Void)
-            .unwrap_or_else(|err| panic!("Type error: {}", err));
-    }
-
     fn exit_function_definition(
         &mut self,
         _path: &'a NodePath<'a>,
