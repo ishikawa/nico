@@ -198,7 +198,19 @@ impl<'a> TypeFieldList<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+impl PartialEq for TypeFieldList<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.fields.len() != other.fields.len() {
+            return false;
+        }
+
+        self.fields
+            .iter()
+            .all(|f1| other.get_field(f1.name()).filter(|f2| f1 == f2).is_some())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct StructType<'a> {
     name: BumpaloString<'a>,
     fields: TypeFieldList<'a>,
@@ -230,6 +242,8 @@ impl<'a> StructType<'a> {
         arena: &'a BumpaloArena,
         expected_type: &'a StructType<'a>,
     ) -> Result<TypeKind<'a>, TypeError<'a>> {
+        debug!("[unify:struct] {} -> {}", self, expected_type);
+
         // Struct follows nominal subtyping.
         if self.name() != expected_type.name() {
             let mismatch = TypeMismatchError::new(
@@ -266,16 +280,6 @@ impl<'a> StructType<'a> {
 
     pub fn type_specifier(&self) -> String {
         self.name().to_string()
-    }
-}
-
-impl PartialEq for StructType<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        if self.name() != other.name() {
-            return false;
-        }
-
-        true
     }
 }
 
@@ -720,6 +724,27 @@ impl<'a> InitialTypeBinder<'a> {
 
         Some(&*self.arena.alloc(ty))
     }
+
+    fn build_struct_literal_type(
+        &mut self,
+        literal: &'a StructLiteral<'a>,
+    ) -> Option<&'a StructType<'a>> {
+        let name = literal.name();
+        let mut field_types = vec![];
+
+        for f in literal.fields() {
+            let name = f.name().as_str();
+
+            let field = &*self
+                .arena
+                .alloc(TypeField::new(self.arena, name, f.r#type()));
+
+            field_types.push(field);
+        }
+
+        let ty = StructType::new(self.arena, name.as_str(), &field_types);
+        Some(&*self.arena.alloc(ty))
+    }
 }
 
 impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
@@ -756,8 +781,12 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         param.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn exit_struct_literal(&mut self, _path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {
-        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    fn exit_struct_literal(&mut self, _path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
+        if let Some(ty) = self.build_struct_literal_type(literal) {
+            literal.assign_type(TypeKind::StructType(ty))
+        } else {
+            literal.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        }
     }
 
     fn exit_value_field(
@@ -766,7 +795,11 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         _struct_literal: &'a StructLiteral<'a>,
         field: &'a ValueField<'a>,
     ) {
-        field.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        if let Some(expr) = field.value() {
+            field.assign_type(expr.r#type());
+        } else {
+            field.assign_type(TypeKind::TypeVariable(self.new_type_var()));
+        }
     }
 
     fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
@@ -871,20 +904,16 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
     }
 
     fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
-        let binding = match path.scope().get_binding(literal.name().as_str()) {
-            Some(binding) => binding,
-            None => return,
-        };
+        let binding = unwrap_or_return!(path.scope().get_binding(literal.name().as_str()));
+        let struct_def = unwrap_or_return!(binding.struct_definition());
 
-        let struct_def = match binding.struct_definition() {
-            Some(struct_def) => struct_def,
-            None => return,
-        };
+        debug!("[inference] struct literal: {}, {}", literal, struct_def);
 
-        literal
-            .r#type()
-            .unify(self.arena, struct_def.r#type())
-            .unwrap_or_else(|err| panic!("Type error: {}", err));
+        if let Err(err) = literal.r#type().unify(self.arena, struct_def.r#type()) {
+            literal
+                .errors()
+                .push_semantic_error(SemanticError::TypeError(err));
+        }
     }
 
     fn exit_variable_declaration(
