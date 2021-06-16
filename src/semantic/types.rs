@@ -11,7 +11,7 @@ use crate::syntax::{
 use crate::unwrap_or_return;
 use log::debug;
 use std::cell::Cell;
-use std::fmt::Display;
+use std::fmt;
 
 use super::errors::TypeError;
 
@@ -52,14 +52,6 @@ impl<'a> TypeKind<'a> {
         }
     }
 
-    pub fn type_variable(&self) -> Option<&'a TypeVariable<'a>> {
-        if let TypeKind::TypeVariable(ty) = self {
-            Some(ty)
-        } else {
-            None
-        }
-    }
-
     pub fn is_function_type(&self) -> bool {
         self.function_type().is_some()
     }
@@ -90,14 +82,7 @@ impl<'a> TypeKind<'a> {
 
         match ty1 {
             TypeKind::TypeVariable(var) => {
-                // `ty1` was pruned, so its instance must be `None`
-                assert!(var.instance().is_none());
-                if ty1 != ty2 {
-                    debug!("[unify] replace: {} -> {}", ty1, ty2);
-                    var.replace_instance(ty2);
-                }
-
-                return Ok(ty2);
+                return var.unify(arena, ty2);
             }
             TypeKind::ArrayType(array_type1) => {
                 if let Some(array_type2) = ty2.array_type() {
@@ -118,12 +103,9 @@ impl<'a> TypeKind<'a> {
         }
 
         // trying opposite side.
-        if let TypeKind::TypeVariable(_) = ty2 {
-            // unreachable
-            assert!(ty1.type_variable().is_none());
-
-            // reverse if mismatched error
-            return match ty2.unify(arena, ty1) {
+        if let TypeKind::TypeVariable(var2) = ty2 {
+            return match var2.unify(arena, ty1) {
+                // reverse operand if error occurred.
                 Err(TypeError::TypeMismatchError(mismatch)) => {
                     let mismatch =
                         TypeMismatchError::new(mismatch.actual_type(), mismatch.expected_type());
@@ -156,8 +138,8 @@ impl<'a> TypeKind<'a> {
     }
 }
 
-impl Display for TypeKind<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for TypeKind<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TypeKind::Int32 => write!(f, "i32"),
             TypeKind::Boolean => write!(f, "bool"),
@@ -283,8 +265,8 @@ impl<'a> StructType<'a> {
     }
 }
 
-impl Display for StructType<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for StructType<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "struct {} ", self.name())?;
 
         let mut it = self.fields().peekable();
@@ -345,8 +327,8 @@ impl<'a> TypeField<'a> {
     }
 }
 
-impl Display for TypeField<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for TypeField<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {}", self.name(), self.r#type())
     }
 }
@@ -463,15 +445,21 @@ impl<'a> FunctionType<'a> {
                 buffer.push_str(", ");
             }
         }
-        buffer.push_str(") -> ");
-        buffer.push_str(&self.return_type().type_specifier());
+
+        match self.return_type().terminal_type() {
+            TypeKind::Void => {}
+            ty => {
+                buffer.push_str(") -> ");
+                buffer.push_str(&ty.type_specifier());
+            }
+        };
 
         buffer
     }
 }
 
-impl Display for FunctionType<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for FunctionType<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "fun {}", self.name())?;
 
         let mut it = self.parameters().peekable();
@@ -483,7 +471,15 @@ impl Display for FunctionType<'_> {
                 write!(f, ", ")?;
             }
         }
-        write!(f, ") -> {}", self.return_type())
+
+        match self.return_type().terminal_type() {
+            TypeKind::Void => {
+                write!(f, ")")
+            }
+            ty => {
+                write!(f, ") -> {}", ty)
+            }
+        }
     }
 }
 
@@ -532,8 +528,8 @@ impl<'a> FunctionParameter<'a> {
     }
 }
 
-impl Display for FunctionParameter<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for FunctionParameter<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {}", self.name(), self.r#type().type_specifier())
     }
 }
@@ -578,8 +574,8 @@ impl<'a> ArrayType<'a> {
     }
 }
 
-impl Display for ArrayType<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ArrayType<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}[]", self.element_type().type_specifier())
     }
 }
@@ -594,18 +590,17 @@ impl Display for ArrayType<'_> {
 
 #[derive(Debug, Clone, Copy)]
 pub enum TypeVariableInner<'a> {
-    Uninstantiated(i32),
+    Uninstantiated(Option<i32>),
     Reference(&'a TypeVariable<'a>),
     Instantiated(TypeKind<'a>),
 }
 
 impl Default for TypeVariableInner<'_> {
     fn default() -> Self {
-        Self::Uninstantiated(1)
+        Self::Uninstantiated(Some(1))
     }
 }
 
-#[derive(Debug)]
 pub struct TypeVariable<'a> {
     label: i32,
     inner: Cell<TypeVariableInner<'a>>,
@@ -653,6 +648,40 @@ impl<'a> TypeVariable<'a> {
         self.inner.replace(inner);
     }
 
+    pub fn unify(
+        &'a self,
+        _arena: &'a BumpaloArena,
+        other: TypeKind<'a>,
+    ) -> Result<TypeKind<'a>, TypeError<'a>> {
+        match self.inner.get() {
+            TypeVariableInner::Uninstantiated(_) => {
+                // TODO: confirm interfaces?
+                let inner = if let TypeKind::TypeVariable(var) = other {
+                    debug!("[unify] reference: ?{} -> {}", self.label, other);
+                    TypeVariableInner::Reference(var)
+                } else {
+                    debug!("[unify] instantiation: ?{} -> {}", self.label, other);
+                    TypeVariableInner::Instantiated(other)
+                };
+
+                self.inner.replace(inner);
+                return Ok(TypeKind::TypeVariable(self));
+            }
+            TypeVariableInner::Reference(var) => {
+                unreachable!(
+                    "A type variable ?{} refers the other type variable ?{}",
+                    self.label, var.label
+                );
+            }
+            TypeVariableInner::Instantiated(ty) => {
+                unreachable!(
+                    "A type variable ?{} is already instantiated with {}",
+                    self.label, ty
+                );
+            }
+        };
+    }
+
     pub fn type_specifier(&self) -> String {
         // Prints the instance type if a type variable is already pruned.
         if let TypeVariableInner::Instantiated(ty) = self.inner.get() {
@@ -663,14 +692,33 @@ impl<'a> TypeVariable<'a> {
     }
 }
 
-impl Display for TypeVariable<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for TypeVariable<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Prints the instance type if a type variable is already pruned.
         if let TypeVariableInner::Instantiated(ty) = self.inner.get() {
             ty.fmt(f)
         } else {
             write!(f, "?{}", self.label)
         }
+    }
+}
+
+impl fmt::Debug for TypeVariable<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(")?;
+        write!(f, "?{}", self.label)?;
+        match self.inner.get() {
+            TypeVariableInner::Uninstantiated(_) => {
+                // TODO: interfaces
+            }
+            TypeVariableInner::Reference(var) => {
+                write!(f, " -> {:?}", var)?;
+            }
+            TypeVariableInner::Instantiated(ty) => {
+                write!(f, " -> {}", ty)?;
+            }
+        };
+        write!(f, ")")
     }
 }
 
@@ -1092,9 +1140,29 @@ impl<'a> TypeVariablePruner<'a> {
     }
 
     fn prune(&self, ty: TypeKind<'a>) {
-        if let Some(type_variable) = ty.type_variable() {
-            type_variable.prune()
-        }
+        match ty {
+            TypeKind::Int32 => {}
+            TypeKind::Boolean => {}
+            TypeKind::String => {}
+            TypeKind::Void => {}
+            TypeKind::StructType(ty) => {
+                for f in ty.fields() {
+                    self.prune(f.r#type());
+                }
+            }
+            TypeKind::FunctionType(ty) => {
+                self.prune(ty.return_type());
+                for p in ty.parameters() {
+                    self.prune(p.r#type());
+                }
+            }
+            TypeKind::ArrayType(ty) => {
+                self.prune(ty.element_type());
+            }
+            TypeKind::TypeVariable(var) => {
+                var.prune();
+            }
+        };
     }
 }
 
