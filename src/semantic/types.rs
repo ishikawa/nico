@@ -83,7 +83,7 @@ impl<'a> TypeKind<'a> {
         let ty2 = expected_type.terminal_type();
         debug!("[unify] prune: {} - {}", ty1, ty2);
 
-        // Already unified.
+        // Already unified or primitive type.
         if ty1 == ty2 {
             return Ok(ty2);
         }
@@ -584,10 +584,31 @@ impl Display for ArrayType<'_> {
     }
 }
 
+/// There are three states of a type variable
+///
+/// 1. The initial state is where the type is not materialized. It can be adapted to any number of constraints.
+/// 2. A reference to another type variable. In this case, constraints are moved to the reference.
+/// 3. Finally, the type has been materialized.
+///
+/// The states transition in the above order and do not go backwards.
+
+#[derive(Debug, Clone, Copy)]
+pub enum TypeVariableInner<'a> {
+    Uninstantiated(i32),
+    Reference(&'a TypeVariable<'a>),
+    Instantiated(TypeKind<'a>),
+}
+
+impl Default for TypeVariableInner<'_> {
+    fn default() -> Self {
+        Self::Uninstantiated(1)
+    }
+}
+
 #[derive(Debug)]
 pub struct TypeVariable<'a> {
     label: i32,
-    inner: Cell<Option<TypeKind<'a>>>,
+    inner: Cell<TypeVariableInner<'a>>,
 }
 
 impl<'a> TypeVariable<'a> {
@@ -599,41 +620,43 @@ impl<'a> TypeVariable<'a> {
     }
 
     pub fn instance(&self) -> Option<TypeKind<'a>> {
-        if let Some(inner) = self.inner.get() {
-            match inner {
-                TypeKind::TypeVariable(var) => var.instance(),
-                ty => Some(ty),
-            }
-        } else {
-            None
+        match self.inner.get() {
+            TypeVariableInner::Reference(var) => var.instance(),
+            TypeVariableInner::Instantiated(ty) => Some(ty),
+            TypeVariableInner::Uninstantiated(_) => None,
         }
     }
 
     /// Returns the type variable or concrete type at the deepest position in type chain.
     pub fn terminal_type(&'a self) -> TypeKind<'a> {
-        if let Some(inner) = self.inner.get() {
-            match inner {
-                TypeKind::TypeVariable(var) => var.terminal_type(),
-                ty => ty,
-            }
-        } else {
-            TypeKind::TypeVariable(self)
+        match self.inner.get() {
+            TypeVariableInner::Reference(var) => var.terminal_type(),
+            TypeVariableInner::Instantiated(ty) => ty,
+            TypeVariableInner::Uninstantiated(_) => TypeKind::TypeVariable(self),
         }
     }
 
     /// Prune unnecessary indirections.
     pub fn prune(&self) {
-        self.inner.replace(self.instance());
+        if let TypeVariableInner::Reference(var) = self.inner.get() {
+            self.replace_instance(var.terminal_type());
+        }
     }
 
     pub fn replace_instance(&self, ty: TypeKind<'a>) {
-        self.inner.replace(Some(ty));
+        let inner = if let TypeKind::TypeVariable(v) = ty {
+            TypeVariableInner::Reference(v)
+        } else {
+            TypeVariableInner::Instantiated(ty)
+        };
+
+        self.inner.replace(inner);
     }
 
     pub fn type_specifier(&self) -> String {
         // Prints the instance type if a type variable is already pruned.
-        if let Some(inner) = self.inner.get() {
-            inner.type_specifier()
+        if let TypeVariableInner::Instantiated(ty) = self.inner.get() {
+            ty.type_specifier()
         } else {
             self.to_string()
         }
@@ -643,8 +666,8 @@ impl<'a> TypeVariable<'a> {
 impl Display for TypeVariable<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Prints the instance type if a type variable is already pruned.
-        if let Some(inner) = self.inner.get() {
-            inner.fmt(f)
+        if let TypeVariableInner::Instantiated(ty) = self.inner.get() {
+            ty.fmt(f)
         } else {
             write!(f, "?{}", self.label)
         }
