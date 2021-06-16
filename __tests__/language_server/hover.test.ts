@@ -128,6 +128,24 @@ let cases: TestCase[] = [
         }
       }
     ]
+  },
+  // Type inference: return type is void
+  {
+    // prettier-ignore
+    input: [
+        "fun empty()",
+        "end",
+      ].join("\n"),
+    requests: [
+      // fun empty()
+      //     ^
+      {
+        position: {
+          line: 0,
+          character: 4
+        }
+      }
+    ]
   }
 ];
 
