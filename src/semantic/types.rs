@@ -156,23 +156,39 @@ impl fmt::Display for TypeKind<'_> {
 #[derive(Debug, Clone)]
 struct TypeFieldList<'a> {
     fields: BumpaloVec<'a, &'a TypeField<'a>>,
+    // stable sorted by name.
+    sorted_fields: BumpaloVec<'a, &'a TypeField<'a>>,
 }
 
 impl<'a> TypeFieldList<'a> {
     pub fn new(arena: &'a BumpaloArena, field_types: &[&'a TypeField<'a>]) -> Self {
         let mut fields = BumpaloVec::with_capacity_in(field_types.len(), arena);
+        let mut sorted_fields: BumpaloVec<'a, &'a TypeField<'a>> =
+            BumpaloVec::with_capacity_in(field_types.len(), arena);
 
         fields.extend(field_types);
+        sorted_fields.extend(field_types);
+        sorted_fields.sort_by(|a, b| a.name().partial_cmp(b.name()).unwrap());
 
-        Self { fields }
+        Self {
+            fields,
+            sorted_fields,
+        }
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
         self.fields.iter().copied()
     }
 
+    pub fn sorted_iter(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
+        self.sorted_fields.iter().copied()
+    }
+
     pub fn get_field(&self, name: &str) -> Option<&'a TypeField<'a>> {
-        self.fields.iter().find(|f| f.name() == name).copied()
+        self.sorted_fields
+            .binary_search_by(|f| f.name().partial_cmp(name).unwrap())
+            .ok()
+            .map(|i| self.sorted_fields[i])
     }
 
     pub fn get_field_type(&self, name: &str) -> Option<TypeKind<'a>> {
@@ -214,6 +230,10 @@ impl<'a> StructType<'a> {
         self.fields.iter()
     }
 
+    pub fn sorted_fields(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
+        self.fields.sorted_iter()
+    }
+
     pub fn get_field_type(&self, name: &str) -> Option<TypeKind<'a>> {
         self.fields.get_field_type(name)
     }
@@ -235,7 +255,11 @@ impl<'a> StructType<'a> {
             return Err(TypeError::TypeMismatchError(mismatch));
         }
 
-        for (i, (x, y)) in self.fields().zip(expected_type.fields()).enumerate() {
+        for (i, (x, y)) in self
+            .sorted_fields()
+            .zip(expected_type.sorted_fields())
+            .enumerate()
+        {
             if let Err(err) = x.unify(arena, y) {
                 match err {
                     TypeError::TypeMismatchError(mismatch) => {
@@ -725,6 +749,62 @@ impl fmt::Debug for TypeVariable<'_> {
 impl<'a> PartialEq for TypeVariable<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.label == other.label
+    }
+}
+
+#[derive(Debug)]
+pub struct TypeConstraint<'a> {
+    inner: Cell<TypeConstraintInner<'a>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TypeConstraintInner<'a> {
+    InterfaceType(&'a InterfaceType<'a>),
+    Union(&'a TypeConstraint<'a>, &'a TypeConstraint<'a>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct InterfaceType<'a> {
+    fields: TypeFieldList<'a>,
+}
+
+impl<'a> InterfaceType<'a> {
+    pub fn new(arena: &'a BumpaloArena, field_types: &[&'a TypeField<'a>]) -> Self {
+        Self {
+            fields: TypeFieldList::new(arena, field_types),
+        }
+    }
+
+    pub fn one_field(arena: &'a BumpaloArena, name: &str, r#type: TypeKind<'a>) -> Self {
+        let field = arena.alloc(TypeField::new(arena, name, r#type));
+        Self::new(arena, &[field])
+    }
+
+    pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
+        self.fields.iter()
+    }
+
+    pub fn get_field_type(&self, name: &str) -> Option<TypeKind<'a>> {
+        self.fields.get_field_type(name)
+    }
+
+    pub fn type_specifier(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl fmt::Display for InterfaceType<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut it = self.fields().peekable();
+
+        write!(f, "{{")?;
+        while let Some(param) = it.next() {
+            write!(f, "{}", param)?;
+            if it.peek().is_some() {
+                write!(f, ", ")?;
+            }
+        }
+        write!(f, "}}")
     }
 }
 
