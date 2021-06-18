@@ -582,9 +582,9 @@ impl fmt::Display for ArrayType<'_> {
 
 /// There are three states of a type variable
 ///
-/// 1. The initial state is where the type is not materialized. It can be adapted to any number of constraints.
-/// 2. A reference to another type variable. In this case, constraints are moved to the reference.
-/// 3. Finally, the type has been materialized.
+/// 1. The initial state is where the type is not instantiated. It can be adapted to any number of constraints.
+/// 2. A reference to another type variable. In this case, constraints are moved to the another reference.
+/// 3. Finally, the type has been instantiated.
 ///
 /// The states transition in the above order and do not go backwards.
 
