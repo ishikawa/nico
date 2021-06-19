@@ -614,7 +614,7 @@ impl fmt::Display for ArrayType<'_> {
 
 #[derive(Debug, Clone, Copy)]
 pub enum TypeVariableInner<'a> {
-    Uninstantiated(&'a TypeConstraint<'a>),
+    Uninstantiated,
     Reference(&'a TypeVariable<'a>),
     Instantiated(TypeKind<'a>),
 }
@@ -629,28 +629,24 @@ impl<'a> TypeVariable<'a> {
         Self { label, inner }
     }
 
-    pub fn uninstantiated(arena: &'a BumpaloArena, label: i32) -> Self {
-        let constraint = arena.alloc(TypeConstraint::empty());
-        Self::new(
-            label,
-            Cell::new(TypeVariableInner::Uninstantiated(constraint)),
-        )
+    pub fn uninstantiated(label: i32) -> Self {
+        Self::new(label, Cell::new(TypeVariableInner::Uninstantiated))
     }
 
     pub fn instance(&self) -> Option<TypeKind<'a>> {
         match self.inner.get() {
+            TypeVariableInner::Uninstantiated => None,
             TypeVariableInner::Reference(var) => var.instance(),
             TypeVariableInner::Instantiated(ty) => Some(ty),
-            TypeVariableInner::Uninstantiated(_) => None,
         }
     }
 
     /// Returns the type variable or concrete type at the deepest position in type chain.
     pub fn terminal_type(&'a self) -> TypeKind<'a> {
         match self.inner.get() {
+            TypeVariableInner::Uninstantiated => TypeKind::TypeVariable(self),
             TypeVariableInner::Reference(var) => var.terminal_type(),
             TypeVariableInner::Instantiated(ty) => ty,
-            TypeVariableInner::Uninstantiated(_) => TypeKind::TypeVariable(self),
         }
     }
 
@@ -677,7 +673,7 @@ impl<'a> TypeVariable<'a> {
         other: TypeKind<'a>,
     ) -> Result<TypeKind<'a>, TypeError<'a>> {
         match self.inner.get() {
-            TypeVariableInner::Uninstantiated(_) => {
+            TypeVariableInner::Uninstantiated => {
                 // TODO: confirm interfaces?
                 let inner = if let TypeKind::TypeVariable(var) = other {
                     debug!("[unify] reference: ?{} -> {}", self.label, other);
@@ -691,27 +687,6 @@ impl<'a> TypeVariable<'a> {
                 Ok(TypeKind::TypeVariable(self))
             }
             TypeVariableInner::Reference(var) => var.unify(arena, other),
-            TypeVariableInner::Instantiated(ty) => {
-                unreachable!(
-                    "A type variable ?{} is already instantiated with {}",
-                    self.label, ty
-                );
-            }
-        }
-    }
-
-    pub fn confirm(
-        &'a self,
-        arena: &'a BumpaloArena,
-        other: &TypeConstraint<'a>,
-    ) -> Result<TypeKind<'a>, TypeError<'a>> {
-        match self.inner.get() {
-            TypeVariableInner::Uninstantiated(constraint) => {
-                //debug!("[confirm] reference: ?{}: {}", self.label, other);
-                constraint.add(arena, other);
-                Ok(TypeKind::TypeVariable(self))
-            }
-            TypeVariableInner::Reference(var) => var.confirm(arena, other),
             TypeVariableInner::Instantiated(ty) => {
                 unreachable!(
                     "A type variable ?{} is already instantiated with {}",
@@ -747,7 +722,7 @@ impl fmt::Debug for TypeVariable<'_> {
         write!(f, "(")?;
         write!(f, "?{}", self.label)?;
         match self.inner.get() {
-            TypeVariableInner::Uninstantiated(_) => {
+            TypeVariableInner::Uninstantiated => {
                 // TODO: interfaces
             }
             TypeVariableInner::Reference(var) => {
@@ -767,83 +742,6 @@ impl<'a> PartialEq for TypeVariable<'a> {
     }
 }
 
-#[derive(Debug)]
-pub struct TypeConstraint<'a> {
-    inner: Cell<Option<&'a TypeConstraintInner<'a>>>,
-}
-
-impl<'a> TypeConstraint<'a> {
-    fn new(inner: Cell<Option<&'a TypeConstraintInner<'a>>>) -> Self {
-        Self { inner }
-    }
-
-    pub fn empty() -> Self {
-        Self::new(Cell::default())
-    }
-
-    pub fn add(&self, arena: &'a BumpaloArena, other: &TypeConstraint<'a>) {
-        let other = unwrap_or_return!(other.inner.get());
-        let inner = if let Some(inner) = self.inner.get() {
-            arena.alloc(TypeConstraintInner::Union(other, inner))
-        } else {
-            other
-        };
-
-        self.inner.replace(Some(inner));
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum TypeConstraintInner<'a> {
-    InterfaceType(&'a InterfaceType<'a>),
-    Union(&'a TypeConstraintInner<'a>, &'a TypeConstraintInner<'a>),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct InterfaceType<'a> {
-    fields: TypeFieldList<'a>,
-}
-
-impl<'a> InterfaceType<'a> {
-    pub fn new(arena: &'a BumpaloArena, field_types: &[&'a TypeField<'a>]) -> Self {
-        Self {
-            fields: TypeFieldList::new(arena, field_types),
-        }
-    }
-
-    pub fn one_field(arena: &'a BumpaloArena, name: &str, r#type: TypeKind<'a>) -> Self {
-        let field = arena.alloc(TypeField::new(arena, name, r#type));
-        Self::new(arena, &[field])
-    }
-
-    pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
-        self.fields.iter()
-    }
-
-    pub fn get_field_type(&self, name: &str) -> Option<TypeKind<'a>> {
-        self.fields.get_field_type(name)
-    }
-
-    pub fn type_specifier(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl fmt::Display for InterfaceType<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut it = self.fields().peekable();
-
-        write!(f, "{{")?;
-        while let Some(param) = it.next() {
-            write!(f, "{}", param)?;
-            if it.peek().is_some() {
-                write!(f, ", ")?;
-            }
-        }
-        write!(f, "}}")
-    }
-}
-
 // --- Type inference visitors ---
 
 /// A visitor assigns an initial type (type variable or primitive type) to a node
@@ -860,7 +758,7 @@ impl<'a> InitialTypeBinder<'a> {
     }
 
     pub fn new_type_var(&mut self) -> &'a TypeVariable<'a> {
-        let var = TypeVariable::uninstantiated(self.arena, self.seq);
+        let var = TypeVariable::uninstantiated(self.seq);
 
         self.seq += 1;
         self.arena.alloc(var)
