@@ -11,7 +11,7 @@ use crate::syntax::{
 use crate::unwrap_or_return;
 use log::debug;
 use std::cell::Cell;
-use std::fmt::Display;
+use std::fmt;
 
 use super::errors::TypeError;
 
@@ -52,14 +52,6 @@ impl<'a> TypeKind<'a> {
         }
     }
 
-    pub fn type_variable(&self) -> Option<&'a TypeVariable<'a>> {
-        if let TypeKind::TypeVariable(ty) = self {
-            Some(ty)
-        } else {
-            None
-        }
-    }
-
     pub fn is_function_type(&self) -> bool {
         self.function_type().is_some()
     }
@@ -75,29 +67,22 @@ impl<'a> TypeKind<'a> {
     pub fn unify(
         &self,
         arena: &'a BumpaloArena,
-        other: TypeKind<'a>,
+        expected_type: TypeKind<'a>,
     ) -> Result<TypeKind<'a>, TypeError<'a>> {
-        debug!("[unify] {} - {}", self, other);
+        debug!("[unify] {} - {}", self, expected_type);
 
         let ty1 = self.terminal_type();
-        let ty2 = other.terminal_type();
+        let ty2 = expected_type.terminal_type();
         debug!("[unify] prune: {} - {}", ty1, ty2);
 
-        // Already unified.
+        // Already unified or primitive type.
         if ty1 == ty2 {
             return Ok(ty2);
         }
 
         match ty1 {
             TypeKind::TypeVariable(var) => {
-                // `ty1` was pruned, so its instance must be `None`
-                assert!(var.instance().is_none());
-                if ty1 != ty2 {
-                    debug!("[unify] replace: {} -> {}", ty1, ty2);
-                    var.replace_instance(ty2);
-                }
-
-                return Ok(ty2);
+                return var.unify(arena, ty2);
             }
             TypeKind::ArrayType(array_type1) => {
                 if let Some(array_type2) = ty2.array_type() {
@@ -118,10 +103,16 @@ impl<'a> TypeKind<'a> {
         }
 
         // trying opposite side.
-        if let TypeKind::TypeVariable(_) = ty2 {
-            // unreachable
-            assert!(ty1.type_variable().is_none());
-            return ty2.unify(arena, ty1);
+        if let TypeKind::TypeVariable(var2) = ty2 {
+            return match var2.unify(arena, ty1) {
+                // reverse operand if error occurred.
+                Err(TypeError::TypeMismatchError(mismatch)) => {
+                    let mismatch =
+                        TypeMismatchError::new(mismatch.actual_type(), mismatch.expected_type());
+                    Err(TypeError::TypeMismatchError(mismatch))
+                }
+                u => u,
+            };
         }
 
         let mismatch = TypeMismatchError::new(ty2, ty1);
@@ -147,8 +138,8 @@ impl<'a> TypeKind<'a> {
     }
 }
 
-impl Display for TypeKind<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for TypeKind<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TypeKind::Int32 => write!(f, "i32"),
             TypeKind::Boolean => write!(f, "bool"),
@@ -162,21 +153,72 @@ impl Display for TypeKind<'_> {
     }
 }
 
+#[derive(Debug, Clone)]
+struct TypeFieldList<'a> {
+    fields: BumpaloVec<'a, &'a TypeField<'a>>,
+    // stable sorted by name.
+    sorted_fields: BumpaloVec<'a, &'a TypeField<'a>>,
+}
+
+impl<'a> TypeFieldList<'a> {
+    pub fn new(arena: &'a BumpaloArena, field_types: &[&'a TypeField<'a>]) -> Self {
+        let mut fields = BumpaloVec::with_capacity_in(field_types.len(), arena);
+        let mut sorted_fields: BumpaloVec<'a, &'a TypeField<'a>> =
+            BumpaloVec::with_capacity_in(field_types.len(), arena);
+
+        fields.extend(field_types);
+        sorted_fields.extend(field_types);
+        sorted_fields.sort_by(|a, b| a.name().partial_cmp(b.name()).unwrap());
+
+        Self {
+            fields,
+            sorted_fields,
+        }
+    }
+
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
+        self.fields.iter().copied()
+    }
+
+    pub fn sorted_iter(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
+        self.sorted_fields.iter().copied()
+    }
+
+    pub fn get_field(&self, name: &str) -> Option<&'a TypeField<'a>> {
+        self.sorted_fields
+            .binary_search_by(|f| f.name().partial_cmp(name).unwrap())
+            .ok()
+            .map(|i| self.sorted_fields[i])
+    }
+
+    pub fn get_field_type(&self, name: &str) -> Option<TypeKind<'a>> {
+        self.get_field(name).map(|f| f.r#type())
+    }
+}
+
+impl PartialEq for TypeFieldList<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.fields.len() != other.fields.len() {
+            return false;
+        }
+
+        self.fields
+            .iter()
+            .all(|f1| other.get_field(f1.name()).filter(|f2| f1 == f2).is_some())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructType<'a> {
     name: BumpaloString<'a>,
-    fields: BumpaloVec<'a, &'a StructField<'a>>,
+    fields: TypeFieldList<'a>,
 }
 
 impl<'a> StructType<'a> {
-    pub fn new(arena: &'a BumpaloArena, name: &str, field_types: &[&'a StructField<'a>]) -> Self {
-        let mut fields = BumpaloVec::with_capacity_in(field_types.len(), arena);
-
-        fields.extend(field_types);
-
+    pub fn new(arena: &'a BumpaloArena, name: &str, field_types: &[&'a TypeField<'a>]) -> Self {
         Self {
             name: BumpaloString::from_str_in(name, arena),
-            fields,
+            fields: TypeFieldList::new(arena, field_types),
         }
     }
 
@@ -184,44 +226,53 @@ impl<'a> StructType<'a> {
         self.name.as_str()
     }
 
-    pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a StructField<'a>> + '_ {
-        self.fields.iter().copied()
+    pub fn fields(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
+        self.fields.iter()
+    }
+
+    pub fn sorted_fields(&self) -> impl ExactSizeIterator<Item = &'a TypeField<'a>> + '_ {
+        self.fields.sorted_iter()
     }
 
     pub fn get_field_type(&self, name: &str) -> Option<TypeKind<'a>> {
-        self.fields
-            .iter()
-            .find(|f| f.name() == name)
-            .map(|f| f.r#type())
+        self.fields.get_field_type(name)
     }
 
+    /// Is a type `self` assignable to `other`?
     pub fn unify(
         &'a self,
         arena: &'a BumpaloArena,
-        other: &'a StructType<'a>,
+        expected_type: &'a StructType<'a>,
     ) -> Result<TypeKind<'a>, TypeError<'a>> {
-        if self.name() != other.name() {
-            let mismatch =
-                TypeMismatchError::new(TypeKind::StructType(other), TypeKind::StructType(self));
+        debug!("[unify:struct] {} -> {}", self, expected_type);
+
+        // Struct follows nominal subtyping.
+        if self.name() != expected_type.name() {
+            let mismatch = TypeMismatchError::new(
+                TypeKind::StructType(expected_type),
+                TypeKind::StructType(self),
+            );
             return Err(TypeError::TypeMismatchError(mismatch));
         }
 
-        for (i, (x, y)) in self.fields().zip(other.fields()).enumerate() {
+        for (i, (x, y)) in self
+            .sorted_fields()
+            .zip(expected_type.sorted_fields())
+            .enumerate()
+        {
             if let Err(err) = x.unify(arena, y) {
                 match err {
                     TypeError::TypeMismatchError(mismatch) => {
                         let mut fields: Vec<_> = self.fields().collect();
 
-                        fields[i] = arena.alloc(StructField::new(
-                            arena,
-                            y.name(),
-                            mismatch.expected_type(),
-                        ));
+                        fields[i] =
+                            arena.alloc(TypeField::new(arena, y.name(), mismatch.expected_type()));
 
-                        let expected = arena.alloc(StructType::new(arena, other.name(), &fields));
+                        let expected =
+                            arena.alloc(StructType::new(arena, expected_type.name(), &fields));
                         let mismatch = TypeMismatchError::new(
                             TypeKind::StructType(expected),
-                            TypeKind::StructType(other),
+                            TypeKind::StructType(self),
                         );
 
                         return Err(TypeError::TypeMismatchError(mismatch));
@@ -238,8 +289,8 @@ impl<'a> StructType<'a> {
     }
 }
 
-impl Display for StructType<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for StructType<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "struct {} ", self.name())?;
 
         let mut it = self.fields().peekable();
@@ -256,12 +307,12 @@ impl Display for StructType<'_> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct StructField<'a> {
+pub struct TypeField<'a> {
     name: BumpaloString<'a>,
     r#type: TypeKind<'a>,
 }
 
-impl<'a> StructField<'a> {
+impl<'a> TypeField<'a> {
     pub fn new(arena: &'a BumpaloArena, name: &str, r#type: TypeKind<'a>) -> Self {
         Self {
             name: BumpaloString::from_str_in(name, arena),
@@ -280,7 +331,7 @@ impl<'a> StructField<'a> {
     pub fn unify(
         &'a self,
         arena: &'a BumpaloArena,
-        other: &'a StructField<'a>,
+        other: &'a TypeField<'a>,
     ) -> Result<TypeKind<'a>, TypeError<'a>> {
         if self.name() != other.name() {
             let mismatch = TypeMismatchError::new(other.r#type(), self.r#type());
@@ -300,8 +351,8 @@ impl<'a> StructField<'a> {
     }
 }
 
-impl Display for StructField<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for TypeField<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {}", self.name(), self.r#type())
     }
 }
@@ -418,15 +469,21 @@ impl<'a> FunctionType<'a> {
                 buffer.push_str(", ");
             }
         }
-        buffer.push_str(") -> ");
-        buffer.push_str(&self.return_type().type_specifier());
+
+        match self.return_type().terminal_type() {
+            TypeKind::Void => {}
+            ty => {
+                buffer.push_str(") -> ");
+                buffer.push_str(&ty.type_specifier());
+            }
+        };
 
         buffer
     }
 }
 
-impl Display for FunctionType<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for FunctionType<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "fun {}", self.name())?;
 
         let mut it = self.parameters().peekable();
@@ -438,7 +495,15 @@ impl Display for FunctionType<'_> {
                 write!(f, ", ")?;
             }
         }
-        write!(f, ") -> {}", self.return_type())
+
+        match self.return_type().terminal_type() {
+            TypeKind::Void => {
+                write!(f, ")")
+            }
+            ty => {
+                write!(f, ") -> {}", ty)
+            }
+        }
     }
 }
 
@@ -487,8 +552,8 @@ impl<'a> FunctionParameter<'a> {
     }
 }
 
-impl Display for FunctionParameter<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for FunctionParameter<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {}", self.name(), self.r#type().type_specifier())
     }
 }
@@ -533,76 +598,141 @@ impl<'a> ArrayType<'a> {
     }
 }
 
-impl Display for ArrayType<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for ArrayType<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}[]", self.element_type().type_specifier())
     }
 }
 
-#[derive(Debug)]
+/// There are three states of a type variable
+///
+/// 1. The initial state is where the type is not instantiated. It can be adapted to any number of constraints.
+/// 2. A reference to another type variable. In this case, constraints are moved to the another reference.
+/// 3. Finally, the type has been instantiated.
+///
+/// The states transition in the above order and do not go backwards.
+
+#[derive(Debug, Clone, Copy)]
+pub enum TypeVariableInner<'a> {
+    Uninstantiated,
+    Reference(&'a TypeVariable<'a>),
+    Instantiated(TypeKind<'a>),
+}
+
 pub struct TypeVariable<'a> {
     label: i32,
-    inner: Cell<Option<TypeKind<'a>>>,
+    inner: Cell<TypeVariableInner<'a>>,
 }
 
 impl<'a> TypeVariable<'a> {
-    pub fn new(label: i32) -> Self {
-        Self {
-            label,
-            inner: Cell::default(),
-        }
+    fn new(label: i32, inner: Cell<TypeVariableInner<'a>>) -> Self {
+        Self { label, inner }
+    }
+
+    pub fn uninstantiated(label: i32) -> Self {
+        Self::new(label, Cell::new(TypeVariableInner::Uninstantiated))
     }
 
     pub fn instance(&self) -> Option<TypeKind<'a>> {
-        if let Some(inner) = self.inner.get() {
-            match inner {
-                TypeKind::TypeVariable(var) => var.instance(),
-                ty => Some(ty),
-            }
-        } else {
-            None
+        match self.inner.get() {
+            TypeVariableInner::Uninstantiated => None,
+            TypeVariableInner::Reference(var) => var.instance(),
+            TypeVariableInner::Instantiated(ty) => Some(ty),
         }
     }
 
     /// Returns the type variable or concrete type at the deepest position in type chain.
     pub fn terminal_type(&'a self) -> TypeKind<'a> {
-        if let Some(inner) = self.inner.get() {
-            match inner {
-                TypeKind::TypeVariable(var) => var.terminal_type(),
-                ty => ty,
-            }
-        } else {
-            TypeKind::TypeVariable(self)
+        match self.inner.get() {
+            TypeVariableInner::Uninstantiated => TypeKind::TypeVariable(self),
+            TypeVariableInner::Reference(var) => var.terminal_type(),
+            TypeVariableInner::Instantiated(ty) => ty,
         }
     }
 
     /// Prune unnecessary indirections.
     pub fn prune(&self) {
-        self.inner.replace(self.instance());
+        if let TypeVariableInner::Reference(var) = self.inner.get() {
+            self.replace_instance(var.terminal_type());
+        }
     }
 
     pub fn replace_instance(&self, ty: TypeKind<'a>) {
-        self.inner.replace(Some(ty));
+        let inner = if let TypeKind::TypeVariable(v) = ty {
+            TypeVariableInner::Reference(v)
+        } else {
+            TypeVariableInner::Instantiated(ty)
+        };
+
+        self.inner.replace(inner);
+    }
+
+    pub fn unify(
+        &'a self,
+        arena: &'a BumpaloArena,
+        other: TypeKind<'a>,
+    ) -> Result<TypeKind<'a>, TypeError<'a>> {
+        match self.inner.get() {
+            TypeVariableInner::Uninstantiated => {
+                // TODO: confirm interfaces?
+                let inner = if let TypeKind::TypeVariable(var) = other {
+                    debug!("[unify] reference: ?{} -> {}", self.label, other);
+                    TypeVariableInner::Reference(var)
+                } else {
+                    debug!("[unify] instantiation: ?{} -> {}", self.label, other);
+                    TypeVariableInner::Instantiated(other)
+                };
+
+                self.inner.replace(inner);
+                Ok(TypeKind::TypeVariable(self))
+            }
+            TypeVariableInner::Reference(var) => var.unify(arena, other),
+            TypeVariableInner::Instantiated(ty) => {
+                unreachable!(
+                    "A type variable ?{} is already instantiated with {}",
+                    self.label, ty
+                );
+            }
+        }
     }
 
     pub fn type_specifier(&self) -> String {
         // Prints the instance type if a type variable is already pruned.
-        if let Some(inner) = self.inner.get() {
-            inner.type_specifier()
+        if let TypeVariableInner::Instantiated(ty) = self.inner.get() {
+            ty.type_specifier()
         } else {
             self.to_string()
         }
     }
 }
 
-impl Display for TypeVariable<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for TypeVariable<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Prints the instance type if a type variable is already pruned.
-        if let Some(inner) = self.inner.get() {
-            inner.fmt(f)
+        if let TypeVariableInner::Instantiated(ty) = self.inner.get() {
+            ty.fmt(f)
         } else {
             write!(f, "?{}", self.label)
         }
+    }
+}
+
+impl fmt::Debug for TypeVariable<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(")?;
+        write!(f, "?{}", self.label)?;
+        match self.inner.get() {
+            TypeVariableInner::Uninstantiated => {
+                // TODO: interfaces
+            }
+            TypeVariableInner::Reference(var) => {
+                write!(f, " -> {:?}", var)?;
+            }
+            TypeVariableInner::Instantiated(ty) => {
+                write!(f, " -> {}", ty)?;
+            }
+        };
+        write!(f, ")")
     }
 }
 
@@ -614,7 +744,8 @@ impl<'a> PartialEq for TypeVariable<'a> {
 
 // --- Type inference visitors ---
 
-/// A visitor assigns an initial type (type variable or primitive type) to a node.
+/// A visitor assigns an initial type (type variable or primitive type) to a node
+/// without unification.
 #[derive(Debug)]
 pub(super) struct InitialTypeBinder<'a> {
     arena: &'a BumpaloArena,
@@ -627,7 +758,7 @@ impl<'a> InitialTypeBinder<'a> {
     }
 
     pub fn new_type_var(&mut self) -> &'a TypeVariable<'a> {
-        let var = TypeVariable::new(self.seq);
+        let var = TypeVariable::uninstantiated(self.seq);
 
         self.seq += 1;
         self.arena.alloc(var)
@@ -644,7 +775,7 @@ impl<'a> InitialTypeBinder<'a> {
             let name = f.name()?.as_str();
             let ty = f.type_annotation()?.r#type();
 
-            let field = &*self.arena.alloc(StructField::new(self.arena, name, ty));
+            let field = &*self.arena.alloc(TypeField::new(self.arena, name, ty));
 
             field_types.push(field);
         }
@@ -676,6 +807,27 @@ impl<'a> InitialTypeBinder<'a> {
             TypeKind::TypeVariable(self.new_type_var()),
         );
 
+        Some(&*self.arena.alloc(ty))
+    }
+
+    fn build_struct_literal_type(
+        &mut self,
+        literal: &'a StructLiteral<'a>,
+    ) -> Option<&'a StructType<'a>> {
+        let name = literal.name();
+        let mut field_types = vec![];
+
+        for f in literal.fields() {
+            let name = f.name().as_str();
+
+            let field = &*self
+                .arena
+                .alloc(TypeField::new(self.arena, name, f.r#type()));
+
+            field_types.push(field);
+        }
+
+        let ty = StructType::new(self.arena, name.as_str(), &field_types);
         Some(&*self.arena.alloc(ty))
     }
 }
@@ -714,8 +866,12 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         param.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 
-    fn exit_struct_literal(&mut self, _path: &'a NodePath<'a>, expr: &'a StructLiteral<'a>) {
-        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    fn exit_struct_literal(&mut self, _path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
+        if let Some(ty) = self.build_struct_literal_type(literal) {
+            literal.assign_type(TypeKind::StructType(ty))
+        } else {
+            literal.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        }
     }
 
     fn exit_value_field(
@@ -724,7 +880,11 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         _struct_literal: &'a StructLiteral<'a>,
         field: &'a ValueField<'a>,
     ) {
-        field.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        if let Some(expr) = field.value() {
+            field.assign_type(expr.r#type());
+        } else {
+            field.assign_type(TypeKind::TypeVariable(self.new_type_var()));
+        }
     }
 
     fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
@@ -740,7 +900,17 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
     }
 
     fn exit_block(&mut self, _path: &'a NodePath<'a>, block: &'a syntax::Block<'a>) {
-        block.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        // The type of a block is actually the return type of the last expression that
+        // occurs in the body.
+        if let Some(stmt) = block.statements().last() {
+            if let Some(expr) = stmt.expression() {
+                block.assign_type(expr.r#type());
+                return;
+            }
+        }
+
+        // Otherwise, the type of a block is `void`
+        block.assign_type(TypeKind::Void);
     }
 
     fn exit_call_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CallExpression<'a>) {
@@ -800,27 +970,6 @@ impl<'a> TypeInferencer<'a> {
 }
 
 impl<'a> Visitor<'a> for TypeInferencer<'a> {
-    fn exit_block(&mut self, _path: &'a NodePath<'a>, block: &'a syntax::Block<'a>) {
-        // The type of a block is actually the return type of the last expression that
-        // occurs in the body.
-        if let Some(stmt) = block.statements().last() {
-            if let Some(expr) = stmt.expression() {
-                debug!("[inference] block: {}, {}", block, expr);
-                block
-                    .r#type()
-                    .unify(self.arena, expr.r#type())
-                    .unwrap_or_else(|err| panic!("Type error: {}", err));
-                return;
-            }
-        }
-
-        // Otherwise, the type of a block is `void`
-        block
-            .r#type()
-            .unify(self.arena, TypeKind::Void)
-            .unwrap_or_else(|err| panic!("Type error: {}", err));
-    }
-
     fn exit_function_definition(
         &mut self,
         _path: &'a NodePath<'a>,
@@ -840,20 +989,16 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
     }
 
     fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
-        let binding = match path.scope().get_binding(literal.name().as_str()) {
-            Some(binding) => binding,
-            None => return,
-        };
+        let binding = unwrap_or_return!(path.scope().get_binding(literal.name().as_str()));
+        let struct_def = unwrap_or_return!(binding.struct_definition());
 
-        let struct_def = match binding.struct_definition() {
-            Some(struct_def) => struct_def,
-            None => return,
-        };
+        debug!("[inference] struct literal: {}, {}", literal, struct_def);
 
-        literal
-            .r#type()
-            .unify(self.arena, struct_def.r#type())
-            .unwrap_or_else(|err| panic!("Type error: {}", err));
+        if let Err(err) = literal.r#type().unify(self.arena, struct_def.r#type()) {
+            literal
+                .errors()
+                .push_semantic_error(SemanticError::TypeError(err));
+        }
     }
 
     fn exit_variable_declaration(
@@ -1009,9 +1154,29 @@ impl<'a> TypeVariablePruner<'a> {
     }
 
     fn prune(&self, ty: TypeKind<'a>) {
-        if let Some(type_variable) = ty.type_variable() {
-            type_variable.prune()
-        }
+        match ty {
+            TypeKind::Int32 => {}
+            TypeKind::Boolean => {}
+            TypeKind::String => {}
+            TypeKind::Void => {}
+            TypeKind::StructType(ty) => {
+                for f in ty.fields() {
+                    self.prune(f.r#type());
+                }
+            }
+            TypeKind::FunctionType(ty) => {
+                self.prune(ty.return_type());
+                for p in ty.parameters() {
+                    self.prune(p.r#type());
+                }
+            }
+            TypeKind::ArrayType(ty) => {
+                self.prune(ty.element_type());
+            }
+            TypeKind::TypeVariable(var) => {
+                var.prune();
+            }
+        };
     }
 }
 

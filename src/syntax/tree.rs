@@ -561,7 +561,7 @@ pub struct StructDefinition<'a> {
     fields: BumpaloVec<'a, &'a TypeField<'a>>,
     code: Code<'a>,
     // for semantic analysis
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
 }
 
@@ -577,7 +577,7 @@ impl<'a> StructDefinition<'a> {
             fields: BumpaloVec::from_iter_in(fields, arena),
             code,
             // for semantic analysis
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             binding: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
@@ -712,7 +712,7 @@ pub struct FunctionDefinition<'a> {
     body: &'a Block<'a>,
     code: Code<'a>,
     // for semantic analysis
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
 }
 
@@ -730,7 +730,7 @@ impl<'a> FunctionDefinition<'a> {
             body,
             code,
             // for semantic analysis
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             binding: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
@@ -794,7 +794,7 @@ pub struct FunctionParameter<'a> {
     name: &'a Identifier<'a>,
     code: Code<'a>,
     // for semantic analysis
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
 }
 
@@ -804,7 +804,7 @@ impl<'a> FunctionParameter<'a> {
             name,
             code,
             // for semantic analysis
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             binding: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
@@ -943,7 +943,7 @@ impl fmt::Display for Statement<'_> {
 pub struct Block<'a> {
     statements: BumpaloVec<'a, &'a Statement<'a>>,
     scope: &'a Scope<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     code: Code<'a>,
 }
 
@@ -957,7 +957,7 @@ impl<'a> Block<'a> {
             statements: BumpaloVec::from_iter_in(statements, arena),
             scope: arena.alloc(Scope::new(arena)),
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
         }
     }
 
@@ -1172,7 +1172,7 @@ pub struct StructLiteral<'a> {
     name: &'a Identifier<'a>,
     fields: BumpaloVec<'a, &'a ValueField<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
 }
 
@@ -1187,7 +1187,7 @@ impl<'a> StructLiteral<'a> {
             name,
             fields: BumpaloVec::from_iter_in(fields, arena),
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             errors: AstErrors::new(arena),
         }
     }
@@ -1238,12 +1238,12 @@ pub struct ValueField<'a> {
     name: &'a Identifier<'a>,
     value: Option<&'a Expression<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
 }
 
 impl<'a> ValueField<'a> {
     pub fn new(
-        arena: &'a BumpaloArena,
+        _arena: &'a BumpaloArena,
         name: &'a Identifier<'a>,
         value: Option<&'a Expression<'a>>,
         code: Code<'a>,
@@ -1252,7 +1252,7 @@ impl<'a> ValueField<'a> {
             name,
             value,
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
         }
     }
 
@@ -1295,7 +1295,7 @@ pub struct BinaryExpression<'a> {
     lhs: &'a Expression<'a>,
     rhs: Option<&'a Expression<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
 }
 
@@ -1312,7 +1312,7 @@ impl<'a> BinaryExpression<'a> {
             lhs,
             rhs,
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             errors: AstErrors::new(arena),
         }
     }
@@ -1363,7 +1363,7 @@ pub struct UnaryExpression<'a> {
     operator: UnaryOperator,
     operand: Option<&'a Expression<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
 }
 
@@ -1378,7 +1378,7 @@ impl<'a> UnaryExpression<'a> {
             operator,
             operand,
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             errors: AstErrors::new(arena),
         }
     }
@@ -1473,7 +1473,7 @@ pub struct SubscriptExpression<'a> {
     callee: &'a Expression<'a>,
     arguments: BumpaloVec<'a, &'a Expression<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
 }
 
@@ -1488,7 +1488,7 @@ impl<'a> SubscriptExpression<'a> {
             callee,
             arguments: BumpaloVec::from_iter_in(arguments, arena),
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             errors: AstErrors::new(arena),
         }
     }
@@ -1535,7 +1535,7 @@ pub struct CallExpression<'a> {
     callee: &'a Expression<'a>,
     arguments: BumpaloVec<'a, &'a Expression<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
 }
 
@@ -1550,7 +1550,7 @@ impl<'a> CallExpression<'a> {
             callee,
             arguments: BumpaloVec::from_iter_in(arguments, arena),
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             errors: AstErrors::new(arena),
         }
     }
@@ -1602,7 +1602,7 @@ pub struct MemberExpression<'a> {
     object: &'a Expression<'a>,
     field: Option<&'a Identifier<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
 }
 
@@ -1617,7 +1617,7 @@ impl<'a> MemberExpression<'a> {
             object,
             field,
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             errors: AstErrors::new(arena),
         }
     }
@@ -1667,7 +1667,7 @@ impl fmt::Display for MemberExpression<'_> {
 pub struct ArrayExpression<'a> {
     elements: BumpaloVec<'a, &'a Expression<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
 }
 
@@ -1680,7 +1680,7 @@ impl<'a> ArrayExpression<'a> {
         Self {
             elements: BumpaloVec::from_iter_in(elements, arena),
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             errors: AstErrors::new(arena),
         }
     }
@@ -1724,7 +1724,7 @@ pub struct IfExpression<'a> {
     then_body: &'a Block<'a>,
     else_body: Option<&'a Block<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
 }
 
@@ -1741,7 +1741,7 @@ impl<'a> IfExpression<'a> {
             then_body,
             else_body,
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             errors: AstErrors::new(arena),
         }
     }
@@ -1793,7 +1793,7 @@ pub struct CaseExpression<'a> {
     arms: BumpaloVec<'a, &'a CaseArm<'a>>,
     else_body: Option<&'a Block<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
 }
 
@@ -1810,7 +1810,7 @@ impl<'a> CaseExpression<'a> {
             arms: BumpaloVec::from_iter_in(arms, arena),
             else_body,
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             errors: AstErrors::new(arena),
         }
     }
@@ -2005,7 +2005,7 @@ impl fmt::Display for StringLiteral<'_> {
 pub struct VariableExpression<'a> {
     id: &'a Identifier<'a>,
     code: CodeKind<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
 }
 
@@ -2015,7 +2015,7 @@ impl<'a> VariableExpression<'a> {
         Self {
             id,
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             errors: AstErrors::new(arena),
         }
     }
@@ -2061,7 +2061,7 @@ impl fmt::Display for VariableExpression<'_> {
 pub struct GroupedExpression<'a> {
     expression: Option<&'a Expression<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
 }
 
@@ -2074,7 +2074,7 @@ impl<'a> GroupedExpression<'a> {
         Self {
             expression,
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             errors: AstErrors::new(arena),
         }
     }
@@ -2168,7 +2168,7 @@ pub struct VariablePattern<'a> {
     id: &'a Identifier<'a>,
     code: CodeKind<'a>,
     // for semantic analysis
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
     binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
 }
 
@@ -2179,7 +2179,7 @@ impl<'a> VariablePattern<'a> {
             id,
             code,
             // for semantic analysis
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
             binding: BumpaloBox::new_in(Cell::default(), arena),
         }
     }
@@ -2230,7 +2230,7 @@ impl fmt::Display for VariablePattern<'_> {
 pub struct ArrayPattern<'a> {
     elements: BumpaloVec<'a, &'a Pattern<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
 }
 
 impl<'a> ArrayPattern<'a> {
@@ -2242,7 +2242,7 @@ impl<'a> ArrayPattern<'a> {
         Self {
             elements: BumpaloVec::from_iter_in(elements, arena),
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
         }
     }
 
@@ -2279,19 +2279,19 @@ impl fmt::Display for ArrayPattern<'_> {
 pub struct RestPattern<'a> {
     variable_pattern: Option<&'a VariablePattern<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
 }
 
 impl<'a> RestPattern<'a> {
     pub fn new(
-        arena: &'a BumpaloArena,
+        _arena: &'a BumpaloArena,
         variable_pattern: Option<&'a VariablePattern<'a>>,
         code: Code<'a>,
     ) -> Self {
         Self {
             variable_pattern,
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
         }
     }
 
@@ -2329,7 +2329,7 @@ pub struct StructPattern<'a> {
     name: &'a Identifier<'a>,
     fields: BumpaloVec<'a, &'a ValueFieldPattern<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
 }
 
 impl<'a> StructPattern<'a> {
@@ -2343,7 +2343,7 @@ impl<'a> StructPattern<'a> {
             name,
             fields: BumpaloVec::from_iter_in(fields, arena),
             code,
-            r#type: BumpaloBox::new_in(Cell::default(), arena),
+            r#type: Cell::default(),
         }
     }
 
@@ -2386,7 +2386,7 @@ pub struct ValueFieldPattern<'a> {
     value: Option<&'a Pattern<'a>>,
     omitted_value: Option<&'a Pattern<'a>>,
     code: Code<'a>,
-    r#type: BumpaloBox<'a, Cell<Option<TypeKind<'a>>>>,
+    r#type: Cell<Option<TypeKind<'a>>>,
 }
 
 impl<'a> ValueFieldPattern<'a> {
@@ -2402,7 +2402,7 @@ impl<'a> ValueFieldPattern<'a> {
                 value,
                 omitted_value: None,
                 code,
-                r#type: BumpaloBox::new_in(Cell::default(), arena),
+                r#type: Cell::default(),
             }
         } else {
             let expr = arena.alloc(VariablePattern::new(arena, name));
@@ -2414,7 +2414,7 @@ impl<'a> ValueFieldPattern<'a> {
                 value,
                 omitted_value: Some(omitted_value),
                 code,
-                r#type: BumpaloBox::new_in(Cell::default(), arena),
+                r#type: Cell::default(),
             }
         }
     }

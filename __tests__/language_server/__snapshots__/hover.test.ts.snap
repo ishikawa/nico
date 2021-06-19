@@ -313,3 +313,30 @@ fun foo(n: i32) -> i32
   },
 }
 `;
+
+exports[`2: hover - \`fun empty()
+end\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1020,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "contents": Object {
+      "kind": "markdown",
+      "value": "\`\`\`nico
+fun empty()
+\`\`\`",
+    },
+    "range": Object {
+      "end": Object {
+        "character": 9,
+        "line": 0,
+      },
+      "start": Object {
+        "character": 4,
+        "line": 0,
+      },
+    },
+  },
+}
+`;
