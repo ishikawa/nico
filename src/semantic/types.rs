@@ -673,7 +673,7 @@ impl<'a> TypeVariable<'a> {
 
     pub fn unify(
         &'a self,
-        _arena: &'a BumpaloArena,
+        arena: &'a BumpaloArena,
         other: TypeKind<'a>,
     ) -> Result<TypeKind<'a>, TypeError<'a>> {
         match self.inner.get() {
@@ -688,21 +688,37 @@ impl<'a> TypeVariable<'a> {
                 };
 
                 self.inner.replace(inner);
-                return Ok(TypeKind::TypeVariable(self));
+                Ok(TypeKind::TypeVariable(self))
             }
-            TypeVariableInner::Reference(var) => {
-                unreachable!(
-                    "A type variable ?{} refers the other type variable ?{}",
-                    self.label, var.label
-                );
-            }
+            TypeVariableInner::Reference(var) => var.unify(arena, other),
             TypeVariableInner::Instantiated(ty) => {
                 unreachable!(
                     "A type variable ?{} is already instantiated with {}",
                     self.label, ty
                 );
             }
-        };
+        }
+    }
+
+    pub fn confirm(
+        &'a self,
+        arena: &'a BumpaloArena,
+        other: &TypeConstraint<'a>,
+    ) -> Result<TypeKind<'a>, TypeError<'a>> {
+        match self.inner.get() {
+            TypeVariableInner::Uninstantiated(constraint) => {
+                //debug!("[confirm] reference: ?{}: {}", self.label, other);
+                constraint.add(arena, other);
+                Ok(TypeKind::TypeVariable(self))
+            }
+            TypeVariableInner::Reference(var) => var.confirm(arena, other),
+            TypeVariableInner::Instantiated(ty) => {
+                unreachable!(
+                    "A type variable ?{} is already instantiated with {}",
+                    self.label, ty
+                );
+            }
+        }
     }
 
     pub fn type_specifier(&self) -> String {
@@ -753,24 +769,34 @@ impl<'a> PartialEq for TypeVariable<'a> {
 
 #[derive(Debug)]
 pub struct TypeConstraint<'a> {
-    inner: Cell<TypeConstraintInner<'a>>,
+    inner: Cell<Option<&'a TypeConstraintInner<'a>>>,
 }
 
 impl<'a> TypeConstraint<'a> {
-    fn new(inner: Cell<TypeConstraintInner<'a>>) -> Self {
+    fn new(inner: Cell<Option<&'a TypeConstraintInner<'a>>>) -> Self {
         Self { inner }
     }
 
     pub fn empty() -> Self {
-        Self::new(Cell::new(TypeConstraintInner::Empty))
+        Self::new(Cell::default())
+    }
+
+    pub fn add(&self, arena: &'a BumpaloArena, other: &TypeConstraint<'a>) {
+        let other = unwrap_or_return!(other.inner.get());
+        let inner = if let Some(inner) = self.inner.get() {
+            arena.alloc(TypeConstraintInner::Union(other, inner))
+        } else {
+            other
+        };
+
+        self.inner.replace(Some(inner));
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum TypeConstraintInner<'a> {
-    Empty,
     InterfaceType(&'a InterfaceType<'a>),
-    Union(&'a TypeConstraint<'a>, &'a TypeConstraint<'a>),
+    Union(&'a TypeConstraintInner<'a>, &'a TypeConstraintInner<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
