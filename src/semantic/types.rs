@@ -614,15 +614,9 @@ impl fmt::Display for ArrayType<'_> {
 
 #[derive(Debug, Clone, Copy)]
 pub enum TypeVariableInner<'a> {
-    Uninstantiated(Option<i32>),
+    Uninstantiated(&'a TypeConstraint<'a>),
     Reference(&'a TypeVariable<'a>),
     Instantiated(TypeKind<'a>),
-}
-
-impl Default for TypeVariableInner<'_> {
-    fn default() -> Self {
-        Self::Uninstantiated(Some(1))
-    }
 }
 
 pub struct TypeVariable<'a> {
@@ -631,11 +625,16 @@ pub struct TypeVariable<'a> {
 }
 
 impl<'a> TypeVariable<'a> {
-    pub fn new(label: i32) -> Self {
-        Self {
+    fn new(label: i32, inner: Cell<TypeVariableInner<'a>>) -> Self {
+        Self { label, inner }
+    }
+
+    pub fn uninstantiated(arena: &'a BumpaloArena, label: i32) -> Self {
+        let constraint = arena.alloc(TypeConstraint::empty());
+        Self::new(
             label,
-            inner: Cell::default(),
-        }
+            Cell::new(TypeVariableInner::Uninstantiated(constraint)),
+        )
     }
 
     pub fn instance(&self) -> Option<TypeKind<'a>> {
@@ -757,8 +756,19 @@ pub struct TypeConstraint<'a> {
     inner: Cell<TypeConstraintInner<'a>>,
 }
 
+impl<'a> TypeConstraint<'a> {
+    fn new(inner: Cell<TypeConstraintInner<'a>>) -> Self {
+        Self { inner }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(Cell::new(TypeConstraintInner::Empty))
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum TypeConstraintInner<'a> {
+    Empty,
     InterfaceType(&'a InterfaceType<'a>),
     Union(&'a TypeConstraint<'a>, &'a TypeConstraint<'a>),
 }
@@ -824,7 +834,7 @@ impl<'a> InitialTypeBinder<'a> {
     }
 
     pub fn new_type_var(&mut self) -> &'a TypeVariable<'a> {
-        let var = TypeVariable::new(self.seq);
+        let var = TypeVariable::uninstantiated(self.arena, self.seq);
 
         self.seq += 1;
         self.arena.alloc(var)
