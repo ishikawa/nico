@@ -1215,6 +1215,39 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
                 }
             })
     }
+
+    fn exit_subscript_expression(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        subscript_expr: &'a SubscriptExpression<'a>,
+    ) {
+        let callee_type = subscript_expr.callee().r#type();
+
+        let array_type = if let Some(array_type) = callee_type.array_type() {
+            array_type
+        } else {
+            subscript_expr
+                .errors()
+                .push_semantic_error(SemanticError::CalleeIsNotSubscriptable { callee_type });
+            return;
+        };
+
+        // element type
+        debug!(
+            "[inference] subscript_expression: {}, {}",
+            subscript_expr,
+            subscript_expr.callee()
+        );
+
+        if let Err(err) = subscript_expr
+            .r#type()
+            .unify(self.arena, array_type.element_type())
+        {
+            subscript_expr
+                .errors()
+                .push_semantic_error(SemanticError::TypeError(err));
+        }
+    }
 }
 
 /// Indirect references by type variables are still necessary after type inference is complete.

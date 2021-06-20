@@ -8,6 +8,8 @@ pub enum SemanticError<'a> {
     ArgumentCountMismatch { expected: usize, found: usize },
     #[error("Expected callable function, found {callee_type}")]
     CalleeIsNotCallable { callee_type: TypeKind<'a> },
+    #[error("Callee is not subscriptable, found {callee_type}")]
+    CalleeIsNotSubscriptable { callee_type: TypeKind<'a> },
     #[error("Cannot find type `{0}` in this scope")]
     UndefinedType(String),
     #[error("{0}")]

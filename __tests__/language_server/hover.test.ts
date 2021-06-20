@@ -146,6 +146,25 @@ let cases: TestCase[] = [
         }
       }
     ]
+  },
+  // Type inference: array parameter and subscript
+  {
+    // prettier-ignore
+    input: [
+      "fun foo(bar: Int[])",
+      "    bar[0]",
+      "end",
+    ].join("\n"),
+    requests: [
+      // fun foo(bar: Int[])
+      //      ^
+      {
+        position: {
+          line: 0,
+          character: 5
+        }
+      }
+    ]
   }
 ];
 
