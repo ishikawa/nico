@@ -4,8 +4,8 @@
 //! ```ignore
 //! Program             := TopLevel*
 //! TopLevel            := Statement | FunctionDeclaration | StructDeclaration
-//! FunctionDeclaration := "export"? "fun" Id "(" FunctionParameter (, FunctionParameter)* ,? ")" Block "end"
-//! FunctionParameter   := Id
+//! FunctionDeclaration := "export"? "fun" Id "(" FunctionParameter (, FunctionParameter)* ,? ")" "->" TypeAnnotation? "\n" Block "end"
+//! FunctionParameter   := Id ":" TypeAnnotation
 //! StructDeclaration   := "export"? "struct" Id "{" TypeField (, TypeField)* ,? "}"
 //! TypeField           := Id ":" TypeAnnotation
 //! Block               := Statement*
@@ -17,7 +17,7 @@
 //!                      | GroupedExpression
 //! GroupedExpression   := "(" Expression ")"
 //! Id                  := <Identifier>
-//! TypeAnnotation      := <Int32>
+//! TypeAnnotation      := <Identifier>
 //! IntegerLiteral      := <Integer>
 //! StringLiteral       := <String>
 //! VariableExpression  := Id
