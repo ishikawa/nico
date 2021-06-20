@@ -26,6 +26,9 @@ pub fn analyze<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
     let mut binder = VariableBinder::new(arena);
     traverse(arena, &mut binder, node);
 
+    let mut binder = TypeQualifierResolver::new(arena);
+    traverse(arena, &mut binder, node);
+
     let mut binder = TypeInferencer::new(arena);
     traverse(arena, &mut binder, node);
 

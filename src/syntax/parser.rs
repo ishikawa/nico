@@ -368,7 +368,7 @@ impl<'a, 't> Parser<'a, 't> {
     fn parse_type_annotation(&mut self, arena: &'a BumpaloArena) -> Option<&'a TypeAnnotation<'a>> {
         let mut code = CodeBuilder::new();
 
-        let kind = match self.tokenizer.peek_kind() {
+        let mut kind = match self.tokenizer.peek_kind() {
             TokenKind::I32 => {
                 let token = self.tokenizer.next_token();
                 code.interpret(token);
@@ -381,6 +381,23 @@ impl<'a, 't> Parser<'a, 't> {
             }
             _ => return None,
         };
+
+        // Array
+        while let Some(open_bracket) = self.expect_token(TokenKind::Char('[')) {
+            code.interpret(open_bracket);
+
+            if let Some(close_bracket) = self.expect_token(TokenKind::Char(']')) {
+                code.interpret(close_bracket);
+            } else {
+                code.missing(
+                    self.tokenizer.current_insertion_range(),
+                    MissingTokenKind::Char(']'),
+                );
+            }
+
+            // Regardless of reading a close bracket, we can infer the type is array :-)
+            kind = TypeAnnotationKind::ArrayType(arena.alloc(kind));
+        }
 
         let ty = TypeAnnotation::new(arena, kind, code.build(arena));
         Some(arena.alloc(ty))

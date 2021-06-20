@@ -17,7 +17,7 @@
 //!                      | GroupedExpression
 //! GroupedExpression   := "(" Expression ")"
 //! Id                  := <Identifier>
-//! TypeAnnotation      := <Identifier>
+//! TypeAnnotation      := (<Identifier> | <Int>) ("[" "]")*
 //! IntegerLiteral      := <Integer>
 //! StringLiteral       := <String>
 //! VariableExpression  := Id
@@ -690,6 +690,7 @@ pub struct TypeAnnotation<'a> {
 pub enum TypeAnnotationKind<'a> {
     Int32,
     Identifier(&'a Identifier<'a>),
+    ArrayType(&'a TypeAnnotationKind<'a>),
 }
 
 impl fmt::Display for TypeAnnotationKind<'_> {
@@ -697,6 +698,7 @@ impl fmt::Display for TypeAnnotationKind<'_> {
         match self {
             TypeAnnotationKind::Int32 => write!(f, "{}", TypeKind::Int32),
             TypeAnnotationKind::Identifier(id) => id.fmt(f),
+            TypeAnnotationKind::ArrayType(element) => write!(f, "{}[]", element),
         }
     }
 }
@@ -712,8 +714,8 @@ impl<'a> TypeAnnotation<'a> {
         }
     }
 
-    pub fn kind(&self) -> TypeAnnotationKind<'a> {
-        self.kind
+    pub fn kind(&self) -> &TypeAnnotationKind<'a> {
+        &self.kind
     }
 
     // for semantic analysis

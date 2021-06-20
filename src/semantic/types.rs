@@ -5,8 +5,8 @@ use crate::semantic::SemanticError;
 use crate::syntax::{
     self, ArrayExpression, BinaryExpression, CallExpression, CaseExpression, FunctionDefinition,
     GroupedExpression, IfExpression, MemberExpression, NodePath, PatternKind, StructDefinition,
-    StructLiteral, SubscriptExpression, TypeAnnotation, UnaryExpression, ValueField,
-    VariableDeclaration, VariableExpression, VariablePattern, Visitor,
+    StructLiteral, SubscriptExpression, TypeAnnotation, TypeAnnotationKind, UnaryExpression,
+    ValueField, VariableDeclaration, VariableExpression, VariablePattern, Visitor,
 };
 use crate::unwrap_or_return;
 use log::debug;
@@ -14,6 +14,7 @@ use std::cell::Cell;
 use std::fmt;
 
 use super::errors::TypeError;
+use super::Scope;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TypeKind<'a> {
@@ -862,14 +863,8 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         _path: &'a NodePath<'a>,
         annotation: &'a TypeAnnotation<'a>,
     ) {
-        match annotation.kind() {
-            syntax::TypeAnnotationKind::Int32 => {
-                annotation.assign_type(TypeKind::Int32);
-            }
-            syntax::TypeAnnotationKind::Identifier(_) => {
-                annotation.assign_type(TypeKind::TypeVariable(self.new_type_var()));
-            }
-        }
+        // placeholder
+        annotation.assign_type(TypeKind::TypeVariable(self.new_type_var()));
     }
 
     fn exit_function_parameter(
@@ -978,6 +973,68 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
 }
 
 #[derive(Debug)]
+pub(super) struct TypeQualifierResolver<'a> {
+    arena: &'a BumpaloArena,
+}
+
+impl<'a> TypeQualifierResolver<'a> {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
+        Self { arena }
+    }
+
+    fn resolve_type_qualifier(
+        &self,
+        scope: &Scope<'a>,
+        annotation_kind: &TypeAnnotationKind<'a>,
+    ) -> Result<TypeKind<'a>, String> {
+        let ty = match annotation_kind {
+            syntax::TypeAnnotationKind::Int32 => TypeKind::Int32,
+            syntax::TypeAnnotationKind::Identifier(type_name) => {
+                let binding = match scope.get_binding(type_name.as_str()) {
+                    None => {
+                        return Err(type_name.to_string());
+                    }
+                    Some(binding) => binding,
+                };
+
+                if !binding.is_defined_struct() {
+                    return Err(type_name.to_string());
+                }
+
+                binding.r#type()
+            }
+            syntax::TypeAnnotationKind::ArrayType(element_kind) => {
+                let element_type = self.resolve_type_qualifier(scope, element_kind)?;
+                let array_type = ArrayType::new(element_type);
+
+                TypeKind::ArrayType(self.arena.alloc(array_type))
+            }
+        };
+
+        Ok(ty)
+    }
+}
+
+impl<'a> Visitor<'a> for TypeQualifierResolver<'a> {
+    fn exit_type_annotation(&mut self, path: &'a NodePath<'a>, annotation: &'a TypeAnnotation<'a>) {
+        match self.resolve_type_qualifier(path.scope(), annotation.kind()) {
+            Ok(ty) => {
+                // We have to unify the previously assigned type variable and the concrete type.
+                annotation
+                    .r#type()
+                    .unify(self.arena, ty)
+                    .unwrap_or_else(|err| panic!("Type error: {}", err));
+            }
+            Err(name) => {
+                annotation
+                    .errors()
+                    .push_semantic_error(SemanticError::UndefinedType(name));
+            }
+        };
+    }
+}
+
+#[derive(Debug)]
 pub(super) struct TypeInferencer<'a> {
     arena: &'a BumpaloArena,
 }
@@ -1005,29 +1062,6 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             .return_type()
             .unify(self.arena, function.body().r#type())
             .unwrap_or_else(|err| panic!("Type error: {}", err));
-    }
-
-    fn exit_type_annotation(&mut self, path: &'a NodePath<'a>, annotation: &'a TypeAnnotation<'a>) {
-        if let syntax::TypeAnnotationKind::Identifier(type_name) = annotation.kind() {
-            let binding = match path.scope().get_binding(type_name.as_str()) {
-                None => {
-                    annotation
-                        .errors()
-                        .push_semantic_error(SemanticError::UndefinedType(type_name.to_string()));
-                    return;
-                }
-                Some(binding) => binding,
-            };
-
-            if !binding.is_defined_struct() {
-                annotation
-                    .errors()
-                    .push_semantic_error(SemanticError::UndefinedType(type_name.to_string()));
-                return;
-            }
-
-            annotation.assign_type(binding.r#type());
-        }
     }
 
     fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
