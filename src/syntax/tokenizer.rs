@@ -521,6 +521,8 @@ impl<'a> Tokenizer<'a> {
             "export" => TokenKind::Export,
             "let" => TokenKind::Let,
             "struct" => TokenKind::Struct,
+            "Int" => TokenKind::I32,
+            // TODO: remove old type
             "i32" => TokenKind::I32,
             _ => TokenKind::Identifier(value),
         };

@@ -314,6 +314,122 @@ fun foo(n: i32) -> i32
 }
 `;
 
+exports[`1: hover - \`fun foo(n: Int)
+  n + 1
+end
+foo(1)\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1010,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "contents": Object {
+      "kind": "markdown",
+      "value": "\`\`\`nico
+(parameter) n: i32
+\`\`\`",
+    },
+    "range": Object {
+      "end": Object {
+        "character": 9,
+        "line": 0,
+      },
+      "start": Object {
+        "character": 8,
+        "line": 0,
+      },
+    },
+  },
+}
+`;
+
+exports[`1: hover - \`fun foo(n: Int)
+  n + 1
+end
+foo(1)\` at [object Object] 2`] = `
+Object {
+  "error": null,
+  "id": 1011,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "contents": Object {
+      "kind": "markdown",
+      "value": "\`\`\`nico
+(parameter) n: i32
+\`\`\`",
+    },
+    "range": Object {
+      "end": Object {
+        "character": 3,
+        "line": 1,
+      },
+      "start": Object {
+        "character": 2,
+        "line": 1,
+      },
+    },
+  },
+}
+`;
+
+exports[`1: hover - \`fun foo(n: Int)
+  n + 1
+end
+foo(1)\` at [object Object] 3`] = `
+Object {
+  "error": null,
+  "id": 1012,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "contents": Object {
+      "kind": "markdown",
+      "value": "\`\`\`nico
+fun foo(n: i32) -> i32
+\`\`\`",
+    },
+    "range": Object {
+      "end": Object {
+        "character": 7,
+        "line": 0,
+      },
+      "start": Object {
+        "character": 4,
+        "line": 0,
+      },
+    },
+  },
+}
+`;
+
+exports[`1: hover - \`fun foo(n: Int)
+  n + 1
+end
+foo(1)\` at [object Object] 4`] = `
+Object {
+  "error": null,
+  "id": 1013,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "contents": Object {
+      "kind": "markdown",
+      "value": "\`\`\`nico
+fun foo(n: i32) -> i32
+\`\`\`",
+    },
+    "range": Object {
+      "end": Object {
+        "character": 3,
+        "line": 3,
+      },
+      "start": Object {
+        "character": 0,
+        "line": 3,
+      },
+    },
+  },
+}
+`;
+
 exports[`2: hover - \`fun empty()
 end\` at [object Object] 1`] = `
 Object {

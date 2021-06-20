@@ -4,7 +4,7 @@ use nico::arena::BumpaloArena;
 use nico::language_server::{self, server::ServerCapabilitiesBuilder};
 use nico::syntax::{
     self, EffectiveRange, Expression, MissingTokenKind, Node, NodePath, ParseError, Parser,
-    StructLiteral, TextToken, Token, TokenKind, Trivia, VariableExpression,
+    StructLiteral, TextToken, Token, TokenKind, Trivia, TypeAnnotation, VariableExpression,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -232,6 +232,16 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
                 value.name().range(),
                 format!("Cannot find name '{}'.", value.name()),
             );
+        }
+    }
+
+    fn enter_type_annotation(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        annotation: &'a TypeAnnotation<'a>,
+    ) {
+        for e in &annotation.errors().semantic_errors() {
+            self.add_diagnostic(annotation.range(), e.to_string());
         }
     }
 

@@ -46,8 +46,9 @@ let cases: TestCaseBase[] = [
 ];
 
 // Add samples files
+// TODO: rename the directory
 cases = cases.concat(
-  glob.sync("./samples/**/*.nico").map(path => ({
+  glob.sync("./samples_2021/**/*.nico").map(path => ({
     file: path
   }))
 );

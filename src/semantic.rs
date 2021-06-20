@@ -1,6 +1,5 @@
 mod binding;
 mod errors;
-mod inferencer;
 mod scope;
 mod types;
 

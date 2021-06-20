@@ -679,17 +679,58 @@ impl fmt::Display for TypeField<'_> {
 
 #[derive(Debug)]
 pub struct TypeAnnotation<'a> {
-    r#type: TypeKind<'a>,
+    kind: TypeAnnotationKind<'a>,
     code: Code<'a>,
+    // for semantic analysis
+    r#type: Cell<Option<TypeKind<'a>>>,
+    errors: AstErrors<'a>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TypeAnnotationKind<'a> {
+    Int32,
+    Identifier(&'a Identifier<'a>),
+}
+
+impl fmt::Display for TypeAnnotationKind<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeAnnotationKind::Int32 => write!(f, "{}", TypeKind::Int32),
+            TypeAnnotationKind::Identifier(id) => id.fmt(f),
+        }
+    }
 }
 
 impl<'a> TypeAnnotation<'a> {
-    pub fn new(r#type: TypeKind<'a>, code: Code<'a>) -> Self {
-        Self { r#type, code }
+    pub fn new(arena: &'a BumpaloArena, kind: TypeAnnotationKind<'a>, code: Code<'a>) -> Self {
+        Self {
+            kind,
+            code,
+            // for semantic analysis
+            r#type: Cell::default(),
+            errors: AstErrors::new(arena),
+        }
     }
 
+    pub fn kind(&self) -> TypeAnnotationKind<'a> {
+        self.kind
+    }
+
+    // for semantic analysis
     pub fn r#type(&self) -> TypeKind<'a> {
-        self.r#type
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -701,7 +742,7 @@ impl<'a> Node<'a> for TypeAnnotation<'a> {
 
 impl fmt::Display for TypeAnnotation<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TypeAnnotation({:?})", self.r#type)
+        write!(f, "TypeAnnotation({})", self.kind())
     }
 }
 
@@ -792,6 +833,7 @@ impl fmt::Display for FunctionDefinition<'_> {
 #[derive(Debug)]
 pub struct FunctionParameter<'a> {
     name: &'a Identifier<'a>,
+    type_annotation: Option<&'a TypeAnnotation<'a>>,
     code: Code<'a>,
     // for semantic analysis
     r#type: Cell<Option<TypeKind<'a>>>,
@@ -799,9 +841,15 @@ pub struct FunctionParameter<'a> {
 }
 
 impl<'a> FunctionParameter<'a> {
-    pub fn new(arena: &'a BumpaloArena, name: &'a Identifier<'a>, code: Code<'a>) -> Self {
+    pub fn new(
+        arena: &'a BumpaloArena,
+        name: &'a Identifier<'a>,
+        type_annotation: Option<&'a TypeAnnotation<'a>>,
+        code: Code<'a>,
+    ) -> Self {
         Self {
             name,
+            type_annotation,
             code,
             // for semantic analysis
             r#type: Cell::default(),
@@ -809,8 +857,12 @@ impl<'a> FunctionParameter<'a> {
         }
     }
 
-    pub fn name(&self) -> &'a Identifier<'a> {
+    pub fn name(&self) -> &Identifier<'a> {
         self.name
+    }
+
+    pub fn type_annotation(&self) -> Option<&TypeAnnotation<'a>> {
+        self.type_annotation
     }
 
     // for semantic analysis
@@ -826,7 +878,7 @@ impl<'a> FunctionParameter<'a> {
         self.r#type.replace(Some(ty));
     }
 
-    pub fn binding(&self) -> Option<&'a Binding<'a>> {
+    pub fn binding(&self) -> Option<&Binding<'a>> {
         self.binding.get()
     }
 

@@ -65,7 +65,7 @@ let cases: TestCase[] = [
   {
     // prettier-ignore
     input: [
-      "fun foo(x)",
+      "fun foo(x: Int)",
       "    x",
       "end",
     ].join("\n"),

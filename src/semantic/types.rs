@@ -5,8 +5,8 @@ use crate::semantic::SemanticError;
 use crate::syntax::{
     self, ArrayExpression, BinaryExpression, CallExpression, CaseExpression, FunctionDefinition,
     GroupedExpression, IfExpression, MemberExpression, NodePath, PatternKind, StructDefinition,
-    StructLiteral, SubscriptExpression, UnaryExpression, ValueField, VariableDeclaration,
-    VariableExpression, VariablePattern, Visitor,
+    StructLiteral, SubscriptExpression, TypeAnnotation, UnaryExpression, ValueField,
+    VariableDeclaration, VariableExpression, VariablePattern, Visitor,
 };
 use crate::unwrap_or_return;
 use log::debug;
@@ -857,13 +857,32 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         }
     }
 
+    fn exit_type_annotation(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        annotation: &'a TypeAnnotation<'a>,
+    ) {
+        match annotation.kind() {
+            syntax::TypeAnnotationKind::Int32 => {
+                annotation.assign_type(TypeKind::Int32);
+            }
+            syntax::TypeAnnotationKind::Identifier(_) => {
+                annotation.assign_type(TypeKind::TypeVariable(self.new_type_var()));
+            }
+        }
+    }
+
     fn exit_function_parameter(
         &mut self,
         _path: &'a NodePath<'a>,
         _fun: &'a FunctionDefinition<'a>,
         param: &'a syntax::FunctionParameter<'a>,
     ) {
-        param.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        if let Some(annotation) = param.type_annotation() {
+            param.assign_type(annotation.r#type())
+        } else {
+            param.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        }
     }
 
     fn exit_struct_literal(&mut self, _path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
@@ -986,6 +1005,29 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             .return_type()
             .unify(self.arena, function.body().r#type())
             .unwrap_or_else(|err| panic!("Type error: {}", err));
+    }
+
+    fn exit_type_annotation(&mut self, path: &'a NodePath<'a>, annotation: &'a TypeAnnotation<'a>) {
+        if let syntax::TypeAnnotationKind::Identifier(type_name) = annotation.kind() {
+            let binding = match path.scope().get_binding(type_name.as_str()) {
+                None => {
+                    annotation
+                        .errors()
+                        .push_semantic_error(SemanticError::UndefinedType(type_name.to_string()));
+                    return;
+                }
+                Some(binding) => binding,
+            };
+
+            if !binding.is_defined_struct() {
+                annotation
+                    .errors()
+                    .push_semantic_error(SemanticError::UndefinedType(type_name.to_string()));
+                return;
+            }
+
+            annotation.assign_type(binding.r#type());
+        }
     }
 
     fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {

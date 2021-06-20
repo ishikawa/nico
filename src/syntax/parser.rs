@@ -1,6 +1,6 @@
 use super::*;
 use crate::arena::{BumpaloArena, BumpaloString};
-use crate::semantic::{self, TypeKind};
+use crate::semantic;
 use crate::util::naming::PrefixNaming;
 
 const DEBUG: bool = false;
@@ -235,14 +235,29 @@ impl<'a, 't> Parser<'a, 't> {
         &mut self,
         arena: &'a BumpaloArena,
     ) -> Option<&'a FunctionParameter<'a>> {
-        if let Some(name) = self.parse_name(arena) {
-            let code = CodeBuilder::new()
-                .node(NodeKind::Identifier(name))
-                .build(arena);
-            Some(arena.alloc(FunctionParameter::new(arena, name, code)))
-        } else {
-            None
+        let name = self.parse_name(arena)?;
+
+        let mut code = CodeBuilder::new();
+        let mut type_annotation = None;
+
+        code.node(NodeKind::Identifier(name));
+
+        if let Some(token) = self.expect_token(TokenKind::Char(':')) {
+            code.interpret(token);
+            type_annotation = self.parse_type_annotation(arena);
         }
+
+        if let Some(ref annotation) = type_annotation {
+            code.node(NodeKind::TypeAnnotation(annotation));
+        } else {
+            code.missing(
+                self.tokenizer.current_insertion_range(),
+                MissingTokenKind::TypeAnnotation,
+            );
+        }
+
+        let param = FunctionParameter::new(arena, name, type_annotation, code.build(arena));
+        Some(arena.alloc(param))
     }
 
     fn parse_type_field(&mut self, arena: &'a BumpaloArena) -> Option<&'a TypeField<'a>> {
@@ -275,7 +290,6 @@ impl<'a, 't> Parser<'a, 't> {
         }
 
         let field = TypeField::new(name, annotation, code.build(arena));
-
         Some(arena.alloc(field))
     }
 
@@ -353,9 +367,22 @@ impl<'a, 't> Parser<'a, 't> {
 
     fn parse_type_annotation(&mut self, arena: &'a BumpaloArena) -> Option<&'a TypeAnnotation<'a>> {
         let mut code = CodeBuilder::new();
-        code.interpret(self.expect_token(TokenKind::I32)?);
 
-        let ty = TypeAnnotation::new(TypeKind::Int32, code.build(arena));
+        let kind = match self.tokenizer.peek_kind() {
+            TokenKind::I32 => {
+                let token = self.tokenizer.next_token();
+                code.interpret(token);
+                TypeAnnotationKind::Int32
+            }
+            TokenKind::Identifier(_) => {
+                let name = self.parse_name(arena)?;
+                code.node(NodeKind::Identifier(name));
+                TypeAnnotationKind::Identifier(name)
+            }
+            _ => return None,
+        };
+
+        let ty = TypeAnnotation::new(arena, kind, code.build(arena));
         Some(arena.alloc(ty))
     }
 
