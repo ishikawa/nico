@@ -752,6 +752,7 @@ impl fmt::Display for TypeAnnotation<'_> {
 pub struct FunctionDefinition<'a> {
     name: Option<&'a Identifier<'a>>,
     parameters: BumpaloVec<'a, &'a FunctionParameter<'a>>,
+    return_type_annotation: Option<&'a TypeAnnotation<'a>>,
     body: &'a Block<'a>,
     code: Code<'a>,
     // for semantic analysis
@@ -764,6 +765,7 @@ impl<'a> FunctionDefinition<'a> {
         arena: &'a BumpaloArena,
         name: Option<&'a Identifier<'a>>,
         parameters: I,
+        return_type_annotation: Option<&'a TypeAnnotation<'a>>,
         body: &'a Block<'a>,
         code: Code<'a>,
     ) -> Self {
@@ -771,6 +773,7 @@ impl<'a> FunctionDefinition<'a> {
             name,
             parameters: BumpaloVec::from_iter_in(parameters, arena),
             body,
+            return_type_annotation,
             code,
             // for semantic analysis
             r#type: Cell::default(),
@@ -792,6 +795,10 @@ impl<'a> FunctionDefinition<'a> {
 
     pub fn function_type(&self) -> Option<&'a FunctionType<'a>> {
         self.r#type.get().and_then(|ty| ty.function_type())
+    }
+
+    pub fn return_type_annotation(&self) -> Option<&'a TypeAnnotation<'a>> {
+        self.return_type_annotation
     }
 
     // for semantic analysis

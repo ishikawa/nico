@@ -216,6 +216,30 @@ impl<'a, 't> Parser<'a, 't> {
             NodeKind::FunctionParameter,
         );
 
+        // return type
+        let mut return_type_annotation = None;
+
+        if let Some(token) = self.expect_token(TokenKind::RightArrow) {
+            code.interpret(token);
+
+            return_type_annotation = self.parse_type_annotation(arena);
+
+            // To reduce ambiguity, a function signature must follow a newline.
+            self.tokenizer.peek();
+
+            if !self.tokenizer.is_newline_seen() {
+                code.missing(
+                    self.tokenizer.current_insertion_range(),
+                    MissingTokenKind::LineSeparator,
+                );
+            }
+        } else {
+            code.missing(
+                self.tokenizer.current_insertion_range(),
+                MissingTokenKind::RightArrow,
+            );
+        }
+
         // body
         let body = self._read_block(arena, &[TokenKind::End]);
 
@@ -226,6 +250,7 @@ impl<'a, 't> Parser<'a, 't> {
             arena,
             function_name,
             parameters,
+            return_type_annotation,
             body,
             code.build(arena),
         )))

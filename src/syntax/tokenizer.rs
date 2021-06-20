@@ -214,6 +214,8 @@ impl SyntaxToken {
 pub enum MissingTokenKind {
     TopLevel,
     FunctionName,
+    RightArrow,
+    LineSeparator,
     StructName,
     FieldName,
     TypeAnnotation,
@@ -674,6 +676,8 @@ impl fmt::Display for MissingTokenKind {
         match self {
             MissingTokenKind::TopLevel => write!(f, "declaration or statement"),
             MissingTokenKind::FunctionName => write!(f, "function name"),
+            MissingTokenKind::RightArrow => write!(f, "->"),
+            MissingTokenKind::LineSeparator => write!(f, "\\n"),
             MissingTokenKind::StructName => write!(f, "struct name"),
             MissingTokenKind::FieldName => write!(f, "field name"),
             MissingTokenKind::TypeAnnotation => write!(f, "type annotation"),
