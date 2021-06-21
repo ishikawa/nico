@@ -223,20 +223,15 @@ impl<'a, 't> Parser<'a, 't> {
             code.interpret(token);
 
             return_type_annotation = self.parse_type_annotation(arena);
+        }
 
-            // To reduce ambiguity, a function signature must follow a newline.
-            self.tokenizer.peek();
+        // To reduce ambiguity, a function signature must by followed by a newline.
+        self.tokenizer.peek();
 
-            if !self.tokenizer.is_newline_seen() {
-                code.missing(
-                    self.tokenizer.current_insertion_range(),
-                    MissingTokenKind::LineSeparator,
-                );
-            }
-        } else {
+        if !self.tokenizer.is_newline_seen() {
             code.missing(
                 self.tokenizer.current_insertion_range(),
-                MissingTokenKind::RightArrow,
+                MissingTokenKind::LineSeparator,
             );
         }
 

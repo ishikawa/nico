@@ -4,7 +4,7 @@
 //! ```ignore
 //! Program             := TopLevel*
 //! TopLevel            := Statement | FunctionDeclaration | StructDeclaration
-//! FunctionDeclaration := "export"? "fun" Id "(" FunctionParameter (, FunctionParameter)* ,? ")" "->" TypeAnnotation? "\n" Block "end"
+//! FunctionDeclaration := "export"? "fun" Id "(" FunctionParameter (, FunctionParameter)* ,? ")" ("->" TypeAnnotation)? "\n" Block "end"
 //! FunctionParameter   := Id ":" TypeAnnotation
 //! StructDeclaration   := "export"? "struct" Id "{" TypeField (, TypeField)* ,? "}"
 //! TypeField           := Id ":" TypeAnnotation
