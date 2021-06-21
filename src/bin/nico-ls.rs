@@ -3,7 +3,7 @@ use lsp_types::*;
 use nico::arena::BumpaloArena;
 use nico::language_server::{self, server::ServerCapabilitiesBuilder};
 use nico::syntax::{
-    self, EffectiveRange, Expression, MissingTokenKind, Node, NodePath, ParseError, Parser,
+    self, Block, EffectiveRange, Expression, MissingTokenKind, Node, NodePath, ParseError, Parser,
     StructLiteral, TextToken, Token, TokenKind, Trivia, TypeAnnotation, VariableExpression,
 };
 use serde::{Deserialize, Serialize};
@@ -232,6 +232,12 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
                 value.name().range(),
                 format!("Cannot find name '{}'.", value.name()),
             );
+        }
+    }
+
+    fn enter_block(&mut self, _path: &'a NodePath<'a>, block: &'a Block<'a>) {
+        for e in &block.errors().semantic_errors() {
+            self.add_diagnostic(block.range(), e.to_string());
         }
     }
 

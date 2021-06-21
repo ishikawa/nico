@@ -222,13 +222,25 @@ impl<'a, 't> Parser<'a, 't> {
         if let Some(token) = self.expect_token(TokenKind::RightArrow) {
             code.interpret(token);
 
-            return_type_annotation = self.parse_type_annotation(arena);
+            // To distinguish a type annotation from function body,
+            // no newline can be placed after `when` keyword.
+            if !self.tokenizer.is_followed_by_newline() {
+                if let Some(type_annotation) = self.parse_type_annotation(arena) {
+                    code.node(NodeKind::TypeAnnotation(type_annotation));
+                    return_type_annotation = Some(type_annotation);
+                }
+            }
+
+            if return_type_annotation.is_none() {
+                code.missing(
+                    self.tokenizer.current_insertion_range(),
+                    MissingTokenKind::TypeAnnotation,
+                );
+            }
         }
 
         // To reduce ambiguity, a function signature must by followed by a newline.
-        self.tokenizer.peek();
-
-        if !self.tokenizer.is_newline_seen() {
+        if !self.tokenizer.is_followed_by_newline() {
             code.missing(
                 self.tokenizer.current_insertion_range(),
                 MissingTokenKind::LineSeparator,
@@ -595,11 +607,8 @@ impl<'a, 't> Parser<'a, 't> {
             let mut code = CodeBuilder::new();
             code.node(NodeKind::Expression(operand));
 
-            // To distinguish `x\n[...]` and `x[...]`, we have to capture
-            // `tokenizer.is_newline_seen()`, so try to advance tokenizer.
-            self.tokenizer.peek();
-
-            if self.tokenizer.is_newline_seen() {
+            // To distinguish `x\n[...]` and `x[...]`, we have to check a newline.
+            if self.tokenizer.is_followed_by_newline() {
                 break;
             }
 
@@ -1050,8 +1059,7 @@ impl<'a, 't> Parser<'a, 't> {
         code.interpret(self.tokenizer.next_token());
 
         // To avoid syntactic ambiguity, no newline can be placed after `when` keyword.
-        self.tokenizer.peek();
-        let pattern = if self.tokenizer.is_newline_seen() {
+        let pattern = if self.tokenizer.is_followed_by_newline() {
             code.missing(
                 self.tokenizer.current_insertion_range(),
                 MissingTokenKind::Pattern,
@@ -1104,8 +1112,7 @@ impl<'a, 't> Parser<'a, 't> {
         let mut body = vec![];
 
         // A separator must be appear before block
-        self.tokenizer.peek();
-        let mut newline_seen = self.tokenizer.is_newline_seen();
+        let mut newline_seen = self.tokenizer.is_followed_by_newline();
         let mut insertion_range = self.tokenizer.current_insertion_range();
 
         loop {

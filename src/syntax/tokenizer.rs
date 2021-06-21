@@ -273,6 +273,11 @@ impl<'a> Tokenizer<'a> {
         self.newline_seen
     }
 
+    pub fn is_followed_by_newline(&mut self) -> bool {
+        self.peek();
+        self.is_newline_seen()
+    }
+
     /// Returns a reference to the `next()` value without advance the tokenizer.
     pub fn peek(&mut self) -> &Token {
         if self.peeked.is_none() {

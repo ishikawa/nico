@@ -801,13 +801,14 @@ impl<'a> InitialTypeBinder<'a> {
             })
             .collect();
 
-        let ty = FunctionType::new(
-            self.arena,
-            name.as_str(),
-            &params,
-            TypeKind::TypeVariable(self.new_type_var()),
-        );
+        let return_type = if let Some(return_type_annotation) = definition.return_type_annotation()
+        {
+            return_type_annotation.r#type()
+        } else {
+            TypeKind::TypeVariable(self.new_type_var())
+        };
 
+        let ty = FunctionType::new(self.arena, name.as_str(), &params, return_type);
         Some(&*self.arena.alloc(ty))
     }
 
@@ -916,15 +917,12 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
     fn exit_block(&mut self, _path: &'a NodePath<'a>, block: &'a syntax::Block<'a>) {
         // The type of a block is actually the return type of the last expression that
         // occurs in the body.
-        if let Some(stmt) = block.statements().last() {
-            if let Some(expr) = stmt.expression() {
-                block.assign_type(expr.r#type());
-                return;
-            }
+        if let Some(expr) = block.last_expression() {
+            block.assign_type(expr.r#type());
+        } else {
+            // Otherwise, the type of a block is `void`
+            block.assign_type(TypeKind::Void);
         }
-
-        // Otherwise, the type of a block is `void`
-        block.assign_type(TypeKind::Void);
     }
 
     fn exit_call_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a CallExpression<'a>) {
@@ -1058,10 +1056,20 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             function_type,
             function.body()
         );
-        function_type
+        if let Err(err) = function_type
             .return_type()
             .unify(self.arena, function.body().r#type())
-            .unwrap_or_else(|err| panic!("Type error: {}", err));
+        {
+            if let Some(expr) = function.body().last_expression() {
+                expr.errors()
+                    .push_semantic_error(SemanticError::TypeError(err));
+            } else {
+                function
+                    .body()
+                    .errors()
+                    .push_semantic_error(SemanticError::TypeError(err));
+            }
+        }
     }
 
     fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {

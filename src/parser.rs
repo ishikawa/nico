@@ -742,11 +742,8 @@ impl Parser {
         };
 
         loop {
-            // To distinguish `x\n[...]` and `x[...]`, we have to capture
-            // `tokenizer.is_newline_seen()`, so try to advance tokenizer.
-            tokenizer.peek();
-
-            if tokenizer.is_newline_seen() {
+            // To distinguish `x\n[...]` from `x[...]`, we have to check a newline.
+            if tokenizer.is_followed_by_newline() {
                 break;
             }
 

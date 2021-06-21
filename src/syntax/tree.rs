@@ -1005,6 +1005,7 @@ pub struct Block<'a> {
     statements: BumpaloVec<'a, &'a Statement<'a>>,
     scope: &'a Scope<'a>,
     r#type: Cell<Option<TypeKind<'a>>>,
+    errors: AstErrors<'a>,
     code: Code<'a>,
 }
 
@@ -1019,6 +1020,7 @@ impl<'a> Block<'a> {
             scope: arena.alloc(Scope::new(arena)),
             code,
             r#type: Cell::default(),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1028,6 +1030,11 @@ impl<'a> Block<'a> {
 
     pub fn statements(&self) -> impl ExactSizeIterator<Item = &'a Statement<'a>> + '_ {
         self.statements.iter().copied()
+    }
+
+    pub fn last_expression(&self) -> Option<&Expression<'a>> {
+        let stmt = self.statements.last()?;
+        stmt.expression()
     }
 
     pub fn r#type(&self) -> TypeKind<'a> {
@@ -1040,6 +1047,10 @@ impl<'a> Block<'a> {
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
