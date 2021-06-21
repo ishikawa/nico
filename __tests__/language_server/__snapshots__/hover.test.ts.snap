@@ -198,7 +198,7 @@ struct A
 }
 `;
 
-exports[`1: hover - \`fun foo(n)
+exports[`1: hover - \`fun foo(n: Int)
   n + 1
 end
 foo(1)\` at [object Object] 1`] = `
@@ -227,7 +227,7 @@ Object {
 }
 `;
 
-exports[`1: hover - \`fun foo(n)
+exports[`1: hover - \`fun foo(n: Int)
   n + 1
 end
 foo(1)\` at [object Object] 2`] = `
@@ -256,7 +256,7 @@ Object {
 }
 `;
 
-exports[`1: hover - \`fun foo(n)
+exports[`1: hover - \`fun foo(n: Int)
   n + 1
 end
 foo(1)\` at [object Object] 3`] = `
@@ -285,7 +285,7 @@ fun foo(n: i32) -> i32
 }
 `;
 
-exports[`1: hover - \`fun foo(n)
+exports[`1: hover - \`fun foo(n: Int)
   n + 1
 end
 foo(1)\` at [object Object] 4`] = `
@@ -330,6 +330,34 @@ fun empty()
     "range": Object {
       "end": Object {
         "character": 9,
+        "line": 0,
+      },
+      "start": Object {
+        "character": 4,
+        "line": 0,
+      },
+    },
+  },
+}
+`;
+
+exports[`3: hover - \`fun foo(bar: Int[])
+    bar[0]
+end\` at [object Object] 1`] = `
+Object {
+  "error": null,
+  "id": 1030,
+  "jsonrpc": "2.0",
+  "result": Object {
+    "contents": Object {
+      "kind": "markdown",
+      "value": "\`\`\`nico
+fun foo(bar: i32[]) -> i32
+\`\`\`",
+    },
+    "range": Object {
+      "end": Object {
+        "character": 7,
         "line": 0,
       },
       "start": Object {

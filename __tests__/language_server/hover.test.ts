@@ -89,7 +89,7 @@ let cases: TestCase[] = [
   {
     // prettier-ignore
     input: [
-      "fun foo(n)",
+      "fun foo(n: Int)",
       "  n + 1",
       "end",
       "foo(1)"
@@ -143,6 +143,25 @@ let cases: TestCase[] = [
         position: {
           line: 0,
           character: 4
+        }
+      }
+    ]
+  },
+  // Type inference: array parameter and subscript
+  {
+    // prettier-ignore
+    input: [
+      "fun foo(bar: Int[])",
+      "    bar[0]",
+      "end",
+    ].join("\n"),
+    requests: [
+      // fun foo(bar: Int[])
+      //      ^
+      {
+        position: {
+          line: 0,
+          character: 5
         }
       }
     ]

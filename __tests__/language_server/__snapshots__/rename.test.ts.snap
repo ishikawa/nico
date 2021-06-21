@@ -87,7 +87,7 @@ Object {
 }
 `;
 
-exports[`2: rename - \`fun foo(x)
+exports[`2: rename - \`fun foo(x: Int)
     x
 end\` at [object Object] 1`] = `
 Object {
@@ -96,7 +96,7 @@ Object {
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
-      "file:///home/user/nico/samplefun%20foo(x)%0A%20%20%20%20x%0Aend.nico": Array [
+      "file:///home/user/nico/samplefun%20foo(x%3A%20Int)%0A%20%20%20%20x%0Aend.nico": Array [
         Object {
           "newText": "bar",
           "range": Object {
@@ -129,7 +129,7 @@ Object {
 }
 `;
 
-exports[`2: rename - \`fun foo(x)
+exports[`2: rename - \`fun foo(x: Int)
     x
 end\` at [object Object] 2`] = `
 Object {
@@ -138,7 +138,7 @@ Object {
   "jsonrpc": "2.0",
   "result": Object {
     "changes": Object {
-      "file:///home/user/nico/samplefun%20foo(x)%0A%20%20%20%20x%0Aend.nico": Array [
+      "file:///home/user/nico/samplefun%20foo(x%3A%20Int)%0A%20%20%20%20x%0Aend.nico": Array [
         Object {
           "newText": "foo",
           "range": Object {

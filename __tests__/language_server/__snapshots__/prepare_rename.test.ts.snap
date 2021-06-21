@@ -97,7 +97,7 @@ Object {
 }
 `;
 
-exports[`2: prepare rename - \`fun foo(x)
+exports[`2: prepare rename - \`fun foo(x: Int)
     x
 end\` at [object Object] 1`] = `
 Object {

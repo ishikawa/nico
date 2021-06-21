@@ -1,6 +1,5 @@
 mod binding;
 mod errors;
-mod inferencer;
 mod scope;
 mod types;
 
@@ -25,6 +24,9 @@ pub fn analyze<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
     traverse(arena, &mut binder, node);
 
     let mut binder = VariableBinder::new(arena);
+    traverse(arena, &mut binder, node);
+
+    let mut binder = TypeQualifierResolver::new(arena);
     traverse(arena, &mut binder, node);
 
     let mut binder = TypeInferencer::new(arena);

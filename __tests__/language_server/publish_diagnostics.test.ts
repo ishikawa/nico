@@ -55,6 +55,22 @@ let cases: TestCaseBase[] = [
       "let Rectangle = 1",
       "let rect = Rectangle {}", // expected struct
     ].join("\n")
+  },
+  {
+    // prettier-ignore
+    input: [
+      "fun foo() ->", // missing return type
+      "end",
+    ].join("\n")
+  },
+  {
+    // prettier-ignore
+    input: [
+      "fun foo(bar: Int[]) -> Int[]",
+      "    let x = bar[0]",
+      "    x * 2",  // mismatched types
+      "end",
+    ].join("\n")
   }
 ];
 
@@ -62,7 +78,6 @@ filterTestCases(cases).forEach((testCase, i) => {
   let src = readTestFileSync(testCase);
   let name = getTestName(testCase);
 
-  // No compilation errors and semantic tokens
   test(`${i}: publishDiagnostics at \`${name}\``, async done => {
     const agent = new LanguageServerAgent(server!, { sequence: i });
 

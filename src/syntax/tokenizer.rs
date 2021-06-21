@@ -89,14 +89,15 @@ impl fmt::Display for Token {
             TokenKind::When => write!(f, "`when`")?,
             TokenKind::Export => write!(f, "`export`")?,
             TokenKind::Let => write!(f, "`let`")?,
-            TokenKind::Range => write!(f, "`..`")?,
-            TokenKind::Rest => write!(f, "`...`")?,
             TokenKind::Struct => write!(f, "`struct`")?,
             TokenKind::I32 => write!(f, "`i32`")?,
             TokenKind::Eq => write!(f, "`==`")?,
             TokenKind::Ne => write!(f, "`!=`")?,
             TokenKind::Le => write!(f, "`<=`")?,
             TokenKind::Ge => write!(f, "`>=`")?,
+            TokenKind::Range => write!(f, "`..`")?,
+            TokenKind::Rest => write!(f, "`...`")?,
+            TokenKind::RightArrow => write!(f, "`->`")?,
             TokenKind::Char(c) => write!(f, "`{}`", c)?,
             TokenKind::Eos => write!(f, "`(eos)`")?,
             TokenKind::StringStart => write!(f, "`\"...`")?,
@@ -145,17 +146,18 @@ pub enum TokenKind {
     When,
     Export,
     Let,
-    Range, // ".."
-    Rest,  // "..."
     Struct,
     // Keywords (types)
     I32,
 
     // Operators
-    Eq, // "=="
-    Ne, // "!="
-    Le, // "<="
-    Ge, // ">="
+    Eq,         // "=="
+    Ne,         // "!="
+    Le,         // "<="
+    Ge,         // ">="
+    Range,      // ".."
+    Rest,       // "..."
+    RightArrow, // "->"
 
     // punctuations
     Char(char),
@@ -212,6 +214,8 @@ impl SyntaxToken {
 pub enum MissingTokenKind {
     TopLevel,
     FunctionName,
+    RightArrow,
+    LineSeparator,
     StructName,
     FieldName,
     TypeAnnotation,
@@ -267,6 +271,11 @@ impl<'a> Tokenizer<'a> {
 
     pub fn is_newline_seen(&self) -> bool {
         self.newline_seen
+    }
+
+    pub fn is_followed_by_newline(&mut self) -> bool {
+        self.peek();
+        self.is_newline_seen()
     }
 
     /// Returns a reference to the `next()` value without advance the tokenizer.
@@ -362,6 +371,7 @@ impl<'a> Tokenizer<'a> {
                         '0'..='9' => self.read_integer(nextc),
                         'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
                         '!' | '=' | '<' | '>' => self.read_operator(nextc),
+                        '-' => self.read_hyphen(),
                         '.' => self.read_dot(),
                         '"' => {
                             self.next_char();
@@ -406,6 +416,17 @@ impl<'a> Tokenizer<'a> {
 
                 self.end_token(kind, vec![])
             }
+        }
+    }
+
+    fn read_hyphen(&mut self) -> TokenKind {
+        self.next_char();
+
+        if let Some('>') = self.peek_char() {
+            self.next_char();
+            TokenKind::RightArrow
+        } else {
+            TokenKind::Char('-')
         }
     }
 
@@ -521,6 +542,8 @@ impl<'a> Tokenizer<'a> {
             "export" => TokenKind::Export,
             "let" => TokenKind::Let,
             "struct" => TokenKind::Struct,
+            "Int" => TokenKind::I32,
+            // TODO: remove old type
             "i32" => TokenKind::I32,
             _ => TokenKind::Identifier(value),
         };
@@ -633,14 +656,15 @@ impl fmt::Display for TokenKind {
             TokenKind::When => write!(f, "when"),
             TokenKind::Export => write!(f, "export"),
             TokenKind::Let => write!(f, "let"),
-            TokenKind::Range => write!(f, ".."),
-            TokenKind::Rest => write!(f, "..."),
             TokenKind::Struct => write!(f, "struct"),
             TokenKind::I32 => write!(f, "i32"),
             TokenKind::Eq => write!(f, "=="),
             TokenKind::Ne => write!(f, "!="),
             TokenKind::Le => write!(f, "<="),
             TokenKind::Ge => write!(f, ">="),
+            TokenKind::Range => write!(f, ".."),
+            TokenKind::Rest => write!(f, "..."),
+            TokenKind::RightArrow => write!(f, "->"),
             TokenKind::Char(c) => write!(f, "{}", c),
             TokenKind::Eos => write!(f, "(EOF)"),
             TokenKind::StringStart => write!(f, "\"..."),
@@ -657,6 +681,8 @@ impl fmt::Display for MissingTokenKind {
         match self {
             MissingTokenKind::TopLevel => write!(f, "declaration or statement"),
             MissingTokenKind::FunctionName => write!(f, "function name"),
+            MissingTokenKind::RightArrow => write!(f, "->"),
+            MissingTokenKind::LineSeparator => write!(f, "\\n"),
             MissingTokenKind::StructName => write!(f, "struct name"),
             MissingTokenKind::FieldName => write!(f, "field name"),
             MissingTokenKind::TypeAnnotation => write!(f, "type annotation"),

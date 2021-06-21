@@ -93,3 +93,49 @@ Array [
   },
 ]
 `;
+
+exports[`5: publishDiagnostics at \`fun foo() ->
+end\` 1`] = `
+Array [
+  Object {
+    "message": "Syntax Error: expected type annotation",
+    "range": Object {
+      "end": Object {
+        "character": 12,
+        "line": 0,
+      },
+      "start": Object {
+        "character": 10,
+        "line": 0,
+      },
+    },
+    "severity": 1,
+    "source": "nico-ls",
+  },
+]
+`;
+
+exports[`6: publishDiagnostics at \`fun foo(bar: Int[]) -> Int[]
+    let x = bar[0]
+    x * 2
+end\` 1`] = `
+Array [
+  Object {
+    "message": "mismatched types
+expected \`i32\`
+   found \`i32[]\`",
+    "range": Object {
+      "end": Object {
+        "character": 9,
+        "line": 2,
+      },
+      "start": Object {
+        "character": 4,
+        "line": 2,
+      },
+    },
+    "severity": 1,
+    "source": "nico-ls",
+  },
+]
+`;

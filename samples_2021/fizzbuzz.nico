@@ -1,0 +1,22 @@
+# https://en.wikipedia.org/wiki/Fizz_buzz
+fun _fizzbuzz(i: Int, n: Int)
+    if i <= n
+        case i
+        when x if x % 15 == 0
+            println_str("Fizz Buzz")
+        when x if x % 3 == 0
+            println_str("Fizz")
+        when x if x % 5 == 0
+            println_str("Buzz")
+        else
+            println_i32(i)
+        end
+        _fizzbuzz(i + 1, n)
+    end
+end
+
+export fun fizzbuzz(n: Int)
+    _fizzbuzz(1, n)
+end
+
+fizzbuzz(15)

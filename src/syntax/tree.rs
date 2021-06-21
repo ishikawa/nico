@@ -4,8 +4,8 @@
 //! ```ignore
 //! Program             := TopLevel*
 //! TopLevel            := Statement | FunctionDeclaration | StructDeclaration
-//! FunctionDeclaration := "export"? "fun" Id "(" FunctionParameter (, FunctionParameter)* ,? ")" Block "end"
-//! FunctionParameter   := Id
+//! FunctionDeclaration := "export"? "fun" Id "(" FunctionParameter (, FunctionParameter)* ,? ")" ("->" TypeAnnotation)? "\n" Block "end"
+//! FunctionParameter   := Id ":" TypeAnnotation
 //! StructDeclaration   := "export"? "struct" Id "{" TypeField (, TypeField)* ,? "}"
 //! TypeField           := Id ":" TypeAnnotation
 //! Block               := Statement*
@@ -17,7 +17,7 @@
 //!                      | GroupedExpression
 //! GroupedExpression   := "(" Expression ")"
 //! Id                  := <Identifier>
-//! TypeAnnotation      := <Int32>
+//! TypeAnnotation      := (<Identifier> | <Int>) ("[" "]")*
 //! IntegerLiteral      := <Integer>
 //! StringLiteral       := <String>
 //! VariableExpression  := Id
@@ -679,17 +679,60 @@ impl fmt::Display for TypeField<'_> {
 
 #[derive(Debug)]
 pub struct TypeAnnotation<'a> {
-    r#type: TypeKind<'a>,
+    kind: TypeAnnotationKind<'a>,
     code: Code<'a>,
+    // for semantic analysis
+    r#type: Cell<Option<TypeKind<'a>>>,
+    errors: AstErrors<'a>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TypeAnnotationKind<'a> {
+    Int32,
+    Identifier(&'a Identifier<'a>),
+    ArrayType(&'a TypeAnnotationKind<'a>),
+}
+
+impl fmt::Display for TypeAnnotationKind<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeAnnotationKind::Int32 => write!(f, "{}", TypeKind::Int32),
+            TypeAnnotationKind::Identifier(id) => id.fmt(f),
+            TypeAnnotationKind::ArrayType(element) => write!(f, "{}[]", element),
+        }
+    }
 }
 
 impl<'a> TypeAnnotation<'a> {
-    pub fn new(r#type: TypeKind<'a>, code: Code<'a>) -> Self {
-        Self { r#type, code }
+    pub fn new(arena: &'a BumpaloArena, kind: TypeAnnotationKind<'a>, code: Code<'a>) -> Self {
+        Self {
+            kind,
+            code,
+            // for semantic analysis
+            r#type: Cell::default(),
+            errors: AstErrors::new(arena),
+        }
     }
 
+    pub fn kind(&self) -> &TypeAnnotationKind<'a> {
+        &self.kind
+    }
+
+    // for semantic analysis
     pub fn r#type(&self) -> TypeKind<'a> {
-        self.r#type
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+
+    pub fn get_type(&self) -> Option<TypeKind<'a>> {
+        self.r#type.get()
+    }
+
+    pub fn assign_type(&self, ty: TypeKind<'a>) {
+        self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -701,7 +744,7 @@ impl<'a> Node<'a> for TypeAnnotation<'a> {
 
 impl fmt::Display for TypeAnnotation<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TypeAnnotation({:?})", self.r#type)
+        write!(f, "TypeAnnotation({})", self.kind())
     }
 }
 
@@ -709,6 +752,7 @@ impl fmt::Display for TypeAnnotation<'_> {
 pub struct FunctionDefinition<'a> {
     name: Option<&'a Identifier<'a>>,
     parameters: BumpaloVec<'a, &'a FunctionParameter<'a>>,
+    return_type_annotation: Option<&'a TypeAnnotation<'a>>,
     body: &'a Block<'a>,
     code: Code<'a>,
     // for semantic analysis
@@ -721,6 +765,7 @@ impl<'a> FunctionDefinition<'a> {
         arena: &'a BumpaloArena,
         name: Option<&'a Identifier<'a>>,
         parameters: I,
+        return_type_annotation: Option<&'a TypeAnnotation<'a>>,
         body: &'a Block<'a>,
         code: Code<'a>,
     ) -> Self {
@@ -728,6 +773,7 @@ impl<'a> FunctionDefinition<'a> {
             name,
             parameters: BumpaloVec::from_iter_in(parameters, arena),
             body,
+            return_type_annotation,
             code,
             // for semantic analysis
             r#type: Cell::default(),
@@ -749,6 +795,10 @@ impl<'a> FunctionDefinition<'a> {
 
     pub fn function_type(&self) -> Option<&'a FunctionType<'a>> {
         self.r#type.get().and_then(|ty| ty.function_type())
+    }
+
+    pub fn return_type_annotation(&self) -> Option<&'a TypeAnnotation<'a>> {
+        self.return_type_annotation
     }
 
     // for semantic analysis
@@ -792,6 +842,7 @@ impl fmt::Display for FunctionDefinition<'_> {
 #[derive(Debug)]
 pub struct FunctionParameter<'a> {
     name: &'a Identifier<'a>,
+    type_annotation: Option<&'a TypeAnnotation<'a>>,
     code: Code<'a>,
     // for semantic analysis
     r#type: Cell<Option<TypeKind<'a>>>,
@@ -799,9 +850,15 @@ pub struct FunctionParameter<'a> {
 }
 
 impl<'a> FunctionParameter<'a> {
-    pub fn new(arena: &'a BumpaloArena, name: &'a Identifier<'a>, code: Code<'a>) -> Self {
+    pub fn new(
+        arena: &'a BumpaloArena,
+        name: &'a Identifier<'a>,
+        type_annotation: Option<&'a TypeAnnotation<'a>>,
+        code: Code<'a>,
+    ) -> Self {
         Self {
             name,
+            type_annotation,
             code,
             // for semantic analysis
             r#type: Cell::default(),
@@ -809,8 +866,12 @@ impl<'a> FunctionParameter<'a> {
         }
     }
 
-    pub fn name(&self) -> &'a Identifier<'a> {
+    pub fn name(&self) -> &Identifier<'a> {
         self.name
+    }
+
+    pub fn type_annotation(&self) -> Option<&TypeAnnotation<'a>> {
+        self.type_annotation
     }
 
     // for semantic analysis
@@ -826,7 +887,7 @@ impl<'a> FunctionParameter<'a> {
         self.r#type.replace(Some(ty));
     }
 
-    pub fn binding(&self) -> Option<&'a Binding<'a>> {
+    pub fn binding(&self) -> Option<&Binding<'a>> {
         self.binding.get()
     }
 
@@ -944,6 +1005,7 @@ pub struct Block<'a> {
     statements: BumpaloVec<'a, &'a Statement<'a>>,
     scope: &'a Scope<'a>,
     r#type: Cell<Option<TypeKind<'a>>>,
+    errors: AstErrors<'a>,
     code: Code<'a>,
 }
 
@@ -958,6 +1020,7 @@ impl<'a> Block<'a> {
             scope: arena.alloc(Scope::new(arena)),
             code,
             r#type: Cell::default(),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -967,6 +1030,11 @@ impl<'a> Block<'a> {
 
     pub fn statements(&self) -> impl ExactSizeIterator<Item = &'a Statement<'a>> + '_ {
         self.statements.iter().copied()
+    }
+
+    pub fn last_expression(&self) -> Option<&Expression<'a>> {
+        let stmt = self.statements.last()?;
+        stmt.expression()
     }
 
     pub fn r#type(&self) -> TypeKind<'a> {
@@ -979,6 +1047,10 @@ impl<'a> Block<'a> {
 
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
+    }
+
+    pub fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 

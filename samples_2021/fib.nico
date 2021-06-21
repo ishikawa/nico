@@ -1,0 +1,21 @@
+# https://en.wikipedia.org/wiki/Fibonacci_number
+export fun fib(n: Int)
+    if n <= 1
+        n
+    else
+        fib(n - 1) + fib(n - 2)
+    end
+end
+
+fun _print_fib(i: Int, n: Int)
+    println_i32(fib(i))
+    if i < n
+        _print_fib(i + 1, n)
+    end
+end
+
+fun print_fib(n: Int)
+    _print_fib(0, n)
+end
+
+print_fib(20)
