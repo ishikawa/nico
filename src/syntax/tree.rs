@@ -60,6 +60,8 @@ pub trait Node<'arena> {
         let init = it.next().unwrap();
         it.fold(init.range(), |acc, kind| kind.range().union(&acc))
     }
+
+    fn errors(&self) -> &AstErrors<'arena>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -383,6 +385,44 @@ impl<'a> Node<'a> for NodeKind<'a> {
             NodeKind::GroupedExpression(kind) => kind.code(),
         }
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        match self {
+            NodeKind::Program(kind) => kind.errors(),
+            NodeKind::TopLevel(kind) => kind.errors(),
+            NodeKind::Block(kind) => kind.errors(),
+            NodeKind::Identifier(kind) => kind.errors(),
+            NodeKind::StructDefinition(kind) => kind.errors(),
+            NodeKind::FunctionDefinition(kind) => kind.errors(),
+            NodeKind::TypeField(kind) => kind.errors(),
+            NodeKind::ValueField(kind) => kind.errors(),
+            NodeKind::TypeAnnotation(kind) => kind.errors(),
+            NodeKind::FunctionParameter(kind) => kind.errors(),
+            NodeKind::Statement(kind) => kind.errors(),
+            NodeKind::VariableDeclaration(kind) => kind.errors(),
+            NodeKind::Expression(kind) => kind.errors(),
+            NodeKind::IntegerLiteral(kind) => kind.errors(),
+            NodeKind::StructLiteral(kind) => kind.errors(),
+            NodeKind::StringLiteral(kind) => kind.errors(),
+            NodeKind::VariableExpression(kind) => kind.errors(),
+            NodeKind::BinaryExpression(kind) => kind.errors(),
+            NodeKind::UnaryExpression(kind) => kind.errors(),
+            NodeKind::SubscriptExpression(kind) => kind.errors(),
+            NodeKind::CallExpression(kind) => kind.errors(),
+            NodeKind::ArrayExpression(kind) => kind.errors(),
+            NodeKind::MemberExpression(kind) => kind.errors(),
+            NodeKind::IfExpression(kind) => kind.errors(),
+            NodeKind::CaseExpression(kind) => kind.errors(),
+            NodeKind::CaseArm(kind) => kind.errors(),
+            NodeKind::Pattern(kind) => kind.errors(),
+            NodeKind::VariablePattern(kind) => kind.errors(),
+            NodeKind::ArrayPattern(kind) => kind.errors(),
+            NodeKind::RestPattern(kind) => kind.errors(),
+            NodeKind::StructPattern(kind) => kind.errors(),
+            NodeKind::ValueFieldPattern(kind) => kind.errors(),
+            NodeKind::GroupedExpression(kind) => kind.errors(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -433,6 +473,14 @@ impl<'a> Node<'a> for TopLevel<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        match self.kind() {
+            TopLevelKind::StructDefinition(definition) => definition.errors(),
+            TopLevelKind::FunctionDefinition(definition) => definition.errors(),
+            TopLevelKind::Statement(stmt) => stmt.errors(),
+        }
+    }
 }
 
 impl fmt::Display for TopLevel<'_> {
@@ -474,6 +522,7 @@ pub struct Program<'a> {
     declarations: &'a Scope<'a>,
     main_scope: &'a Scope<'a>,
     code: Code<'a>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> Program<'a> {
@@ -490,6 +539,7 @@ impl<'a> Program<'a> {
             declarations,
             main_scope,
             code,
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -510,6 +560,10 @@ impl<'a> Node<'a> for Program<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl fmt::Display for Program<'_> {
@@ -522,6 +576,7 @@ impl fmt::Display for Program<'_> {
 pub struct Identifier<'a> {
     id: BumpaloString<'a>,
     code: CodeKind<'a>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> Identifier<'a> {
@@ -529,6 +584,7 @@ impl<'a> Identifier<'a> {
         Self {
             id: BumpaloString::from_str_in(id.as_ref(), arena),
             code: CodeKind::interpreted(token),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -547,6 +603,10 @@ impl<'a> Node<'a> for Identifier<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         CodeKindIter::from(&self.code)
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl fmt::Display for Identifier<'_> {
@@ -563,6 +623,7 @@ pub struct StructDefinition<'a> {
     // for semantic analysis
     r#type: Cell<Option<TypeKind<'a>>>,
     binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> StructDefinition<'a> {
@@ -579,6 +640,7 @@ impl<'a> StructDefinition<'a> {
             // for semantic analysis
             r#type: Cell::default(),
             binding: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -620,6 +682,10 @@ impl<'a> Node<'a> for StructDefinition<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl fmt::Display for StructDefinition<'_> {
@@ -637,10 +703,12 @@ pub struct TypeField<'a> {
     name: Option<&'a Identifier<'a>>,
     type_annotation: Option<&'a TypeAnnotation<'a>>,
     code: Code<'a>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> TypeField<'a> {
     pub fn new(
+        arena: &'a BumpaloArena,
         name: Option<&'a Identifier<'a>>,
         type_annotation: Option<&'a TypeAnnotation<'a>>,
         code: Code<'a>,
@@ -649,6 +717,7 @@ impl<'a> TypeField<'a> {
             name,
             type_annotation,
             code,
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -664,6 +733,10 @@ impl<'a> TypeField<'a> {
 impl<'a> Node<'a> for TypeField<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -730,15 +803,15 @@ impl<'a> TypeAnnotation<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for TypeAnnotation<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -758,6 +831,7 @@ pub struct FunctionDefinition<'a> {
     // for semantic analysis
     r#type: Cell<Option<TypeKind<'a>>>,
     binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> FunctionDefinition<'a> {
@@ -778,6 +852,7 @@ impl<'a> FunctionDefinition<'a> {
             // for semantic analysis
             r#type: Cell::default(),
             binding: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -827,6 +902,10 @@ impl<'a> Node<'a> for FunctionDefinition<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl fmt::Display for FunctionDefinition<'_> {
@@ -847,6 +926,7 @@ pub struct FunctionParameter<'a> {
     // for semantic analysis
     r#type: Cell<Option<TypeKind<'a>>>,
     binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> FunctionParameter<'a> {
@@ -863,6 +943,7 @@ impl<'a> FunctionParameter<'a> {
             // for semantic analysis
             r#type: Cell::default(),
             binding: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -900,6 +981,10 @@ impl<'a> Node<'a> for FunctionParameter<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl fmt::Display for FunctionParameter<'_> {
@@ -913,10 +998,12 @@ pub struct VariableDeclaration<'a> {
     pattern: Option<&'a Pattern<'a>>,
     init: Option<&'a Expression<'a>>,
     code: Code<'a>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> VariableDeclaration<'a> {
     pub fn new(
+        arena: &'a BumpaloArena,
         pattern: Option<&'a Pattern<'a>>,
         init: Option<&'a Expression<'a>>,
         code: Code<'a>,
@@ -925,6 +1012,7 @@ impl<'a> VariableDeclaration<'a> {
             pattern,
             init,
             code,
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -940,6 +1028,10 @@ impl<'a> VariableDeclaration<'a> {
 impl<'a> Node<'a> for VariableDeclaration<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -991,6 +1083,13 @@ impl<'a> Statement<'a> {
 impl<'a> Node<'a> for Statement<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         CodeKindIter::from(&self.code)
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        match self.kind() {
+            StatementKind::Expression(expr) => expr.errors(),
+            StatementKind::VariableDeclaration(decl) => decl.errors(),
+        }
     }
 }
 
@@ -1048,15 +1147,15 @@ impl<'a> Block<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for Block<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1231,6 +1330,24 @@ impl<'a> Node<'a> for Expression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         CodeKindIter::from(&self.code)
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        match self.kind() {
+            ExpressionKind::IntegerLiteral(expr) => expr.errors(),
+            ExpressionKind::StringLiteral(expr) => expr.errors(),
+            ExpressionKind::VariableExpression(expr) => expr.errors(),
+            ExpressionKind::BinaryExpression(expr) => expr.errors(),
+            ExpressionKind::UnaryExpression(expr) => expr.errors(),
+            ExpressionKind::SubscriptExpression(expr) => expr.errors(),
+            ExpressionKind::CallExpression(expr) => expr.errors(),
+            ExpressionKind::ArrayExpression(expr) => expr.errors(),
+            ExpressionKind::IfExpression(expr) => expr.errors(),
+            ExpressionKind::CaseExpression(expr) => expr.errors(),
+            ExpressionKind::MemberExpression(expr) => expr.errors(),
+            ExpressionKind::StructLiteral(expr) => expr.errors(),
+            ExpressionKind::GroupedExpression(expr) => expr.errors(),
+        }
+    }
 }
 
 impl fmt::Display for Expression<'_> {
@@ -1287,15 +1404,15 @@ impl<'a> StructLiteral<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for StructLiteral<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1311,11 +1428,12 @@ pub struct ValueField<'a> {
     value: Option<&'a Expression<'a>>,
     code: Code<'a>,
     r#type: Cell<Option<TypeKind<'a>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> ValueField<'a> {
     pub fn new(
-        _arena: &'a BumpaloArena,
+        arena: &'a BumpaloArena,
         name: &'a Identifier<'a>,
         value: Option<&'a Expression<'a>>,
         code: Code<'a>,
@@ -1325,6 +1443,7 @@ impl<'a> ValueField<'a> {
             value,
             code,
             r#type: Cell::default(),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1352,6 +1471,10 @@ impl<'a> ValueField<'a> {
 impl<'a> Node<'a> for ValueField<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1412,15 +1535,15 @@ impl<'a> BinaryExpression<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for BinaryExpression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1474,15 +1597,15 @@ impl<'a> UnaryExpression<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for UnaryExpression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1584,15 +1707,15 @@ impl<'a> SubscriptExpression<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for SubscriptExpression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1651,15 +1774,15 @@ impl<'a> CallExpression<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for CallExpression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1713,15 +1836,15 @@ impl<'a> MemberExpression<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for MemberExpression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1772,15 +1895,15 @@ impl<'a> ArrayExpression<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for ArrayExpression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1841,15 +1964,15 @@ impl<'a> IfExpression<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for IfExpression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -1920,6 +2043,10 @@ impl<'a> Node<'a> for CaseExpression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl fmt::Display for CaseExpression<'_> {
@@ -1939,6 +2066,7 @@ pub struct CaseArm<'a> {
     // the guard clause.
     scope: &'a Scope<'a>,
     code: Code<'a>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> CaseArm<'a> {
@@ -1955,6 +2083,7 @@ impl<'a> CaseArm<'a> {
             then_body,
             scope: arena.alloc(Scope::new(arena)),
             code,
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -1978,6 +2107,10 @@ impl<'a> CaseArm<'a> {
 impl<'a> Node<'a> for CaseArm<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -2011,15 +2144,15 @@ impl<'a> IntegerLiteral<'a> {
     pub fn r#type(&self) -> TypeKind<'a> {
         TypeKind::Int32
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for IntegerLiteral<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         CodeKindIter::from(&self.code)
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -2052,14 +2185,15 @@ impl<'a> StringLiteral<'a> {
     pub fn r#type(&self) -> TypeKind<'a> {
         TypeKind::String
     }
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for StringLiteral<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -2111,15 +2245,15 @@ impl<'a> VariableExpression<'a> {
     pub fn assign_type(&self, ty: TypeKind<'a>) {
         self.r#type.replace(Some(ty));
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        &self.errors
-    }
 }
 
 impl<'a> Node<'a> for VariableExpression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         CodeKindIter::from(&self.code)
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 
@@ -2177,6 +2311,10 @@ impl<'a> Node<'a> for GroupedExpression<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl fmt::Display for GroupedExpression<'_> {
@@ -2227,6 +2365,18 @@ impl<'a> Node<'a> for Pattern<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         CodeKindIter::from(&self.code)
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        match self.kind() {
+            PatternKind::IntegerPattern(pattern) => pattern.errors(),
+            PatternKind::StringPattern(pattern) => pattern.errors(),
+            PatternKind::VariablePattern(pattern) => pattern.errors(),
+            PatternKind::ArrayPattern(pattern) => pattern.errors(),
+            PatternKind::RestPattern(pattern) => pattern.errors(),
+            PatternKind::StructPattern(pattern) => pattern.errors(),
+            PatternKind::ValueFieldPattern(pattern) => pattern.errors(),
+        }
+    }
 }
 
 impl fmt::Display for Pattern<'_> {
@@ -2242,6 +2392,7 @@ pub struct VariablePattern<'a> {
     // for semantic analysis
     r#type: Cell<Option<TypeKind<'a>>>,
     binding: BumpaloBox<'a, Cell<Option<&'a Binding<'a>>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> VariablePattern<'a> {
@@ -2253,6 +2404,7 @@ impl<'a> VariablePattern<'a> {
             // for semantic analysis
             r#type: Cell::default(),
             binding: BumpaloBox::new_in(Cell::default(), arena),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -2290,6 +2442,10 @@ impl<'a> Node<'a> for VariablePattern<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         CodeKindIter::from(&self.code)
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl fmt::Display for VariablePattern<'_> {
@@ -2303,6 +2459,7 @@ pub struct ArrayPattern<'a> {
     elements: BumpaloVec<'a, &'a Pattern<'a>>,
     code: Code<'a>,
     r#type: Cell<Option<TypeKind<'a>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> ArrayPattern<'a> {
@@ -2315,6 +2472,7 @@ impl<'a> ArrayPattern<'a> {
             elements: BumpaloVec::from_iter_in(elements, arena),
             code,
             r#type: Cell::default(),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -2339,6 +2497,10 @@ impl<'a> Node<'a> for ArrayPattern<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl fmt::Display for ArrayPattern<'_> {
@@ -2352,11 +2514,12 @@ pub struct RestPattern<'a> {
     variable_pattern: Option<&'a VariablePattern<'a>>,
     code: Code<'a>,
     r#type: Cell<Option<TypeKind<'a>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> RestPattern<'a> {
     pub fn new(
-        _arena: &'a BumpaloArena,
+        arena: &'a BumpaloArena,
         variable_pattern: Option<&'a VariablePattern<'a>>,
         code: Code<'a>,
     ) -> Self {
@@ -2364,6 +2527,7 @@ impl<'a> RestPattern<'a> {
             variable_pattern,
             code,
             r#type: Cell::default(),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -2388,6 +2552,10 @@ impl<'a> Node<'a> for RestPattern<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl fmt::Display for RestPattern<'_> {
@@ -2402,6 +2570,7 @@ pub struct StructPattern<'a> {
     fields: BumpaloVec<'a, &'a ValueFieldPattern<'a>>,
     code: Code<'a>,
     r#type: Cell<Option<TypeKind<'a>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> StructPattern<'a> {
@@ -2416,6 +2585,7 @@ impl<'a> StructPattern<'a> {
             fields: BumpaloVec::from_iter_in(fields, arena),
             code,
             r#type: Cell::default(),
+            errors: AstErrors::new(arena),
         }
     }
 
@@ -2444,6 +2614,10 @@ impl<'a> Node<'a> for StructPattern<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
+    }
 }
 
 impl fmt::Display for StructPattern<'_> {
@@ -2459,6 +2633,7 @@ pub struct ValueFieldPattern<'a> {
     omitted_value: Option<&'a Pattern<'a>>,
     code: Code<'a>,
     r#type: Cell<Option<TypeKind<'a>>>,
+    errors: AstErrors<'a>,
 }
 
 impl<'a> ValueFieldPattern<'a> {
@@ -2475,6 +2650,7 @@ impl<'a> ValueFieldPattern<'a> {
                 omitted_value: None,
                 code,
                 r#type: Cell::default(),
+                errors: AstErrors::new(arena),
             }
         } else {
             let expr = arena.alloc(VariablePattern::new(arena, name));
@@ -2487,6 +2663,7 @@ impl<'a> ValueFieldPattern<'a> {
                 omitted_value: Some(omitted_value),
                 code,
                 r#type: Cell::default(),
+                errors: AstErrors::new(arena),
             }
         }
     }
@@ -2519,6 +2696,10 @@ impl<'a> ValueFieldPattern<'a> {
 impl<'a> Node<'a> for ValueFieldPattern<'a> {
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
+    }
+
+    fn errors(&self) -> &AstErrors<'a> {
+        &self.errors
     }
 }
 

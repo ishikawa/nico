@@ -1,4 +1,4 @@
-use super::TypeKind;
+use super::{Binding, TypeKind};
 use std::fmt::Display;
 use thiserror::Error;
 
@@ -12,6 +12,13 @@ pub enum SemanticError<'a> {
     CalleeIsNotSubscriptable { callee_type: TypeKind<'a> },
     #[error("Cannot find type `{0}` in this scope")]
     UndefinedType(String),
+    #[error("Expected {expected}, found '{found}'.")]
+    UnexpectedBinding {
+        expected: String,
+        found: &'a Binding<'a>,
+    },
+    #[error("Cannot find name '{name}'.")]
+    UndefinedBinding { name: String },
     #[error("{0}")]
     TypeError(TypeError<'a>),
 }

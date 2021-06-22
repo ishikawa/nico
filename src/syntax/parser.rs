@@ -321,7 +321,7 @@ impl<'a, 't> Parser<'a, 't> {
             );
         }
 
-        let field = TypeField::new(name, annotation, code.build(arena));
+        let field = TypeField::new(arena, name, annotation, code.build(arena));
         Some(arena.alloc(field))
     }
 
@@ -478,7 +478,7 @@ impl<'a, 't> Parser<'a, 't> {
             );
         }
 
-        let decl = VariableDeclaration::new(pattern, init, code.build(arena));
+        let decl = VariableDeclaration::new(arena, pattern, init, code.build(arena));
 
         Some(arena.alloc(decl))
     }

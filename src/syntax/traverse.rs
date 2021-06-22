@@ -193,6 +193,9 @@ pub trait Visitor<'a> {
     }
 
     // Node
+    fn enter_node(&mut self, path: &'a NodePath<'a>, node: NodeKind<'a>) {}
+    fn exit_node(&mut self, path: &'a NodePath<'a>, node: NodeKind<'a>) {}
+
     fn enter_program(&mut self, path: &'a NodePath<'a>, program: &'a Program<'a>) {}
     fn exit_program(&mut self, path: &'a NodePath<'a>, program: &'a Program<'a>) {}
 
@@ -461,6 +464,8 @@ fn traverse_path<'a>(
 fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
     let node = path.node();
 
+    visitor.enter_node(path, node);
+
     match node {
         NodeKind::Program(kind) => {
             visitor.enter_program(path, kind);
@@ -579,6 +584,8 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
 
 fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
     let node = path.node();
+
+    visitor.exit_node(path, node);
 
     match node {
         NodeKind::Program(kind) => {
