@@ -4,9 +4,9 @@ use crate::semantic::errors::TypeMismatchError;
 use crate::semantic::SemanticError;
 use crate::syntax::{
     self, ArrayExpression, BinaryExpression, CallExpression, CaseExpression, FunctionDefinition,
-    GroupedExpression, IfExpression, MemberExpression, NodePath, PatternKind, StructDefinition,
-    StructLiteral, SubscriptExpression, TypeAnnotation, TypeAnnotationKind, UnaryExpression,
-    ValueField, VariableDeclaration, VariableExpression, VariablePattern, Visitor,
+    GroupedExpression, IfExpression, MemberExpression, Node, NodePath, PatternKind,
+    StructDefinition, StructLiteral, SubscriptExpression, TypeAnnotation, TypeAnnotationKind,
+    UnaryExpression, ValueField, VariableDeclaration, VariableExpression, VariablePattern, Visitor,
 };
 use crate::unwrap_or_return;
 use log::debug;
