@@ -1073,8 +1073,29 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
     }
 
     fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
-        let binding = unwrap_or_return!(path.scope().get_binding(literal.name().as_str()));
-        let struct_def = unwrap_or_return!(binding.struct_definition());
+        // Expected struct for name
+        let struct_def = if let Some(binding) = path.scope().get_binding(literal.name().as_str()) {
+            if let Some(struct_def) = binding.struct_definition() {
+                struct_def
+            } else {
+                literal
+                    .name()
+                    .errors()
+                    .push_semantic_error(SemanticError::UnexpectedBinding {
+                        expected: "struct".to_string(),
+                        found: binding,
+                    });
+                return;
+            }
+        } else {
+            literal
+                .name()
+                .errors()
+                .push_semantic_error(SemanticError::UndefinedBinding {
+                    name: literal.name().to_string(),
+                });
+            return;
+        };
 
         debug!("[inference] struct literal: {}, {}", literal, struct_def);
 

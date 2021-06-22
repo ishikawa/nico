@@ -4,7 +4,7 @@ use nico::arena::BumpaloArena;
 use nico::language_server::{self, server::ServerCapabilitiesBuilder};
 use nico::syntax::{
     self, EffectiveRange, MissingTokenKind, Node, NodeKind, NodePath, ParseError, Parser,
-    StructLiteral, TextToken, Token, TokenKind, Trivia, VariableExpression,
+    TextToken, Token, TokenKind, Trivia, VariableExpression,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -207,6 +207,7 @@ impl DiagnosticsCollector {
 }
 
 impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
+    // TODO: move to semantic analysis
     fn enter_variable_expression(
         &mut self,
         path: &'a NodePath<'a>,
@@ -215,23 +216,6 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
         // Undefined variable
         if path.scope().get_binding(expr.name()).is_none() {
             self.add_diagnostic(expr.range(), format!("Cannot find name '{}'.", expr.name()));
-        }
-    }
-
-    fn enter_struct_literal(&mut self, path: &'a NodePath<'a>, value: &StructLiteral) {
-        // Expected struct for name
-        if let Some(binding) = path.scope().get_binding(value.name().as_str()) {
-            if !binding.is_struct() {
-                self.add_diagnostic(
-                    value.name().range(),
-                    format!("Expected struct, found '{}'.", binding),
-                );
-            }
-        } else {
-            self.add_diagnostic(
-                value.name().range(),
-                format!("Cannot find name '{}'.", value.name()),
-            );
         }
     }
 
