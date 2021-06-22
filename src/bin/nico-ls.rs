@@ -3,8 +3,8 @@ use lsp_types::*;
 use nico::arena::BumpaloArena;
 use nico::language_server::{self, server::ServerCapabilitiesBuilder};
 use nico::syntax::{
-    self, Block, EffectiveRange, Expression, MissingTokenKind, Node, NodePath, ParseError, Parser,
-    StructLiteral, TextToken, Token, TokenKind, Trivia, TypeAnnotation, VariableExpression,
+    self, EffectiveRange, MissingTokenKind, Node, NodeKind, NodePath, ParseError, Parser,
+    StructLiteral, TextToken, Token, TokenKind, Trivia, VariableExpression,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -235,25 +235,20 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
         }
     }
 
-    fn enter_block(&mut self, _path: &'a NodePath<'a>, block: &'a Block<'a>) {
-        for e in &block.errors().semantic_errors() {
-            self.add_diagnostic(block.range(), e.to_string());
+    fn enter_node(&mut self, _path: &'a NodePath<'a>, node: syntax::NodeKind<'a>) {
+        // We don't care wrapper nodes.
+        match node {
+            NodeKind::TopLevel(_)
+            | NodeKind::Statement(_)
+            | NodeKind::Expression(_)
+            | NodeKind::Pattern(_) => {
+                return;
+            }
+            _ => {}
         }
-    }
 
-    fn enter_type_annotation(
-        &mut self,
-        _path: &'a NodePath<'a>,
-        annotation: &'a TypeAnnotation<'a>,
-    ) {
-        for e in &annotation.errors().semantic_errors() {
-            self.add_diagnostic(annotation.range(), e.to_string());
-        }
-    }
-
-    fn enter_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a Expression<'a>) {
-        for e in &expr.errors().semantic_errors() {
-            self.add_diagnostic(expr.range(), e.to_string());
+        for e in &node.errors().semantic_errors() {
+            self.add_diagnostic(node.range(), e.to_string());
         }
     }
 
