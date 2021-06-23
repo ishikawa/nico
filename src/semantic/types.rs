@@ -1138,6 +1138,11 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             expr.r#type()
                 .unify(self.arena, binding.r#type())
                 .unwrap_or_else(|err| panic!("Type error: {}", err));
+        } else {
+            expr.errors()
+                .push_semantic_error(SemanticError::UndefinedBinding {
+                    name: expr.name().to_string(),
+                });
         }
     }
 

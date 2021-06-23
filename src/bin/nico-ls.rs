@@ -4,7 +4,7 @@ use nico::arena::BumpaloArena;
 use nico::language_server::{self, server::ServerCapabilitiesBuilder};
 use nico::syntax::{
     self, EffectiveRange, MissingTokenKind, Node, NodeKind, NodePath, ParseError, Parser,
-    TextToken, Token, TokenKind, Trivia, VariableExpression,
+    TextToken, Token, TokenKind, Trivia,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -207,18 +207,6 @@ impl DiagnosticsCollector {
 }
 
 impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
-    // TODO: move to semantic analysis
-    fn enter_variable_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a VariableExpression<'a>,
-    ) {
-        // Undefined variable
-        if path.scope().get_binding(expr.name()).is_none() {
-            self.add_diagnostic(expr.range(), format!("Cannot find name '{}'.", expr.name()));
-        }
-    }
-
     fn enter_node(&mut self, _path: &'a NodePath<'a>, node: syntax::NodeKind<'a>) {
         // We don't care wrapper nodes.
         match node {
