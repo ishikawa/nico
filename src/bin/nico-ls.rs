@@ -321,7 +321,9 @@ impl SemanticTokenizer {
             | TokenKind::Char('-')
             | TokenKind::Char('*')
             | TokenKind::Char('/')
-            | TokenKind::Char('%') => SemanticTokenType::OPERATOR,
+            | TokenKind::Char('%')
+            | TokenKind::Rest
+            | TokenKind::Range => SemanticTokenType::OPERATOR,
             TokenKind::Identifier(_) => {
                 self.token_type_and_modifiers_for_identifier(path, &mut token_modifiers_bitset)
             }
