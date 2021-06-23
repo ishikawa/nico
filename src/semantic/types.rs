@@ -1074,9 +1074,9 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
 
     fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
         // Expected struct for name
-        let struct_def = if let Some(binding) = path.scope().get_binding(literal.name().as_str()) {
-            if let Some(struct_def) = binding.struct_definition() {
-                struct_def
+        let struct_type = if let Some(binding) = path.scope().get_binding(literal.name().as_str()) {
+            if let Some(struct_type) = binding.r#type().struct_type() {
+                struct_type
             } else {
                 literal
                     .name()
@@ -1097,9 +1097,12 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             return;
         };
 
-        debug!("[inference] struct literal: {}, {}", literal, struct_def);
+        debug!("[inference] struct literal: {}", literal);
 
-        if let Err(err) = literal.r#type().unify(self.arena, struct_def.r#type()) {
+        if let Err(err) = literal
+            .r#type()
+            .unify(self.arena, TypeKind::StructType(struct_type))
+        {
             literal
                 .errors()
                 .push_semantic_error(SemanticError::TypeError(err));
