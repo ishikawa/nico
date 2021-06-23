@@ -1073,33 +1073,15 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
     }
 
     fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
-        // Expected struct for name
-        let struct_def = if let Some(binding) = path.scope().get_binding(literal.name().as_str()) {
-            if let Some(struct_def) = binding.struct_definition() {
-                struct_def
-            } else {
-                literal
-                    .name()
-                    .errors()
-                    .push_semantic_error(SemanticError::UnexpectedBinding {
-                        expected: "struct".to_string(),
-                        found: binding,
-                    });
-                return;
-            }
-        } else {
-            literal
-                .name()
-                .errors()
-                .push_semantic_error(SemanticError::UndefinedBinding {
-                    name: literal.name().to_string(),
-                });
-            return;
-        };
+        let binding = unwrap_or_return!(path.scope().get_binding(literal.name().as_str()));
+        let struct_type = unwrap_or_return!(binding.r#type().struct_type());
 
-        debug!("[inference] struct literal: {}, {}", literal, struct_def);
+        debug!("[inference] struct literal: {}", literal);
 
-        if let Err(err) = literal.r#type().unify(self.arena, struct_def.r#type()) {
+        if let Err(err) = literal
+            .r#type()
+            .unify(self.arena, TypeKind::StructType(struct_type))
+        {
             literal
                 .errors()
                 .push_semantic_error(SemanticError::TypeError(err));
@@ -1130,12 +1112,12 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         path: &'a NodePath<'a>,
         expr: &'a VariableExpression<'a>,
     ) {
-        if let Some(binding) = path.scope().get_binding(expr.name()) {
-            debug!("[inference] variable_expression: {}, {}", expr, binding);
-            expr.r#type()
-                .unify(self.arena, binding.r#type())
-                .unwrap_or_else(|err| panic!("Type error: {}", err));
-        }
+        let binding = unwrap_or_return!(path.scope().get_binding(expr.name()));
+
+        debug!("[inference] variable_expression: {}, {}", expr, binding);
+        expr.r#type()
+            .unify(self.arena, binding.r#type())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
     }
 
     fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
