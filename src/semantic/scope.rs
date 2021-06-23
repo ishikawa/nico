@@ -1,8 +1,8 @@
 use crate::arena::{BumpaloArena, BumpaloBox};
-use crate::semantic::{Binding, TypeKind};
+use crate::semantic::{Binding, SemanticError, TypeKind};
 use crate::syntax::{
-    self, Block, CaseArm, FunctionDefinition, NodeKind, NodePath, PatternKind, Program,
-    StructDefinition, VariableDeclaration, Visitor,
+    self, Block, CaseArm, FunctionDefinition, Node, NodeKind, NodePath, PatternKind, Program,
+    StructDefinition, StructLiteral, VariableDeclaration, VariableExpression, Visitor,
 };
 use std::cell::Ref;
 use std::{
@@ -267,5 +267,53 @@ impl<'a> Visitor<'a> for VariableBinder<'a> {
             arm.scope()
                 .register_declaration(self.arena, NodeKind::Pattern(pattern));
         }
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct BindingResolver<'a> {
+    arena: &'a BumpaloArena,
+}
+
+impl<'a> BindingResolver<'a> {
+    pub fn new(arena: &'a BumpaloArena) -> Self {
+        Self { arena }
+    }
+}
+
+impl<'a> Visitor<'a> for BindingResolver<'a> {
+    fn exit_variable_expression(
+        &mut self,
+        path: &'a NodePath<'a>,
+        expr: &'a VariableExpression<'a>,
+    ) {
+        if path.scope().get_binding(expr.name()).is_none() {
+            expr.errors()
+                .push_semantic_error(SemanticError::UndefinedBinding {
+                    name: expr.name().to_string(),
+                });
+        }
+    }
+
+    fn exit_struct_literal(&mut self, path: &'a NodePath<'a>, literal: &'a StructLiteral<'a>) {
+        // Expected struct for name
+        if let Some(binding) = path.scope().get_binding(literal.name().as_str()) {
+            if binding.r#type().struct_type().is_none() {
+                literal
+                    .name()
+                    .errors()
+                    .push_semantic_error(SemanticError::UnexpectedBinding {
+                        expected: "struct".to_string(),
+                        found: binding,
+                    });
+            }
+        } else {
+            literal
+                .name()
+                .errors()
+                .push_semantic_error(SemanticError::UndefinedBinding {
+                    name: literal.name().to_string(),
+                });
+        };
     }
 }
