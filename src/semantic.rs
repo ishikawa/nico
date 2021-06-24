@@ -15,36 +15,36 @@ use scope::{BindingResolver, ScopeChainBinder, TopLevelDeclarationBinder, Variab
 
 pub fn analyze<'a>(arena: &'a BumpaloArena, node: &'a Program<'a>) {
     // Assign `.r#type()` with new type variables or primitive concrete type.
-    let mut binder = InitialTypeBinder::new(arena);
-    traverse(arena, &mut binder, node);
+    let mut visitor = InitialTypeBinder::new(arena);
+    traverse(arena, &mut visitor, node);
 
     // Register top level declarations in the scope.
-    let mut binder = TopLevelDeclarationBinder::new(arena);
-    traverse(arena, &mut binder, node);
+    let mut visitor = TopLevelDeclarationBinder::new(arena);
+    traverse(arena, &mut visitor, node);
 
     // Register local variables in scopes.
-    let mut binder = VariableBinder::new(arena);
-    traverse(arena, &mut binder, node);
+    let mut visitor = VariableBinder::new(arena);
+    traverse(arena, &mut visitor, node);
 
     // Build parent-child scope chain.
-    let mut binder = ScopeChainBinder::new(arena);
-    traverse(arena, &mut binder, node);
+    let mut visitor = ScopeChainBinder::new(arena);
+    traverse(arena, &mut visitor, node);
 
     // Make sure all bindings exist and have an expected type.
-    let mut binder = BindingResolver::new(arena);
-    traverse(arena, &mut binder, node);
+    let mut visitor = BindingResolver::new(arena);
+    traverse(arena, &mut visitor, node);
 
     // Assign concrete types to type annotations.
-    let mut binder = TypeQualifierResolver::new(arena);
-    traverse(arena, &mut binder, node);
+    let mut visitor = TypeQualifierResolver::new(arena);
+    traverse(arena, &mut visitor, node);
 
     // Apply type inference
-    let mut binder = TypeInferencer::new(arena);
-    traverse(arena, &mut binder, node);
+    let mut visitor = TypeInferencer::new(arena);
+    traverse(arena, &mut visitor, node);
 
     // Remove unnecessary intermediate type variables.
-    let mut binder = TypeVariablePruner::new(arena);
-    traverse(arena, &mut binder, node);
+    let mut visitor = TypeVariablePruner::new(arena);
+    traverse(arena, &mut visitor, node);
 }
 
 #[cfg(test)]

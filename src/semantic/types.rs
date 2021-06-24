@@ -652,20 +652,18 @@ impl<'a> TypeVariable<'a> {
     }
 
     /// Prune unnecessary indirections.
-    pub fn prune(&self) {
+    fn prune(&self) {
         if let TypeVariableInner::Reference(var) = self.inner.get() {
-            self.replace_instance(var.terminal_type());
+            let terminal_type = var.terminal_type();
+
+            let inner = if let TypeKind::TypeVariable(v) = terminal_type {
+                TypeVariableInner::Reference(v)
+            } else {
+                TypeVariableInner::Instantiated(terminal_type)
+            };
+
+            self.inner.replace(inner);
         }
-    }
-
-    pub fn replace_instance(&self, ty: TypeKind<'a>) {
-        let inner = if let TypeKind::TypeVariable(v) = ty {
-            TypeVariableInner::Reference(v)
-        } else {
-            TypeVariableInner::Instantiated(ty)
-        };
-
-        self.inner.replace(inner);
     }
 
     pub fn unify(
@@ -677,7 +675,7 @@ impl<'a> TypeVariable<'a> {
             TypeVariableInner::Uninstantiated => {
                 // TODO: confirm interfaces?
                 let inner = if let TypeKind::TypeVariable(var) = other {
-                    debug!("[unify] reference: ?{} -> {}", self.label, other);
+                    debug!("[unify] reference: ?{} -> {}", self.label, var);
                     TypeVariableInner::Reference(var)
                 } else {
                     debug!("[unify] instantiation: ?{} -> {}", self.label, other);
@@ -966,6 +964,34 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
     }
 
     fn exit_variable_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a VariablePattern<'a>) {
+        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_array_pattern(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        pattern: &'a syntax::ArrayPattern<'a>,
+    ) {
+        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_struct_pattern(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        pattern: &'a syntax::StructPattern<'a>,
+    ) {
+        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_rest_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a syntax::RestPattern<'a>) {
+        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+    }
+
+    fn exit_value_field_pattern(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        pattern: &'a syntax::ValueFieldPattern<'a>,
+    ) {
         pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
     }
 }
@@ -1316,5 +1342,13 @@ impl<'a> Visitor<'a> for TypeVariablePruner<'a> {
         param: &'a syntax::FunctionParameter<'a>,
     ) {
         self.prune(param.r#type());
+    }
+
+    fn exit_expression(&mut self, _path: &'a NodePath<'a>, expression: &'a syntax::Expression<'a>) {
+        self.prune(expression.r#type());
+    }
+
+    fn exit_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a syntax::Pattern<'a>) {
+        self.prune(pattern.r#type());
     }
 }
