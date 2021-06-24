@@ -1306,24 +1306,6 @@ impl<'a> Expression<'a> {
             ExpressionKind::GroupedExpression(expr) => expr.r#type(),
         }
     }
-
-    pub fn errors(&self) -> &AstErrors<'a> {
-        match self.kind() {
-            ExpressionKind::IntegerLiteral(expr) => expr.errors(),
-            ExpressionKind::StringLiteral(expr) => expr.errors(),
-            ExpressionKind::VariableExpression(expr) => expr.errors(),
-            ExpressionKind::BinaryExpression(expr) => expr.errors(),
-            ExpressionKind::UnaryExpression(expr) => expr.errors(),
-            ExpressionKind::SubscriptExpression(expr) => expr.errors(),
-            ExpressionKind::CallExpression(expr) => expr.errors(),
-            ExpressionKind::ArrayExpression(expr) => expr.errors(),
-            ExpressionKind::IfExpression(expr) => expr.errors(),
-            ExpressionKind::CaseExpression(expr) => expr.errors(),
-            ExpressionKind::MemberExpression(expr) => expr.errors(),
-            ExpressionKind::StructLiteral(expr) => expr.errors(),
-            ExpressionKind::GroupedExpression(expr) => expr.errors(),
-        }
-    }
 }
 
 impl<'a> Node<'a> for Expression<'a> {
@@ -2358,6 +2340,18 @@ impl<'a> Pattern<'a> {
 
     pub fn kind(&self) -> &PatternKind<'a> {
         &self.kind
+    }
+
+    pub fn r#type(&self) -> TypeKind<'a> {
+        match self.kind() {
+            PatternKind::IntegerPattern(pattern) => pattern.r#type(),
+            PatternKind::StringPattern(pattern) => pattern.r#type(),
+            PatternKind::VariablePattern(pattern) => pattern.r#type(),
+            PatternKind::ArrayPattern(pattern) => pattern.r#type(),
+            PatternKind::RestPattern(pattern) => pattern.r#type(),
+            PatternKind::StructPattern(pattern) => pattern.r#type(),
+            PatternKind::ValueFieldPattern(pattern) => pattern.r#type(),
+        }
     }
 }
 

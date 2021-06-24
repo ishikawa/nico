@@ -418,6 +418,15 @@ pub trait Visitor<'a> {
     }
     fn exit_variable_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a VariablePattern<'a>) {}
 
+    fn enter_array_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a ArrayPattern<'a>) {}
+    fn exit_array_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a ArrayPattern<'a>) {}
+
+    fn enter_rest_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a RestPattern<'a>) {}
+    fn exit_rest_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a RestPattern<'a>) {}
+
+    fn enter_struct_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a StructPattern<'a>) {}
+    fn exit_struct_pattern(&mut self, path: &'a NodePath<'a>, pattern: &'a StructPattern<'a>) {}
+
     fn enter_value_field_pattern(
         &mut self,
         path: &'a NodePath<'a>,
@@ -565,9 +574,15 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::VariablePattern(kind) => {
             visitor.enter_variable_pattern(path, kind);
         }
-        NodeKind::ArrayPattern(_) => { /* todo */ }
-        NodeKind::RestPattern(_) => { /* todo */ }
-        NodeKind::StructPattern(_) => { /* todo */ }
+        NodeKind::ArrayPattern(pattern) => {
+            visitor.enter_array_pattern(path, pattern);
+        }
+        NodeKind::RestPattern(pattern) => {
+            visitor.enter_rest_pattern(path, pattern);
+        }
+        NodeKind::StructPattern(pattern) => {
+            visitor.enter_struct_pattern(path, pattern);
+        }
         NodeKind::ValueFieldPattern(kind) => {
             visitor.enter_value_field_pattern(path, kind);
 
@@ -680,15 +695,21 @@ fn dispatch_exit<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
             visitor.exit_expression(path, expr);
         }
         // Pattern
-        NodeKind::Pattern(kind) => {
-            visitor.exit_pattern(path, kind);
+        NodeKind::Pattern(pattern) => {
+            visitor.exit_pattern(path, pattern);
         }
-        NodeKind::VariablePattern(kind) => {
-            visitor.exit_variable_pattern(path, kind);
+        NodeKind::VariablePattern(pattern) => {
+            visitor.exit_variable_pattern(path, pattern);
         }
-        NodeKind::ArrayPattern(_) => { /* todo */ }
-        NodeKind::RestPattern(_) => { /* todo */ }
-        NodeKind::StructPattern(_) => { /* todo */ }
+        NodeKind::ArrayPattern(pattern) => {
+            visitor.exit_array_pattern(path, pattern);
+        }
+        NodeKind::RestPattern(pattern) => {
+            visitor.exit_rest_pattern(path, pattern);
+        }
+        NodeKind::StructPattern(pattern) => {
+            visitor.exit_struct_pattern(path, pattern);
+        }
         NodeKind::ValueFieldPattern(kind) => {
             if let Some(value_pattern) = kind.omitted_value() {
                 if let PatternKind::VariablePattern(variable_pattern) = value_pattern.kind() {
