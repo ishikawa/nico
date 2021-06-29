@@ -49,15 +49,16 @@ use crate::util::collections::RefVecIter;
 use std::cell::{Cell, RefCell};
 use std::fmt;
 
-pub trait Node<'arena> {
+pub trait Node<'arena>: fmt::Display {
     fn code(&self) -> CodeKindIter<'_, 'arena>;
 
     /// Returns the effective range of this node.
     fn range(&self) -> EffectiveRange {
         let mut it = self.code();
 
-        // node must be at least one token.
-        let init = it.next().unwrap();
+        let next = it.next();
+        let init = next.unwrap_or_else(|| panic!("node must have at least one token: {}", self));
+
         it.fold(init.range(), |acc, kind| kind.range().union(&acc))
     }
 
@@ -2083,6 +2084,10 @@ impl<'a> CaseArm<'a> {
 
     pub fn then_body(&self) -> &'a Block<'a> {
         self.then_body
+    }
+
+    pub fn r#type(&self) -> TypeKind<'a> {
+        self.then_body.r#type()
     }
 }
 

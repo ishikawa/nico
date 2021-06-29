@@ -1202,6 +1202,33 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             .unwrap_or_else(|err| panic!("Type error: {}", err));
     }
 
+    fn exit_case_expression(&mut self, _path: &'a NodePath<'a>, case_expr: &'a CaseExpression<'a>) {
+        // - All branches must have same type.
+        // - An empty case expression's type is `void`.
+
+        let accumulated = case_expr.arms().enumerate().reduce(|(i, a), (j, b)| {
+            debug!("[inference] case_expression: arm #{} - #{}", i, j);
+            if let Err(err) = b.r#type().unify(self.arena, a.r#type()) {
+                b.errors()
+                    .push_semantic_error(SemanticError::TypeError(err));
+            }
+
+            (j, b)
+        });
+
+        if let Some((i, arm)) = accumulated {
+            debug!("[inference] case_expression <- arm #{} ", i);
+            if let Err(err) = case_expr.r#type().unify(self.arena, arm.r#type()) {
+                case_expr
+                    .errors()
+                    .push_semantic_error(SemanticError::TypeError(err));
+            }
+        } else {
+            debug!("[inference] case_expression <- void");
+            case_expr.assign_type(TypeKind::Void);
+        }
+    }
+
     fn exit_call_expression(&mut self, _path: &'a NodePath<'a>, call_expr: &'a CallExpression<'a>) {
         let callee_type = call_expr.callee().r#type();
 
