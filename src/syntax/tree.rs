@@ -1212,7 +1212,7 @@ impl<'a> Block<'a> {
 
 impl<'a> Node<'a> for Block<'a> {
     fn range_hint(&self) -> Option<EffectiveRange> {
-        if self.code.len() == 0 {
+        if self.code.is_empty() {
             self.range_hint
         } else {
             None
