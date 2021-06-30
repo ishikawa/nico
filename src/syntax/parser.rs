@@ -1158,7 +1158,12 @@ impl<'a, 't> Parser<'a, 't> {
             }
         }
 
-        arena.alloc(Block::new(arena, body, code.build(arena)))
+        arena.alloc(Block::new(
+            arena,
+            body,
+            code.build(arena),
+            Some(self.tokenizer.current_insertion_range()),
+        ))
     }
 
     fn _parse_optional_item<T>(

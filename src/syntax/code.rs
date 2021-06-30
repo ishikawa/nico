@@ -15,6 +15,10 @@ impl<'a> Code<'a> {
     pub fn iter(&self) -> CodeKindIter<'_, 'a> {
         CodeKindIter::from(self.code.iter())
     }
+
+    pub fn len(&self) -> usize {
+        self.code.len()
+    }
 }
 
 #[derive(Debug)]

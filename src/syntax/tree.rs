@@ -54,12 +54,28 @@ pub trait Node<'arena>: fmt::Display {
 
     /// Returns the effective range of this node.
     fn range(&self) -> EffectiveRange {
-        let mut it = self.code();
+        if let Some(range) = self.range_hint() {
+            range
+        } else {
+            let mut it = self.code();
 
-        let next = it.next();
-        let init = next.unwrap_or_else(|| panic!("node must have at least one token: {}", self));
+            let next = it.next();
+            let init = next.unwrap_or_else(|| {
+                panic!(
+                    "node must have at least one token: {} - {:?}",
+                    self,
+                    self.range_hint()
+                )
+            });
 
-        it.fold(init.range(), |acc, kind| kind.range().union(&acc))
+            it.fold(init.range(), |acc, kind| kind.range().union(&acc))
+        }
+    }
+
+    /// Some kind of node doesn't have any syntactic token. The sort of node must provide
+    /// the position information by implementing this method.
+    fn range_hint(&self) -> Option<EffectiveRange> {
+        None
     }
 
     fn errors(&self) -> &AstErrors<'arena>;
@@ -349,6 +365,44 @@ impl<'a> NodeKind<'a> {
 }
 
 impl<'a> Node<'a> for NodeKind<'a> {
+    fn range_hint(&self) -> Option<EffectiveRange> {
+        match self {
+            NodeKind::Program(kind) => kind.range_hint(),
+            NodeKind::TopLevel(kind) => kind.range_hint(),
+            NodeKind::Block(kind) => kind.range_hint(),
+            NodeKind::Identifier(kind) => kind.range_hint(),
+            NodeKind::StructDefinition(kind) => kind.range_hint(),
+            NodeKind::FunctionDefinition(kind) => kind.range_hint(),
+            NodeKind::TypeField(kind) => kind.range_hint(),
+            NodeKind::ValueField(kind) => kind.range_hint(),
+            NodeKind::TypeAnnotation(kind) => kind.range_hint(),
+            NodeKind::FunctionParameter(kind) => kind.range_hint(),
+            NodeKind::Statement(kind) => kind.range_hint(),
+            NodeKind::VariableDeclaration(kind) => kind.range_hint(),
+            NodeKind::Expression(kind) => kind.range_hint(),
+            NodeKind::IntegerLiteral(kind) => kind.range_hint(),
+            NodeKind::StructLiteral(kind) => kind.range_hint(),
+            NodeKind::StringLiteral(kind) => kind.range_hint(),
+            NodeKind::VariableExpression(kind) => kind.range_hint(),
+            NodeKind::BinaryExpression(kind) => kind.range_hint(),
+            NodeKind::UnaryExpression(kind) => kind.range_hint(),
+            NodeKind::SubscriptExpression(kind) => kind.range_hint(),
+            NodeKind::CallExpression(kind) => kind.range_hint(),
+            NodeKind::ArrayExpression(kind) => kind.range_hint(),
+            NodeKind::MemberExpression(kind) => kind.range_hint(),
+            NodeKind::IfExpression(kind) => kind.range_hint(),
+            NodeKind::CaseExpression(kind) => kind.range_hint(),
+            NodeKind::CaseArm(kind) => kind.range_hint(),
+            NodeKind::Pattern(kind) => kind.range_hint(),
+            NodeKind::VariablePattern(kind) => kind.range_hint(),
+            NodeKind::ArrayPattern(kind) => kind.range_hint(),
+            NodeKind::RestPattern(kind) => kind.range_hint(),
+            NodeKind::StructPattern(kind) => kind.range_hint(),
+            NodeKind::ValueFieldPattern(kind) => kind.range_hint(),
+            NodeKind::GroupedExpression(kind) => kind.range_hint(),
+        }
+    }
+
     fn code(&self) -> CodeKindIter<'_, 'a> {
         match self {
             NodeKind::Program(kind) => kind.code(),
@@ -1107,6 +1161,10 @@ pub struct Block<'a> {
     r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
     code: Code<'a>,
+
+    // For an empty block.
+    // An empty block has no tokens to calculate its effective range.
+    range_hint: Option<EffectiveRange>,
 }
 
 impl<'a> Block<'a> {
@@ -1114,6 +1172,7 @@ impl<'a> Block<'a> {
         arena: &'a BumpaloArena,
         statements: I,
         code: Code<'a>,
+        range_hint: Option<EffectiveRange>,
     ) -> Self {
         Self {
             statements: BumpaloVec::from_iter_in(statements, arena),
@@ -1121,6 +1180,7 @@ impl<'a> Block<'a> {
             code,
             r#type: Cell::default(),
             errors: AstErrors::new(arena),
+            range_hint,
         }
     }
 
@@ -1151,6 +1211,14 @@ impl<'a> Block<'a> {
 }
 
 impl<'a> Node<'a> for Block<'a> {
+    fn range_hint(&self) -> Option<EffectiveRange> {
+        if self.code.len() == 0 {
+            self.range_hint
+        } else {
+            None
+        }
+    }
+
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
