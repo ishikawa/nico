@@ -304,6 +304,13 @@ impl<'a> NodeKind<'a> {
         None
     }
 
+    pub fn case_expression(&self) -> Option<&'a CaseExpression<'a>> {
+        if let NodeKind::CaseExpression(node) = self {
+            return Some(node);
+        }
+        None
+    }
+
     pub fn member_expression(&self) -> Option<&'a MemberExpression<'a>> {
         if let NodeKind::MemberExpression(node) = self {
             return Some(node);

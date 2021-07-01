@@ -1203,9 +1203,23 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
     }
 
     fn exit_case_expression(&mut self, _path: &'a NodePath<'a>, case_expr: &'a CaseExpression<'a>) {
-        // - All branches must have same type.
-        // - An empty case expression's type is `void`.
+        // -- All arm pattern types must be same as the type of head expression.
+        if let Some(head_expr) = case_expr.head() {
+            for (i, arm) in case_expr.arms().enumerate() {
+                debug!("[inference] head {} <- arm #{} ", head_expr, i);
 
+                if let Some(pattern) = arm.pattern() {
+                    if let Err(err) = pattern.r#type().unify(self.arena, head_expr.r#type()) {
+                        arm.errors()
+                            .push_semantic_error(SemanticError::TypeError(err));
+                    }
+                }
+            }
+        }
+
+        // -- Infer the return type of a case expression
+
+        // - All arms must have same type.
         let accumulated = case_expr.arms().enumerate().reduce(|(i, a), (j, b)| {
             debug!("[inference] case_expression: arm #{} - #{}", i, j);
             if let Err(err) = b.r#type().unify(self.arena, a.r#type()) {
@@ -1216,6 +1230,7 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             (j, b)
         });
 
+        // - An empty case expression's type is `void`.
         if let Some((i, arm)) = accumulated {
             debug!("[inference] case_expression <- arm #{} ", i);
             if let Err(err) = case_expr.r#type().unify(self.arena, arm.r#type()) {
