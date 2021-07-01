@@ -1,6 +1,8 @@
 use crate::arena::{BumpaloArena, BumpaloString};
 use crate::semantic::{self, TypeKind};
-use crate::syntax::{FunctionDefinition, FunctionParameter, StructDefinition, VariablePattern};
+use crate::syntax::{
+    FunctionDefinition, FunctionParameter, StructDefinition, TypedNode, VariablePattern,
+};
 use std::fmt;
 
 use super::{FunctionType, StructType};

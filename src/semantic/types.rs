@@ -6,7 +6,8 @@ use crate::syntax::{
     self, ArrayExpression, BinaryExpression, CallExpression, CaseExpression, FunctionDefinition,
     GroupedExpression, IfExpression, MemberExpression, Node, NodePath, PatternKind,
     StructDefinition, StructLiteral, SubscriptExpression, TypeAnnotation, TypeAnnotationKind,
-    UnaryExpression, ValueField, VariableDeclaration, VariableExpression, VariablePattern, Visitor,
+    TypedNode, UnaryExpression, ValueField, VariableDeclaration, VariableExpression,
+    VariablePattern, Visitor,
 };
 use crate::unwrap_or_return;
 use log::debug;
@@ -1338,6 +1339,7 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
 
 /// Indirect references by type variables are still necessary after type inference is complete.
 /// However, unnecessary indirect references can be removed.
+/// Furthermore, raise error if there are any type variables still left at the leaf node.
 #[derive(Debug)]
 pub(super) struct TypeVariablePruner<'a> {
     arena: &'a BumpaloArena,
