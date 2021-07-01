@@ -756,11 +756,18 @@ impl<'a> InitialTypeBinder<'a> {
         Self { arena, seq: 0 }
     }
 
-    pub fn new_type_var(&mut self) -> &'a TypeVariable<'a> {
+    fn new_type_var(&mut self) -> &'a TypeVariable<'a> {
         let var = TypeVariable::uninstantiated(self.seq);
 
         self.seq += 1;
         self.arena.alloc(var)
+    }
+
+    fn new_array_type(&mut self) -> &'a ArrayType<'a> {
+        let element_type = self.new_type_var();
+        let array_type = ArrayType::new(TypeKind::TypeVariable(element_type));
+
+        self.arena.alloc(array_type)
     }
 
     fn build_struct_type(
@@ -972,7 +979,11 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         _path: &'a NodePath<'a>,
         pattern: &'a syntax::ArrayPattern<'a>,
     ) {
-        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        pattern.assign_type(TypeKind::ArrayType(self.new_array_type()));
+    }
+
+    fn exit_rest_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a syntax::RestPattern<'a>) {
+        pattern.assign_type(TypeKind::ArrayType(self.new_array_type()));
     }
 
     fn exit_struct_pattern(
@@ -980,11 +991,7 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         _path: &'a NodePath<'a>,
         pattern: &'a syntax::StructPattern<'a>,
     ) {
-        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
-    }
-
-    fn exit_rest_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a syntax::RestPattern<'a>) {
-        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()));
     }
 
     fn exit_value_field_pattern(
