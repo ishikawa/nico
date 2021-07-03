@@ -2,6 +2,7 @@ use log::{info, warn};
 use lsp_types::*;
 use nico::arena::BumpaloArena;
 use nico::language_server::{self, server::ServerCapabilitiesBuilder};
+use nico::semantic;
 use nico::syntax::{
     self, EffectiveRange, MissingTokenKind, Node, NodeKind, NodePath, ParseError, Parser,
     TextToken, Token, TokenKind, Trivia,
@@ -219,8 +220,20 @@ impl<'a> syntax::Visitor<'a> for DiagnosticsCollector {
             _ => {}
         }
 
-        for e in &node.errors().semantic_errors() {
-            self.add_diagnostic(node.range(), e.to_string());
+        // Show semantic errors
+        if !node.errors().is_empty() {
+            if node.errors().len() == 1 {
+                for e in &node.errors().semantic_errors() {
+                    self.add_diagnostic(node.range(), e.to_string());
+                }
+            } else {
+                // To suppress the display of many errors, add only the minimum necessary errors as diagnostics
+                node.errors()
+                    .semantic_errors()
+                    .into_iter()
+                    .filter(|e| !matches!(e, semantic::SemanticError::CannotInferType { .. }))
+                    .for_each(|e| self.add_diagnostic(node.range(), e.to_string()));
+            }
         }
     }
 

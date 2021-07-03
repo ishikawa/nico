@@ -1369,15 +1369,13 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
                         .errors()
                         .push_semantic_error(SemanticError::TypeError(err));
                 }
-            } else {
-                if let Err(err) = element
-                    .r#type()
-                    .unify(self.arena, array_type.element_type())
-                {
-                    element
-                        .errors()
-                        .push_semantic_error(SemanticError::TypeError(err));
-                }
+            } else if let Err(err) = element
+                .r#type()
+                .unify(self.arena, array_type.element_type())
+            {
+                element
+                    .errors()
+                    .push_semantic_error(SemanticError::TypeError(err));
             }
         }
     }

@@ -512,6 +512,14 @@ impl<'a> AstErrors<'a> {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.semantic_errors.borrow().is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.semantic_errors.borrow().len()
+    }
+
     pub fn push_semantic_error(&self, error: SemanticError<'a>) {
         self.semantic_errors.borrow_mut().push(error);
     }
