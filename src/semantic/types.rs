@@ -1376,6 +1376,46 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         }
     }
 
+    fn enter_struct_pattern(
+        &mut self,
+        path: &'a NodePath<'a>,
+        pattern: &'a syntax::StructPattern<'a>,
+    ) {
+        let binding = unwrap_or_return!(path.scope().get_binding(pattern.name().as_str()));
+        let struct_type = unwrap_or_return!(binding.r#type().struct_type());
+
+        // Struct pattern type
+        debug!("[inference] struct pattern: {}", pattern);
+
+        if let Err(err) = pattern
+            .r#type()
+            .unify(self.arena, TypeKind::StructType(struct_type))
+        {
+            pattern
+                .errors()
+                .push_semantic_error(SemanticError::TypeError(err));
+        }
+
+        // Struct pattern fields type
+        for field in pattern.fields() {
+            if let Some(field_type) = struct_type.get_field_type(field.name().as_str()) {
+                if let Err(err) = field.r#type().unify(self.arena, field_type) {
+                    field
+                        .errors()
+                        .push_semantic_error(SemanticError::TypeError(err));
+                }
+            } else {
+                field
+                    .name()
+                    .errors()
+                    .push_semantic_error(SemanticError::FieldDoesNotExist {
+                        r#type: TypeKind::StructType(struct_type),
+                        field: field.name().to_string(),
+                    });
+            }
+        }
+    }
+
     fn enter_variable_declaration(
         &mut self,
         _path: &'a NodePath<'a>,
