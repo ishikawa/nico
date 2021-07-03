@@ -994,14 +994,6 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
     ) {
         pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()));
     }
-
-    fn exit_value_field_pattern(
-        &mut self,
-        _path: &'a NodePath<'a>,
-        pattern: &'a syntax::ValueFieldPattern<'a>,
-    ) {
-        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
-    }
 }
 
 #[derive(Debug)]
@@ -1362,7 +1354,11 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             .array_type()
             .expect("The type of an array pattern must be an array type.");
 
-        for element in pattern.elements() {
+        debug!("[inference] array pattern: {}", pattern);
+
+        for (i, element) in pattern.elements().enumerate() {
+            debug!("[inference] #{} of array pattern: {}", i, element);
+
             if element.rest_pattern().is_some() {
                 if let Err(err) = element.r#type().unify(self.arena, pattern.r#type()) {
                     element
@@ -1393,6 +1389,7 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
                 "[inference] variable_declaration: {}, {}",
                 var_pattern, init
             );
+
             var_pattern
                 .r#type()
                 .unify(self.arena, init.r#type())

@@ -2482,6 +2482,14 @@ impl<'a> Pattern<'a> {
         &self.kind
     }
 
+    pub fn value_field_pattern(&self) -> Option<&ValueFieldPattern<'a>> {
+        if let PatternKind::ValueFieldPattern(pattern) = self.kind() {
+            Some(pattern)
+        } else {
+            None
+        }
+    }
+
     pub fn rest_pattern(&self) -> Option<&RestPattern<'a>> {
         if let PatternKind::RestPattern(pattern) = self.kind() {
             Some(pattern)
@@ -2781,11 +2789,15 @@ impl fmt::Display for StructPattern<'_> {
 #[derive(Debug)]
 pub struct ValueFieldPattern<'a> {
     name: &'a Identifier<'a>,
-    value: Option<&'a Pattern<'a>>,
-    omitted_value: Option<&'a Pattern<'a>>,
+    value_kind: ValueFieldPatternValueKind<'a>,
     code: Code<'a>,
-    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
+}
+
+#[derive(Debug)]
+enum ValueFieldPatternValueKind<'a> {
+    Value(&'a Pattern<'a>),
+    Omitted(&'a Pattern<'a>),
 }
 
 impl<'a> ValueFieldPattern<'a> {
@@ -2795,13 +2807,11 @@ impl<'a> ValueFieldPattern<'a> {
         value: Option<&'a Pattern<'a>>,
         code: Code<'a>,
     ) -> Self {
-        if value.is_some() {
+        if let Some(value) = value {
             Self {
                 name,
-                value,
-                omitted_value: None,
+                value_kind: ValueFieldPatternValueKind::Value(value),
                 code,
-                r#type: Cell::default(),
                 errors: AstErrors::new(arena),
             }
         } else {
@@ -2811,10 +2821,8 @@ impl<'a> ValueFieldPattern<'a> {
 
             Self {
                 name,
-                value,
-                omitted_value: Some(omitted_value),
+                value_kind: ValueFieldPatternValueKind::Omitted(omitted_value),
                 code,
-                r#type: Cell::default(),
                 errors: AstErrors::new(arena),
             }
         }
@@ -2825,19 +2833,19 @@ impl<'a> ValueFieldPattern<'a> {
     }
 
     pub fn value(&self) -> Option<&'a Pattern<'a>> {
-        self.value
+        if let ValueFieldPatternValueKind::Value(value) = self.value_kind {
+            Some(value)
+        } else {
+            None
+        }
     }
 
     pub fn omitted_value(&self) -> Option<&'a Pattern<'a>> {
-        self.omitted_value
-    }
-
-    pub fn get_type(&self) -> Option<TypeKind<'a>> {
-        self.r#type.get()
-    }
-
-    pub fn assign_type(&self, ty: TypeKind<'a>) {
-        self.r#type.replace(Some(ty));
+        if let ValueFieldPatternValueKind::Omitted(value) = self.value_kind {
+            Some(value)
+        } else {
+            None
+        }
     }
 }
 
@@ -2853,7 +2861,10 @@ impl<'a> Node<'a> for ValueFieldPattern<'a> {
 
 impl<'a> TypedNode<'a> for ValueFieldPattern<'a> {
     fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
+        match self.value_kind {
+            ValueFieldPatternValueKind::Value(value) => value.r#type(),
+            ValueFieldPatternValueKind::Omitted(value) => value.r#type(),
+        }
     }
 }
 
