@@ -1405,8 +1405,27 @@ impl<'a> TypeVariablePruner<'a> {
         };
     }
 
+    fn does_type_contains_type_variable(&self, r#type: TypeKind<'a>) -> bool {
+        match r#type.terminal_type() {
+            TypeKind::Int32 => false,
+            TypeKind::Boolean => false,
+            TypeKind::String => false,
+            TypeKind::Void => false,
+            TypeKind::StructType(ty) => ty
+                .fields()
+                .any(|f| self.does_type_contains_type_variable(f.r#type())),
+            TypeKind::FunctionType(ty) => {
+                ty.parameters()
+                    .any(|p| self.does_type_contains_type_variable(p.r#type()))
+                    || self.does_type_contains_type_variable(ty.return_type())
+            }
+            TypeKind::ArrayType(ty) => self.does_type_contains_type_variable(ty.element_type),
+            TypeKind::TypeVariable(_) => true,
+        }
+    }
+
     fn type_should_be_instantiated(&self, node: NodeKind<'a>, r#type: TypeKind<'a>) {
-        if let TypeKind::TypeVariable(_) = r#type.terminal_type() {
+        if self.does_type_contains_type_variable(r#type) {
             node.errors()
                 .push_semantic_error(SemanticError::CannotInferType { node, r#type })
         }
