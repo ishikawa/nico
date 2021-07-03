@@ -1169,38 +1169,6 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         }
     }
 
-    fn exit_variable_declaration(
-        &mut self,
-        _path: &'a NodePath<'a>,
-        declaration: &'a VariableDeclaration<'a>,
-    ) {
-        let pattern = unwrap_or_return!(declaration.pattern());
-        let init = unwrap_or_return!(declaration.init());
-
-        if let PatternKind::VariablePattern(var_pattern) = pattern.kind() {
-            debug!("[inference] variable_pattern: {}, {}", var_pattern, init);
-            var_pattern
-                .r#type()
-                .unify(self.arena, init.r#type())
-                .unwrap_or_else(|err| panic!("Type error: {}", err));
-        } else {
-            todo!("warn: except for variable pattern, we can't infer type.");
-        }
-    }
-
-    fn exit_variable_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a VariableExpression<'a>,
-    ) {
-        let binding = unwrap_or_return!(path.scope().get_binding(expr.name()));
-
-        debug!("[inference] variable_expression: {}, {}", expr, binding);
-        expr.r#type()
-            .unify(self.arena, binding.r#type())
-            .unwrap_or_else(|err| panic!("Type error: {}", err));
-    }
-
     fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
         let lhs = expr.lhs();
         let rhs = unwrap_or_return!(expr.rhs());
@@ -1381,6 +1349,72 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
                 .errors()
                 .push_semantic_error(SemanticError::TypeError(err));
         }
+    }
+
+    // --- patterns: infer types top-down
+    fn enter_array_pattern(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        pattern: &'a syntax::ArrayPattern<'a>,
+    ) {
+        let array_type = pattern
+            .r#type()
+            .array_type()
+            .expect("The type of an array pattern must be an array type.");
+
+        for element in pattern.elements() {
+            if element.rest_pattern().is_some() {
+                if let Err(err) = element.r#type().unify(self.arena, pattern.r#type()) {
+                    element
+                        .errors()
+                        .push_semantic_error(SemanticError::TypeError(err));
+                }
+            } else {
+                if let Err(err) = element
+                    .r#type()
+                    .unify(self.arena, array_type.element_type())
+                {
+                    element
+                        .errors()
+                        .push_semantic_error(SemanticError::TypeError(err));
+                }
+            }
+        }
+    }
+
+    fn enter_variable_declaration(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        declaration: &'a VariableDeclaration<'a>,
+    ) {
+        let pattern = unwrap_or_return!(declaration.pattern());
+        let init = unwrap_or_return!(declaration.init());
+
+        if let PatternKind::VariablePattern(var_pattern) = pattern.kind() {
+            debug!(
+                "[inference] variable_declaration: {}, {}",
+                var_pattern, init
+            );
+            var_pattern
+                .r#type()
+                .unify(self.arena, init.r#type())
+                .unwrap_or_else(|err| panic!("Type error: {}", err));
+        } else {
+            todo!("warn: except for variable pattern, we can't infer type.");
+        }
+    }
+
+    fn enter_variable_expression(
+        &mut self,
+        path: &'a NodePath<'a>,
+        expr: &'a VariableExpression<'a>,
+    ) {
+        let binding = unwrap_or_return!(path.scope().get_binding(expr.name()));
+
+        debug!("[inference] variable_expression: {}, {}", expr, binding);
+        expr.r#type()
+            .unify(self.arena, binding.r#type())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
     }
 }
 

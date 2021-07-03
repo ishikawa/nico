@@ -2473,6 +2473,14 @@ impl<'a> Pattern<'a> {
     pub fn kind(&self) -> &PatternKind<'a> {
         &self.kind
     }
+
+    pub fn rest_pattern(&self) -> Option<&RestPattern<'a>> {
+        if let PatternKind::RestPattern(pattern) = self.kind() {
+            Some(pattern)
+        } else {
+            None
+        }
+    }
 }
 
 impl<'a> Node<'a> for Pattern<'a> {
