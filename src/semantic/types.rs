@@ -909,15 +909,15 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
     }
 
     fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
-        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()));
     }
 
     fn exit_unary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a UnaryExpression<'a>) {
-        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()));
     }
 
     fn exit_array_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a ArrayExpression<'a>) {
-        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        expr.assign_type(TypeKind::ArrayType(self.new_array_type()));
     }
 
     fn exit_block(&mut self, _path: &'a NodePath<'a>, block: &'a syntax::Block<'a>) {
@@ -1149,6 +1149,24 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
                 r#type: object_type,
                 field: field.to_string(),
             });
+    }
+
+    fn exit_array_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a ArrayExpression<'a>) {
+        let array_type = expr
+            .r#type()
+            .array_type()
+            .expect("The type of an array expression must be array type.");
+
+        for element in expr.elements() {
+            if let Err(err) = element
+                .r#type()
+                .unify(self.arena, array_type.element_type())
+            {
+                element
+                    .errors()
+                    .push_semantic_error(SemanticError::TypeError(err));
+            }
+        }
     }
 
     fn exit_variable_declaration(
