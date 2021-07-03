@@ -122,6 +122,12 @@ pub enum NodeKind<'a> {
     GroupedExpression(&'a GroupedExpression<'a>),
 }
 
+impl<'a> From<&'a Expression<'a>> for NodeKind<'a> {
+    fn from(expr: &'a Expression<'a>) -> Self {
+        NodeKind::Expression(expr)
+    }
+}
+
 impl<'a> From<&ExpressionKind<'a>> for NodeKind<'a> {
     fn from(expr: &ExpressionKind<'a>) -> Self {
         match expr {

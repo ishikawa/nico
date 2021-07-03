@@ -1,4 +1,5 @@
 use super::{Binding, TypeKind};
+use crate::syntax::NodeKind;
 use std::fmt::Display;
 use thiserror::Error;
 
@@ -19,6 +20,13 @@ pub enum SemanticError<'a> {
     },
     #[error("Cannot find name '{name}'.")]
     UndefinedBinding { name: String },
+    #[error("Can not infer type. Consider giving `{node}` the explicit type `{r#type}`, with the type parameters specified.")]
+    CannotInferType {
+        node: NodeKind<'a>,
+        r#type: TypeKind<'a>,
+    },
+    #[error("Unknown field. No field `{field}` on type `{r#type}`")]
+    FieldDoesNotExist { r#type: TypeKind<'a>, field: String },
     #[error("{0}")]
     TypeError(TypeError<'a>),
 }

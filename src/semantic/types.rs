@@ -4,7 +4,7 @@ use crate::semantic::errors::TypeMismatchError;
 use crate::semantic::SemanticError;
 use crate::syntax::{
     self, ArrayExpression, BinaryExpression, CallExpression, CaseExpression, FunctionDefinition,
-    GroupedExpression, IfExpression, MemberExpression, Node, NodePath, PatternKind,
+    GroupedExpression, IfExpression, MemberExpression, Node, NodeKind, NodePath, PatternKind,
     StructDefinition, StructLiteral, SubscriptExpression, TypeAnnotation, TypeAnnotationKind,
     TypedNode, UnaryExpression, ValueField, VariableDeclaration, VariableExpression,
     VariablePattern, Visitor,
@@ -1122,6 +1122,35 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         }
     }
 
+    fn exit_member_expression(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        member_expr: &'a MemberExpression<'a>,
+    ) {
+        let field = unwrap_or_return!(member_expr.field());
+        let object = member_expr.object();
+        let object_type = object.r#type();
+
+        if let Some(struct_type) = object_type.struct_type() {
+            if let Some(field_type) = struct_type.get_field_type(field.as_str()) {
+                if let Err(err) = member_expr.r#type().unify(self.arena, field_type) {
+                    member_expr
+                        .errors()
+                        .push_semantic_error(SemanticError::TypeError(err));
+                }
+
+                return;
+            }
+        }
+
+        object
+            .errors()
+            .push_semantic_error(SemanticError::FieldDoesNotExist {
+                r#type: object_type,
+                field: field.to_string(),
+            });
+    }
+
     fn exit_variable_declaration(
         &mut self,
         _path: &'a NodePath<'a>,
@@ -1375,6 +1404,13 @@ impl<'a> TypeVariablePruner<'a> {
             }
         };
     }
+
+    fn type_should_be_instantiated(&self, node: NodeKind<'a>, r#type: TypeKind<'a>) {
+        if let TypeKind::TypeVariable(_) = r#type.terminal_type() {
+            node.errors()
+                .push_semantic_error(SemanticError::CannotInferType { node, r#type })
+        }
+    }
 }
 
 impl<'a> Visitor<'a> for TypeVariablePruner<'a> {
@@ -1384,6 +1420,10 @@ impl<'a> Visitor<'a> for TypeVariablePruner<'a> {
         definition: &'a FunctionDefinition<'a>,
     ) {
         self.prune(definition.r#type());
+        self.type_should_be_instantiated(
+            NodeKind::FunctionDefinition(definition),
+            definition.r#type(),
+        );
     }
 
     fn exit_function_parameter(
@@ -1393,13 +1433,16 @@ impl<'a> Visitor<'a> for TypeVariablePruner<'a> {
         param: &'a syntax::FunctionParameter<'a>,
     ) {
         self.prune(param.r#type());
+        self.type_should_be_instantiated(NodeKind::FunctionParameter(param), param.r#type());
     }
 
     fn exit_expression(&mut self, _path: &'a NodePath<'a>, expression: &'a syntax::Expression<'a>) {
         self.prune(expression.r#type());
+        self.type_should_be_instantiated(NodeKind::Expression(expression), expression.r#type());
     }
 
     fn exit_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a syntax::Pattern<'a>) {
         self.prune(pattern.r#type());
+        self.type_should_be_instantiated(NodeKind::Pattern(pattern), pattern.r#type());
     }
 }
