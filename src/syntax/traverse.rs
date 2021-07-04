@@ -586,6 +586,8 @@ fn dispatch_enter<'a>(visitor: &mut dyn Visitor<'a>, path: &'a NodePath<'a>) {
         NodeKind::ValueFieldPattern(kind) => {
             visitor.enter_value_field_pattern(path, kind);
 
+            // Since omitted value pattern doesn't appear in AST,
+            // we have to visit pseudo value node manually.
             if let Some(value_pattern) = kind.omitted_value() {
                 visitor.enter_pattern(path, value_pattern);
 

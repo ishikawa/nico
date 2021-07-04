@@ -4,9 +4,10 @@ use crate::semantic::errors::TypeMismatchError;
 use crate::semantic::SemanticError;
 use crate::syntax::{
     self, ArrayExpression, BinaryExpression, CallExpression, CaseExpression, FunctionDefinition,
-    GroupedExpression, IfExpression, MemberExpression, Node, NodePath, PatternKind,
+    GroupedExpression, IfExpression, MemberExpression, Node, NodeKind, NodePath, PatternKind,
     StructDefinition, StructLiteral, SubscriptExpression, TypeAnnotation, TypeAnnotationKind,
-    UnaryExpression, ValueField, VariableDeclaration, VariableExpression, VariablePattern, Visitor,
+    TypedNode, UnaryExpression, ValueField, VariableDeclaration, VariableExpression,
+    VariablePattern, Visitor,
 };
 use crate::unwrap_or_return;
 use log::debug;
@@ -756,11 +757,18 @@ impl<'a> InitialTypeBinder<'a> {
         Self { arena, seq: 0 }
     }
 
-    pub fn new_type_var(&mut self) -> &'a TypeVariable<'a> {
+    fn new_type_var(&mut self) -> &'a TypeVariable<'a> {
         let var = TypeVariable::uninstantiated(self.seq);
 
         self.seq += 1;
         self.arena.alloc(var)
+    }
+
+    fn new_array_type(&mut self) -> &'a ArrayType<'a> {
+        let element_type = self.new_type_var();
+        let array_type = ArrayType::new(TypeKind::TypeVariable(element_type));
+
+        self.arena.alloc(array_type)
     }
 
     fn build_struct_type(
@@ -901,15 +909,15 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
     }
 
     fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
-        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()));
     }
 
     fn exit_unary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a UnaryExpression<'a>) {
-        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()));
     }
 
     fn exit_array_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a ArrayExpression<'a>) {
-        expr.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        expr.assign_type(TypeKind::ArrayType(self.new_array_type()));
     }
 
     fn exit_block(&mut self, _path: &'a NodePath<'a>, block: &'a syntax::Block<'a>) {
@@ -972,7 +980,11 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         _path: &'a NodePath<'a>,
         pattern: &'a syntax::ArrayPattern<'a>,
     ) {
-        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        pattern.assign_type(TypeKind::ArrayType(self.new_array_type()));
+    }
+
+    fn exit_rest_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a syntax::RestPattern<'a>) {
+        pattern.assign_type(TypeKind::ArrayType(self.new_array_type()));
     }
 
     fn exit_struct_pattern(
@@ -980,19 +992,7 @@ impl<'a> Visitor<'a> for InitialTypeBinder<'a> {
         _path: &'a NodePath<'a>,
         pattern: &'a syntax::StructPattern<'a>,
     ) {
-        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
-    }
-
-    fn exit_rest_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a syntax::RestPattern<'a>) {
-        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
-    }
-
-    fn exit_value_field_pattern(
-        &mut self,
-        _path: &'a NodePath<'a>,
-        pattern: &'a syntax::ValueFieldPattern<'a>,
-    ) {
-        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()))
+        pattern.assign_type(TypeKind::TypeVariable(self.new_type_var()));
     }
 }
 
@@ -1114,36 +1114,51 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         }
     }
 
-    fn exit_variable_declaration(
+    fn exit_member_expression(
         &mut self,
         _path: &'a NodePath<'a>,
-        declaration: &'a VariableDeclaration<'a>,
+        member_expr: &'a MemberExpression<'a>,
     ) {
-        let pattern = unwrap_or_return!(declaration.pattern());
-        let init = unwrap_or_return!(declaration.init());
+        let field = unwrap_or_return!(member_expr.field());
+        let object = member_expr.object();
+        let object_type = object.r#type();
 
-        if let PatternKind::VariablePattern(var_pattern) = pattern.kind() {
-            debug!("[inference] variable_pattern: {}, {}", var_pattern, init);
-            var_pattern
-                .r#type()
-                .unify(self.arena, init.r#type())
-                .unwrap_or_else(|err| panic!("Type error: {}", err));
-        } else {
-            todo!("warn: except for variable pattern, we can't infer type.");
+        if let Some(struct_type) = object_type.struct_type() {
+            if let Some(field_type) = struct_type.get_field_type(field.as_str()) {
+                if let Err(err) = member_expr.r#type().unify(self.arena, field_type) {
+                    member_expr
+                        .errors()
+                        .push_semantic_error(SemanticError::TypeError(err));
+                }
+
+                return;
+            }
         }
+
+        object
+            .errors()
+            .push_semantic_error(SemanticError::FieldDoesNotExist {
+                r#type: object_type,
+                field: field.to_string(),
+            });
     }
 
-    fn exit_variable_expression(
-        &mut self,
-        path: &'a NodePath<'a>,
-        expr: &'a VariableExpression<'a>,
-    ) {
-        let binding = unwrap_or_return!(path.scope().get_binding(expr.name()));
+    fn exit_array_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a ArrayExpression<'a>) {
+        let array_type = expr
+            .r#type()
+            .array_type()
+            .expect("The type of an array expression must be array type.");
 
-        debug!("[inference] variable_expression: {}, {}", expr, binding);
-        expr.r#type()
-            .unify(self.arena, binding.r#type())
-            .unwrap_or_else(|err| panic!("Type error: {}", err));
+        for element in expr.elements() {
+            if let Err(err) = element
+                .r#type()
+                .unify(self.arena, array_type.element_type())
+            {
+                element
+                    .errors()
+                    .push_semantic_error(SemanticError::TypeError(err));
+            }
+        }
     }
 
     fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
@@ -1200,6 +1215,48 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
             .r#type()
             .unify(self.arena, ty)
             .unwrap_or_else(|err| panic!("Type error: {}", err));
+    }
+
+    fn exit_case_expression(&mut self, _path: &'a NodePath<'a>, case_expr: &'a CaseExpression<'a>) {
+        // -- All arm pattern types must be same as the type of head expression.
+        if let Some(head_expr) = case_expr.head() {
+            for (i, arm) in case_expr.arms().enumerate() {
+                debug!("[inference] head {} <- arm #{} ", head_expr, i);
+
+                if let Some(pattern) = arm.pattern() {
+                    if let Err(err) = pattern.r#type().unify(self.arena, head_expr.r#type()) {
+                        arm.errors()
+                            .push_semantic_error(SemanticError::TypeError(err));
+                    }
+                }
+            }
+        }
+
+        // -- Infer the return type of a case expression
+
+        // - All arms must have same type.
+        let accumulated = case_expr.arms().enumerate().reduce(|(i, a), (j, b)| {
+            debug!("[inference] case_expression: arm #{} - #{}", i, j);
+            if let Err(err) = b.r#type().unify(self.arena, a.r#type()) {
+                b.errors()
+                    .push_semantic_error(SemanticError::TypeError(err));
+            }
+
+            (j, b)
+        });
+
+        // - An empty case expression's type is `void`.
+        if let Some((i, arm)) = accumulated {
+            debug!("[inference] case_expression <- arm #{} ", i);
+            if let Err(err) = case_expr.r#type().unify(self.arena, arm.r#type()) {
+                case_expr
+                    .errors()
+                    .push_semantic_error(SemanticError::TypeError(err));
+            }
+        } else {
+            debug!("[inference] case_expression <- void");
+            case_expr.assign_type(TypeKind::Void);
+        }
     }
 
     fn exit_call_expression(&mut self, _path: &'a NodePath<'a>, call_expr: &'a CallExpression<'a>) {
@@ -1285,10 +1342,120 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
                 .push_semantic_error(SemanticError::TypeError(err));
         }
     }
+
+    // --- patterns: infer types top-down
+    fn enter_array_pattern(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        pattern: &'a syntax::ArrayPattern<'a>,
+    ) {
+        let array_type = pattern
+            .r#type()
+            .array_type()
+            .expect("The type of an array pattern must be an array type.");
+
+        debug!("[inference] array pattern: {}", pattern);
+
+        for (i, element) in pattern.elements().enumerate() {
+            debug!("[inference] #{} of array pattern: {}", i, element);
+
+            if element.rest_pattern().is_some() {
+                if let Err(err) = element.r#type().unify(self.arena, pattern.r#type()) {
+                    element
+                        .errors()
+                        .push_semantic_error(SemanticError::TypeError(err));
+                }
+            } else if let Err(err) = element
+                .r#type()
+                .unify(self.arena, array_type.element_type())
+            {
+                element
+                    .errors()
+                    .push_semantic_error(SemanticError::TypeError(err));
+            }
+        }
+    }
+
+    fn enter_struct_pattern(
+        &mut self,
+        path: &'a NodePath<'a>,
+        pattern: &'a syntax::StructPattern<'a>,
+    ) {
+        let binding = unwrap_or_return!(path.scope().get_binding(pattern.name().as_str()));
+        let struct_type = unwrap_or_return!(binding.r#type().struct_type());
+
+        // Struct pattern type
+        debug!("[inference] struct pattern: {}", pattern);
+
+        if let Err(err) = pattern
+            .r#type()
+            .unify(self.arena, TypeKind::StructType(struct_type))
+        {
+            pattern
+                .errors()
+                .push_semantic_error(SemanticError::TypeError(err));
+        }
+
+        // Struct pattern fields type
+        for field in pattern.fields() {
+            if let Some(field_type) = struct_type.get_field_type(field.name().as_str()) {
+                if let Err(err) = field.r#type().unify(self.arena, field_type) {
+                    field
+                        .errors()
+                        .push_semantic_error(SemanticError::TypeError(err));
+                }
+            } else {
+                field
+                    .name()
+                    .errors()
+                    .push_semantic_error(SemanticError::FieldDoesNotExist {
+                        r#type: TypeKind::StructType(struct_type),
+                        field: field.name().to_string(),
+                    });
+            }
+        }
+    }
+
+    fn enter_variable_declaration(
+        &mut self,
+        _path: &'a NodePath<'a>,
+        declaration: &'a VariableDeclaration<'a>,
+    ) {
+        let pattern = unwrap_or_return!(declaration.pattern());
+        let init = unwrap_or_return!(declaration.init());
+
+        if let PatternKind::VariablePattern(var_pattern) = pattern.kind() {
+            debug!(
+                "[inference] variable_declaration: {}, {}",
+                var_pattern, init
+            );
+
+            var_pattern
+                .r#type()
+                .unify(self.arena, init.r#type())
+                .unwrap_or_else(|err| panic!("Type error: {}", err));
+        } else {
+            todo!("warn: except for variable pattern, we can't infer type.");
+        }
+    }
+
+    fn enter_variable_expression(
+        &mut self,
+        path: &'a NodePath<'a>,
+        expr: &'a VariableExpression<'a>,
+    ) {
+        let binding = unwrap_or_return!(path.scope().get_binding(expr.name()));
+
+        debug!("[inference] variable_expression: {}, {}", expr, binding);
+        expr.r#type()
+            .unify(self.arena, binding.r#type())
+            .unwrap_or_else(|err| panic!("Type error: {}", err));
+    }
 }
 
 /// Indirect references by type variables are still necessary after type inference is complete.
 /// However, unnecessary indirect references can be removed.
+/// Furthermore, raise error if there are any type variables still left at the leaf node.
 #[derive(Debug)]
 pub(super) struct TypeVariablePruner<'a> {
     arena: &'a BumpaloArena,
@@ -1324,6 +1491,32 @@ impl<'a> TypeVariablePruner<'a> {
             }
         };
     }
+
+    fn does_type_contains_type_variable(&self, r#type: TypeKind<'a>) -> bool {
+        match r#type.terminal_type() {
+            TypeKind::Int32 => false,
+            TypeKind::Boolean => false,
+            TypeKind::String => false,
+            TypeKind::Void => false,
+            TypeKind::StructType(ty) => ty
+                .fields()
+                .any(|f| self.does_type_contains_type_variable(f.r#type())),
+            TypeKind::FunctionType(ty) => {
+                ty.parameters()
+                    .any(|p| self.does_type_contains_type_variable(p.r#type()))
+                    || self.does_type_contains_type_variable(ty.return_type())
+            }
+            TypeKind::ArrayType(ty) => self.does_type_contains_type_variable(ty.element_type),
+            TypeKind::TypeVariable(_) => true,
+        }
+    }
+
+    fn type_should_be_instantiated(&self, node: NodeKind<'a>, r#type: TypeKind<'a>) {
+        if self.does_type_contains_type_variable(r#type) {
+            node.errors()
+                .push_semantic_error(SemanticError::CannotInferType { node, r#type })
+        }
+    }
 }
 
 impl<'a> Visitor<'a> for TypeVariablePruner<'a> {
@@ -1333,6 +1526,10 @@ impl<'a> Visitor<'a> for TypeVariablePruner<'a> {
         definition: &'a FunctionDefinition<'a>,
     ) {
         self.prune(definition.r#type());
+        self.type_should_be_instantiated(
+            NodeKind::FunctionDefinition(definition),
+            definition.r#type(),
+        );
     }
 
     fn exit_function_parameter(
@@ -1342,13 +1539,16 @@ impl<'a> Visitor<'a> for TypeVariablePruner<'a> {
         param: &'a syntax::FunctionParameter<'a>,
     ) {
         self.prune(param.r#type());
+        self.type_should_be_instantiated(NodeKind::FunctionParameter(param), param.r#type());
     }
 
     fn exit_expression(&mut self, _path: &'a NodePath<'a>, expression: &'a syntax::Expression<'a>) {
         self.prune(expression.r#type());
+        self.type_should_be_instantiated(NodeKind::Expression(expression), expression.r#type());
     }
 
     fn exit_pattern(&mut self, _path: &'a NodePath<'a>, pattern: &'a syntax::Pattern<'a>) {
         self.prune(pattern.r#type());
+        self.type_should_be_instantiated(NodeKind::Pattern(pattern), pattern.r#type());
     }
 }

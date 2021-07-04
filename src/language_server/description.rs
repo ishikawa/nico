@@ -1,5 +1,5 @@
 use crate::semantic::{StructType, TypeKind};
-use crate::syntax::{self, VariablePattern};
+use crate::syntax::{self, TypedNode, VariablePattern};
 use std::fmt::Display;
 
 pub fn code_fence<T: Display>(content: T) -> String {

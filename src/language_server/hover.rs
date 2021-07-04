@@ -2,8 +2,8 @@ use super::description;
 use crate::arena::BumpaloArena;
 use crate::syntax::{
     self, EffectiveRange, FunctionDefinition, FunctionParameter, MemberExpression, Node, NodePath,
-    Position, Program, StructDefinition, StructLiteral, TypeAnnotation, TypeField, ValueField,
-    VariableExpression, VariablePattern,
+    Position, Program, StructDefinition, StructLiteral, TypeAnnotation, TypeField, TypedNode,
+    ValueField, VariableExpression, VariablePattern,
 };
 use crate::unwrap_or_return;
 

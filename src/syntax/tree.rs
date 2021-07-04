@@ -49,19 +49,40 @@ use crate::util::collections::RefVecIter;
 use std::cell::{Cell, RefCell};
 use std::fmt;
 
-pub trait Node<'arena> {
+pub trait Node<'arena>: fmt::Display {
     fn code(&self) -> CodeKindIter<'_, 'arena>;
 
     /// Returns the effective range of this node.
     fn range(&self) -> EffectiveRange {
-        let mut it = self.code();
+        if let Some(range) = self.range_hint() {
+            range
+        } else {
+            let mut it = self.code();
 
-        // node must be at least one token.
-        let init = it.next().unwrap();
-        it.fold(init.range(), |acc, kind| kind.range().union(&acc))
+            let next = it.next();
+            let init = next.unwrap_or_else(|| {
+                panic!(
+                    "node must have at least one token: {} - {:?}",
+                    self,
+                    self.range_hint()
+                )
+            });
+
+            it.fold(init.range(), |acc, kind| kind.range().union(&acc))
+        }
+    }
+
+    /// Some kind of node doesn't have any syntactic token. The sort of node must provide
+    /// the position information by implementing this method.
+    fn range_hint(&self) -> Option<EffectiveRange> {
+        None
     }
 
     fn errors(&self) -> &AstErrors<'arena>;
+}
+
+pub trait TypedNode<'arena>: Node<'arena> {
+    fn r#type(&self) -> TypeKind<'arena>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -99,6 +120,12 @@ pub enum NodeKind<'a> {
     StructPattern(&'a StructPattern<'a>),
     ValueFieldPattern(&'a ValueFieldPattern<'a>),
     GroupedExpression(&'a GroupedExpression<'a>),
+}
+
+impl<'a> From<&'a Expression<'a>> for NodeKind<'a> {
+    fn from(expr: &'a Expression<'a>) -> Self {
+        NodeKind::Expression(expr)
+    }
 }
 
 impl<'a> From<&ExpressionKind<'a>> for NodeKind<'a> {
@@ -287,6 +314,13 @@ impl<'a> NodeKind<'a> {
         None
     }
 
+    pub fn case_expression(&self) -> Option<&'a CaseExpression<'a>> {
+        if let NodeKind::CaseExpression(node) = self {
+            return Some(node);
+        }
+        None
+    }
+
     pub fn member_expression(&self) -> Option<&'a MemberExpression<'a>> {
         if let NodeKind::MemberExpression(node) = self {
             return Some(node);
@@ -348,6 +382,44 @@ impl<'a> NodeKind<'a> {
 }
 
 impl<'a> Node<'a> for NodeKind<'a> {
+    fn range_hint(&self) -> Option<EffectiveRange> {
+        match self {
+            NodeKind::Program(kind) => kind.range_hint(),
+            NodeKind::TopLevel(kind) => kind.range_hint(),
+            NodeKind::Block(kind) => kind.range_hint(),
+            NodeKind::Identifier(kind) => kind.range_hint(),
+            NodeKind::StructDefinition(kind) => kind.range_hint(),
+            NodeKind::FunctionDefinition(kind) => kind.range_hint(),
+            NodeKind::TypeField(kind) => kind.range_hint(),
+            NodeKind::ValueField(kind) => kind.range_hint(),
+            NodeKind::TypeAnnotation(kind) => kind.range_hint(),
+            NodeKind::FunctionParameter(kind) => kind.range_hint(),
+            NodeKind::Statement(kind) => kind.range_hint(),
+            NodeKind::VariableDeclaration(kind) => kind.range_hint(),
+            NodeKind::Expression(kind) => kind.range_hint(),
+            NodeKind::IntegerLiteral(kind) => kind.range_hint(),
+            NodeKind::StructLiteral(kind) => kind.range_hint(),
+            NodeKind::StringLiteral(kind) => kind.range_hint(),
+            NodeKind::VariableExpression(kind) => kind.range_hint(),
+            NodeKind::BinaryExpression(kind) => kind.range_hint(),
+            NodeKind::UnaryExpression(kind) => kind.range_hint(),
+            NodeKind::SubscriptExpression(kind) => kind.range_hint(),
+            NodeKind::CallExpression(kind) => kind.range_hint(),
+            NodeKind::ArrayExpression(kind) => kind.range_hint(),
+            NodeKind::MemberExpression(kind) => kind.range_hint(),
+            NodeKind::IfExpression(kind) => kind.range_hint(),
+            NodeKind::CaseExpression(kind) => kind.range_hint(),
+            NodeKind::CaseArm(kind) => kind.range_hint(),
+            NodeKind::Pattern(kind) => kind.range_hint(),
+            NodeKind::VariablePattern(kind) => kind.range_hint(),
+            NodeKind::ArrayPattern(kind) => kind.range_hint(),
+            NodeKind::RestPattern(kind) => kind.range_hint(),
+            NodeKind::StructPattern(kind) => kind.range_hint(),
+            NodeKind::ValueFieldPattern(kind) => kind.range_hint(),
+            NodeKind::GroupedExpression(kind) => kind.range_hint(),
+        }
+    }
+
     fn code(&self) -> CodeKindIter<'_, 'a> {
         match self {
             NodeKind::Program(kind) => kind.code(),
@@ -438,6 +510,14 @@ impl<'a> AstErrors<'a> {
                 arena,
             ),
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.semantic_errors.borrow().is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.semantic_errors.borrow().len()
     }
 
     pub fn push_semantic_error(&self, error: SemanticError<'a>) {
@@ -657,10 +737,6 @@ impl<'a> StructDefinition<'a> {
     }
 
     // for semantic analysis
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -685,6 +761,12 @@ impl<'a> Node<'a> for StructDefinition<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for StructDefinition<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -792,10 +874,6 @@ impl<'a> TypeAnnotation<'a> {
     }
 
     // for semantic analysis
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -812,6 +890,12 @@ impl<'a> Node<'a> for TypeAnnotation<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for TypeAnnotation<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -877,10 +961,6 @@ impl<'a> FunctionDefinition<'a> {
     }
 
     // for semantic analysis
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -905,6 +985,12 @@ impl<'a> Node<'a> for FunctionDefinition<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for FunctionDefinition<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -956,10 +1042,6 @@ impl<'a> FunctionParameter<'a> {
     }
 
     // for semantic analysis
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -984,6 +1066,12 @@ impl<'a> Node<'a> for FunctionParameter<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for FunctionParameter<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -1106,6 +1194,10 @@ pub struct Block<'a> {
     r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
     code: Code<'a>,
+
+    // For an empty block.
+    // An empty block has no tokens to calculate its effective range.
+    range_hint: Option<EffectiveRange>,
 }
 
 impl<'a> Block<'a> {
@@ -1113,6 +1205,7 @@ impl<'a> Block<'a> {
         arena: &'a BumpaloArena,
         statements: I,
         code: Code<'a>,
+        range_hint: Option<EffectiveRange>,
     ) -> Self {
         Self {
             statements: BumpaloVec::from_iter_in(statements, arena),
@@ -1120,6 +1213,7 @@ impl<'a> Block<'a> {
             code,
             r#type: Cell::default(),
             errors: AstErrors::new(arena),
+            range_hint,
         }
     }
 
@@ -1136,10 +1230,6 @@ impl<'a> Block<'a> {
         stmt.expression()
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -1150,12 +1240,26 @@ impl<'a> Block<'a> {
 }
 
 impl<'a> Node<'a> for Block<'a> {
+    fn range_hint(&self) -> Option<EffectiveRange> {
+        if self.code.is_empty() {
+            self.range_hint
+        } else {
+            None
+        }
+    }
+
     fn code(&self) -> CodeKindIter<'_, 'a> {
         self.code.iter()
     }
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for Block<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -1288,24 +1392,6 @@ impl<'a> Expression<'a> {
     pub fn is_variable_expression(&self) -> bool {
         matches!(self.kind, ExpressionKind::VariableExpression(..))
     }
-
-    pub fn r#type(&self) -> TypeKind<'a> {
-        match self.kind() {
-            ExpressionKind::IntegerLiteral(expr) => expr.r#type(),
-            ExpressionKind::StringLiteral(expr) => expr.r#type(),
-            ExpressionKind::VariableExpression(expr) => expr.r#type(),
-            ExpressionKind::BinaryExpression(expr) => expr.r#type(),
-            ExpressionKind::UnaryExpression(expr) => expr.r#type(),
-            ExpressionKind::SubscriptExpression(expr) => expr.r#type(),
-            ExpressionKind::CallExpression(expr) => expr.r#type(),
-            ExpressionKind::ArrayExpression(expr) => expr.r#type(),
-            ExpressionKind::IfExpression(expr) => expr.r#type(),
-            ExpressionKind::CaseExpression(expr) => expr.r#type(),
-            ExpressionKind::MemberExpression(expr) => expr.r#type(),
-            ExpressionKind::StructLiteral(expr) => expr.r#type(),
-            ExpressionKind::GroupedExpression(expr) => expr.r#type(),
-        }
-    }
 }
 
 impl<'a> Node<'a> for Expression<'a> {
@@ -1328,6 +1414,26 @@ impl<'a> Node<'a> for Expression<'a> {
             ExpressionKind::MemberExpression(expr) => expr.errors(),
             ExpressionKind::StructLiteral(expr) => expr.errors(),
             ExpressionKind::GroupedExpression(expr) => expr.errors(),
+        }
+    }
+}
+
+impl<'a> TypedNode<'a> for Expression<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        match self.kind() {
+            ExpressionKind::IntegerLiteral(expr) => expr.r#type(),
+            ExpressionKind::StringLiteral(expr) => expr.r#type(),
+            ExpressionKind::VariableExpression(expr) => expr.r#type(),
+            ExpressionKind::BinaryExpression(expr) => expr.r#type(),
+            ExpressionKind::UnaryExpression(expr) => expr.r#type(),
+            ExpressionKind::SubscriptExpression(expr) => expr.r#type(),
+            ExpressionKind::CallExpression(expr) => expr.r#type(),
+            ExpressionKind::ArrayExpression(expr) => expr.r#type(),
+            ExpressionKind::IfExpression(expr) => expr.r#type(),
+            ExpressionKind::CaseExpression(expr) => expr.r#type(),
+            ExpressionKind::MemberExpression(expr) => expr.r#type(),
+            ExpressionKind::StructLiteral(expr) => expr.r#type(),
+            ExpressionKind::GroupedExpression(expr) => expr.r#type(),
         }
     }
 }
@@ -1375,10 +1481,6 @@ impl<'a> StructLiteral<'a> {
         self.r#type().struct_type()
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -1395,6 +1497,12 @@ impl<'a> Node<'a> for StructLiteral<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for StructLiteral<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -1437,10 +1545,6 @@ impl<'a> ValueField<'a> {
         self.value
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -1457,6 +1561,12 @@ impl<'a> Node<'a> for ValueField<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for ValueField<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -1506,10 +1616,6 @@ impl<'a> BinaryExpression<'a> {
         self.rhs
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -1526,6 +1632,12 @@ impl<'a> Node<'a> for BinaryExpression<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for BinaryExpression<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -1568,10 +1680,6 @@ impl<'a> UnaryExpression<'a> {
         self.operand
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -1588,6 +1696,12 @@ impl<'a> Node<'a> for UnaryExpression<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for UnaryExpression<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -1678,10 +1792,6 @@ impl<'a> SubscriptExpression<'a> {
         self.arguments.iter().copied()
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -1698,6 +1808,12 @@ impl<'a> Node<'a> for SubscriptExpression<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for SubscriptExpression<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -1745,10 +1861,6 @@ impl<'a> CallExpression<'a> {
         function_type.function_type()
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -1765,6 +1877,12 @@ impl<'a> Node<'a> for CallExpression<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for CallExpression<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -1807,10 +1925,6 @@ impl<'a> MemberExpression<'a> {
         self.field
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -1827,6 +1941,12 @@ impl<'a> Node<'a> for MemberExpression<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for MemberExpression<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -1866,10 +1986,6 @@ impl<'a> ArrayExpression<'a> {
         self.elements.iter().copied()
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -1886,6 +2002,12 @@ impl<'a> Node<'a> for ArrayExpression<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for ArrayExpression<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -1935,10 +2057,6 @@ impl<'a> IfExpression<'a> {
         self.else_body
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -1955,6 +2073,12 @@ impl<'a> Node<'a> for IfExpression<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for IfExpression<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -2004,10 +2128,6 @@ impl<'a> CaseExpression<'a> {
         self.else_body
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -2028,6 +2148,12 @@ impl<'a> Node<'a> for CaseExpression<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for CaseExpression<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -2096,6 +2222,12 @@ impl<'a> Node<'a> for CaseArm<'a> {
     }
 }
 
+impl<'a> TypedNode<'a> for CaseArm<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.then_body.r#type()
+    }
+}
+
 impl fmt::Display for CaseArm<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CaseArm")
@@ -2122,10 +2254,6 @@ impl<'a> IntegerLiteral<'a> {
     pub fn value(&self) -> i32 {
         self.value
     }
-
-    pub fn r#type(&self) -> TypeKind<'a> {
-        TypeKind::Int32
-    }
 }
 
 impl<'a> Node<'a> for IntegerLiteral<'a> {
@@ -2135,6 +2263,12 @@ impl<'a> Node<'a> for IntegerLiteral<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for IntegerLiteral<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        TypeKind::Int32
     }
 }
 
@@ -2163,10 +2297,6 @@ impl<'a> StringLiteral<'a> {
     pub fn value(&self) -> Option<&str> {
         self.value.as_deref()
     }
-
-    pub fn r#type(&self) -> TypeKind<'a> {
-        TypeKind::String
-    }
 }
 
 impl<'a> Node<'a> for StringLiteral<'a> {
@@ -2176,6 +2306,12 @@ impl<'a> Node<'a> for StringLiteral<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for StringLiteral<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        TypeKind::String
     }
 }
 
@@ -2216,10 +2352,6 @@ impl<'a> VariableExpression<'a> {
         self.id.as_str()
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -2236,6 +2368,12 @@ impl<'a> Node<'a> for VariableExpression<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for VariableExpression<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -2272,10 +2410,6 @@ impl<'a> GroupedExpression<'a> {
     }
 
     // for semantic analysis
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -2296,6 +2430,12 @@ impl<'a> Node<'a> for GroupedExpression<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for GroupedExpression<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -2342,15 +2482,19 @@ impl<'a> Pattern<'a> {
         &self.kind
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        match self.kind() {
-            PatternKind::IntegerPattern(pattern) => pattern.r#type(),
-            PatternKind::StringPattern(pattern) => pattern.r#type(),
-            PatternKind::VariablePattern(pattern) => pattern.r#type(),
-            PatternKind::ArrayPattern(pattern) => pattern.r#type(),
-            PatternKind::RestPattern(pattern) => pattern.r#type(),
-            PatternKind::StructPattern(pattern) => pattern.r#type(),
-            PatternKind::ValueFieldPattern(pattern) => pattern.r#type(),
+    pub fn value_field_pattern(&self) -> Option<&ValueFieldPattern<'a>> {
+        if let PatternKind::ValueFieldPattern(pattern) = self.kind() {
+            Some(pattern)
+        } else {
+            None
+        }
+    }
+
+    pub fn rest_pattern(&self) -> Option<&RestPattern<'a>> {
+        if let PatternKind::RestPattern(pattern) = self.kind() {
+            Some(pattern)
+        } else {
+            None
         }
     }
 }
@@ -2369,6 +2513,20 @@ impl<'a> Node<'a> for Pattern<'a> {
             PatternKind::RestPattern(pattern) => pattern.errors(),
             PatternKind::StructPattern(pattern) => pattern.errors(),
             PatternKind::ValueFieldPattern(pattern) => pattern.errors(),
+        }
+    }
+}
+
+impl<'a> TypedNode<'a> for Pattern<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        match self.kind() {
+            PatternKind::IntegerPattern(pattern) => pattern.r#type(),
+            PatternKind::StringPattern(pattern) => pattern.r#type(),
+            PatternKind::VariablePattern(pattern) => pattern.r#type(),
+            PatternKind::ArrayPattern(pattern) => pattern.r#type(),
+            PatternKind::RestPattern(pattern) => pattern.r#type(),
+            PatternKind::StructPattern(pattern) => pattern.r#type(),
+            PatternKind::ValueFieldPattern(pattern) => pattern.r#type(),
         }
     }
 }
@@ -2411,10 +2569,6 @@ impl<'a> VariablePattern<'a> {
     }
 
     // for semantic analysis
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -2439,6 +2593,12 @@ impl<'a> Node<'a> for VariablePattern<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for VariablePattern<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -2474,10 +2634,6 @@ impl<'a> ArrayPattern<'a> {
         self.elements.iter().copied()
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -2494,6 +2650,12 @@ impl<'a> Node<'a> for ArrayPattern<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for ArrayPattern<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -2529,10 +2691,6 @@ impl<'a> RestPattern<'a> {
         self.variable_pattern
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -2549,6 +2707,12 @@ impl<'a> Node<'a> for RestPattern<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for RestPattern<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
     }
 }
 
@@ -2591,10 +2755,6 @@ impl<'a> StructPattern<'a> {
         self.fields.iter().copied()
     }
 
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
     pub fn get_type(&self) -> Option<TypeKind<'a>> {
         self.r#type.get()
     }
@@ -2614,6 +2774,12 @@ impl<'a> Node<'a> for StructPattern<'a> {
     }
 }
 
+impl<'a> TypedNode<'a> for StructPattern<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        self.get_type().expect("Uninitialized semantic value.")
+    }
+}
+
 impl fmt::Display for StructPattern<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "StructPattern({})", self.name())
@@ -2623,11 +2789,15 @@ impl fmt::Display for StructPattern<'_> {
 #[derive(Debug)]
 pub struct ValueFieldPattern<'a> {
     name: &'a Identifier<'a>,
-    value: Option<&'a Pattern<'a>>,
-    omitted_value: Option<&'a Pattern<'a>>,
+    value_kind: ValueFieldPatternValueKind<'a>,
     code: Code<'a>,
-    r#type: Cell<Option<TypeKind<'a>>>,
     errors: AstErrors<'a>,
+}
+
+#[derive(Debug)]
+enum ValueFieldPatternValueKind<'a> {
+    Value(&'a Pattern<'a>),
+    Omitted(&'a Pattern<'a>),
 }
 
 impl<'a> ValueFieldPattern<'a> {
@@ -2637,13 +2807,11 @@ impl<'a> ValueFieldPattern<'a> {
         value: Option<&'a Pattern<'a>>,
         code: Code<'a>,
     ) -> Self {
-        if value.is_some() {
+        if let Some(value) = value {
             Self {
                 name,
-                value,
-                omitted_value: None,
+                value_kind: ValueFieldPatternValueKind::Value(value),
                 code,
-                r#type: Cell::default(),
                 errors: AstErrors::new(arena),
             }
         } else {
@@ -2653,10 +2821,8 @@ impl<'a> ValueFieldPattern<'a> {
 
             Self {
                 name,
-                value,
-                omitted_value: Some(omitted_value),
+                value_kind: ValueFieldPatternValueKind::Omitted(omitted_value),
                 code,
-                r#type: Cell::default(),
                 errors: AstErrors::new(arena),
             }
         }
@@ -2667,23 +2833,19 @@ impl<'a> ValueFieldPattern<'a> {
     }
 
     pub fn value(&self) -> Option<&'a Pattern<'a>> {
-        self.value
+        if let ValueFieldPatternValueKind::Value(value) = self.value_kind {
+            Some(value)
+        } else {
+            None
+        }
     }
 
     pub fn omitted_value(&self) -> Option<&'a Pattern<'a>> {
-        self.omitted_value
-    }
-
-    pub fn r#type(&self) -> TypeKind<'a> {
-        self.get_type().expect("Uninitialized semantic value.")
-    }
-
-    pub fn get_type(&self) -> Option<TypeKind<'a>> {
-        self.r#type.get()
-    }
-
-    pub fn assign_type(&self, ty: TypeKind<'a>) {
-        self.r#type.replace(Some(ty));
+        if let ValueFieldPatternValueKind::Omitted(value) = self.value_kind {
+            Some(value)
+        } else {
+            None
+        }
     }
 }
 
@@ -2694,6 +2856,15 @@ impl<'a> Node<'a> for ValueFieldPattern<'a> {
 
     fn errors(&self) -> &AstErrors<'a> {
         &self.errors
+    }
+}
+
+impl<'a> TypedNode<'a> for ValueFieldPattern<'a> {
+    fn r#type(&self) -> TypeKind<'a> {
+        match self.value_kind {
+            ValueFieldPatternValueKind::Value(value) => value.r#type(),
+            ValueFieldPatternValueKind::Omitted(value) => value.r#type(),
+        }
     }
 }
 

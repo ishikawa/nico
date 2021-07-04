@@ -6,7 +6,8 @@ use crate::syntax::TypeField;
 use crate::syntax::ValueField;
 use crate::syntax::{
     self, EffectiveRange, FunctionDefinition, FunctionParameter, Identifier, Node, NodePath,
-    Position, Program, StructDefinition, StructLiteral, VariableExpression, VariablePattern,
+    Position, Program, StructDefinition, StructLiteral, TypedNode, VariableExpression,
+    VariablePattern,
 };
 use crate::unwrap_or_return;
 
