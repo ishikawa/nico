@@ -19,7 +19,7 @@ use super::Scope;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TypeKind<'a> {
-    Int32,
+    Integer,
     Boolean,
     String,
     Void,
@@ -143,7 +143,7 @@ impl<'a> TypeKind<'a> {
 impl fmt::Display for TypeKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeKind::Int32 => write!(f, "Int"),
+            TypeKind::Integer => write!(f, "Int"),
             TypeKind::Boolean => write!(f, "Bool"),
             TypeKind::String => write!(f, "Str"),
             TypeKind::Void => write!(f, "Void"),
@@ -1012,7 +1012,8 @@ impl<'a> TypeQualifierResolver<'a> {
         annotation_kind: &TypeAnnotationKind<'a>,
     ) -> Result<TypeKind<'a>, String> {
         let ty = match annotation_kind {
-            syntax::TypeAnnotationKind::Int32 => TypeKind::Int32,
+            syntax::TypeAnnotationKind::Int => TypeKind::Integer,
+            syntax::TypeAnnotationKind::Bool => TypeKind::Boolean,
             syntax::TypeAnnotationKind::Identifier(type_name) => {
                 let binding = match scope.get_binding(type_name.as_str()) {
                     None => {
@@ -1468,7 +1469,7 @@ impl<'a> TypeVariablePruner<'a> {
 
     fn prune(&self, ty: TypeKind<'a>) {
         match ty {
-            TypeKind::Int32 => {}
+            TypeKind::Integer => {}
             TypeKind::Boolean => {}
             TypeKind::String => {}
             TypeKind::Void => {}
@@ -1494,7 +1495,7 @@ impl<'a> TypeVariablePruner<'a> {
 
     fn does_type_contains_type_variable(&self, r#type: TypeKind<'a>) -> bool {
         match r#type.terminal_type() {
-            TypeKind::Int32 => false,
+            TypeKind::Integer => false,
             TypeKind::Boolean => false,
             TypeKind::String => false,
             TypeKind::Void => false,

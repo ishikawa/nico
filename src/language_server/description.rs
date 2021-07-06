@@ -44,7 +44,7 @@ pub fn format_function_parameter(param: &syntax::FunctionParameter<'_>) -> Strin
 
 pub fn describe_type(ty: TypeKind<'_>) -> String {
     let description = match ty.terminal_type() {
-        TypeKind::Int32 => "The 32-bit signed integer type.",
+        TypeKind::Integer => "The 32-bit signed integer type.",
         TypeKind::Boolean => "The boolean type.",
         _ => "",
     };

@@ -25,19 +25,19 @@ impl<'a> Scope<'a> {
             arena,
             "println_str",
             &[("arg0", TypeKind::String)],
-            TypeKind::Int32,
+            TypeKind::Integer,
         ));
         scope.insert(Binding::builtin_function(
             arena,
             "println_i32",
-            &[("arg0", TypeKind::Int32)],
-            TypeKind::Int32,
+            &[("arg0", TypeKind::Integer)],
+            TypeKind::Integer,
         ));
         scope.insert(Binding::builtin_function(
             arena,
             "debug_i32",
-            &[("message", TypeKind::String), ("value", TypeKind::Int32)],
-            TypeKind::Int32,
+            &[("message", TypeKind::String), ("value", TypeKind::Integer)],
+            TypeKind::Integer,
         ));
 
         scope

@@ -843,7 +843,8 @@ pub struct TypeAnnotation<'a> {
 
 #[derive(Debug, Clone, Copy)]
 pub enum TypeAnnotationKind<'a> {
-    Int32,
+    Int,
+    Bool,
     Identifier(&'a Identifier<'a>),
     ArrayType(&'a TypeAnnotationKind<'a>),
 }
@@ -851,7 +852,8 @@ pub enum TypeAnnotationKind<'a> {
 impl fmt::Display for TypeAnnotationKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeAnnotationKind::Int32 => write!(f, "{}", TypeKind::Int32),
+            TypeAnnotationKind::Int => write!(f, "{}", TypeKind::Integer),
+            TypeAnnotationKind::Bool => write!(f, "{}", TypeKind::Boolean),
             TypeAnnotationKind::Identifier(id) => id.fmt(f),
             TypeAnnotationKind::ArrayType(element) => write!(f, "{}[]", element),
         }
@@ -2268,7 +2270,7 @@ impl<'a> Node<'a> for IntegerLiteral<'a> {
 
 impl<'a> TypedNode<'a> for IntegerLiteral<'a> {
     fn r#type(&self) -> TypeKind<'a> {
-        TypeKind::Int32
+        TypeKind::Integer
     }
 }
 

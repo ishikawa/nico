@@ -401,10 +401,15 @@ impl<'a, 't> Parser<'a, 't> {
         let mut code = CodeBuilder::new();
 
         let mut kind = match self.tokenizer.peek_kind() {
-            TokenKind::I32 => {
+            TokenKind::IntType => {
                 let token = self.tokenizer.next_token();
                 code.interpret(token);
-                TypeAnnotationKind::Int32
+                TypeAnnotationKind::Int
+            }
+            TokenKind::BoolType => {
+                let token = self.tokenizer.next_token();
+                code.interpret(token);
+                TypeAnnotationKind::Bool
             }
             TokenKind::Identifier(_) => {
                 let name = self.parse_name(arena)?;
