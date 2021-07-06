@@ -122,8 +122,8 @@ end\` 1`] = `
 Array [
   Object {
     "message": "mismatched types
-expected \`i32\`
-   found \`i32[]\`",
+expected \`Int[]\`
+   found \`Int\`",
     "range": Object {
       "end": Object {
         "character": 9,

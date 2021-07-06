@@ -90,7 +90,8 @@ impl fmt::Display for Token {
             TokenKind::Export => write!(f, "`export`")?,
             TokenKind::Let => write!(f, "`let`")?,
             TokenKind::Struct => write!(f, "`struct`")?,
-            TokenKind::I32 => write!(f, "`i32`")?,
+            TokenKind::IntType => write!(f, "`Int`")?,
+            TokenKind::BoolType => write!(f, "`Bool`")?,
             TokenKind::Eq => write!(f, "`==`")?,
             TokenKind::Ne => write!(f, "`!=`")?,
             TokenKind::Le => write!(f, "`<=`")?,
@@ -147,8 +148,10 @@ pub enum TokenKind {
     Export,
     Let,
     Struct,
+
     // Keywords (types)
-    I32,
+    IntType,
+    BoolType,
 
     // Operators
     Eq,         // "=="
@@ -542,9 +545,10 @@ impl<'a> Tokenizer<'a> {
             "export" => TokenKind::Export,
             "let" => TokenKind::Let,
             "struct" => TokenKind::Struct,
-            "Int" => TokenKind::I32,
+            "Int" => TokenKind::IntType,
+            "Bool" => TokenKind::BoolType,
             // TODO: remove old type
-            "i32" => TokenKind::I32,
+            "i32" => TokenKind::IntType,
             _ => TokenKind::Identifier(value),
         };
 
@@ -657,7 +661,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Export => write!(f, "export"),
             TokenKind::Let => write!(f, "let"),
             TokenKind::Struct => write!(f, "struct"),
-            TokenKind::I32 => write!(f, "i32"),
+            TokenKind::IntType => write!(f, "Int"),
+            TokenKind::BoolType => write!(f, "Bool"),
             TokenKind::Eq => write!(f, "=="),
             TokenKind::Ne => write!(f, "!="),
             TokenKind::Le => write!(f, "<="),

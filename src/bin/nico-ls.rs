@@ -338,7 +338,7 @@ impl SemanticTokenizer {
                 );
                 SemanticTokenType::VARIABLE
             }
-            TokenKind::I32 => SemanticTokenType::TYPE,
+            TokenKind::IntType => SemanticTokenType::TYPE,
             _ => return None,
         };
 

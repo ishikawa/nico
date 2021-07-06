@@ -11,7 +11,7 @@ Object {
     "contents": Object {
       "kind": "markdown",
       "value": "\`\`\`nico
-i32
+Int
 \`\`\`
 ---
 The 32-bit signed integer type.",
@@ -41,7 +41,7 @@ Object {
     "contents": Object {
       "kind": "markdown",
       "value": "\`\`\`nico
-A.a: i32
+A.a: Int
 \`\`\`",
     },
     "range": Object {
@@ -69,7 +69,7 @@ Object {
     "contents": Object {
       "kind": "markdown",
       "value": "\`\`\`nico
-A.a: i32
+A.a: Int
 \`\`\`",
     },
     "range": Object {
@@ -97,7 +97,7 @@ Object {
     "contents": Object {
       "kind": "markdown",
       "value": "\`\`\`nico
-A.a: i32
+A.a: Int
 \`\`\`",
     },
     "range": Object {
@@ -210,7 +210,7 @@ Object {
     "contents": Object {
       "kind": "markdown",
       "value": "\`\`\`nico
-(parameter) n: i32
+(parameter) n: Int
 \`\`\`",
     },
     "range": Object {
@@ -239,7 +239,7 @@ Object {
     "contents": Object {
       "kind": "markdown",
       "value": "\`\`\`nico
-(parameter) n: i32
+(parameter) n: Int
 \`\`\`",
     },
     "range": Object {
@@ -268,7 +268,7 @@ Object {
     "contents": Object {
       "kind": "markdown",
       "value": "\`\`\`nico
-fun foo(n: i32) -> i32
+fun foo(n: Int) -> Int
 \`\`\`",
     },
     "range": Object {
@@ -297,7 +297,7 @@ Object {
     "contents": Object {
       "kind": "markdown",
       "value": "\`\`\`nico
-fun foo(n: i32) -> i32
+fun foo(n: Int) -> Int
 \`\`\`",
     },
     "range": Object {
@@ -352,7 +352,7 @@ Object {
     "contents": Object {
       "kind": "markdown",
       "value": "\`\`\`nico
-fun foo(bar: i32[]) -> i32
+fun foo(bar: Int[]) -> Int
 \`\`\`",
     },
     "range": Object {

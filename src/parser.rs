@@ -407,7 +407,7 @@ impl Parser {
 
         let type_annotation = if let Some(name) = match_identifier(tokenizer, "type name") {
             TypeAnnotation::Name(name)
-        } else if match_token(tokenizer, TokenKind::I32).is_some() {
+        } else if match_token(tokenizer, TokenKind::IntType).is_some() {
             TypeAnnotation::Builtin(wrap(sem::Type::Int32))
         } else {
             return None;

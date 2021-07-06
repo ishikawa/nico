@@ -19,7 +19,7 @@ use super::Scope;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TypeKind<'a> {
-    Int32,
+    Integer,
     Boolean,
     String,
     Void,
@@ -143,10 +143,10 @@ impl<'a> TypeKind<'a> {
 impl fmt::Display for TypeKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeKind::Int32 => write!(f, "i32"),
-            TypeKind::Boolean => write!(f, "bool"),
-            TypeKind::String => write!(f, "str"),
-            TypeKind::Void => write!(f, "void"),
+            TypeKind::Integer => write!(f, "Int"),
+            TypeKind::Boolean => write!(f, "Bool"),
+            TypeKind::String => write!(f, "Str"),
+            TypeKind::Void => write!(f, "Void"),
             TypeKind::StructType(ty) => ty.fmt(f),
             TypeKind::FunctionType(ty) => ty.fmt(f),
             TypeKind::ArrayType(ty) => ty.fmt(f),
@@ -1012,7 +1012,8 @@ impl<'a> TypeQualifierResolver<'a> {
         annotation_kind: &TypeAnnotationKind<'a>,
     ) -> Result<TypeKind<'a>, String> {
         let ty = match annotation_kind {
-            syntax::TypeAnnotationKind::Int32 => TypeKind::Int32,
+            syntax::TypeAnnotationKind::Int => TypeKind::Integer,
+            syntax::TypeAnnotationKind::Bool => TypeKind::Boolean,
             syntax::TypeAnnotationKind::Identifier(type_name) => {
                 let binding = match scope.get_binding(type_name.as_str()) {
                     None => {
@@ -1076,16 +1077,23 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         function: &'a FunctionDefinition<'a>,
     ) {
         let function_type = unwrap_or_return!(function.function_type());
+        let return_type = function_type.return_type();
+        let body_type = function.body().r#type();
 
+        // If an explicit type is specified for the return type,
+        // the type of function body must be compatible.
         debug!(
-            "[inference] return_type: {}, {}",
-            function_type,
-            function.body()
+            "[inference] return_type: {}, body: {} in function {}",
+            return_type, body_type, function
         );
-        if let Err(err) = function_type
-            .return_type()
-            .unify(self.arena, function.body().r#type())
-        {
+
+        let err = if let TypeKind::TypeVariable(_) = return_type {
+            body_type.unify(self.arena, return_type)
+        } else {
+            return_type.unify(self.arena, body_type)
+        };
+
+        if let Err(err) = err {
             if let Some(expr) = function.body().last_expression() {
                 expr.errors()
                     .push_semantic_error(SemanticError::TypeError(err));
@@ -1468,7 +1476,7 @@ impl<'a> TypeVariablePruner<'a> {
 
     fn prune(&self, ty: TypeKind<'a>) {
         match ty {
-            TypeKind::Int32 => {}
+            TypeKind::Integer => {}
             TypeKind::Boolean => {}
             TypeKind::String => {}
             TypeKind::Void => {}
@@ -1494,7 +1502,7 @@ impl<'a> TypeVariablePruner<'a> {
 
     fn does_type_contains_type_variable(&self, r#type: TypeKind<'a>) -> bool {
         match r#type.terminal_type() {
-            TypeKind::Int32 => false,
+            TypeKind::Integer => false,
             TypeKind::Boolean => false,
             TypeKind::String => false,
             TypeKind::Void => false,
