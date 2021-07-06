@@ -1077,16 +1077,23 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
         function: &'a FunctionDefinition<'a>,
     ) {
         let function_type = unwrap_or_return!(function.function_type());
+        let return_type = function_type.return_type();
+        let body_type = function.body().r#type();
 
+        // If an explicit type is specified for the return type,
+        // the type of function body must be compatible.
         debug!(
-            "[inference] return_type: {}, {}",
-            function_type,
-            function.body()
+            "[inference] return_type: {}, body: {} in function {}",
+            return_type, body_type, function
         );
-        if let Err(err) = function_type
-            .return_type()
-            .unify(self.arena, function.body().r#type())
-        {
+
+        let err = if let TypeKind::TypeVariable(_) = return_type {
+            body_type.unify(self.arena, return_type)
+        } else {
+            return_type.unify(self.arena, body_type)
+        };
+
+        if let Err(err) = err {
             if let Some(expr) = function.body().last_expression() {
                 expr.errors()
                     .push_semantic_error(SemanticError::TypeError(err));
