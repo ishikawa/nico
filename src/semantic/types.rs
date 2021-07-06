@@ -143,10 +143,10 @@ impl<'a> TypeKind<'a> {
 impl fmt::Display for TypeKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeKind::Int32 => write!(f, "i32"),
-            TypeKind::Boolean => write!(f, "bool"),
-            TypeKind::String => write!(f, "str"),
-            TypeKind::Void => write!(f, "void"),
+            TypeKind::Int32 => write!(f, "Int"),
+            TypeKind::Boolean => write!(f, "Bool"),
+            TypeKind::String => write!(f, "Str"),
+            TypeKind::Void => write!(f, "Void"),
             TypeKind::StructType(ty) => ty.fmt(f),
             TypeKind::FunctionType(ty) => ty.fmt(f),
             TypeKind::ArrayType(ty) => ty.fmt(f),

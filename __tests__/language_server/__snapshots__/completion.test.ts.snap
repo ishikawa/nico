@@ -9,12 +9,12 @@ Object {
     "isIncomplete": false,
     "items": Array [
       Object {
-        "detail": "fun println_i32(arg0: i32) -> i32",
+        "detail": "fun println_i32(arg0: Int) -> Int",
         "kind": 3,
         "label": "println_i32",
       },
       Object {
-        "detail": "fun println_str(arg0: str) -> i32",
+        "detail": "fun println_str(arg0: Str) -> Int",
         "kind": 3,
         "label": "println_str",
       },
@@ -38,7 +38,7 @@ Object {
     "isIncomplete": false,
     "items": Array [
       Object {
-        "detail": "struct Rectangle {width: i32}",
+        "detail": "struct Rectangle {width: Int}",
         "kind": 22,
         "label": "Rectangle",
       },
