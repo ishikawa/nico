@@ -3,11 +3,11 @@ use crate::arena::{BumpaloString, BumpaloVec};
 use crate::semantic::errors::TypeMismatchError;
 use crate::semantic::SemanticError;
 use crate::syntax::{
-    self, ArrayExpression, BinaryExpression, CallExpression, CaseExpression, FunctionDefinition,
-    GroupedExpression, IfExpression, MemberExpression, Node, NodeKind, NodePath, PatternKind,
-    StructDefinition, StructLiteral, SubscriptExpression, TypeAnnotation, TypeAnnotationKind,
-    TypedNode, UnaryExpression, ValueField, VariableDeclaration, VariableExpression,
-    VariablePattern, Visitor,
+    self, ArrayExpression, BinaryExpression, BinaryOperator, CallExpression, CaseExpression,
+    FunctionDefinition, GroupedExpression, IfExpression, MemberExpression, Node, NodeKind,
+    NodePath, PatternKind, StructDefinition, StructLiteral, SubscriptExpression, TypeAnnotation,
+    TypeAnnotationKind, TypedNode, UnaryExpression, ValueField, VariableDeclaration,
+    VariableExpression, VariablePattern, Visitor,
 };
 use crate::unwrap_or_return;
 use log::debug;
@@ -1060,6 +1060,39 @@ impl<'a> Visitor<'a> for TypeQualifierResolver<'a> {
 }
 
 #[derive(Debug)]
+struct BinaryOperatorType<'a> {
+    lhs: TypeKind<'a>,
+    rhs: TypeKind<'a>,
+    result_type: TypeKind<'a>,
+}
+
+impl<'a> From<BinaryOperator> for BinaryOperatorType<'a> {
+    fn from(op: BinaryOperator) -> Self {
+        match op {
+            BinaryOperator::Add
+            | BinaryOperator::Sub
+            | BinaryOperator::Mul
+            | BinaryOperator::Div
+            | BinaryOperator::Rem => Self {
+                lhs: TypeKind::Integer,
+                rhs: TypeKind::Integer,
+                result_type: TypeKind::Integer,
+            },
+            BinaryOperator::Lt
+            | BinaryOperator::Gt
+            | BinaryOperator::Le
+            | BinaryOperator::Ge
+            | BinaryOperator::Eq
+            | BinaryOperator::Ne => Self {
+                lhs: TypeKind::Integer,
+                rhs: TypeKind::Integer,
+                result_type: TypeKind::Boolean,
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
 pub(super) struct TypeInferencer<'a> {
     arena: &'a BumpaloArena,
 }
@@ -1172,16 +1205,25 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
     fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
         let lhs = expr.lhs();
         let rhs = unwrap_or_return!(expr.rhs());
+        let op_type = BinaryOperatorType::from(expr.operator());
 
-        debug!("[inference] binary_expression (operand): {}, {}", lhs, rhs);
-        lhs.r#type()
-            .unify(self.arena, rhs.r#type())
-            .unwrap_or_else(|err| panic!("Type error: {}", err));
+        debug!("[inference] binary_expression (lhs): {}", lhs);
+        if let Err(err) = lhs.r#type().unify(self.arena, op_type.lhs) {
+            lhs.errors()
+                .push_semantic_error(SemanticError::TypeError(err));
+        }
 
-        debug!("[inference] binary_expression: {}, {}", expr, lhs);
-        expr.r#type()
-            .unify(self.arena, lhs.r#type())
-            .unwrap_or_else(|err| panic!("Type error: {}", err));
+        debug!("[inference] binary_expression (rhs): {}", rhs);
+        if let Err(err) = rhs.r#type().unify(self.arena, op_type.rhs) {
+            rhs.errors()
+                .push_semantic_error(SemanticError::TypeError(err));
+        }
+
+        debug!("[inference] binary_expression: {}", expr);
+        if let Err(err) = expr.r#type().unify(self.arena, op_type.result_type) {
+            expr.errors()
+                .push_semantic_error(SemanticError::TypeError(err));
+        }
     }
 
     fn exit_grouped_expression(
