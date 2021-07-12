@@ -351,7 +351,7 @@ impl<'a> Tokenizer<'a> {
                     Some(nextc) => match nextc {
                         '0'..='9' => self.read_integer(nextc),
                         'a'..='z' | 'A'..='Z' | '_' => self.read_name(nextc),
-                        '!' | '=' | '<' | '>' => self.read_operator(nextc),
+                        '!' | '=' | '<' | '>' | '&' | '|' => self.read_operator(nextc),
                         '-' => self.read_hyphen(),
                         '.' => self.read_dot(),
                         '"' => {
@@ -486,6 +486,8 @@ impl<'a> Tokenizer<'a> {
             ('!', '=') => TokenKind::Ne,
             ('<', '=') => TokenKind::Le,
             ('>', '=') => TokenKind::Ge,
+            ('&', '&') => TokenKind::And,
+            ('|', '|') => TokenKind::Or,
             _ => return TokenKind::Char(c),
         };
 
