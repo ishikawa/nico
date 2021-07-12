@@ -79,33 +79,9 @@ pub struct Token {
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            TokenKind::Identifier(value) => write!(f, "Identifier({})", value)?,
-            TokenKind::Integer(value) => write!(f, "Integer({})", value)?,
-            TokenKind::If => write!(f, "`if`")?,
-            TokenKind::Else => write!(f, "`else`")?,
-            TokenKind::End => write!(f, "`end`")?,
-            TokenKind::Fun => write!(f, "`fun`")?,
-            TokenKind::Case => write!(f, "`case`")?,
-            TokenKind::When => write!(f, "`when`")?,
-            TokenKind::Export => write!(f, "`export`")?,
-            TokenKind::Let => write!(f, "`let`")?,
-            TokenKind::Struct => write!(f, "`struct`")?,
-            TokenKind::IntType => write!(f, "`Int`")?,
-            TokenKind::BoolType => write!(f, "`Bool`")?,
-            TokenKind::Eq => write!(f, "`==`")?,
-            TokenKind::Ne => write!(f, "`!=`")?,
-            TokenKind::Le => write!(f, "`<=`")?,
-            TokenKind::Ge => write!(f, "`>=`")?,
-            TokenKind::Range => write!(f, "`..`")?,
-            TokenKind::Rest => write!(f, "`...`")?,
-            TokenKind::RightArrow => write!(f, "`->`")?,
-            TokenKind::Char(c) => write!(f, "`{}`", c)?,
-            TokenKind::Eos => write!(f, "`(eos)`")?,
-            TokenKind::StringStart => write!(f, "`\"...`")?,
-            TokenKind::StringContent(content) => write!(f, "`{}`", content)?,
-            TokenKind::StringEscapeSequence(c) => write!(f, "`\\{}`", c)?,
-            TokenKind::StringUnrecognizedEscapeSequence(c) => write!(f, "`?\\{}`", c)?,
-            TokenKind::StringEnd => write!(f, "`...\"`")?,
+            kind @ TokenKind::Identifier(_) => write!(f, "{}", kind)?,
+            kind @ TokenKind::Integer(_) => write!(f, "{}", kind)?,
+            kind => write!(f, "`{}`", kind)?,
         };
 
         write!(f, " at {}", self.range)
@@ -158,6 +134,8 @@ pub enum TokenKind {
     Ne,         // "!="
     Le,         // "<="
     Ge,         // ">="
+    And,        // "&&"
+    Or,         // "||"
     Range,      // ".."
     Rest,       // "..."
     RightArrow, // "->"
@@ -650,8 +628,8 @@ impl<'a> Tokenizer<'a> {
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenKind::Identifier(name) => write!(f, "id<{}>", name),
-            TokenKind::Integer(i) => write!(f, "int<{}>", i),
+            TokenKind::Identifier(name) => write!(f, "Identifier({})", name),
+            TokenKind::Integer(i) => write!(f, "Integer({})", i),
             TokenKind::If => write!(f, "if"),
             TokenKind::Else => write!(f, "else"),
             TokenKind::End => write!(f, "end"),
@@ -667,6 +645,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Ne => write!(f, "!="),
             TokenKind::Le => write!(f, "<="),
             TokenKind::Ge => write!(f, ">="),
+            TokenKind::And => write!(f, "&&"),
+            TokenKind::Or => write!(f, "||"),
             TokenKind::Range => write!(f, ".."),
             TokenKind::Rest => write!(f, "..."),
             TokenKind::RightArrow => write!(f, "->"),
@@ -675,7 +655,7 @@ impl fmt::Display for TokenKind {
             TokenKind::StringStart => write!(f, "\"..."),
             TokenKind::StringContent(s) => write!(f, "\"{}\"", s),
             TokenKind::StringEscapeSequence(c) => write!(f, "\\{}", c),
-            TokenKind::StringUnrecognizedEscapeSequence(c) => write!(f, "\\{}", c),
+            TokenKind::StringUnrecognizedEscapeSequence(c) => write!(f, "?\\{}", c),
             TokenKind::StringEnd => write!(f, "...\""),
         }
     }
