@@ -1088,6 +1088,11 @@ impl<'a> From<BinaryOperator> for BinaryOperatorType<'a> {
                 rhs: TypeKind::Integer,
                 result_type: TypeKind::Boolean,
             },
+            BinaryOperator::And | BinaryOperator::Or => Self {
+                lhs: TypeKind::Boolean,
+                rhs: TypeKind::Boolean,
+                result_type: TypeKind::Boolean,
+            },
         }
     }
 }

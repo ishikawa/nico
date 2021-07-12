@@ -1726,6 +1726,8 @@ pub enum BinaryOperator {
     Ge,
     Eq,
     Ne,
+    And,
+    Or,
 }
 
 impl fmt::Display for BinaryOperator {
@@ -1742,6 +1744,8 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::Ge => write!(f, ">="),
             BinaryOperator::Eq => write!(f, "=="),
             BinaryOperator::Ne => write!(f, "!="),
+            BinaryOperator::And => write!(f, "&&"),
+            BinaryOperator::Or => write!(f, "||"),
         }
     }
 }

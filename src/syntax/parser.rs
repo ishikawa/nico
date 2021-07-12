@@ -507,7 +507,22 @@ impl<'a, 't> Parser<'a, 't> {
 
     fn parse_expr(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
         self.debug_trace("parse_expr");
-        self.parse_rel_op1(arena)
+        self.parse_logical_op(arena)
+    }
+
+    // Operator precedence - JavaScript | MDN
+    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence
+
+    fn parse_logical_op(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
+        self.debug_trace("parse_logical_op");
+        self._parse_binary_op(
+            arena,
+            Parser::parse_rel_op1,
+            &[
+                (TokenKind::And, BinaryOperator::And),
+                (TokenKind::Or, BinaryOperator::Or),
+            ],
+        )
     }
 
     fn parse_rel_op1(&mut self, arena: &'a BumpaloArena) -> Option<&'a Expression<'a>> {
