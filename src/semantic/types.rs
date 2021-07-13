@@ -1110,6 +1110,10 @@ impl<'a> From<UnaryOperator> for UnaryOperatorType<'a> {
                 operand: TypeKind::Integer,
                 result_type: TypeKind::Integer,
             },
+            UnaryOperator::Not => Self {
+                operand: TypeKind::Boolean,
+                result_type: TypeKind::Boolean,
+            },
         }
     }
 }
