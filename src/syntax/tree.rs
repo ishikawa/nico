@@ -1754,6 +1754,7 @@ impl fmt::Display for BinaryOperator {
 pub enum UnaryOperator {
     Plus,
     Minus,
+    Not,
 }
 
 impl fmt::Display for UnaryOperator {
@@ -1761,6 +1762,7 @@ impl fmt::Display for UnaryOperator {
         match self {
             UnaryOperator::Plus => write!(f, "+"),
             UnaryOperator::Minus => write!(f, "-"),
+            UnaryOperator::Not => write!(f, "!"),
         }
     }
 }

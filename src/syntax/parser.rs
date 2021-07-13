@@ -582,6 +582,7 @@ impl<'a, 't> Parser<'a, 't> {
         let operator = match self.tokenizer.peek_kind() {
             TokenKind::Char('+') => UnaryOperator::Plus,
             TokenKind::Char('-') => UnaryOperator::Minus,
+            TokenKind::Char('!') => UnaryOperator::Not,
             _ => return self.parse_access(arena),
         };
 
