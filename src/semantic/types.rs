@@ -6,7 +6,7 @@ use crate::syntax::{
     self, ArrayExpression, BinaryExpression, BinaryOperator, CallExpression, CaseExpression,
     FunctionDefinition, GroupedExpression, IfExpression, MemberExpression, Node, NodeKind,
     NodePath, PatternKind, StructDefinition, StructLiteral, SubscriptExpression, TypeAnnotation,
-    TypeAnnotationKind, TypedNode, UnaryExpression, ValueField, VariableDeclaration,
+    TypeAnnotationKind, TypedNode, UnaryExpression, UnaryOperator, ValueField, VariableDeclaration,
     VariableExpression, VariablePattern, Visitor,
 };
 use crate::unwrap_or_return;
@@ -1098,6 +1098,23 @@ impl<'a> From<BinaryOperator> for BinaryOperatorType<'a> {
 }
 
 #[derive(Debug)]
+struct UnaryOperatorType<'a> {
+    operand: TypeKind<'a>,
+    result_type: TypeKind<'a>,
+}
+
+impl<'a> From<UnaryOperator> for UnaryOperatorType<'a> {
+    fn from(op: UnaryOperator) -> Self {
+        match op {
+            UnaryOperator::Plus | UnaryOperator::Minus => Self {
+                operand: TypeKind::Integer,
+                result_type: TypeKind::Integer,
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
 pub(super) struct TypeInferencer<'a> {
     arena: &'a BumpaloArena,
 }
@@ -1210,21 +1227,44 @@ impl<'a> Visitor<'a> for TypeInferencer<'a> {
     fn exit_binary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a BinaryExpression<'a>) {
         let lhs = expr.lhs();
         let rhs = unwrap_or_return!(expr.rhs());
-        let op_type = BinaryOperatorType::from(expr.operator());
+        let operator = expr.operator();
+        let op_type = BinaryOperatorType::from(operator);
 
-        debug!("[inference] binary_expression (lhs): {}", lhs);
+        debug!("[inference] binary_expression ({}) lhs: {}", operator, lhs);
         if let Err(err) = lhs.r#type().unify(self.arena, op_type.lhs) {
             lhs.errors()
                 .push_semantic_error(SemanticError::TypeError(err));
         }
 
-        debug!("[inference] binary_expression (rhs): {}", rhs);
+        debug!("[inference] binary_expression ({}) rhs: {}", operator, rhs);
         if let Err(err) = rhs.r#type().unify(self.arena, op_type.rhs) {
             rhs.errors()
                 .push_semantic_error(SemanticError::TypeError(err));
         }
 
-        debug!("[inference] binary_expression: {}", expr);
+        debug!("[inference] binary_expression ({}) - {}", operator, expr);
+        if let Err(err) = expr.r#type().unify(self.arena, op_type.result_type) {
+            expr.errors()
+                .push_semantic_error(SemanticError::TypeError(err));
+        }
+    }
+
+    fn exit_unary_expression(&mut self, _path: &'a NodePath<'a>, expr: &'a UnaryExpression<'a>) {
+        let operand = unwrap_or_return!(expr.operand());
+        let operator = expr.operator();
+        let op_type = UnaryOperatorType::from(operator);
+
+        debug!(
+            "[inference] unary_expression ({}) operand: {}",
+            operator, operand
+        );
+        if let Err(err) = operand.r#type().unify(self.arena, op_type.operand) {
+            operand
+                .errors()
+                .push_semantic_error(SemanticError::TypeError(err));
+        }
+
+        debug!("[inference] unary_expression ({}) - {}", operator, expr);
         if let Err(err) = expr.r#type().unify(self.arena, op_type.result_type) {
             expr.errors()
                 .push_semantic_error(SemanticError::TypeError(err));
