@@ -7,7 +7,21 @@ import loadWabt from "wabt";
 
 const DEBUG = false;
 
-export async function compileFileToWATFile(filepath: string, outputFilepath: string): Promise<void> {
+export type CompileFileOptions = {
+  backend?: "2021-spring" | "2021-summer";
+};
+
+export async function compileFileToWATFile(
+  filepath: string,
+  outputFilepath: string,
+  options: CompileFileOptions = {}
+): Promise<void> {
+  const args = [filepath];
+
+  if (options.backend) {
+    args.unshift("--backend", options.backend);
+  }
+
   return new Promise((resolve, reject) => {
     execFile("./target/debug/nico", [filepath], (error, stdout, stderr) => {
       if (error) {

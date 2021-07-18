@@ -46,6 +46,7 @@ use super::{Code, CodeKind, CodeKindIter, EffectiveRange, Token};
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString, BumpaloVec};
 use crate::semantic::{Binding, FunctionType, Scope, SemanticError, StructType, TypeKind};
 use crate::util::collections::RefVecIter;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::cell::{Cell, RefCell};
 use std::fmt;
 
@@ -569,6 +570,19 @@ impl fmt::Display for TopLevel<'_> {
     }
 }
 
+impl Serialize for TopLevel<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.kind() {
+            TopLevelKind::StructDefinition(_) => serializer.serialize_str("struct"),
+            TopLevelKind::FunctionDefinition(_) => serializer.serialize_str("function"),
+            TopLevelKind::Statement(stmt) => stmt.serialize(serializer),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum TopLevelKind<'a> {
     StructDefinition(&'a StructDefinition<'a>),
@@ -652,6 +666,24 @@ impl fmt::Display for Program<'_> {
     }
 }
 
+impl Serialize for Program<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Program", 3)?;
+
+        let body = self.body().collect::<Vec<_>>();
+        state.serialize_field("body", &body)?;
+        state.serialize_field("type", "Program")?;
+
+        let range = self.range();
+        state.serialize_field("loc", &range)?;
+
+        state.end()
+    }
+}
+
 #[derive(Debug)]
 pub struct Identifier<'a> {
     id: BumpaloString<'a>,
@@ -692,6 +724,20 @@ impl<'a> Node<'a> for Identifier<'a> {
 impl fmt::Display for Identifier<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.id.fmt(f)
+    }
+}
+
+impl Serialize for Identifier<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Identifier", 3)?;
+
+        state.serialize_field("name", self.as_str())?;
+        state.serialize_field("type", "Identifier")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
     }
 }
 
@@ -1131,6 +1177,22 @@ impl fmt::Display for VariableDeclaration<'_> {
     }
 }
 
+impl Serialize for VariableDeclaration<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("VariableDeclaration", 4)?;
+
+        state.serialize_field("id", &self.pattern())?;
+        state.serialize_field("init", &self.init())?;
+
+        state.serialize_field("type", "VariableDeclaration")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
+    }
+}
+
 #[derive(Debug)]
 pub struct Statement<'a> {
     kind: StatementKind<'a>,
@@ -1186,6 +1248,18 @@ impl<'a> Node<'a> for Statement<'a> {
 impl fmt::Display for Statement<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Statement")
+    }
+}
+
+impl Serialize for Statement<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.kind() {
+            StatementKind::Expression(expr) => expr.serialize(serializer),
+            StatementKind::VariableDeclaration(decl) => decl.serialize(serializer),
+        }
     }
 }
 
@@ -1446,6 +1520,29 @@ impl fmt::Display for Expression<'_> {
     }
 }
 
+impl Serialize for Expression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.kind() {
+            ExpressionKind::IntegerLiteral(expr) => expr.serialize(serializer),
+            ExpressionKind::StringLiteral(expr) => expr.serialize(serializer),
+            ExpressionKind::VariableExpression(expr) => expr.serialize(serializer),
+            ExpressionKind::BinaryExpression(expr) => expr.serialize(serializer),
+            ExpressionKind::UnaryExpression(expr) => expr.serialize(serializer),
+            ExpressionKind::SubscriptExpression(_) => todo!(),
+            ExpressionKind::CallExpression(expr) => expr.serialize(serializer),
+            ExpressionKind::ArrayExpression(_) => todo!(),
+            ExpressionKind::IfExpression(_) => todo!(),
+            ExpressionKind::CaseExpression(_) => todo!(),
+            ExpressionKind::MemberExpression(_) => todo!(),
+            ExpressionKind::StructLiteral(_) => todo!(),
+            ExpressionKind::GroupedExpression(expr) => expr.serialize(serializer),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct StructLiteral<'a> {
     name: &'a Identifier<'a>,
@@ -1649,6 +1746,23 @@ impl fmt::Display for BinaryExpression<'_> {
     }
 }
 
+impl Serialize for BinaryExpression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("BinaryExpression", 5)?;
+
+        state.serialize_field("operator", &self.operator().to_string())?;
+        state.serialize_field("left", self.lhs())?;
+        state.serialize_field("right", &self.rhs())?;
+
+        state.serialize_field("type", "BinaryExpression")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
+    }
+}
+
 #[derive(Debug)]
 pub struct UnaryExpression<'a> {
     operator: UnaryOperator,
@@ -1710,6 +1824,22 @@ impl<'a> TypedNode<'a> for UnaryExpression<'a> {
 impl fmt::Display for UnaryExpression<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "UnaryExpression({})", self.operator())
+    }
+}
+
+impl Serialize for UnaryExpression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("UnaryExpression", 3)?;
+
+        state.serialize_field("operator", self.operator().to_string().as_str())?;
+        state.serialize_field("operand", &self.operand())?;
+
+        state.serialize_field("type", "UnaryExpression")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
     }
 }
 
@@ -1897,6 +2027,24 @@ impl<'a> TypedNode<'a> for CallExpression<'a> {
 impl fmt::Display for CallExpression<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CallExpression({})", self.callee())
+    }
+}
+
+impl Serialize for CallExpression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("CallExpression", 3)?;
+
+        state.serialize_field("callee", self.callee())?;
+
+        let args = self.arguments().collect::<Vec<_>>();
+        state.serialize_field("arguments", &args)?;
+
+        state.serialize_field("type", "CallExpression")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
     }
 }
 
@@ -2286,6 +2434,20 @@ impl fmt::Display for IntegerLiteral<'_> {
     }
 }
 
+impl Serialize for IntegerLiteral<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("IntegerLiteral", 3)?;
+
+        state.serialize_field("value", &self.value())?;
+        state.serialize_field("type", "IntegerLiteral")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
+    }
+}
+
 #[derive(Debug)]
 pub struct StringLiteral<'a> {
     value: Option<BumpaloString<'a>>,
@@ -2330,6 +2492,21 @@ impl fmt::Display for StringLiteral<'_> {
             "StringLiteral({})",
             self.value().unwrap_or(&"-".to_string())
         )
+    }
+}
+
+impl Serialize for StringLiteral<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("StringLiteral", 3)?;
+
+        state.serialize_field("value", &self.value())?;
+
+        state.serialize_field("type", "StringLiteral")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
     }
 }
 
@@ -2388,6 +2565,21 @@ impl<'a> TypedNode<'a> for VariableExpression<'a> {
 impl fmt::Display for VariableExpression<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "VariableExpression({})", self.id())
+    }
+}
+
+impl Serialize for VariableExpression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("VariableExpression", 3)?;
+
+        state.serialize_field("id", self.id())?;
+
+        state.serialize_field("type", "VariableExpression")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
     }
 }
 
@@ -2453,6 +2645,19 @@ impl fmt::Display for GroupedExpression<'_> {
             write!(f, "GroupedExpression({})", expression)
         } else {
             write!(f, "GroupedExpression")
+        }
+    }
+}
+
+impl Serialize for GroupedExpression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if let Some(expression) = self.expression() {
+            expression.serialize(serializer)
+        } else {
+            serializer.serialize_none()
         }
     }
 }
@@ -2545,6 +2750,23 @@ impl fmt::Display for Pattern<'_> {
     }
 }
 
+impl Serialize for Pattern<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.kind() {
+            PatternKind::IntegerPattern(_) => todo!(),
+            PatternKind::StringPattern(_) => todo!(),
+            PatternKind::VariablePattern(pattern) => pattern.serialize(serializer),
+            PatternKind::ArrayPattern(_) => todo!(),
+            PatternKind::RestPattern(_) => todo!(),
+            PatternKind::StructPattern(_) => todo!(),
+            PatternKind::ValueFieldPattern(_) => todo!(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct VariablePattern<'a> {
     id: &'a Identifier<'a>,
@@ -2613,6 +2835,15 @@ impl<'a> TypedNode<'a> for VariablePattern<'a> {
 impl fmt::Display for VariablePattern<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "VariablePattern({})", self.id())
+    }
+}
+
+impl Serialize for VariablePattern<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.id().serialize(serializer)
     }
 }
 
