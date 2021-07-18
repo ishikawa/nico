@@ -61,6 +61,10 @@ impl CompilerOptions {
     pub fn new() -> Self {
         Self::default()
     }
+
+    pub fn filepath(&self) -> Option<&str> {
+        self.filepath.as_deref()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -77,15 +81,17 @@ impl Command {
     ) -> Result<String, CompilerError> {
         let options = parse_options(args)?;
 
-        let src = if let Some(filepath) = options.filepath {
-            read_from_file(filepath.as_str())?
+        let src = if let Some(filepath) = options.filepath() {
+            read_from_file(filepath)?
         } else {
             read_from_stdin()?
         };
 
+        let filename = options.filepath().unwrap_or("-");
+
         match options.backend {
             CompilerBackend::Nico2021Spring => backend_2021_spring::compile(src),
-            CompilerBackend::Nico2021Summer => backend_2021_summer::compile(src),
+            CompilerBackend::Nico2021Summer => backend_2021_summer::compile(src, filename),
         }
     }
 }
