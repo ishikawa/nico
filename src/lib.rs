@@ -2,6 +2,7 @@
 
 pub mod arena;
 pub mod asm;
+pub mod compiler;
 pub mod language_server;
 pub mod parser;
 pub mod sem;

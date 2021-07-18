@@ -1,7 +1,6 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { StringDecoder } from "string_decoder";
 import { compileFile } from "./util/compiler";
 import { BufferedPrinter, buildImportObject, ConsolePrinter, StringView } from "../runner/runtime";
 import { filterTestCases, TestCaseBase } from "./util/testcase";
