@@ -1508,7 +1508,7 @@ impl Serialize for Expression<'_> {
             ExpressionKind::CaseExpression(_) => todo!(),
             ExpressionKind::MemberExpression(_) => todo!(),
             ExpressionKind::StructLiteral(_) => todo!(),
-            ExpressionKind::GroupedExpression(_) => todo!(),
+            ExpressionKind::GroupedExpression(expr) => expr.serialize(serializer),
         }
     }
 }
@@ -2551,6 +2551,19 @@ impl fmt::Display for GroupedExpression<'_> {
             write!(f, "GroupedExpression({})", expression)
         } else {
             write!(f, "GroupedExpression")
+        }
+    }
+}
+
+impl Serialize for GroupedExpression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if let Some(expression) = self.expression() {
+            expression.serialize(serializer)
+        } else {
+            serializer.serialize_none()
         }
     }
 }
