@@ -1528,9 +1528,9 @@ impl Serialize for Expression<'_> {
         match self.kind() {
             ExpressionKind::IntegerLiteral(expr) => expr.serialize(serializer),
             ExpressionKind::StringLiteral(_) => todo!(),
-            ExpressionKind::VariableExpression(_) => todo!(),
+            ExpressionKind::VariableExpression(expr) => expr.serialize(serializer),
             ExpressionKind::BinaryExpression(expr) => expr.serialize(serializer),
-            ExpressionKind::UnaryExpression(_) => todo!(),
+            ExpressionKind::UnaryExpression(expr) => expr.serialize(serializer),
             ExpressionKind::SubscriptExpression(_) => todo!(),
             ExpressionKind::CallExpression(_) => todo!(),
             ExpressionKind::ArrayExpression(_) => todo!(),
@@ -1824,6 +1824,22 @@ impl<'a> TypedNode<'a> for UnaryExpression<'a> {
 impl fmt::Display for UnaryExpression<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "UnaryExpression({})", self.operator())
+    }
+}
+
+impl Serialize for UnaryExpression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("UnaryExpression", 3)?;
+
+        state.serialize_field("operator", self.operator().to_string().as_str())?;
+        state.serialize_field("operand", &self.operand())?;
+
+        state.serialize_field("type", "UnaryExpression")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
     }
 }
 
@@ -2516,6 +2532,21 @@ impl<'a> TypedNode<'a> for VariableExpression<'a> {
 impl fmt::Display for VariableExpression<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "VariableExpression({})", self.id())
+    }
+}
+
+impl Serialize for VariableExpression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("VariableExpression", 3)?;
+
+        state.serialize_field("id", self.id())?;
+
+        state.serialize_field("type", "VariableExpression")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
     }
 }
 
