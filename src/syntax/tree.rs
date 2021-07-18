@@ -46,6 +46,7 @@ use super::{Code, CodeKind, CodeKindIter, EffectiveRange, Token};
 use crate::arena::{BumpaloArena, BumpaloBox, BumpaloString, BumpaloVec};
 use crate::semantic::{Binding, FunctionType, Scope, SemanticError, StructType, TypeKind};
 use crate::util::collections::RefVecIter;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 use std::cell::{Cell, RefCell};
 use std::fmt;
 
@@ -569,6 +570,19 @@ impl fmt::Display for TopLevel<'_> {
     }
 }
 
+impl Serialize for TopLevel<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.kind() {
+            TopLevelKind::StructDefinition(_) => serializer.serialize_str("struct"),
+            TopLevelKind::FunctionDefinition(_) => serializer.serialize_str("function"),
+            TopLevelKind::Statement(_) => serializer.serialize_str("statement"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum TopLevelKind<'a> {
     StructDefinition(&'a StructDefinition<'a>),
@@ -649,6 +663,19 @@ impl<'a> Node<'a> for Program<'a> {
 impl fmt::Display for Program<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Program")
+    }
+}
+
+impl Serialize for Program<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Program", 1)?;
+        let body = self.body().collect::<Vec<_>>();
+
+        state.serialize_field("body", &body)?;
+        state.end()
     }
 }
 

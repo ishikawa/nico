@@ -9,5 +9,8 @@ pub fn compile(src: String, filename: &str) -> Result<String, CompilerError> {
     let mut parser = Parser::new(&arena, tokenizer, filename);
     let program = parser.parse(&arena);
 
-    Ok(format!("{}", program))
+    // JSON
+    let j = serde_json::to_string(&program).expect("JSON serialization");
+
+    Ok(format!("{}", j))
 }
