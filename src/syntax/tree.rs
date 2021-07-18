@@ -1527,12 +1527,12 @@ impl Serialize for Expression<'_> {
     {
         match self.kind() {
             ExpressionKind::IntegerLiteral(expr) => expr.serialize(serializer),
-            ExpressionKind::StringLiteral(_) => todo!(),
+            ExpressionKind::StringLiteral(expr) => expr.serialize(serializer),
             ExpressionKind::VariableExpression(expr) => expr.serialize(serializer),
             ExpressionKind::BinaryExpression(expr) => expr.serialize(serializer),
             ExpressionKind::UnaryExpression(expr) => expr.serialize(serializer),
             ExpressionKind::SubscriptExpression(_) => todo!(),
-            ExpressionKind::CallExpression(_) => todo!(),
+            ExpressionKind::CallExpression(expr) => expr.serialize(serializer),
             ExpressionKind::ArrayExpression(_) => todo!(),
             ExpressionKind::IfExpression(_) => todo!(),
             ExpressionKind::CaseExpression(_) => todo!(),
@@ -2030,6 +2030,24 @@ impl fmt::Display for CallExpression<'_> {
     }
 }
 
+impl Serialize for CallExpression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("CallExpression", 3)?;
+
+        state.serialize_field("callee", self.callee())?;
+
+        let args = self.arguments().collect::<Vec<_>>();
+        state.serialize_field("arguments", &args)?;
+
+        state.serialize_field("type", "CallExpression")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
+    }
+}
+
 #[derive(Debug)]
 pub struct MemberExpression<'a> {
     object: &'a Expression<'a>,
@@ -2474,6 +2492,21 @@ impl fmt::Display for StringLiteral<'_> {
             "StringLiteral({})",
             self.value().unwrap_or(&"-".to_string())
         )
+    }
+}
+
+impl Serialize for StringLiteral<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("StringLiteral", 3)?;
+
+        state.serialize_field("value", &self.value())?;
+
+        state.serialize_field("type", "StringLiteral")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
     }
 }
 
