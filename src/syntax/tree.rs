@@ -727,6 +727,20 @@ impl fmt::Display for Identifier<'_> {
     }
 }
 
+impl Serialize for Identifier<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Identifier", 3)?;
+
+        state.serialize_field("name", self.as_str())?;
+        state.serialize_field("type", "Identifier")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
+    }
+}
+
 #[derive(Debug)]
 pub struct StructDefinition<'a> {
     name: Option<&'a Identifier<'a>>,
@@ -1163,6 +1177,22 @@ impl fmt::Display for VariableDeclaration<'_> {
     }
 }
 
+impl Serialize for VariableDeclaration<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("VariableDeclaration", 4)?;
+
+        state.serialize_field("id", &self.pattern())?;
+        state.serialize_field("init", &self.init())?;
+
+        state.serialize_field("type", "VariableDeclaration")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
+    }
+}
+
 #[derive(Debug)]
 pub struct Statement<'a> {
     kind: StatementKind<'a>,
@@ -1228,7 +1258,7 @@ impl Serialize for Statement<'_> {
     {
         match self.kind() {
             StatementKind::Expression(expr) => expr.serialize(serializer),
-            StatementKind::VariableDeclaration(_) => serializer.serialize_str("var"),
+            StatementKind::VariableDeclaration(decl) => decl.serialize(serializer),
         }
     }
 }
@@ -2656,6 +2686,23 @@ impl fmt::Display for Pattern<'_> {
     }
 }
 
+impl Serialize for Pattern<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.kind() {
+            PatternKind::IntegerPattern(_) => todo!(),
+            PatternKind::StringPattern(_) => todo!(),
+            PatternKind::VariablePattern(pattern) => pattern.serialize(serializer),
+            PatternKind::ArrayPattern(_) => todo!(),
+            PatternKind::RestPattern(_) => todo!(),
+            PatternKind::StructPattern(_) => todo!(),
+            PatternKind::ValueFieldPattern(_) => todo!(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct VariablePattern<'a> {
     id: &'a Identifier<'a>,
@@ -2724,6 +2771,15 @@ impl<'a> TypedNode<'a> for VariablePattern<'a> {
 impl fmt::Display for VariablePattern<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "VariablePattern({})", self.id())
+    }
+}
+
+impl Serialize for VariablePattern<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.id().serialize(serializer)
     }
 }
 
