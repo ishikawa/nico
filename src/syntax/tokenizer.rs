@@ -6,13 +6,14 @@
 //! sequences and EOF in the middle.
 //!
 //! It is responsibility of parsers to interpret these tokens and generate strings and other nodes.
+use serde::Serialize;
 use std::convert::TryFrom;
 use std::fmt;
 use std::iter::Peekable;
 use std::str::Chars;
 
 /// Position in a text document expressed as zero-based line and character offset.
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default)]
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default, Serialize)]
 pub struct Position {
     /// Line position in a document (zero-based).
     pub line: u32,
@@ -30,7 +31,7 @@ impl fmt::Display for Position {
 
 // The effective range of a token.
 // `start` inclusive, `end` exclusive.
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default)]
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Default, Serialize)]
 pub struct EffectiveRange {
     //pub length: u32,
     pub start: Position,

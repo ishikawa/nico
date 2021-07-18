@@ -10,7 +10,7 @@ pub fn compile(src: String, filename: &str) -> Result<String, CompilerError> {
     let program = parser.parse(&arena);
 
     // JSON
-    let j = serde_json::to_string(&program).expect("JSON serialization");
+    let j = serde_json::to_string_pretty(&program).expect("JSON serialization");
 
-    Ok(format!("{}", j))
+    Ok(format!("{}\n", j))
 }

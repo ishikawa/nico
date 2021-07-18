@@ -671,10 +671,15 @@ impl Serialize for Program<'_> {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("Program", 1)?;
-        let body = self.body().collect::<Vec<_>>();
+        let mut state = serializer.serialize_struct("Program", 2)?;
 
+        let body = self.body().collect::<Vec<_>>();
         state.serialize_field("body", &body)?;
+        state.serialize_field("type", "Program")?;
+
+        let range = self.range();
+        state.serialize_field("loc", &range)?;
+
         state.end()
     }
 }
