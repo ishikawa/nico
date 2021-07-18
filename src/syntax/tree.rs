@@ -578,7 +578,7 @@ impl Serialize for TopLevel<'_> {
         match self.kind() {
             TopLevelKind::StructDefinition(_) => serializer.serialize_str("struct"),
             TopLevelKind::FunctionDefinition(_) => serializer.serialize_str("function"),
-            TopLevelKind::Statement(_) => serializer.serialize_str("statement"),
+            TopLevelKind::Statement(stmt) => stmt.serialize(serializer),
         }
     }
 }
@@ -671,7 +671,7 @@ impl Serialize for Program<'_> {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("Program", 2)?;
+        let mut state = serializer.serialize_struct("Program", 3)?;
 
         let body = self.body().collect::<Vec<_>>();
         state.serialize_field("body", &body)?;
@@ -1221,6 +1221,18 @@ impl fmt::Display for Statement<'_> {
     }
 }
 
+impl Serialize for Statement<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.kind() {
+            StatementKind::Expression(expr) => expr.serialize(serializer),
+            StatementKind::VariableDeclaration(_) => serializer.serialize_str("var"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Block<'a> {
     statements: BumpaloVec<'a, &'a Statement<'a>>,
@@ -1478,6 +1490,29 @@ impl fmt::Display for Expression<'_> {
     }
 }
 
+impl Serialize for Expression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.kind() {
+            ExpressionKind::IntegerLiteral(expr) => expr.serialize(serializer),
+            ExpressionKind::StringLiteral(_) => todo!(),
+            ExpressionKind::VariableExpression(_) => todo!(),
+            ExpressionKind::BinaryExpression(expr) => expr.serialize(serializer),
+            ExpressionKind::UnaryExpression(_) => todo!(),
+            ExpressionKind::SubscriptExpression(_) => todo!(),
+            ExpressionKind::CallExpression(_) => todo!(),
+            ExpressionKind::ArrayExpression(_) => todo!(),
+            ExpressionKind::IfExpression(_) => todo!(),
+            ExpressionKind::CaseExpression(_) => todo!(),
+            ExpressionKind::MemberExpression(_) => todo!(),
+            ExpressionKind::StructLiteral(_) => todo!(),
+            ExpressionKind::GroupedExpression(_) => todo!(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct StructLiteral<'a> {
     name: &'a Identifier<'a>,
@@ -1678,6 +1713,23 @@ impl<'a> TypedNode<'a> for BinaryExpression<'a> {
 impl fmt::Display for BinaryExpression<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "BinaryExpression({})", self.operator())
+    }
+}
+
+impl Serialize for BinaryExpression<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("BinaryExpression", 5)?;
+
+        state.serialize_field("operator", &self.operator().to_string())?;
+        state.serialize_field("left", self.lhs())?;
+        state.serialize_field("right", &self.rhs())?;
+
+        state.serialize_field("type", "BinaryExpression")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
     }
 }
 
@@ -2315,6 +2367,20 @@ impl<'a> TypedNode<'a> for IntegerLiteral<'a> {
 impl fmt::Display for IntegerLiteral<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "IntegerLiteral({})", self.value())
+    }
+}
+
+impl Serialize for IntegerLiteral<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("IntegerLiteral", 3)?;
+
+        state.serialize_field("value", &self.value())?;
+        state.serialize_field("type", "IntegerLiteral")?;
+        state.serialize_field("loc", &self.range())?;
+        state.end()
     }
 }
 
